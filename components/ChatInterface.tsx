@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { SavedConversation } from '@/lib/types';
 
 interface FormQuestion {
@@ -26,30 +26,29 @@ interface Message {
   form?: MessageForm;
 }
 
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/\*\*\*(.+?)\*\*\*/g, '$1')
-    .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\*(.+?)\*/g, '$1')
-    .replace(/#{1,6}\s+/g, '')
-    .replace(/`{1,3}([^`]*)`{1,3}/g, '$1');
-}
-
-function renderInlineContent(text: string, keyPrefix: string): React.ReactNode[] {
+// Render inline: bold, links — no stripping
+function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
+  // Split on **bold** and [label](url) / bare urls
+  const tokenRegex = /\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/\S+)/g;
   const parts: React.ReactNode[] = [];
-  const linkRegex = /\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/\S+)/g;
   let last = 0;
   let match: RegExpExecArray | null;
-  while ((match = linkRegex.exec(text)) !== null) {
+  while ((match = tokenRegex.exec(text)) !== null) {
     if (match.index > last) parts.push(text.slice(last, match.index));
-    const href = match[2] || match[3];
-    const label = match[1] || match[3];
-    parts.push(
-      <a key={`${keyPrefix}-link-${match.index}`} href={href} target="_blank" rel="noopener noreferrer"
-         className="text-[#2d9e4f] underline underline-offset-2 hover:text-[#27883f] break-all">
-        {label}
-      </a>
-    );
+    if (match[1] !== undefined) {
+      // **bold**
+      parts.push(<strong key={`${keyPrefix}-b-${match.index}`} className="font-semibold text-gray-900">{match[1]}</strong>);
+    } else {
+      // link
+      const href = match[3] || match[4];
+      const label = match[2] || match[4];
+      parts.push(
+        <a key={`${keyPrefix}-link-${match.index}`} href={href} target="_blank" rel="noopener noreferrer"
+           className="text-[#2d9e4f] underline underline-offset-2 hover:text-[#27883f] break-all">
+          {label}
+        </a>
+      );
+    }
     last = match.index + match[0].length;
   }
   if (last < text.length) parts.push(text.slice(last));
@@ -57,28 +56,39 @@ function renderInlineContent(text: string, keyPrefix: string): React.ReactNode[]
 }
 
 function renderContent(text: string): React.ReactNode {
-  const stripped = stripMarkdown(text);
-  const paragraphs = stripped.split(/\n{2,}/);
+  // Split on double newlines for paragraphs
+  const paragraphs = text.split(/\n{2,}/);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {paragraphs.map((para, pi) => {
-        const lines = para.split('\n').filter(l => l.trim());
-        if (lines.length === 0) return null;
+        const trimmed = para.trim();
+        if (!trimmed) return null;
 
-        // Check if all lines in this paragraph are numbered steps
-        const allNumbered = lines.every(l => /^\d+[\.)]\s+/.test(l.trim()));
+        // Heading: ## or ### at start of paragraph
+        if (/^#{1,3}\s+/.test(trimmed)) {
+          const content = trimmed.replace(/^#{1,3}\s+/, '');
+          return (
+            <p key={pi} className="text-[13px] font-semibold text-gray-800 uppercase tracking-wide">
+              {renderInline(content, `${pi}`)}
+            </p>
+          );
+        }
 
+        const lines = trimmed.split('\n').filter(l => l.trim());
+
+        // Numbered list: all lines start with digit
+        const allNumbered = lines.length > 1 && lines.every(l => /^\d+[\.)]\s+/.test(l.trim()));
         if (allNumbered) {
           return (
-            <ol key={pi} className="space-y-1.5 pl-1">
+            <ol key={pi} className="space-y-2 pl-0.5">
               {lines.map((line, li) => {
                 const content = line.replace(/^\d+[\.)]\s+/, '');
                 const num = (line.match(/^(\d+)/) || [])[1];
                 return (
-                  <li key={li} className="flex gap-2.5 text-sm leading-relaxed">
-                    <span className="flex-shrink-0 w-5 h-5 bg-[#2d9e4f]/10 text-[#2d9e4f] rounded-full text-[11px] font-bold flex items-center justify-center mt-0.5">{num}</span>
-                    <span className="text-gray-700">{renderInlineContent(content, `${pi}-${li}`)}</span>
+                  <li key={li} className="flex gap-3 text-[14px] leading-relaxed">
+                    <span className="flex-shrink-0 w-5 h-5 bg-[#2d9e4f] text-white rounded-full text-[10px] font-bold flex items-center justify-center mt-0.5">{num}</span>
+                    <span className="text-gray-700">{renderInline(content, `${pi}-${li}`)}</span>
                   </li>
                 );
               })}
@@ -86,13 +96,31 @@ function renderContent(text: string): React.ReactNode {
           );
         }
 
-        // Mixed or single lines — render as paragraph with line breaks
+        // Bullet list: lines start with - or •
+        const allBullet = lines.every(l => /^[-•]\s+/.test(l.trim()));
+        if (allBullet) {
+          return (
+            <ul key={pi} className="space-y-1.5 pl-0.5">
+              {lines.map((line, li) => {
+                const content = line.replace(/^[-•]\s+/, '');
+                return (
+                  <li key={li} className="flex gap-2.5 text-[14px] leading-relaxed">
+                    <span className="flex-shrink-0 w-1.5 h-1.5 bg-[#2d9e4f] rounded-full mt-[7px]" />
+                    <span className="text-gray-700">{renderInline(content, `${pi}-${li}`)}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          );
+        }
+
+        // Plain paragraph
         return (
-          <p key={pi} className="text-sm leading-relaxed text-gray-700">
+          <p key={pi} className="text-[14px] leading-relaxed text-gray-700">
             {lines.map((line, li) => (
               <span key={li}>
                 {li > 0 && <br />}
-                {renderInlineContent(line.trim(), `${pi}-${li}`)}
+                {renderInline(line.trim(), `${pi}-${li}`)}
               </span>
             ))}
           </p>
@@ -383,20 +411,20 @@ export default function ChatInterface({ username, historyEnabled = false, initia
       <div className="flex-1 overflow-y-auto px-6 py-8 space-y-5">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="mb-6">
+            <div className="mb-5 bg-white rounded-xl px-4 py-2.5 shadow-sm border border-gray-100 inline-block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/wint-logo.png" alt="Wint Wealth" width={120} height={48} className="object-contain mx-auto" />
+              <img src="/wint-logo.png" alt="Wint Wealth" width={110} height={40} className="object-contain block" />
             </div>
-            <h2 className="text-2xl font-semibold text-[#111] mb-2 tracking-tight">IR Support Assistant</h2>
-            <p className="text-gray-400 text-sm max-w-xs mb-10">
-              Select a common issue below or describe the user&apos;s problem.
+            <h2 className="text-xl font-semibold text-[#111] mb-1.5 tracking-tight">IR Support Assistant</h2>
+            <p className="text-gray-400 text-sm max-w-xs mb-8">
+              Select a common issue below or describe the investor&apos;s problem.
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
               {SUGGESTED_QUESTIONS.map(q => (
                 <button
                   key={q}
                   onClick={() => sendMessage(q)}
-                  className="text-left px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm text-gray-600 hover:border-[#2d9e4f]/60 hover:bg-[#2d9e4f]/5 hover:text-[#2d9e4f] transition-all shadow-sm"
+                  className="text-left px-4 py-3 bg-white border border-gray-200 rounded-xl text-[13.5px] font-medium text-gray-600 hover:border-[#2d9e4f]/60 hover:bg-[#2d9e4f]/5 hover:text-[#2d9e4f] transition-all shadow-sm"
                 >
                   {q}
                 </button>
@@ -410,11 +438,11 @@ export default function ChatInterface({ username, historyEnabled = false, initia
 
                 {msg.role === 'assistant' && (
                   <div className="flex items-center gap-2 mb-2 ml-1">
-                    <div className="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 bg-white border border-gray-100">
+                    <div className="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-white border border-gray-200 shadow-sm flex items-center justify-center p-0.5">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/wint-logo.png" alt="Wint" className="object-contain w-full h-full p-0.5" />
+                      <img src="/wint-logo.png" alt="Wint" className="object-contain w-full h-full" />
                     </div>
-                    <span className="text-xs font-medium text-gray-400 tracking-wide">Wint IR Assistant</span>
+                    <span className="text-[12px] font-semibold text-gray-500 tracking-wide">Wint IR Assistant</span>
                   </div>
                 )}
 
@@ -452,24 +480,31 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                 {msg.role === 'assistant' && msg.form && !msg.loading && (
                   <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm shadow-sm overflow-hidden">
                     {msg.form.submitted ? (
-                      <div className="px-5 py-4 flex items-center gap-2.5 text-sm text-gray-500">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#2d9e4f" strokeWidth="2">
-                          <path d="M3 8l4 4 6-6"/>
-                        </svg>
-                        {msg.form.stepTitle ? `${msg.form.stepTitle} — submitted` : 'Step submitted — processing...'}
+                      <div className="px-5 py-3.5 flex items-center gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-[#2d9e4f]/10 flex items-center justify-center flex-shrink-0">
+                          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#2d9e4f" strokeWidth="2.5">
+                            <path d="M3 8l4 4 6-6"/>
+                          </svg>
+                        </span>
+                        <span className="text-[13px] text-gray-500">
+                          {msg.form.stepTitle ? `${msg.form.stepTitle} — submitted` : 'Step submitted — processing...'}
+                        </span>
                       </div>
                     ) : (
                       <>
-                        <div className="px-5 pt-4 pb-3 border-b border-gray-100 bg-gray-50/60">
-                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
-                            {msg.form.stepTitle || 'Context Required'}
-                          </p>
-                          <p className="text-xs text-gray-400 mt-0.5">Answer all fields to continue</p>
+                        <div className="px-5 pt-4 pb-3 border-b border-gray-100 bg-gradient-to-r from-[#2d9e4f]/5 to-transparent">
+                          <div className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-[#2d9e4f] rounded-full" />
+                            <p className="text-[11px] font-bold text-[#2d9e4f] uppercase tracking-widest">
+                              {msg.form.stepTitle || 'Context Required'}
+                            </p>
+                          </div>
+                          <p className="text-[12px] text-gray-400 mt-1 ml-3.5">Select an answer for each field below</p>
                         </div>
-                        <div className="px-5 py-4 space-y-4">
+                        <div className="px-5 py-4 space-y-5">
                           {msg.form.questions.map(q => (
                             <div key={q.id}>
-                              <label className="block text-xs font-semibold text-gray-600 mb-2">{q.label}</label>
+                              <label className="block text-[13px] font-semibold text-gray-700 mb-2.5">{q.label}</label>
                               <div className="flex flex-wrap gap-2">
                                 {(q.options ?? []).map(opt => {
                                   const selected = msg.form!.answers[q.id] === opt;
@@ -479,10 +514,10 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                                       type="button"
                                       disabled={loading}
                                       onClick={() => updateFormAnswer(msg.id, q.id, opt)}
-                                      className={`px-3.5 py-1.5 text-xs rounded-lg border transition-all font-medium disabled:opacity-50 ${
+                                      className={`px-4 py-1.5 text-[13px] rounded-lg border transition-all font-medium disabled:opacity-50 ${
                                         selected
                                           ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
-                                          : 'bg-white border-gray-200 text-gray-500 hover:border-[#2d9e4f]/50 hover:text-[#2d9e4f]'
+                                          : 'bg-white border-gray-200 text-gray-500 hover:border-[#2d9e4f]/60 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
                                       }`}
                                     >
                                       {opt}
@@ -497,11 +532,11 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                           <button
                             onClick={() => submitForm(msg.id)}
                             disabled={loading || msg.form.questions.some(q => !msg.form!.answers[q.id]?.trim())}
-                            className="w-full bg-[#2d9e4f] hover:bg-[#27883f] disabled:opacity-30 disabled:cursor-not-allowed text-white text-xs font-semibold py-2.5 rounded-lg transition-all tracking-wide"
+                            className="w-full bg-[#2d9e4f] hover:bg-[#27883f] disabled:opacity-30 disabled:cursor-not-allowed text-white text-[13px] font-semibold py-2.5 rounded-xl transition-all"
                           >
                             {loading
                               ? 'Processing…'
-                              : `Continue  ${msg.form.questions.filter(q => msg.form!.answers[q.id]?.trim()).length}/${msg.form.questions.length} answered`}
+                              : `Continue — ${msg.form.questions.filter(q => msg.form!.answers[q.id]?.trim()).length}/${msg.form.questions.length} answered`}
                           </button>
                         </div>
                       </>
@@ -511,7 +546,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
 
                 {/* Assistant: text answer */}
                 {msg.role === 'assistant' && !msg.loading && !msg.form && msg.content && (
-                  <div className="px-5 py-4 rounded-2xl rounded-tl-sm bg-white border border-gray-100 shadow-sm">
+                  <div className="px-5 py-4 rounded-2xl rounded-tl-sm bg-white border border-gray-200 shadow-sm">
                     {renderContent(msg.content)}
                   </div>
                 )}

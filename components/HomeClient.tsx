@@ -36,14 +36,10 @@ export default function HomeClient({ username, isAdmin, historyEnabled }: HomeCl
         onNewChat={handleNewChat}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between shrink-0">
+        <header className="bg-white border-b border-gray-100 px-6 py-3.5 flex items-center shrink-0">
           <div>
-            <h1 className="text-[#1a1a1a] font-semibold text-base">IR Knowledge Base</h1>
-            <p className="text-gray-400 text-xs mt-0.5">Powered by AI · Wint Wealth</p>
-          </div>
-          <div className="flex items-center gap-2 bg-[#2d9e4f]/10 px-3 py-1.5 rounded-full">
-            <span className="w-2 h-2 bg-[#2d9e4f] rounded-full animate-pulse" />
-            <span className="text-[#2d9e4f] text-xs font-medium">Knowledge base connected</span>
+            <h1 className="text-[#1a1a1a] font-semibold text-sm tracking-tight">IR Support Assistant</h1>
+            <p className="text-gray-400 text-xs mt-0.5">Wint Wealth · Internal use only</p>
           </div>
         </header>
         <div className="flex-1 overflow-hidden">

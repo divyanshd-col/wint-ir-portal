@@ -295,11 +295,13 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
       <aside className={`${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-transform fixed lg:static inset-y-0 left-0 z-40 w-72 bg-[#1a1a1a] flex flex-col`}>
 
         {/* Logo */}
-        <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-white/10 flex items-center justify-between">
           <div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/wint-logo.png" alt="Wint Wealth" width={100} height={36} className="object-contain brightness-0 invert" />
-            <p className="text-gray-500 text-xs mt-1.5">IR Portal{isAdmin ? ' · Admin' : ''}</p>
+            <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/wint-logo.png" alt="Wint Wealth" width={88} height={28} className="object-contain block" />
+            </div>
+            <p className="text-gray-500 text-xs mt-2">IR Portal{isAdmin ? ' · Admin' : ''}</p>
           </div>
           {isAdmin && view === 'settings' && (
             <button onClick={() => setView('main')} className="text-gray-400 hover:text-white transition p-1" title="Back">

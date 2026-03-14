@@ -87,6 +87,7 @@ Look at the field IDs in EXISTING CONFIRMED ANSWERS. Write them out mentally:
 - If every field needed for a step is already in EXISTING CONFIRMED ANSWERS, that entire step is DONE — move to the next step.
 - If every step in the decision tree is DONE — return {"questions":[]}.
 - If a step's branch condition (e.g. "only if aof_status = pending") is NOT satisfied by existing answers — skip that step entirely, do not ask it.
+- CRITICAL: The query text and conversation history are NOT confirmed answers. Do not treat anything in the query as a pre-filled answer unless it was submitted through a previous form step and appears in EXISTING CONFIRMED ANSWERS.
 
 This check is not optional. Run it before selecting which step to return.
 
@@ -98,10 +99,12 @@ CORE RULES:
 3. A conditional step is SKIPPED if its condition is not met by existing answers
 4. Return ONLY the questions for the FIRST step that is neither DONE nor SKIPPED
 5. If all steps are DONE or SKIPPED → return {"questions":[]}
-6. Also check CONVERSATION HISTORY — if a value was explicitly stated, treat it as confirmed
+6. Also check CONVERSATION HISTORY — if a value was explicitly stated by the agent in a previous turn (e.g. "confirmed the user's DDPI is active"), treat it as confirmed
 7. NEVER return a question whose id is already in EXISTING CONFIRMED ANSWERS
 8. NEVER ask free-text fields — all questions must have discrete options
 9. NEVER invent option values — use ONLY the exact options listed in each step
+10. NEVER infer or assume a question is already answered from the current query text. A query like "user wants to sell bonds" does NOT confirm ddpi_signed, sell_order_placed, or any other field. Only EXISTING CONFIRMED ANSWERS (from prior form submissions) can mark a field as done.
+11. ALWAYS start from STEP 1 of the matched tree when EXISTING CONFIRMED ANSWERS is empty or does not satisfy any step condition. Never jump ahead based on what the query implies about the user's situation.
 
 ---
 
@@ -317,7 +320,8 @@ STEP 1 — stepTitle: "Step 1: Payment and Order Basics"
     payment_status (success / failed / pending)
     first_investment (yes / no)
   → payment_status = failed or pending → RESOLVED (payment issue, not settlement)
-  → payment_status = success → STEP 2
+  → payment_status = success AND first_investment = yes → RESOLVED (first investment before demat — handle as B1 Insta Payment flow)
+  → payment_status = success AND first_investment = no → STEP 2
 
 STEP 2 [only if payment_status = success] — stepTitle: "Step 2: Referral Status"
   Ask: referred_user (yes / no)
@@ -513,7 +517,8 @@ STEP 1 — stepTitle: "Step 1: Active SIP and Upcoming Order"
     active_sip_on_finder (yes / no)
     upcoming_sip_order_placed (yes / no)
   → active_sip_on_finder = no → RESOLVED (no active SIP found — verify user ID)
-  → active_sip_on_finder = yes → STEP 2
+  → active_sip_on_finder = yes AND upcoming_sip_order_placed = yes → RESOLVED (upcoming instalment already placed — change will apply from next cycle, inform user)
+  → active_sip_on_finder = yes AND upcoming_sip_order_placed = no → STEP 2
 
 STEP 2 [only if active SIP confirmed] — stepTitle: "Step 2: Mandate Type and Email Confirmation"
   Ask:
@@ -533,9 +538,10 @@ Triggers: SIP amount debited but no bond showing, duplicate SIP deduction report
 
 STEP 1 — stepTitle: "Step 1: SIP Active Status on Finder"
   Ask: active_sip_on_finder (yes / no)
-  → STEP 2
+  → active_sip_on_finder = no → RESOLVED (SIP not found on Finder — debit may be from a cancelled mandate or bank error, not a Wint SIP)
+  → active_sip_on_finder = yes → STEP 2
 
-STEP 2 — stepTitle: "Step 2: Duplicate Confirmation — Bank Statement"
+STEP 2 [only if active SIP confirmed on Finder] — stepTitle: "Step 2: Duplicate Confirmation — Bank Statement"
   Ask: bank_statement_confirming_duplicate (yes / no)
   → RESOLVED
 
@@ -624,7 +630,6 @@ Triggers: User questions how referral reward was calculated or why it is lower
 STEP 1 — stepTitle: "Step 1: Order Type"
   Ask:
     order_type (one-time / SIP)
-    was_sip_order (yes / no)
   → RESOLVED
 
 ---
@@ -723,12 +728,12 @@ STEP 1 — stepTitle: "Step 1: Active Holdings Check"
   Ask:
     active_bond_holdings (yes / no)
     active_fd_investments (yes / no)
-  → active_bond_holdings = yes → STEP 2
-  → active_bond_holdings = no → STEP 3
+  → active_bond_holdings = yes OR active_fd_investments = yes → STEP 2
+  → active_bond_holdings = no AND active_fd_investments = no → STEP 3
 
-STEP 2 [only if active bond holdings exist] — stepTitle: "Step 2: Holdings Liquidated"
+STEP 2 [only if active bond holdings or FD investments exist] — stepTitle: "Step 2: Holdings Liquidated"
   Ask: holdings_liquidated_or_transferred (yes / no)
-  → holdings_liquidated_or_transferred = no → RESOLVED (cannot delete until bonds are sold or transferred)
+  → holdings_liquidated_or_transferred = no → RESOLVED (cannot delete until bonds are sold/transferred and FDs are closed/matured)
   → holdings_liquidated_or_transferred = yes → STEP 3
 
 STEP 3 — stepTitle: "Step 3: Demat Closure Awareness"
