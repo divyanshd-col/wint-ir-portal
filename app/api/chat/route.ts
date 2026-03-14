@@ -5,7 +5,52 @@ import Anthropic from '@anthropic-ai/sdk';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { readConfig } from '@/lib/config';
 import { logChatMessage } from '@/lib/logger';
-import { getOrderedGeminiKeys, geminiStream } from '@/lib/gemini';
+import { getOrderedGeminiKeys, geminiGenerate, geminiStream } from '@/lib/gemini';
+
+/**
+ * Expands a user query into a richer set of search terms using Flash.
+ * Runs in parallel with KB fetch — zero latency cost.
+ *
+ * Handles: synonym gaps ("pledge" → "lien hypothecation"), phrasing differences
+ * ("cancel SIP" → "pause mandate deactivate"), abbreviation mismatches, etc.
+ * Falls back to original query on any error.
+ */
+async function expandQuery(keys: string[], query: string): Promise<string> {
+  if (!keys.length) return query;
+  try {
+    const result = await geminiGenerate(
+      keys,
+      'gemini-2.5-flash',
+      [{
+        role: 'user',
+        parts: [{
+          text: `You are a search query expander for an internal Wint Wealth CX knowledge base.
+The KB uses operational/fintech terminology that may differ from how agents phrase questions.
+
+Given this query, return 8–12 space-separated search keywords that would match the relevant KB sections.
+Include: synonyms, related internal terms, fintech jargon, and alternative phrasings.
+
+Examples of the kind of mapping needed:
+- "pledge bonds" → pledge lien hypothecation collateral margin encumber securities
+- "cancel SIP" → cancel pause stop deactivate SIP mandate autopay instalment
+- "joint account" → joint family co-applicant co-holder member
+- "transfer bonds" → transfer demat off-market delivery instruction DIS CDSL NSDL
+- "interest payout" → repayment coupon interest credit payout record date
+- "account closure" → closure delete deactivate demat account terminate
+
+Query: ${query}
+
+Return ONLY the keywords, space-separated, nothing else.`,
+        }],
+      }]
+    );
+    const expanded = result.trim();
+    console.log(`[chat] Query expansion: "${query}" → "${expanded}"`);
+    return `${query} ${expanded}`;
+  } catch {
+    return query;
+  }
+}
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -32,18 +77,25 @@ export async function POST(req: NextRequest) {
   let sources: { fileId: string; fileName: string; excerpt: string }[] = [];
 
   try {
-    console.log('[chat] Fetching knowledge base...');
-    const chunks = await fetchKnowledgeChunks();
+    console.log('[chat] Fetching knowledge base + expanding query in parallel...');
+    // Run KB fetch and query expansion simultaneously — no added latency
+    const [chunks, expandedQuery] = await Promise.all([
+      fetchKnowledgeChunks(),
+      expandQuery(geminiKeys, query),
+    ]);
     console.log(`[chat] KB ready: ${chunks.length} chunks`);
-    // For process queries with form evidence, enrich the search with field values
-    // so we pull KB sections that match the specific scenario (e.g. "after 9pm no holiday" → repayment section)
-    const enrichedQuery = (formAnswers && Object.keys(formAnswers).length > 0)
-      ? query + ' ' + Object.values(formAnswers as Record<string, string>).join(' ')
-      : query;
-    // Direct (educational) queries get more chunks — broader context needed.
-    // Process (diagnostic) queries stay tight — form answers already narrow scope.
+
+    // For process queries: also append form answer values as search terms
+    // (e.g. "after 9pm no holiday" pulls repayment section; "failed razorpay" pulls payment section)
+    const formTerms = (formAnswers && Object.keys(formAnswers).length > 0)
+      ? ' ' + Object.values(formAnswers as Record<string, string>).join(' ')
+      : '';
+    const searchQuery = expandedQuery + formTerms;
+
+    // Direct queries get more chunks — broader context needed for educational answers
+    // Process queries stay tighter — form answers already narrow the scenario
     const topK = queryType === 'direct' ? 15 : 10;
-    const relevant = retrieveRelevantChunks(chunks, enrichedQuery, topK);
+    const relevant = retrieveRelevantChunks(chunks, searchQuery, topK);
     console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK})`);
     if (relevant.length > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
@@ -121,7 +173,7 @@ OUTPUT RULES:
 5. Write like a confident, calm senior colleague. Human and direct, not robotic.
 6. Never invent channels, POC names, timelines, email addresses, or steps. Only use what is explicitly in the KB.
 7. Never ask for information already in CONFIRMED EVIDENCE.
-8. If the KB does not contain enough to answer this case: "No information available for this specific case. Please escalate to ir@wintwealth.com."
+8. If the KB does not contain enough to answer this case: "I don't have enough information for this specific case. Please escalate to ir@wintwealth.com."
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'None'}
@@ -154,8 +206,7 @@ The KB is written in internal operational language. Queries from agents may use 
 HOW TO DETERMINE IF THE KB COVERS IT:
 1. Read through all the KB chunks provided — not just the ones that look relevant at first glance.
 2. If the information exists under different terminology, extract and explain it in plain terms.
-3. If the KB explicitly says something is not available, not supported, or has conditions — state that clearly and precisely. That is a real answer, not a gap.
-4. Only conclude "not in KB" if after reading all chunks there is genuinely no content that could address the question even indirectly.
+3. Only conclude "not in KB" if after reading all chunks there is genuinely no content that could address the question even indirectly.
 
 RULES:
 1. No markdown, no bold, no headers. Use numbered steps only for sequential processes.
@@ -163,7 +214,7 @@ RULES:
 3. Keep it concise — 2–3 sentences for simple answers, numbered steps for multi-step processes.
 4. Write in plain English. NEVER use first person ("I will", "I can").
 5. Do not invent numbers, timelines, fees, or steps not explicitly in the KB.
-6. If after thorough review the KB genuinely has no coverage: "No information available for this specific query. Please escalate to ir@wintwealth.com."
+6. If after thorough review the KB genuinely has no coverage: "I don't have information on this specific query. Please escalate to ir@wintwealth.com."
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'None'}
