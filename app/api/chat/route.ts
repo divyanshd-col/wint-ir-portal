@@ -40,7 +40,12 @@ export async function POST(req: NextRequest) {
     const enrichedQuery = (formAnswers && Object.keys(formAnswers).length > 0)
       ? query + ' ' + Object.values(formAnswers as Record<string, string>).join(' ')
       : query;
-    const relevant = retrieveRelevantChunks(chunks, enrichedQuery);
+    let relevant = retrieveRelevantChunks(chunks, enrichedQuery);
+    // For direct (educational) queries: if keyword search finds nothing, fall back to
+    // top 5 chunks by any score so the LLM can still attempt an answer from the full KB
+    if (relevant.length === 0 && queryType === 'direct' && chunks.length > 0) {
+      relevant = retrieveRelevantChunks(chunks, enrichedQuery, chunks.length).slice(0, 5);
+    }
     console.log(`[chat] Relevant chunks: ${relevant.length}`);
     if (relevant.length > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
