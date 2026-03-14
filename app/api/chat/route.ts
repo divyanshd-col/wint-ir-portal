@@ -40,13 +40,11 @@ export async function POST(req: NextRequest) {
     const enrichedQuery = (formAnswers && Object.keys(formAnswers).length > 0)
       ? query + ' ' + Object.values(formAnswers as Record<string, string>).join(' ')
       : query;
-    let relevant = retrieveRelevantChunks(chunks, enrichedQuery);
-    // For direct (educational) queries: if keyword search finds nothing, fall back to
-    // top 5 chunks by any score so the LLM can still attempt an answer from the full KB
-    if (relevant.length === 0 && queryType === 'direct' && chunks.length > 0) {
-      relevant = retrieveRelevantChunks(chunks, enrichedQuery, chunks.length).slice(0, 5);
-    }
-    console.log(`[chat] Relevant chunks: ${relevant.length}`);
+    // Direct (educational) queries get more chunks — broader context needed.
+    // Process (diagnostic) queries stay tight — form answers already narrow scope.
+    const topK = queryType === 'direct' ? 15 : 10;
+    const relevant = retrieveRelevantChunks(chunks, enrichedQuery, topK);
+    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK})`);
     if (relevant.length > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
       sources = relevant.map(c => ({ fileId: c.fileId, fileName: c.fileName, excerpt: c.content.slice(0, 200) + '...' }));
@@ -75,6 +73,12 @@ The KB below contains internal CX process guides. Every section is structured as
 - Critical Alert → mismatch or warning flags. Treat these with highest priority.
 
 The KB chunks you receive start with a breadcrumb path showing their location in the document (e.g. "Repayment > Scenario 2: Bank Account Change Done After the Record Date"). Use this path to confirm you are reading the right section before extracting the answer.
+
+HOW TO MAP CONFIRMED EVIDENCE TO KB SECTIONS:
+The confirmed field names and values are navigation keys into the KB. Map them directly:
+- Field name tells you WHICH section: aof_status → KYC section; falls_on_holiday → Repayment; ddpi_signed → Sell/DDPI; mandate_status → SIP; payment_status → Payments
+- Field value tells you WHICH scenario: aof_status=expired → expired AOF scenario; recent_bank_change=yes + change_before_or_after_record_date=after record date → Scenario 2
+Read the KB with these as lookup keys. Do not guess or blend scenarios.
 
 HOW TO USE CONFIRMED EVIDENCE:
 The form has already collected the exact facts about this user's situation. Use them as navigation keys:
@@ -135,18 +139,31 @@ Produce only the final answer. No labels, no preamble. Just what the agent needs
     : `KNOWLEDGE BASE: No relevant documents found.`;
 
   // --- DIRECT (educational) mode ---
-  const directSystemPrompt = `You are a knowledgeable senior colleague at Wint Wealth, a fintech bond investment platform. A CX support agent is asking you a general question about platform processes, policies, or features.
+  const directSystemPrompt = `You are the most senior knowledge expert at Wint Wealth. A CX support agent is asking you a general question about platform processes, policies, or features. You answer by reading the KNOWLEDGE BASE below — it is your only and complete source of truth.
 
-Your job: answer the question clearly and educationally — like explaining to a colleague who needs to understand how something works so they can guide a user.
+HOW TO READ THE KNOWLEDGE BASE:
+The KB is written in internal operational language. Queries from agents may use different words. Your job is to bridge this gap every time:
+
+- "pledge bonds" → look for lien, hypothecation, collateral, pledge, encumber, margin pledge
+- "sell bonds" → look for liquidate, exit, sell anytime, secondary market, DDPI
+- "withdraw money" → look for repayment, redemption, payout, bank credit
+- "cancel investment" → look for cancellation, exit, pre-closure, refund
+- "joint account" → look for family account, co-applicant, joint holder
+- Apply this principle universally: always ask yourself what the concept is, then look for every way the KB might phrase it.
+
+HOW TO DETERMINE IF THE KB COVERS IT:
+1. Read through all the KB chunks provided — not just the ones that look relevant at first glance.
+2. If the information exists under different terminology, extract and explain it in plain terms.
+3. If the KB explicitly says something is not available, not supported, or has conditions — state that clearly and precisely. That is a real answer, not a gap.
+4. Only conclude "not in KB" if after reading all chunks there is genuinely no content that could address the question even indirectly.
 
 RULES:
 1. No markdown, no bold, no headers. Use numbered steps only for sequential processes.
-2. Start with a 1–2 sentence plain-text explanation. Then, if the process has steps, list them as numbered steps on separate lines.
+2. Start with a direct 1–2 sentence answer. Then list steps if the process is sequential.
 3. Keep it concise — 2–3 sentences for simple answers, numbered steps for multi-step processes.
 4. Write in plain English. NEVER use first person ("I will", "I can").
-5. Answer ONLY from the KNOWLEDGE BASE below. No outside knowledge, assumptions, or general fintech conventions.
-6. If the KNOWLEDGE BASE does not contain a clear answer: "I don't have enough information on this specific query. Please escalate to ir@wintwealth.com."
-7. Do not invent or assume any numbers, timelines, fees, or steps not explicitly in the KNOWLEDGE BASE.
+5. Do not invent numbers, timelines, fees, or steps not explicitly in the KB.
+6. If after thorough review the KB genuinely has no coverage: "No information available for this specific query. Please escalate to ir@wintwealth.com."
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'None'}

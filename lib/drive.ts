@@ -238,45 +238,73 @@ export async function fetchKnowledgeChunks(): Promise<KnowledgeChunk[]> {
   return chunks;
 }
 
+/**
+ * Simple suffix-stripping stemmer.
+ * Normalises word variants so "pledging"/"pledged"/"pledge" all become "pledg",
+ * "cancellation"/"cancelling"/"cancel" all become "cancel", etc.
+ * Applied to BOTH query words and chunk text so mismatched inflections still score.
+ */
+function stemWord(word: string): string {
+  if (word.length < 5) return word;
+  // Try longer suffixes first so "ations" wins over "ions" wins over "s"
+  const suffixes = [
+    'ations', 'ation', 'ments', 'ment', 'nesses', 'ness',
+    'ables', 'able', 'ibles', 'ible', 'ings', 'ing',
+    'ied', 'ies', 'ed', 'es', 'ly', 's',
+  ];
+  for (const suf of suffixes) {
+    if (word.endsWith(suf) && word.length - suf.length >= 3) {
+      return word.slice(0, word.length - suf.length);
+    }
+  }
+  return word;
+}
+
 export function retrieveRelevantChunks(chunks: KnowledgeChunk[], query: string, topK = 10): KnowledgeChunk[] {
   const q = query.toLowerCase();
-  const words = q.split(/\s+/).filter(w => w.length > 2);
+  const rawWords = q.split(/\s+/).filter(w => w.length > 2);
 
-  // Build 2-word and 3-word phrases from query for phrase-level boosting
+  // Build search terms: original words PLUS their stemmed forms (deduped)
+  const searchTerms = [...new Set([...rawWords, ...rawWords.map(stemWord)])];
+
+  // 2-word and 3-word phrases from the original query for phrase-level boosting
   const phrases: string[] = [];
-  for (let i = 0; i < words.length - 1; i++) {
-    phrases.push(`${words[i]} ${words[i + 1]}`);
-    if (i < words.length - 2) phrases.push(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+  for (let i = 0; i < rawWords.length - 1; i++) {
+    phrases.push(`${rawWords[i]} ${rawWords[i + 1]}`);
+    if (i < rawWords.length - 2) phrases.push(`${rawWords[i]} ${rawWords[i + 1]} ${rawWords[i + 2]}`);
   }
 
   const scored = chunks.map(chunk => {
     const lower = chunk.content.toLowerCase();
 
-    // Split chunk into header section (first line) and body for weighted scoring
+    // Split into header (breadcrumb path) vs body for weighted scoring
     const firstNewline = lower.indexOf('\n');
     const headerPart = firstNewline > -1 ? lower.slice(0, firstNewline) : lower;
-    const bodyPart = firstNewline > -1 ? lower.slice(firstNewline) : '';
+    const bodyPart   = firstNewline > -1 ? lower.slice(firstNewline)    : '';
 
     let score = 0;
 
-    // Individual word hits: header matches worth 3x body matches
-    for (const word of words) {
-      const headerHits = (headerPart.match(new RegExp(word, 'g')) || []).length;
-      const bodyHits = (bodyPart.match(new RegExp(word, 'g')) || []).length;
-      score += headerHits * 3 + bodyHits;
+    // Word hits (including stemmed variants): header = 3×, body = 1×
+    for (const term of searchTerms) {
+      const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      score += (headerPart.match(re) || []).length * 3;
+      score += (bodyPart.match(re)   || []).length;
     }
 
-    // Phrase hits: worth 5x a single word hit each
+    // Phrase hits: 5× per occurrence
     for (const phrase of phrases) {
-      const phraseHits = (lower.match(new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
-      score += phraseHits * 5;
+      const re = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      score += (lower.match(re) || []).length * 5;
     }
 
     return { chunk, score };
   });
 
+  // Sort by score descending; return topK regardless of score value.
+  // Removing the score > 0 gate means the LLM always receives some KB context —
+  // even when query terminology differs entirely from KB text, the highest-scoring
+  // (or first-ranked) chunks are still passed so the model can reason across them.
   return scored
-    .filter(s => s.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, topK)
     .map(s => s.chunk);
