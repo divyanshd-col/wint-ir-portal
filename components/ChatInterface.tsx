@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import type { SavedConversation } from '@/lib/types';
 
 interface FormQuestion {
   id: string;
@@ -110,7 +111,13 @@ const SUGGESTED_QUESTIONS = [
   "User wants to sell bonds",
 ];
 
-export default function ChatInterface() {
+interface ChatInterfaceProps {
+  username?: string;
+  historyEnabled?: boolean;
+  initialConversation?: SavedConversation | null;
+}
+
+export default function ChatInterface({ username, historyEnabled = false, initialConversation }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -118,6 +125,17 @@ export default function ChatInterface() {
   const [formStepCount, setFormStepCount] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Restore a past conversation on mount (key prop causes remount for each restore)
+  useEffect(() => {
+    if (!initialConversation) return;
+    const restored: Message[] = initialConversation.messages.map((m, i) => ({
+      id: `restored-${i}`,
+      role: m.role,
+      content: m.content,
+    }));
+    setMessages(restored);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -172,6 +190,25 @@ export default function ChatInterface() {
             }
           } catch {}
         }
+      }
+      // Save conversation to history after successful answer
+      if (historyEnabled && fullText) {
+        const firstUserMsg = queryMessages.find(m => m.role === 'user');
+        const title = (firstUserMsg?.content || 'Conversation').slice(0, 60);
+        const conversation: SavedConversation = {
+          id: Date.now().toString(),
+          title,
+          messages: [
+            ...queryMessages.map(m => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+            { role: 'assistant' as const, content: fullText },
+          ],
+          timestamp: Date.now(),
+        };
+        fetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(conversation),
+        }).catch(() => {});
       }
     } catch {
       setMessages(prev =>

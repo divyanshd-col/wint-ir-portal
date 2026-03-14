@@ -4,7 +4,7 @@
  */
 
 import type { PortalConfig } from './config';
-import type { KnowledgeChunk } from './types';
+import type { KnowledgeChunk, SavedConversation } from './types';
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -118,4 +118,16 @@ export async function storeSetKBCache(chunks: KnowledgeChunk[]): Promise<void> {
 
 export async function storeClearKBCache(): Promise<void> {
   await kv_set(KB_CACHE_KEY, 'null');
+}
+
+// --- Conversations ---
+
+export async function storeGetConversations(username: string): Promise<SavedConversation[]> {
+  const raw = await kv_get(`convs:${username}`);
+  if (!raw) return [];
+  try { return JSON.parse(raw); } catch { return []; }
+}
+
+export async function storeSetConversations(username: string, convs: SavedConversation[]): Promise<void> {
+  await kv_set(`convs:${username}`, JSON.stringify(convs));
 }

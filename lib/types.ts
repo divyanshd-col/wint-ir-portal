@@ -22,3 +22,10 @@ export interface KnowledgeChunk {
   fileName: string;
   content: string;
 }
+
+export interface SavedConversation {
+  id: string;
+  title: string;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  timestamp: number;
+}

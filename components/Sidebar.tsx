@@ -2,10 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { signOut } from 'next-auth/react';
+import type { SavedConversation } from '@/lib/types';
 
 interface SidebarProps {
   username: string;
   isAdmin?: boolean;
+  historyEnabled?: boolean;
+  onRestoreConversation?: (conv: SavedConversation) => void;
+  onNewChat?: () => void;
+}
+
+function formatTimeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function shortLabel(url: string): string {
@@ -16,7 +30,7 @@ function shortLabel(url: string): string {
   } catch { return url; }
 }
 
-export default function Sidebar({ username, isAdmin }: SidebarProps) {
+export default function Sidebar({ username, isAdmin, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
   const [open, setOpen] = useState(true);
   const [view, setView] = useState<'main' | 'settings'>('main');
 
@@ -55,6 +69,18 @@ export default function Sidebar({ username, isAdmin }: SidebarProps) {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [savingReset, setSavingReset] = useState(false);
 
+  // Conversation history
+  const [conversations, setConversations] = useState<SavedConversation[]>([]);
+  const [historyEnabledLocal, setHistoryEnabledLocal] = useState(historyEnabled);
+
+  useEffect(() => {
+    if (!historyEnabled) return;
+    fetch('/api/conversations')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setConversations(data); })
+      .catch(() => {});
+  }, [historyEnabled]);
+
   useEffect(() => {
     if (!isAdmin) return;
     fetch('/api/config')
@@ -77,6 +103,23 @@ export default function Sidebar({ username, isAdmin }: SidebarProps) {
       .catch(() => {});
     refreshUsers();
   }, [isAdmin]);
+
+  const toggleHistory = async () => {
+    const next = !historyEnabledLocal;
+    setHistoryEnabledLocal(next);
+    await fetch('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationHistoryEnabled: next }),
+    });
+    if (next) {
+      // Load conversations immediately after enabling
+      fetch('/api/conversations')
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setConversations(data); })
+        .catch(() => {});
+    }
+  };
 
   const refreshKB = async () => {
     setRefreshingKB(true);
@@ -270,11 +313,14 @@ export default function Sidebar({ username, isAdmin }: SidebarProps) {
         {/* ── MAIN VIEW ── */}
         {view === 'main' && (
           <nav className="px-4 py-4 flex-1 overflow-y-auto space-y-1">
-            <button className="w-full flex items-center gap-3 px-3 py-2.5 bg-[#2d9e4f]/20 text-[#2d9e4f] rounded-lg text-sm font-medium">
+            <button
+              onClick={onNewChat}
+              className="w-full flex items-center gap-3 px-3 py-2.5 bg-[#2d9e4f]/20 text-[#2d9e4f] rounded-lg text-sm font-medium hover:bg-[#2d9e4f]/30 transition"
+            >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                 <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z"/>
               </svg>
-              Ask Questions
+              New Chat
             </button>
 
             {isAdmin && (
@@ -288,6 +334,25 @@ export default function Sidebar({ username, isAdmin }: SidebarProps) {
                 </svg>
                 Settings
               </button>
+            )}
+
+            {/* Recent conversations */}
+            {historyEnabledLocal && conversations.length > 0 && (
+              <div className="pt-3">
+                <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider px-3 mb-1.5">Recent</p>
+                <div className="space-y-0.5">
+                  {conversations.map(conv => (
+                    <button
+                      key={conv.id}
+                      onClick={() => onRestoreConversation?.(conv)}
+                      className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition group"
+                    >
+                      <p className="text-gray-300 text-xs truncate group-hover:text-white transition">{conv.title}</p>
+                      <p className="text-gray-600 text-[10px] mt-0.5">{formatTimeAgo(conv.timestamp)}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </nav>
         )}
@@ -415,6 +480,27 @@ export default function Sidebar({ username, isAdmin }: SidebarProps) {
               {llmProvider === 'claude' && hasAnthropicKey && (
                 <p className="text-green-400 text-xs mt-2">✓ Anthropic key configured</p>
               )}
+            </section>
+
+            <div className="border-t border-white/10" />
+
+            {/* Conversation History toggle */}
+            <section>
+              <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider px-1 mb-2">Conversation History</p>
+              <button
+                onClick={toggleHistory}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border transition ${
+                  historyEnabledLocal
+                    ? 'bg-[#2d9e4f]/10 border-[#2d9e4f]/30 text-[#2d9e4f]'
+                    : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+                }`}
+              >
+                <span className="text-xs font-medium">Save last 5 conversations</span>
+                <span className={`w-8 h-4 rounded-full relative transition-colors ${historyEnabledLocal ? 'bg-[#2d9e4f]' : 'bg-white/20'}`}>
+                  <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${historyEnabledLocal ? 'left-4' : 'left-0.5'}`} />
+                </span>
+              </button>
+              <p className="text-gray-600 text-[10px] px-1 mt-1.5">Only active for your account until you enable for all users.</p>
             </section>
 
             <div className="border-t border-white/10" />

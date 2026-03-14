@@ -19,6 +19,7 @@ export interface PortalConfig {
   knowledgeBaseUrls: string[];
   users: PortalUser[];
   systemPrompt?: string;
+  conversationHistoryEnabled?: boolean;
   isConfigured: boolean;
 }
 
@@ -35,6 +36,7 @@ const DEFAULT_CONFIG: PortalConfig = {
   knowledgeBaseUrls: [],
   users: [],
   systemPrompt: '',
+  conversationHistoryEnabled: false,
   isConfigured: false,
 };
 

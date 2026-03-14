@@ -27,6 +27,7 @@ export async function GET() {
     geminiModel: config.geminiModel || 'gemini-2.5-flash',
     knowledgeBaseUrls: config.knowledgeBaseUrls,
     systemPrompt: config.systemPrompt || '',
+    conversationHistoryEnabled: config.conversationHistoryEnabled ?? false,
     users: config.users.map(u => ({ username: u.username, password: '••••••••', isAdmin: u.isAdmin })),
     isConfigured: config.isConfigured,
   });
@@ -50,6 +51,7 @@ export async function PATCH(req: NextRequest) {
     ...(body.geminiApiKey4 !== undefined && !body.geminiApiKey4?.startsWith('••••') && { geminiApiKey4: body.geminiApiKey4 }),
     ...(body.geminiApiKey5 !== undefined && !body.geminiApiKey5?.startsWith('••••') && { geminiApiKey5: body.geminiApiKey5 }),
     ...(body.systemPrompt !== undefined && { systemPrompt: body.systemPrompt }),
+    ...(body.conversationHistoryEnabled !== undefined && { conversationHistoryEnabled: body.conversationHistoryEnabled }),
   };
 
   await writeConfig(updated);
