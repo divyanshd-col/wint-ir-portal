@@ -80,31 +80,53 @@ If PROCESS: continue to STEP 1 below.
 
 ---
 
+STEP 0B — EXTRACT EXPLICITLY STATED FACTS FROM THE QUERY:
+
+Before running the decision tree, scan the query for field values that are DIRECTLY AND UNAMBIGUOUSLY STATED — not guessed, not inferred, but explicitly said.
+
+The rule: if removing the fact from the query would change its meaning, it is explicitly stated.
+
+Examples of EXPLICIT facts (treat as pre-filled):
+- "user is unable to pay using netbanking" → payment_mode = Net Banking
+- "payment failed on Razorpay" → gateway = Razorpay
+- "user's AOF has expired" → aof_status = expired
+- "DDPI is active but sell button is greyed out" → ddpi_signed = yes, ddpi_activation_status = active
+- "user hasn't made any investment yet" → completed_one_investment = no
+- "payment was successful but bond not showing" → payment_status = success
+- "user is on UPI AutoPay" → payment_method = UPI AutoPay
+- "repayment date falls on a holiday" → falls_on_holiday = yes
+
+Examples of VAGUE inferences (do NOT pre-fill — still ask):
+- "user wants to sell bonds" → does NOT confirm ddpi_signed, sell_order_placed, or any other field
+- "user's KYC is stuck" → does NOT confirm aof_status value
+- "payment not going through" → does NOT confirm payment_status value (could be failed or pending on Finder — must check)
+
+Add extracted explicit facts to a working set called EXTRACTED FACTS. Treat them exactly like EXISTING CONFIRMED ANSWERS — do not ask for any field whose value is already in EXTRACTED FACTS.
+
+---
+
 MANDATORY PRE-CHECK — DO THIS BEFORE ANYTHING ELSE:
 
-Look at the field IDs in EXISTING CONFIRMED ANSWERS. Write them out mentally:
-- These fields are DONE. You must NEVER return a question whose "id" already appears as a key in EXISTING CONFIRMED ANSWERS.
-- If every field needed for a step is already in EXISTING CONFIRMED ANSWERS, that entire step is DONE — move to the next step.
-- If every step in the decision tree is DONE — return {"questions":[]}.
-- If a step's branch condition (e.g. "only if aof_status = pending") is NOT satisfied by existing answers — skip that step entirely, do not ask it.
-- CRITICAL: The query text and conversation history are NOT confirmed answers. Do not treat anything in the query as a pre-filled answer unless it was submitted through a previous form step and appears in EXISTING CONFIRMED ANSWERS.
-
-This check is not optional. Run it before selecting which step to return.
+Combine EXISTING CONFIRMED ANSWERS + EXTRACTED FACTS into one set of known values.
+- Any field ID present in this combined set is DONE — never ask it again.
+- If every field needed for a step is in the combined set, that step is DONE — move to the next.
+- If every step is DONE or SKIPPED → return {"questions":[]}.
+- If a step's branch condition is not met by the combined set — skip that step entirely.
 
 ---
 
 CORE RULES:
 1. Walk the decision tree for the detected query type top-to-bottom
-2. A step is DONE if ALL its question IDs are already keys in EXISTING CONFIRMED ANSWERS
-3. A conditional step is SKIPPED if its condition is not met by existing answers
+2. A step is DONE if ALL its question IDs are in EXISTING CONFIRMED ANSWERS + EXTRACTED FACTS
+3. A conditional step is SKIPPED if its condition is not met by the combined known values
 4. Return ONLY the questions for the FIRST step that is neither DONE nor SKIPPED
 5. If all steps are DONE or SKIPPED → return {"questions":[]}
-6. Also check CONVERSATION HISTORY — if a value was explicitly stated by the agent in a previous turn (e.g. "confirmed the user's DDPI is active"), treat it as confirmed
-7. NEVER return a question whose id is already in EXISTING CONFIRMED ANSWERS
+6. Also check CONVERSATION HISTORY — if a value was explicitly stated by the agent in a previous turn, treat it as confirmed
+7. NEVER return a question whose id is already in the combined known set
 8. NEVER ask free-text fields — all questions must have discrete options
 9. NEVER invent option values — use ONLY the exact options listed in each step
-10. NEVER infer or assume a question is already answered from the current query text. A query like "user wants to sell bonds" does NOT confirm ddpi_signed, sell_order_placed, or any other field. Only EXISTING CONFIRMED ANSWERS (from prior form submissions) can mark a field as done.
-11. ALWAYS start from STEP 1 of the matched tree when EXISTING CONFIRMED ANSWERS is empty or does not satisfy any step condition. Never jump ahead based on what the query implies about the user's situation.
+10. NEVER infer vague or assumed answers from the query. Only extract what is directly and unambiguously stated (see STEP 0B above).
+11. ALWAYS start from STEP 1 of the matched tree and walk forward. Never skip ahead based on implied context — only skip steps whose questions are already answered in the combined known set.
 
 ---
 
