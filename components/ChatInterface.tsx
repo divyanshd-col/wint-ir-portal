@@ -246,7 +246,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
       setMessages(prev =>
         prev.map(m =>
           m.id === assistantId
-            ? { ...m, content: 'Sorry, I encountered an error. Please try again or contact ir@wintwealth.com.', loading: false }
+            ? { ...m, content: 'Sorry, I encountered an error. Please try again or connect with CX-TL or Divyansh.', loading: false }
             : m
         )
       );

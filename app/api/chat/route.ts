@@ -173,14 +173,14 @@ OUTPUT RULES:
 3. Write like a confident senior colleague briefing a junior one. Direct, calm, no fluff.
 4. Never invent channels, POC names, timelines, email addresses, or steps not in the KB.
 5. Never ask for information already in CONFIRMED EVIDENCE.
-6. If the KB does not cover this case: "I don't have enough information for this specific case. Please escalate to ir@wintwealth.com."
+6. If the KB does not cover this case: "I don't have enough information for this specific case. Please connect with CX-TL or Divyansh."
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'None'}
 
 ---
 
-${context ? `KNOWLEDGE BASE:\n${context}` : `KNOWLEDGE BASE: No relevant documents found. Please escalate to ir@wintwealth.com.`}
+${context ? `KNOWLEDGE BASE:\n${context}` : `KNOWLEDGE BASE: No relevant documents found. Please connect with CX-TL or Divyansh.`}
 
 ---
 
@@ -218,7 +218,7 @@ OUTPUT RULES:
 3. Keep it concise. The agent needs to understand quickly, not read an essay.
 4. Never address the user directly. Every word is for the agent.
 5. Do not invent numbers, timelines, fees, or steps not in the KB.
-6. If the KB has no coverage: "I don't have information on this specific query. Please escalate to ir@wintwealth.com."
+6. If the KB has no coverage: "I don't have information on this specific query. Please connect with CX-TL or Divyansh."
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'None'}
