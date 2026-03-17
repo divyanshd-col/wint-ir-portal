@@ -274,11 +274,24 @@ export default function ChatInterface({ username, historyEnabled = false, initia
         body: JSON.stringify({ messages: queryMessages, allAnswers: accumulated }),
       });
 
-      const { queryType, questions, stepTitle } = await analyzeRes.json();
+      const { queryType, questions, stepTitle, clarificationMessage } = await analyzeRes.json();
 
       // Direct queries skip the form entirely
       if (queryType === 'direct') {
         await streamAnswer(queryMessages, undefined, 'direct');
+        return;
+      }
+
+      // Clarify: show as a conversational text message — agent can respond naturally
+      if (queryType === 'clarify' && clarificationMessage) {
+        const clarifyId = (Date.now() + 1).toString();
+        setMessages(prev => [...prev, {
+          id: clarifyId,
+          role: 'assistant',
+          content: clarificationMessage,
+          loading: false,
+        }]);
+        setLoading(false);
         return;
       }
 
@@ -339,12 +352,22 @@ export default function ChatInterface({ username, historyEnabled = false, initia
         body: JSON.stringify({ messages: apiMessages, allAnswers: {} }),
       });
 
-      const { queryType, questions, stepTitle } = await analyzeRes.json();
+      const { queryType, questions, stepTitle, clarificationMessage } = await analyzeRes.json();
 
       // Direct queries: skip form, answer immediately
       if (queryType === 'direct' || !questions || questions.length === 0) {
         setMessages(prev => prev.filter(m => m.id !== thinkingMsg.id));
         await streamAnswer(apiMessages, undefined, queryType === 'direct' ? 'direct' : 'process');
+      } else if (queryType === 'clarify' && clarificationMessage) {
+        // Clarify: replace thinking dot with a conversational question
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === thinkingMsg.id
+              ? { ...m, loading: false, content: clarificationMessage }
+              : m
+          )
+        );
+        setLoading(false);
       } else {
         // Process query: show Step 1 form
         setMessages(prev =>
