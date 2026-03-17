@@ -8,6 +8,7 @@ interface FormQuestion {
   label: string;
   placeholder?: string;
   options?: string[];
+  type?: 'select' | 'text';
 }
 
 interface MessageForm {
@@ -526,34 +527,52 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                               {msg.form.stepTitle || 'Context Required'}
                             </p>
                           </div>
-                          <p className="text-[12px] text-gray-400 mt-1.5 pl-[17px]">Select an answer for each field</p>
+                          <p className="text-[12px] text-gray-400 mt-1.5 pl-[17px]">
+                            {msg.form.questions.every(q => q.options && q.options.length > 0)
+                              ? 'Select an answer for each field'
+                              : 'Select or type an answer for each field'}
+                          </p>
                         </div>
                         <div className="px-5 py-5 space-y-5">
-                          {msg.form.questions.map(q => (
+                          {msg.form.questions.map(q => {
+                            const isText = q.type === 'text' || !q.options || q.options.length === 0;
+                            return (
                             <div key={q.id}>
                               <label className="block text-[13.5px] font-[600] text-[#111827] mb-3">{q.label}</label>
-                              <div className="flex flex-wrap gap-2">
-                                {(q.options ?? []).map(opt => {
-                                  const selected = msg.form!.answers[q.id] === opt;
-                                  return (
-                                    <button
-                                      key={opt}
-                                      type="button"
-                                      disabled={loading}
-                                      onClick={() => updateFormAnswer(msg.id, q.id, opt)}
-                                      className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${
-                                        selected
-                                          ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
-                                          : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
-                                      }`}
-                                    >
-                                      {opt}
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                              {isText ? (
+                                <input
+                                  type="text"
+                                  disabled={loading}
+                                  value={msg.form!.answers[q.id] || ''}
+                                  onChange={e => updateFormAnswer(msg.id, q.id, e.target.value)}
+                                  placeholder={q.placeholder || 'Type your answer…'}
+                                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
+                                />
+                              ) : (
+                                <div className="flex flex-wrap gap-2">
+                                  {(q.options ?? []).map(opt => {
+                                    const selected = msg.form!.answers[q.id] === opt;
+                                    return (
+                                      <button
+                                        key={opt}
+                                        type="button"
+                                        disabled={loading}
+                                        onClick={() => updateFormAnswer(msg.id, q.id, opt)}
+                                        className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${
+                                          selected
+                                            ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
+                                        }`}
+                                      >
+                                        {opt}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                         <div className="px-5 pb-5">
                           <button

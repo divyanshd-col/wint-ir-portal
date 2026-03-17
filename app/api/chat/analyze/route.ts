@@ -41,7 +41,9 @@ ${query}
 ---
 
 RETURN FORMAT — return ONLY valid JSON, no markdown, no explanation:
-{"queryType":"direct"|"process"|"clarify","questions":[{"id":"field_id","label":"Question label","options":["opt1","opt2"]}],"stepTitle":"Step N: Description","clarificationMessage":"only when queryType=clarify"}
+{"queryType":"direct"|"process"|"clarify","questions":[{"id":"field_id","label":"Question label","options":["opt1","opt2"],"type":"select"|"text"}],"stepTitle":"Step N: Description","clarificationMessage":"only when queryType=clarify"}
+
+For each question, set "type":"select" when there are known discrete options (use options array). Set "type":"text" and omit options (or use []) when the answer is open-ended and cannot be predicted — e.g. an error message the user saw, a UTR number, a date, last 4 digits of account number, a specific amount. Never invent options for things that are genuinely free-form.
 
 ---
 
@@ -160,8 +162,9 @@ Using the KNOWN SET, identify which tree to use (from PRODUCT ROUTING below), th
 RULES:
 - Walk top-to-bottom. Never jump ahead.
 - Never return a question whose field ID is already in the KNOWN SET
-- All questions must have discrete options — never free-text
-- Only use option values listed in the tree — never invent new ones
+- Questions with known discrete states → use "type":"select" with options array
+- Questions with unpredictable answers (error text, numbers, dates) → use "type":"text" with no options
+- Never invent options for things that are genuinely free-form
 - If all needed context is already known, return {"questions":[]} immediately (final answer will be generated)
 
 QUESTION SEQUENCING — THE MOST IMPORTANT RULE:
