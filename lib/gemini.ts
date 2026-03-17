@@ -18,6 +18,9 @@ function isRateLimit(err: any): boolean {
   return err?.status === 429 || String(err?.message).includes('429') || String(err?.message).toLowerCase().includes('quota');
 }
 
+// Testing branch: thinking disabled on all Gemini calls to measure latency impact
+const NO_THINKING = { thinkingConfig: { thinkingBudget: 0 } };
+
 /** Non-streaming Gemini call with automatic key rotation on 429. */
 export async function geminiGenerate(
   keys: string[],
@@ -29,7 +32,7 @@ export async function geminiGenerate(
   for (const key of keys) {
     try {
       const ai = new GoogleGenAI({ apiKey: key });
-      const response = await ai.models.generateContent({ model, contents, ...extra });
+      const response = await ai.models.generateContent({ model, contents, config: NO_THINKING, ...extra });
       return response.text || '';
     } catch (err: any) {
       if (isRateLimit(err)) { lastError = err; continue; }
@@ -53,7 +56,7 @@ export async function geminiStream(
       return await ai.models.generateContentStream({
         model,
         contents,
-        config: { systemInstruction },
+        config: { systemInstruction, ...NO_THINKING },
       });
     } catch (err: any) {
       if (isRateLimit(err)) { lastError = err; continue; }
