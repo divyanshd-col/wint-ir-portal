@@ -20,7 +20,7 @@ function isRateLimit(err: any): boolean {
 
 // Testing branch: minimum thinking budget to benchmark latency
 // (Gemini 2.5 Pro requires thinking mode — 0 is rejected, 1 is the minimum)
-const NO_THINKING = { thinkingConfig: { thinkingBudget: 1 } };
+const NO_THINKING = { thinkingConfig: { thinkingBudget: 128 } };
 
 /** Non-streaming Gemini call with automatic key rotation on 429. */
 export async function geminiGenerate(
