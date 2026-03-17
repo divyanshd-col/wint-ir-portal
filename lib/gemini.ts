@@ -47,13 +47,18 @@ export async function geminiStream(
   systemInstruction: string
 ) {
   let lastError: any;
+  // Cap thinking for Pro to reduce latency at scale. 2048 is enough for CX briefings
+  // (answers are structured, not open-ended reasoning). Flash has no thinking by default.
+  const thinkingConfig = model.includes('pro')
+    ? { thinkingConfig: { thinkingBudget: 2048 } }
+    : {};
   for (const key of keys) {
     try {
       const ai = new GoogleGenAI({ apiKey: key });
       return await ai.models.generateContentStream({
         model,
         contents,
-        config: { systemInstruction },
+        config: { systemInstruction, ...thinkingConfig },
       });
     } catch (err: any) {
       if (isRateLimit(err)) { lastError = err; continue; }

@@ -441,9 +441,11 @@ Now identify the category, check the Known Set against the relevant framework ab
       });
       text = response.content[0].type === 'text' ? response.content[0].text : text;
     } else {
+      // Flash for routing/classification — 5× faster, 10× higher rate limits than Pro
+      // Deep reasoning not needed here; quality gain from Pro is negligible for JSON routing
       text = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-pro',
+        'gemini-2.5-flash',
         [{ role: 'user', parts: [{ text: analyzePrompt }] }]
       );
     }
