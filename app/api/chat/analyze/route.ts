@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
 
   const config = await readConfig();
   const provider = config.llmProvider || 'gemini';
-  // Analyze always uses Flash — fast, cheap, sufficient for JSON classification
   const geminiKeys = getOrderedGeminiKeys(config);
 
   const conversationHistory = messages
@@ -442,7 +441,7 @@ Now identify the category, check the Known Set against the relevant framework ab
     } else {
       text = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        'gemini-2.5-pro',
         [{ role: 'user', parts: [{ text: analyzePrompt }] }]
       );
     }

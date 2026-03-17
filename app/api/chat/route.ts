@@ -20,7 +20,7 @@ async function expandQuery(keys: string[], query: string): Promise<string> {
   try {
     const result = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      'gemini-2.5-pro',
       [{
         role: 'user',
         parts: [{
