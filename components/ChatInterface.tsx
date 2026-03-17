@@ -268,11 +268,23 @@ export default function ChatInterface({ username, historyEnabled = false, initia
       return;
     }
 
+    // Inject accumulated form answers into the conversation so the analyze model
+    // sees them in its history — prevents asking questions that are already answered
+    const messagesForAnalyze = Object.keys(accumulated).length > 0
+      ? [
+          ...queryMessages,
+          {
+            role: 'user' as const,
+            content: `[Already confirmed by agent:\n${Object.entries(accumulated).map(([k, v]) => `${k}: ${v}`).join('\n')}]`,
+          },
+        ]
+      : queryMessages;
+
     try {
       const analyzeRes = await fetch('/api/chat/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: queryMessages, allAnswers: accumulated }),
+        body: JSON.stringify({ messages: messagesForAnalyze, allAnswers: accumulated }),
       });
 
       const { queryType, questions, stepTitle, clarificationMessage } = await analyzeRes.json();

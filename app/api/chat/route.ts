@@ -85,16 +85,20 @@ export async function POST(req: NextRequest) {
     ]);
     console.log(`[chat] KB ready: ${chunks.length} chunks`);
 
-    // For process queries: also append form answer values as search terms
-    // (e.g. "after 9pm no holiday" pulls repayment section; "failed razorpay" pulls payment section)
+    // For process queries: append form answer keys AND values as search terms.
+    // Keys (e.g. "holding_on_record_date", "payment_mode") directly match KB section terminology.
+    // Values (e.g. "Net Banking", "Razorpay") match specific scenario text within those sections.
     const formTerms = (formAnswers && Object.keys(formAnswers).length > 0)
-      ? ' ' + Object.values(formAnswers as Record<string, string>).join(' ')
+      ? ' ' + [
+          ...Object.keys(formAnswers as Record<string, string>).map(k => k.replace(/_/g, ' ')),
+          ...Object.values(formAnswers as Record<string, string>),
+        ].join(' ')
       : '';
     const searchQuery = expandedQuery + formTerms;
 
-    // Direct queries get more chunks — broader context needed for educational answers
-    // Process queries stay tighter — form answers already narrow the scenario
-    const topK = queryType === 'direct' ? 15 : 10;
+    // Direct queries: broad KB scan. Process queries: form answer keys/values now guide retrieval
+    // so we can pull more chunks without noise — both use 15
+    const topK = 15;
     const relevant = retrieveRelevantChunks(chunks, searchQuery, topK);
     console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK})`);
     if (relevant.length > 0) {

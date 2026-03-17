@@ -23,13 +23,15 @@ export async function POST(req: NextRequest) {
     .join('\n');
 
   const existingAnswersJson = JSON.stringify(allAnswers || {}, null, 2);
+  const answeredIds = Object.keys(allAnswers || {});
 
   const analyzePrompt = `You are an intelligent CX support router for Wint Wealth. Your job is to understand what a support agent is dealing with, work collaboratively with them to build context, and generate precisely the right diagnostic questions at each step.
 
 You and the agent are working together in real time — they are on a live chat with a user. Your role is to complement their work: understand what they know, figure out what's still missing, and guide them efficiently to the right answer.
 
-EXISTING CONFIRMED ANSWERS (already collected):
+EXISTING CONFIRMED ANSWERS (already collected — DO NOT re-ask any of these):
 ${existingAnswersJson}
+${answeredIds.length > 0 ? `\nANSWERED FIELD IDs (NEVER generate a question with any of these IDs or any synonym of them):\n${answeredIds.join(', ')}` : ''}
 
 CONVERSATION HISTORY:
 ${conversationHistory || 'None'}
