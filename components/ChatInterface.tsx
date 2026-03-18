@@ -17,6 +17,7 @@ interface MessageForm {
   answers: Record<string, string>;
   submitted: boolean;
   queryMessages: { role: string; content: string }[];
+  category?: string | null;
 }
 
 interface Message {
@@ -186,7 +187,8 @@ export default function ChatInterface({ username, historyEnabled = false, initia
   const streamAnswer = async (
     queryMessages: { role: string; content: string }[],
     formAnswers?: Record<string, string>,
-    queryType: 'direct' | 'process' = 'process'
+    queryType: 'direct' | 'process' = 'process',
+    category?: string | null
   ) => {
     const assistantId = (Date.now() + 2).toString();
     const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', loading: true };
@@ -196,7 +198,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: queryMessages, formAnswers, queryType }),
+        body: JSON.stringify({ messages: queryMessages, formAnswers, queryType, category }),
       });
 
       if (!res.ok) throw new Error('Failed to get response');
@@ -260,11 +262,12 @@ export default function ChatInterface({ username, historyEnabled = false, initia
   const analyzeAndProceed = async (
     queryMessages: { role: string; content: string }[],
     accumulated: Record<string, string>,
-    stepCount: number = 0
+    stepCount: number = 0,
+    knownCategory?: string | null
   ) => {
     // Hard cap: after 6 steps always go to final answer regardless
     if (stepCount >= 6) {
-      await streamAnswer(queryMessages, accumulated);
+      await streamAnswer(queryMessages, accumulated, 'process', knownCategory);
       return;
     }
 
@@ -287,11 +290,13 @@ export default function ChatInterface({ username, historyEnabled = false, initia
         body: JSON.stringify({ messages: messagesForAnalyze, allAnswers: accumulated }),
       });
 
-      const { queryType, questions, stepTitle, clarificationMessage } = await analyzeRes.json();
+      const { queryType, category: responseCategory, questions, stepTitle, clarificationMessage } = await analyzeRes.json();
+      // Persist category once identified — subsequent steps reuse it
+      const category = responseCategory || knownCategory || null;
 
       // Direct queries skip the form entirely
       if (queryType === 'direct') {
-        await streamAnswer(queryMessages, undefined, 'direct');
+        await streamAnswer(queryMessages, undefined, 'direct', null);
         return;
       }
 
@@ -327,15 +332,16 @@ export default function ChatInterface({ username, historyEnabled = false, initia
             answers: {},
             submitted: false,
             queryMessages,
+            category,
           },
         }]);
         setLoading(false);
       } else {
         // No new questions — all evidence collected, stream final answer
-        await streamAnswer(queryMessages, accumulated, 'process');
+        await streamAnswer(queryMessages, accumulated, 'process', category);
       }
     } catch {
-      await streamAnswer(queryMessages, accumulated);
+      await streamAnswer(queryMessages, accumulated, 'process', knownCategory);
     }
   };
 
@@ -365,12 +371,12 @@ export default function ChatInterface({ username, historyEnabled = false, initia
         body: JSON.stringify({ messages: apiMessages, allAnswers: {} }),
       });
 
-      const { queryType, questions, stepTitle, clarificationMessage } = await analyzeRes.json();
+      const { queryType, category, questions, stepTitle, clarificationMessage } = await analyzeRes.json();
 
       // Direct queries: skip form, answer immediately
       if (queryType === 'direct' || !questions || questions.length === 0) {
         setMessages(prev => prev.filter(m => m.id !== thinkingMsg.id));
-        await streamAnswer(apiMessages, undefined, queryType === 'direct' ? 'direct' : 'process');
+        await streamAnswer(apiMessages, undefined, queryType === 'direct' ? 'direct' : 'process', category);
       } else if (queryType === 'clarify' && clarificationMessage) {
         // Clarify: replace thinking dot with a conversational question
         setMessages(prev =>
@@ -395,6 +401,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                     answers: {},
                     submitted: false,
                     queryMessages: apiMessages,
+                    category,
                   },
                 }
               : m
@@ -427,7 +434,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
     setLoading(true);
 
     // Re-analyze with all accumulated answers to determine next step or final answer
-    await analyzeAndProceed(msg.form.queryMessages, newAccumulated, newStepCount);
+    await analyzeAndProceed(msg.form.queryMessages, newAccumulated, newStepCount, msg.form.category);
   };
 
   const handleSubmit = (e: React.FormEvent) => {

@@ -56,9 +56,12 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { messages, formAnswers, queryType } = await req.json();
+  const { messages, formAnswers, queryType, category } = await req.json();
   const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
-  const query = latestUserMessage?.content || '';
+  // Exclude injected context messages from query extraction
+  const rawContent = latestUserMessage?.content || '';
+  // Strip injected context messages (added by frontend for analyze calls)
+  const query = rawContent.startsWith('[Already confirmed') ? '' : rawContent;
 
   const config = await readConfig();
   const provider = config.llmProvider || 'gemini';
@@ -85,16 +88,30 @@ export async function POST(req: NextRequest) {
     ]);
     console.log(`[chat] KB ready: ${chunks.length} chunks`);
 
-    // For process queries: append form answer keys AND values as search terms.
-    // Keys (e.g. "holding_on_record_date", "payment_mode") directly match KB section terminology.
-    // Values (e.g. "Net Banking", "Razorpay") match specific scenario text within those sections.
+    // Category keywords directly target the right KB section
+    const categoryKeywords: Record<string, string> = {
+      repayment: 'repayment coupon interest principal record date bank',
+      kyc: 'KYC AOF eSign KRA AML demat UCC penny test Aadhaar',
+      payment: 'payment RFQ buy order Razorpay Cashfree UPI Net Banking gateway',
+      sip: 'SIP mandate autopay UPI AutoPay eNACH instalment debit',
+      sell: 'sell DDPI activation proceeds T+1 Flexi tenure liquidity',
+      referral: 'referral reward referee signup mapped credited',
+      taxation: 'TDS tax 15G 15H 26AS LTCG STCG capital gains',
+      dashboard: 'portfolio dashboard profile bank account family account deletion',
+      fd: 'FD fixed deposit premature withdrawal Bajaj Shriram',
+      huf: 'HUF Hindu Undivided Family offline tracking sheet',
+    };
+    const categoryBoost = category ? (categoryKeywords[category] || '') : '';
+
+    // Form answer keys (e.g. "holding_on_record_date") match KB section headers.
+    // Values (e.g. "Razorpay", "eNACH") match scenario text within those sections.
     const formTerms = (formAnswers && Object.keys(formAnswers).length > 0)
       ? ' ' + [
           ...Object.keys(formAnswers as Record<string, string>).map(k => k.replace(/_/g, ' ')),
           ...Object.values(formAnswers as Record<string, string>),
         ].join(' ')
       : '';
-    const searchQuery = expandedQuery + formTerms;
+    const searchQuery = expandedQuery + formTerms + (categoryBoost ? ' ' + categoryBoost : '');
 
     // Direct queries: broad KB scan. Process queries: form answer keys/values now guide retrieval
     // so we can pull more chunks without noise — both use 15
@@ -139,42 +156,52 @@ KB chunks start with a breadcrumb path (e.g. "Repayment > Scenario 2: Bank Accou
 
 MAPPING CONFIRMED EVIDENCE TO KB SCENARIOS:
 
-The confirmed field names and values are navigation keys. Use them like this:
-
-Field NAMES tell you the KB section:
-  aof_status / sebi_kyc_status / kra_status / which_kra → KYC Process Guide
-  holding_on_record_date / contacted_on_repayment_date / recent_bank_change / change_before_or_after_record_date / bank_statement_check → Repayment Process Guide
-  mandate_status / payment_method / mandate_type / sip_amount_over_10k / active_sip_on_finder → SIP Process Guide
-  ddpi_signed / ddpi_activation_status / sell_order_placed / t1_elapsed_since_order → Sell / DDPI Process Guide
-  payment_mode / gateway / payment_status / first_investment / before_or_after_t3_working_days → Payment & Buy Order Process Guide
-  referee_kyc_complete / reward_status_on_finder / signup_method → Referral Process Guide
-
-Field VALUES tell you the exact scenario:
+The triage layer has already collected the facts below. Use the field names and values as direct pointers to the KB scenario. Do not re-derive or second-guess them — go straight to the resolution.
 
 REPAYMENT:
-  holding_on_record_date=no → Scenario 1: not entitled — not holding on record date
-  contacted_on_repayment_date=yes → Scenario 3: still processing — wait until EOD
-  recent_bank_change=yes + change_before_or_after_record_date=after record date → Scenario 2: sent to old bank; share last 4 digits of old account; escalate #asset-repayment-issues if amount not found
-  recent_bank_change=no + bank_statement_check=provided and IFSC does NOT match → Scenario 4 Case 2: IFSC mismatch; ask user to update bank details
-  recent_bank_change=no + bank_statement_check=provided and IFSC matches → Scenario 4 Case 1: details match; escalate #asset-repayment-issues with CMR + bank statement
+  holding_on_record_date=No → Scenario 1: user not entitled (was not holding on record date)
+  contacted_on_repayment_date=Contacting today → Scenario 3: still processing today — tell user to wait until EOD
+  recent_bank_change=Yes + change_before_or_after_record_date=After the record date → Scenario 2: repayment sent to old bank account
+  recent_bank_change=No + bank_ifsc_check=IFSC does NOT match Finder → Scenario 4 Case 2: IFSC mismatch — ask user to update bank details
+  recent_bank_change=No + bank_ifsc_check=IFSC matches Finder → Scenario 4 Case 1: escalate #asset-repayment-issues with CMR + bank statement
+  repayment_amount_direction=Received more → explain accrued interest / bonus coupon
+  repayment_amount_direction=Received less → explain partial repayment / TDS deduction
 
-KYC:
-  aof_status=blank → user has not started KYC
-  aof_status=pending → eSign link sent, user has not signed yet
-  aof_status=expired → eSign link expired; needs reset
-  aof_status=signed → check KRA, AML, Insta Demat, UCC in Finder
-  kra_status=approved + aml_status=approved + insta_demat_status=completed + ucc_status=blank → UCC pending; request self-attested PAN; raise #ucc-coordination
-  which_kra=CVL → CVL KRA template; check CVL portal and KRA mod sheet; escalate #bond-kyc-discrepancies @dpops
-  which_kra=NDML → NDML template with T+4 expected resolution
+KYC — Layer 1 (step failing during submission):
+  kyc_failing_step=Proceed button not responding → network/device troubleshooting
+  kyc_failing_step=Bank details already linked to another account → confirm credential, present 2 deletion options
+  kyc_failing_step=Penny test failed → guide to Manual Bank Entry option in app
+  kyc_failing_step=Penny test refund not received → check KYC submission date (15-day SLA); if >15 days, get UTR from TL or email Setu
+  kyc_failing_step=Aadhaar OTP not received → check SMS folders + reset via /OTP-reset in #cx-api; if still failing → escalate to CX-TL → email Digio
+  kyc_failing_step=PAN or Aadhaar already linked to another Wint account → confirm credential, present 2 deletion options
+  kyc_failing_step=PAN and Aadhaar are not linked on IT portal → Scenario 1 (never linked) → IT portal guide; Scenario 2 (claims linked but fails) → screenshot + Google Form + Cashfree escalation
+  kyc_failing_step=Date of birth mismatch → correct on UIDAI or IT portal
+  kyc_failing_step=Selfie / liveliness check failing → lighting/positioning guidance
 
-PAYMENTS (B3 — payment not going through):
-  payment_error_type=bank website redirect failed → known intermittent bank error; ask user to retry or switch to UPI
+KYC — Layer 2 (submitted and eSigned, account not active):
+  kra_status=Issue + which_kra=CVL → CVL KRA template; check CVL portal and KRA mod sheet; escalate #bond-kyc-discrepancies @dpops
+  kra_status=Issue + which_kra=NDML → NDML template; T+4 expected resolution
+  kra_status=Approved + aml_status=Approved + insta_demat_status=Completed + ucc_status=Blank → UCC pending; request self-attested PAN; raise #ucc-coordination (Harishankar)
+
+KYC — Layer 3 (nominee/form signing):
+  nominee_or_signing_issue=Nominee update — only 1 nominee → reset via /nominee-reset in #cx-api
+  nominee_or_signing_issue=Nominee update — multiple nominees → share 3 forms (Cancellation + Submission + KYC); courier to office
+  nominee_or_signing_issue=Signing error on a form → confirm form type; confirm own Aadhaar used; if name mismatch → collect PAN + Aadhaar → escalate #bond-kyc-discrepancies, tag Yashika
+
+PAYMENT / BUY ORDER:
+  payment_situation=bond not showing + first_investment=Yes → first investment flow; check demat creation (kra/aml/insta/ucc statuses); T+3 working day window
+  payment_situation=bond not showing + first_investment=No + payment_status_confirmed=Success → T+1 settlement delay — check RFQ tab
+  payment_situation=bond not showing + first_investment=No + payment_status_confirmed=Failed → payment did not succeed — redirect to payment failing flow
+  payment_error_type=Amount was deducted but no order + order_visible_on_finder=Yes → order exists on Finder, settlement delay — check RFQ tab status
+  payment_error_type=Amount was deducted but no order + order_visible_on_finder=No → deduction without order — raise #cx-email-coordination, tag @email; 10–15 day SLA
+  payment_error_type=Bank website redirect failed → known intermittent bank error; guide user to retry or switch to UPI
   payment_error_type=UPI transaction declined → check Cashfree portal for failure reason; guide retry
-  payment_error_type=error message shown on screen → get screenshot; check gateway (Razorpay for Net Banking, Cashfree for UPI); if URL rejected error → known bank-end issue, retry or switch method
-  payment_error_type=amount deducted but no order placed + order_visible_on_finder=yes → order exists, settlement delay — check RFQ tab status
-  payment_error_type=amount deducted but no order placed + order_visible_on_finder=no → deduction without order — raise on #cx-email-coordination, tag @email; 10–15 day SLA
-  retried=no → guide user to retry or try alternate payment method first before escalating
-  retried=yes → check gateway portal for failure reason; raise on #cx-email-coordination, tag @email; share 10–15 day resolution SLA with user
+  payment_error_type=Payment page failing + retried=No → guide user to retry first or try alternate payment method
+  payment_error_type=Payment page failing + retried=Yes → check gateway portal; raise #cx-email-coordination, tag @email; 10–15 day SLA
+  payment_situation=Cannot buy more than X units → unit/purchase limit; check referral status and which seller assigned
+  payment_situation=Refund expected + refund_trigger=Failed payment → refund SLA 5–7 working days; UCC deletion T+5 from failed payment; blocked until 12:30 PM on deletion day
+  payment_situation=Refund expected + refund_trigger=KYC rejected → refund initiated next day of rejection (UPI only)
+  payment_situation=Refund expected + refund_trigger=Order cancelled → standard refund process
 
 GATEWAY CHECKS (internal — agent only):
   UPI payments → Cashfree portal; confirm valid UPI account
@@ -182,9 +209,43 @@ GATEWAY CHECKS (internal — agent only):
   Net Banking via Cashfree → wint_cashfree profile on Cashfree
 
 SIP:
-  active_sip_on_finder=no → debit may be from old cancelled mandate or bank error — not a Wint SIP
-  mandate_type=UPI AutoPay + amount change requested → cancel and re-setup SIP (UPI mandate cannot be modified mid-flight)
-  mandate_type=eNACH + amount change requested → raise in SIP modification sheet; tag Shaurya Agarwal / Hrithik
+  sip_issue_type=Cannot set up + completed_one_investment=No → not eligible; must complete one investment first
+  sip_issue_type=Cannot set up + completed_one_investment=Yes + mandate_type=UPI AutoPay → UPI AutoPay setup; note ₹10k cap
+  sip_issue_type=Cannot set up + completed_one_investment=Yes + mandate_type=eNACH → eNACH setup; up to ₹3 lakh
+  sip_issue_type=Change date or amount + active_sip_on_finder=No → no active SIP; check if user set one up correctly
+  sip_issue_type=Change date or amount + mandate_type=UPI AutoPay → cannot modify; must cancel and re-setup
+  sip_issue_type=Change date or amount + mandate_type=eNACH → raise in SIP modification sheet; tag Shaurya Agarwal / Hrithik
+  sip_issue_type=Money deducted no bond + active_sip_on_finder=No → debit from old cancelled mandate or bank error — not a Wint SIP; guide user to check with bank
+  sip_issue_type=Money deducted no bond + active_sip_on_finder=Yes → SIP confirmed active; get bank statement to check for duplicate; escalate #sip-discrepancies
+  sip_issue_type=Cancel SIP + active_sip_on_finder=No → no active SIP to cancel
+  sip_issue_type=Cancel SIP + active_sip_on_finder=Yes + upcoming_order_placed=No → can cancel; instruct email to hello@wintwealth.com
+  sip_issue_type=Cancel SIP + upcoming_order_placed=Yes + t_minus_1_check=Yes — deduction is tomorrow → T-1: that instalment cannot be stopped; email for cancellation of future instalments
+  sip_issue_type=Cancel SIP + upcoming_order_placed=Yes + t_minus_1_check=No → can still cancel this cycle via app; then email for full cancellation
+  sip_issue_type=Skip instalment + t_minus_1_check=Yes — deduction is tomorrow → T-1: autopay raised, cannot stop this debit
+  sip_issue_type=Skip instalment + t_minus_1_check=No → guide to skip via app (latest version)
+
+SELL / DDPI:
+  sell_situation=DDPI not set up + ddpi_activation_status=Inactive → guide to sign DDPI from app Settings
+  sell_situation=DDPI not set up + ddpi_activation_status=Pending → signed but not yet active; 24–48 working hours; check Finder status
+  sell_situation=DDPI not set up + ddpi_activation_status=Active → DDPI is active; investigate sell issue
+  sell_situation=DDPI active but sell unavailable + sell_blocked_reason=Near or on record date → sell temporarily restricted near record date; explain
+  sell_situation=DDPI active but sell unavailable + sell_blocked_reason=Bond flagged / negative news → sell restricted due to news; escalate #cx-ops
+  sell_situation=DDPI active but sell unavailable + sell_blocked_reason=Flexi tenure → predefined exit dates; no buyer = auto-extends to maturity; extend option available on app
+  sell_situation=Sell proceeds not received + t1_elapsed_since_order=No → T+1 settlement still in progress; ask user to wait
+  sell_situation=Sell proceeds not received + t1_elapsed_since_order=Yes → settlement overdue; user sends bank statement to hello@wintwealth.com
+  sell_situation=User wants to deactivate DDPI → offline process; email hello@wintwealth.com; 2 working days
+  sell_situation=User wants to cancel sell order → email hello@wintwealth.com; team checks if cancellable; escalate #cx-ops
+
+REFERRAL:
+  referral_issue_type=reward not credited + any prerequisite incomplete (kyc/demat/order) → prerequisites not yet met; explain which one is missing
+  referral_issue_type=reward not credited + all prerequisites done + reward_status_on_finder=Transferred → reward already sent; collect UTR from Finder and share with agent to pass to user
+  referral_issue_type=reward not credited + all prerequisites done + reward_status_on_finder=Pending → reward pending; 5–7 working days after first trade settles
+  referral_issue_type=reward not credited + all prerequisites done + reward_status_on_finder=Not found → check if reward was ever triggered; escalate #cx-live, include Referrer User ID + Referee investment details
+  referral_issue_type=referral not mapped + signup_method=Via referral link → referral should have mapped; check Mixpanel; escalate #cx-api with Referrer User ID + Referee mobile number if not found
+  referral_issue_type=referral not mapped + signup_method=Downloaded app independently → referral not captured (web link not used); cannot retroactively map
+  referral_issue_type=reward calculation dispute → one-time order vs SIP order (calculation differs); explain the difference
+  referral_issue_type=remove or replace + referee_has_investments=Yes → cannot remove referee who has investments
+  referral_issue_type=remove or replace + referee_has_investments=No → need 3-party email consent (existing referee + new referee + referrer); escalate #cx-api
 
 ---
 
