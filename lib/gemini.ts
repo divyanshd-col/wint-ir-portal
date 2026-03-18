@@ -18,51 +18,64 @@ function isRateLimit(err: any): boolean {
   return err?.status === 429 || String(err?.message).includes('429') || String(err?.message).toLowerCase().includes('quota');
 }
 
-/** Non-streaming Gemini call with automatic key rotation on 429. */
+const FALLBACK_MODEL: Record<string, string> = {
+  'gemini-2.5-pro': 'gemini-2.5-flash',
+};
+
+/** Non-streaming Gemini call with automatic key rotation on 429, then model fallback. */
 export async function geminiGenerate(
   keys: string[],
   model: string,
   contents: any[],
   extra?: Record<string, any>
 ): Promise<string> {
+  const modelsToTry = [model, ...(FALLBACK_MODEL[model] ? [FALLBACK_MODEL[model]] : [])];
   let lastError: any;
-  for (const key of keys) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: key });
-      const response = await ai.models.generateContent({ model, contents, ...extra });
-      return response.text || '';
-    } catch (err: any) {
-      if (isRateLimit(err)) { lastError = err; continue; }
-      throw err;
+
+  for (const currentModel of modelsToTry) {
+    for (const key of keys) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: key });
+        const response = await ai.models.generateContent({ model: currentModel, contents, ...extra });
+        if (currentModel !== model) console.warn(`[gemini] Pro quota exhausted — using ${currentModel} fallback`);
+        return response.text || '';
+      } catch (err: any) {
+        if (isRateLimit(err)) { lastError = err; continue; }
+        throw err;
+      }
     }
   }
   throw lastError;
 }
 
-/** Streaming Gemini call with automatic key rotation on 429 (rotation happens before streaming starts). */
+/** Streaming Gemini call with automatic key rotation on 429, then model fallback. */
 export async function geminiStream(
   keys: string[],
   model: string,
   contents: any[],
   systemInstruction: string
 ) {
+  const modelsToTry = [model, ...(FALLBACK_MODEL[model] ? [FALLBACK_MODEL[model]] : [])];
   let lastError: any;
-  // Cap thinking for Pro to reduce latency at scale. 2048 is enough for CX briefings
-  // (answers are structured, not open-ended reasoning). Flash has no thinking by default.
-  const thinkingConfig = model.includes('pro')
-    ? { thinkingConfig: { thinkingBudget: 2048 } }
-    : {};
-  for (const key of keys) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: key });
-      return await ai.models.generateContentStream({
-        model,
-        contents,
-        config: { systemInstruction, ...thinkingConfig },
-      });
-    } catch (err: any) {
-      if (isRateLimit(err)) { lastError = err; continue; }
-      throw err;
+
+  for (const currentModel of modelsToTry) {
+    // Cap thinking for Pro to reduce latency at scale. Flash has no thinking by default.
+    const thinkingConfig = currentModel.includes('pro')
+      ? { thinkingConfig: { thinkingBudget: 2048 } }
+      : {};
+    for (const key of keys) {
+      try {
+        const ai = new GoogleGenAI({ apiKey: key });
+        if (currentModel !== model) console.warn(`[gemini] Pro quota exhausted — using ${currentModel} fallback`);
+        return await ai.models.generateContentStream({
+          model: currentModel,
+          contents,
+          config: { systemInstruction, ...thinkingConfig },
+        });
+      } catch (err: any) {
+        if (isRateLimit(err)) { lastError = err; continue; }
+        throw err;
+      }
     }
   }
   throw lastError;
