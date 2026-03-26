@@ -54,7 +54,7 @@ Return ONLY the keywords, space-separated, nothing else.`,
 }
 
 interface ChatRequest {
-  messages: { role: string; content: string }[];
+  messages: { role: 'user' | 'assistant'; content: string }[];
   formAnswers?: Record<string, string>;
   queryType?: 'direct' | 'process' | 'clarify';
   category?: string | null;
@@ -434,7 +434,7 @@ ${kbSection}`;
         if (provider === 'claude') {
           const client = new Anthropic({ apiKey: config.anthropicApiKey });
           const anthropicMessages = messages.map((m: any) => ({
-            role: m.role === 'assistant' ? 'assistant' : 'user',
+            role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
             content: m.content,
           }));
           const stream = client.messages.stream({
