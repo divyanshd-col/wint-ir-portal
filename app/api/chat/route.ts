@@ -124,8 +124,8 @@ export async function POST(req: NextRequest) {
     const searchQuery = expandedQuery + formTerms + (categoryBoost ? ' ' + categoryBoost : '');
 
     // Direct queries: broad KB scan. Process queries: form answer keys/values now guide retrieval
-    // so we can pull more chunks without noise — both use 15
-    const topK = 15;
+    // Chunks are now 600 chars — use topK=20 to ensure full scenario coverage
+    const topK = 20;
     const relevant = retrieveRelevantChunks(chunks, searchQuery, topK);
     const topScore = getTopKBScore(chunks, searchQuery);
     console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore})`);

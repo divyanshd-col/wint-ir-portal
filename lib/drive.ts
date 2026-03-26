@@ -132,11 +132,12 @@ function getHeaderLevel(line: string): number {
  *  - Walk lines; when a header is found, flush the current buffer as a chunk.
  *  - Maintain a breadcrumb of ancestor headers so every chunk knows its full
  *    hierarchical context (e.g. "1. KYC > 1.1 AOF Status > 1.1.2 Expired").
- *  - If a section's content exceeds maxChars, split it on paragraph boundaries
- *    but prefix every sub-chunk with the breadcrumb so context is never lost.
+ *  - If a section's content exceeds maxChars, split on paragraph boundaries and
+ *    carry the last paragraph of each flushed chunk into the next (overlap) so
+ *    context is never lost at split boundaries.
  *  - Skip fragments that are too small to be useful (< 40 chars of real content).
  */
-function chunkText(text: string, maxChars = 2000): string[] {
+function chunkText(text: string, maxChars = 600): string[] {
   const lines = text.split('\n');
   const chunks: string[] = [];
 
@@ -157,18 +158,29 @@ function chunkText(text: string, maxChars = 2000): string[] {
       return;
     }
 
-    // Section too large — split on paragraph boundaries, prefix each sub-chunk
+    // Section too large — split on paragraph boundaries, prefix each sub-chunk.
+    // Overlap: seed each new chunk with the last paragraph of the previous one
+    // so a scenario that spans a boundary is never cut without context.
     const paras = content.split(/\n{2,}/);
     let cur = '';
+    let lastParaInCur = '';
     for (const para of paras) {
       const candidate = cur ? `${cur}\n\n${para}` : para;
       const withPrefix = prefix ? `${prefix}\n\n${candidate}` : candidate;
       if (withPrefix.length > maxChars && cur.length > 0) {
         const out = prefix ? `${prefix}\n\n${cur}` : cur;
         chunks.push(out.trim());
-        cur = para;
+        // Overlap: carry the last paragraph into the next chunk for continuity.
+        // Skip if it's too large (> half maxChars) to avoid runaway chunks.
+        const overlap =
+          lastParaInCur && lastParaInCur !== para && lastParaInCur.length < maxChars / 2
+            ? `${lastParaInCur}\n\n`
+            : '';
+        cur = `${overlap}${para}`;
+        lastParaInCur = para;
       } else {
         cur = candidate;
+        lastParaInCur = para;
       }
     }
     if (cur.trim()) {

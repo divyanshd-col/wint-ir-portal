@@ -11,7 +11,7 @@ const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
 const CONFIG_KEY = 'wint_portal_config';
 const LOGS_KEY = 'wint_portal_logs';
-const KB_CACHE_KEY = 'wint_kb_cache';
+const KB_CACHE_KEY = 'wint_kb_cache_v2'; // v2: 600-char chunks with overlap
 
 function ready(): boolean {
   return !!(UPSTASH_URL && UPSTASH_TOKEN);
