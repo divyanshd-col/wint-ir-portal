@@ -22,37 +22,57 @@ const CONFIRMATION_KEYWORDS = [
  * Only messages posted on/after 2026-01-01 are considered.
  */
 export async function searchSlack(query: string, token: string): Promise<SlackResult[]> {
+  console.log(`[slack] Searching for: "${query}" (token: ${token ? token.slice(0, 8) + '…' : 'MISSING'})`);
+
   const url = `https://slack.com/api/search.messages?query=${encodeURIComponent(query)}&count=10&sort=score`;
   let data: any;
   try {
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return [];
+    console.log(`[slack] search.messages HTTP ${res.status}`);
+    if (!res.ok) {
+      console.error(`[slack] HTTP error ${res.status}`);
+      return [];
+    }
     data = await res.json();
   } catch (err) {
-    console.error('[slack] search.messages failed:', err);
+    console.error('[slack] search.messages fetch failed:', err);
     return [];
   }
 
-  if (!data.ok || !data.messages?.matches?.length) return [];
+  if (!data.ok) {
+    console.error(`[slack] API error: ${data.error} (needed: search:read scope)`);
+    return [];
+  }
+
+  const matches = data.messages?.matches || [];
+  console.log(`[slack] Raw matches: ${matches.length}`);
+
+  if (!matches.length) return [];
 
   const validated = await Promise.all(
-    data.messages.matches.map((msg: any) => validateMessage(msg, token))
+    matches.map((msg: any) => validateMessage(msg, token))
   );
 
-  return validated.filter(Boolean).slice(0, 4) as SlackResult[];
+  const results = validated.filter(Boolean).slice(0, 4) as SlackResult[];
+  console.log(`[slack] Validated results: ${results.length}/${matches.length}`);
+  return results;
 }
 
 async function validateMessage(msg: any, token: string): Promise<SlackResult | null> {
-  const channelName: string = msg.channel?.name || '';
+  const channelName: string = msg.channel?.name || '(unknown)';
   const text: string = msg.text || '';
   const permalink: string = msg.permalink || '';
 
   // Reject messages before 2026-01-01
   const msgTs = parseFloat(msg.ts || '0');
-  if (msgTs < SLACK_CUTOFF_TS) return null;
+  if (msgTs < SLACK_CUTOFF_TS) {
+    console.log(`[slack] ✗ #${channelName} — too old (${new Date(msgTs * 1000).toISOString().slice(0, 10)})`);
+    return null;
+  }
 
   // 1. cx-announcement channel — always authoritative
   if (channelName === 'cx-announcement' || channelName === 'cx-announcements') {
+    console.log(`[slack] ✓ #${channelName} — cx-announcement (auto-trusted)`);
     return { text, channelName, permalink, validatedBy: 'cx-announcement' };
   }
 
@@ -62,6 +82,7 @@ async function validateMessage(msg: any, token: string): Promise<SlackResult | n
     ['white_check_mark', 'heavy_check_mark', '+1', 'thumbsup'].includes(r.name)
   );
   if (validReaction) {
+    console.log(`[slack] ✓ #${channelName} — reaction :${validReaction.name}:`);
     return { text, channelName, permalink, validatedBy: `reaction:${validReaction.name}` };
   }
 
@@ -69,10 +90,12 @@ async function validateMessage(msg: any, token: string): Promise<SlackResult | n
   if ((msg.reply_count || 0) > 0 && msg.channel?.id && msg.ts) {
     const confirmedBy = await checkThreadConfirmation(msg.channel.id, msg.ts, msg.user, token);
     if (confirmedBy) {
+      console.log(`[slack] ✓ #${channelName} — thread confirmed by ${confirmedBy}`);
       return { text, channelName, permalink, validatedBy: `thread:${confirmedBy}` };
     }
   }
 
+  console.log(`[slack] ✗ #${channelName} — no validation signal (no reaction, no thread confirmation)`);
   return null;
 }
 
@@ -87,7 +110,10 @@ async function checkThreadConfirmation(
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) return null;
     const data = await res.json();
-    if (!data.ok) return null;
+    if (!data.ok) {
+      console.log(`[slack] conversations.replies error: ${data.error}`);
+      return null;
+    }
 
     // Skip the first message (the original), check replies only
     const replies: any[] = (data.messages || []).slice(1);
@@ -98,6 +124,8 @@ async function checkThreadConfirmation(
         return reply.username || reply.user || 'colleague';
       }
     }
-  } catch {}
+  } catch (err) {
+    console.error('[slack] conversations.replies failed:', err);
+  }
   return null;
 }

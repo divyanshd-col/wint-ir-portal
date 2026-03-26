@@ -88,6 +88,7 @@ export async function POST(req: NextRequest) {
 
   let context = '';
   let sources: { fileId: string; fileName: string; excerpt: string }[] = [];
+  let originalTopScore = 0;
 
   try {
     console.log('[chat] Fetching knowledge base + expanding query in parallel...');
@@ -128,7 +129,11 @@ export async function POST(req: NextRequest) {
     const topK = 20;
     const relevant = retrieveRelevantChunks(chunks, searchQuery, topK);
     const topScore = getTopKBScore(chunks, searchQuery);
-    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore})`);
+    // Score the ORIGINAL query (not expanded) to check if the topic is actually in the KB.
+    // Expanded query inflates scores with generic terms (e.g. "error", "platform") that
+    // match everywhere — originalTopScore stays near-zero for unrecognised topics.
+    originalTopScore = getTopKBScore(chunks, query);
+    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore}, originalTopScore=${originalTopScore})`);
     if (relevant.length > 0 && topScore > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
       sources = relevant.map(c => ({ fileId: c.fileId, fileName: c.fileName, excerpt: c.content.slice(0, 200) + '...' }));
@@ -137,9 +142,11 @@ export async function POST(req: NextRequest) {
     console.error('[chat] KB error:', err);
   }
 
-  // Slack fallback: only when KB has zero keyword match and token is configured
+  // Slack fallback: trigger when the original (unexpanded) query has low KB coverage.
+  // originalTopScore < 20 means the topic's actual words barely appear in the KB,
+  // regardless of how many generic expansion terms matched.
   let fromSlack = false;
-  if (context === '' && config.slackUserToken && query) {
+  if (originalTopScore < 20 && config.slackUserToken && query) {
     try {
       console.log('[chat] KB score=0, trying Slack fallback...');
       const slackResults = await searchSlack(query, config.slackUserToken);
