@@ -43,7 +43,9 @@ Query: ${query}
 
 Return ONLY the keywords, space-separated, nothing else.`,
         }],
-      }]
+      }],
+      undefined,
+      15000  // 15s max for query expansion; falls back to original query on timeout
     );
     const expanded = result.trim();
     console.log(`[chat] Query expansion: "${query}" → "${expanded}"`);

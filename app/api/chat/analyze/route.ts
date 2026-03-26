@@ -557,7 +557,9 @@ The answer generator handles the rest. Never ask more questions than the minimum
       text = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',
-        [{ role: 'user', parts: [{ text: analyzePrompt }] }]
+        [{ role: 'user', parts: [{ text: analyzePrompt }] }],
+        undefined,
+        60000  // analyze prompt is large — allow up to 60s
       );
     }
 
