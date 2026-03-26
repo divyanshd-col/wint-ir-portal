@@ -5,11 +5,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
 
+interface AnalyzeRequest {
+  messages: { role: string; content: string }[];
+  allAnswers?: Record<string, string>;
+}
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { messages, allAnswers } = await req.json();
+  const { messages, allAnswers }: AnalyzeRequest = await req.json();
   const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
   const query = latestUserMessage?.content || '';
 
@@ -139,10 +144,21 @@ Step 1 — id: holding_on_record_date
   type: select | options: ["Yes", "No"]
   → If No: STOP. Return {"questions":[]}. (Scenario: not entitled — not holding on record date)
 
-Step 2 — id: contacted_on_repayment_date
-  label: "Is the user contacting today, on the repayment date itself, or has the date already passed?"
-  type: select | options: ["Contacting today — repayment date is today", "Date has already passed"]
-  → If "Contacting today": STOP. Return {"questions":[]}. (Scenario: still processing today — wait EOD)
+Step 1.5 — id: repayment_issue_type
+  label: "What is the repayment issue?"
+  type: select | options: ["Repayment not received at all", "Received a repayment but the amount is wrong"]
+  → If "Received a repayment but the amount is wrong": ask Step 1.6 next, skip Steps 2–4.
+
+Step 1.6 — id: repayment_amount_direction (ONLY if repayment_issue_type = "Received a repayment but the amount is wrong")
+  label: "Which direction is the amount wrong?"
+  type: select | options: ["Received more than expected", "Received less than expected"]
+  → STOP after answer. Scenario identified.
+
+Step 2 — (ONLY if repayment_issue_type = "Repayment not received at all")
+  id: contacted_on_repayment_date
+  label: "Is the user contacting on the repayment date itself, or has the date already passed?"
+  type: select | options: ["Today is the repayment date — user hasn't received it yet", "The repayment date has passed"]
+  → If "Today is the repayment date": STOP. Return {"questions":[]}. (Scenario: still processing today — wait EOD)
 
 Step 3 — id: recent_bank_change
   label: "Has the user's linked bank account in Finder been changed recently?"
@@ -156,15 +172,9 @@ Step 4a — ONLY if recent_bank_change=Yes:
 
 Step 4b — ONLY if recent_bank_change=No:
   id: bank_ifsc_check
-  label: "Ask the user to check their bank statement. Does the IFSC on the statement match the IFSC saved in Finder?"
-  type: select | options: ["Yes — IFSC on statement matches Finder", "No — IFSC does not match Finder"]
+  label: "Check the IFSC linked to the user's bank account in Finder. Does it match the IFSC the user says is correct for their bank?"
+  type: select | options: ["Yes — IFSC in Finder matches what user expects", "No — IFSC in Finder does not match what user expects"]
   → STOP after answer. (Scenario 4a or 4b identified)
-
-AMOUNT MISMATCH variant (if the issue is wrong amount, not missing repayment):
-  id: repayment_amount_direction
-  label: "The user received a repayment but the amount is wrong. Which direction?"
-  type: select | options: ["Received more than expected", "Received less than expected"]
-  → STOP after answer.
 
 ════════════════════════════════════════════
 KYC  (category: "kyc")
@@ -240,12 +250,7 @@ Step 2a — id: first_investment
   label: "Is this the user's very first investment ever on Wint? (Check Finder)"
   type: select | options: ["Yes — first investment ever", "No — has invested before"]
 
-Step 3a — ONLY if first_investment=Yes (check demat creation alongside KYC):
-  id: kra_status | label: "KRA status in Finder" | type: select | options: ["Approved", "Issue / Pending"]
-  id: aml_status | label: "AML status in Finder" | type: select | options: ["Approved", "Issue / Pending"]
-  id: insta_demat_status | label: "Insta Demat status in Finder" | type: select | options: ["Completed", "Issue / Pending"]
-  id: ucc_status | label: "UCC status in Finder" | type: select | options: ["Active", "Blank / Pending"]
-  → STOP after answer. Scenario identified.
+  → If first_investment=Yes: STOP. Return {"questions":[]}. (Stage 2 handles the demat/KYC creation check)
 
 Step 3b — ONLY if first_investment=No:
   id: payment_status_confirmed
@@ -386,7 +391,7 @@ Step 2b — id: sell_blocked_reason
     "Near or on the record date for this bond",
     "Bond has been flagged or negative news",
     "Flexi tenure bond — checking exit date constraints",
-    "None of these / not sure"
+    "Other reason — not any of the above"
   ]
   → STOP after answer. Scenario identified.
 
@@ -492,13 +497,13 @@ Step 1 — id: profile_issue_type
   → Family account → STOP. Scenario identified (family account rules).
 
 PATH: Bond not showing:
-Step 2a — id: payment_confirmed_success
-  label: "Check Finder: was the payment confirmed as successful?"
-  type: select | options: ["Yes — payment successful in Finder", "No — payment shows failed or pending"]
-  → If No: STOP. (Payment issue, not portfolio issue — re-route to payment category)
+Step 2a — id: payment_status_confirmed
+  label: "Check Finder RFQ tab: what is the payment status for this order?"
+  type: select | options: ["Success", "Failed", "Pending"]
+  → If Failed or Pending: STOP. (Payment issue, not portfolio issue — re-route to payment category)
 
-Step 3a — ONLY if payment_confirmed_success=Yes:
-  id: t1_elapsed
+Step 3a — ONLY if payment_status_confirmed=Success:
+  id: t1_elapsed_since_payment
   label: "Has 1 full working day passed since the payment was made?"
   type: select | options: ["Yes — more than 1 working day", "No — less than 1 working day"]
   → STOP after answer. Scenario identified.
@@ -558,9 +563,18 @@ The answer generator handles the rest. Never ask more questions than the minimum
 
     const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(cleaned);
+    if (answeredIds.length && Array.isArray(parsed.questions)) {
+      const before = parsed.questions.length;
+      parsed.questions = parsed.questions.filter(
+        (q: { id: string }) => !answeredIds.includes(q.id)
+      );
+      if (parsed.questions.length < before) {
+        console.warn(`[analyze] Filtered ${before - parsed.questions.length} duplicate question(s)`);
+      }
+    }
     return NextResponse.json(parsed);
   } catch (err) {
     console.error('[analyze] Error:', err);
-    return NextResponse.json({ questions: [] });
+    return NextResponse.json({ questions: [], queryType: 'direct', fallback: true });
   }
 }

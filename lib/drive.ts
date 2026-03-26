@@ -221,14 +221,19 @@ export async function fetchKnowledgeChunks(): Promise<KnowledgeChunk[]> {
   const urls = config.knowledgeBaseUrls || [];
   const chunks: KnowledgeChunk[] = [];
 
-  for (const url of urls) {
-    try {
-      const { text, name } = await fetchGoogleDoc(url);
-      for (const chunk of chunkText(text)) {
-        chunks.push({ fileId: url, fileName: name, content: chunk });
-      }
-    } catch (err) {
-      console.error(`Failed to fetch ${url}:`, err);
+  const results = await Promise.all(
+    urls.map(url =>
+      fetchGoogleDoc(url).catch(err => {
+        console.error(`Failed to fetch ${url}:`, err);
+        return null;
+      })
+    )
+  );
+  for (let i = 0; i < urls.length; i++) {
+    const result = results[i];
+    if (!result) continue;
+    for (const chunk of chunkText(result.text)) {
+      chunks.push({ fileId: urls[i], fileName: result.name, content: chunk });
     }
   }
 
@@ -308,6 +313,39 @@ export function retrieveRelevantChunks(chunks: KnowledgeChunk[], query: string, 
     .sort((a, b) => b.score - a.score)
     .slice(0, topK)
     .map(s => s.chunk);
+}
+
+/** Returns the highest relevance score any chunk achieves for the given query.
+ *  A score of 0 means no keyword overlap — safe signal to trigger a Slack fallback. */
+export function getTopKBScore(chunks: KnowledgeChunk[], query: string): number {
+  if (!chunks.length) return 0;
+  const q = query.toLowerCase();
+  const rawWords = q.split(/\s+/).filter(w => w.length > 2);
+  const searchTerms = [...new Set([...rawWords, ...rawWords.map(stemWord)])];
+  const phrases: string[] = [];
+  for (let i = 0; i < rawWords.length - 1; i++) {
+    phrases.push(`${rawWords[i]} ${rawWords[i + 1]}`);
+    if (i < rawWords.length - 2) phrases.push(`${rawWords[i]} ${rawWords[i + 1]} ${rawWords[i + 2]}`);
+  }
+  let topScore = 0;
+  for (const chunk of chunks) {
+    const lower = chunk.content.toLowerCase();
+    const firstNewline = lower.indexOf('\n');
+    const headerPart = firstNewline > -1 ? lower.slice(0, firstNewline) : lower;
+    const bodyPart   = firstNewline > -1 ? lower.slice(firstNewline)    : '';
+    let score = 0;
+    for (const term of searchTerms) {
+      const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      score += (headerPart.match(re) || []).length * 3;
+      score += (bodyPart.match(re)   || []).length;
+    }
+    for (const phrase of phrases) {
+      const re = new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      score += (lower.match(re) || []).length * 5;
+    }
+    if (score > topScore) topScore = score;
+  }
+  return topScore;
 }
 
 export async function listDriveFiles() {

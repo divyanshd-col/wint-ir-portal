@@ -28,6 +28,7 @@ export async function GET() {
     knowledgeBaseUrls: config.knowledgeBaseUrls,
     systemPrompt: config.systemPrompt || '',
     conversationHistoryEnabled: config.conversationHistoryEnabled ?? false,
+    slackUserToken: config.slackUserToken ? '••••••••' : '',
     users: config.users.map(u => ({ username: u.username, password: '••••••••', isAdmin: u.isAdmin })),
     isConfigured: config.isConfigured,
   });
@@ -52,6 +53,7 @@ export async function PATCH(req: NextRequest) {
     ...(body.geminiApiKey5 !== undefined && !body.geminiApiKey5?.startsWith('••••') && { geminiApiKey5: body.geminiApiKey5 }),
     ...(body.systemPrompt !== undefined && { systemPrompt: body.systemPrompt }),
     ...(body.conversationHistoryEnabled !== undefined && { conversationHistoryEnabled: body.conversationHistoryEnabled }),
+    ...(body.slackUserToken !== undefined && !body.slackUserToken.startsWith('••••') && { slackUserToken: body.slackUserToken }),
   };
 
   await writeConfig(updated);

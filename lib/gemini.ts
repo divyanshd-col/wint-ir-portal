@@ -27,7 +27,8 @@ export async function geminiGenerate(
   keys: string[],
   model: string,
   contents: any[],
-  extra?: Record<string, any>
+  extra?: Record<string, any>,
+  timeoutMs = 8000
 ): Promise<string> {
   const modelsToTry = [model, ...(FALLBACK_MODEL[model] ? [FALLBACK_MODEL[model]] : [])];
   let lastError: any;
@@ -36,7 +37,13 @@ export async function geminiGenerate(
     for (const key of keys) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        const response = await ai.models.generateContent({ model: currentModel, contents, ...extra });
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('geminiGenerate timeout')), timeoutMs)
+        );
+        const response = await Promise.race([
+          ai.models.generateContent({ model: currentModel, contents, ...extra }),
+          timeoutPromise,
+        ]);
         if (currentModel !== model) console.warn(`[gemini] Pro quota exhausted — using ${currentModel} fallback`);
         return response.text || '';
       } catch (err: any) {

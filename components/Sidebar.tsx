@@ -54,6 +54,10 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
   const [systemPrompt, setSystemPrompt] = useState('');
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptSaved, setPromptSaved] = useState(false);
+  const [slackToken, setSlackToken] = useState('');
+  const [hasSlackToken, setHasSlackToken] = useState(false);
+  const [savingSlack, setSavingSlack] = useState(false);
+  const [slackSaved, setSlackSaved] = useState(false);
 
   // User management
   const [users, setUsers] = useState<{ username: string; isAdmin: boolean }[]>([]);
@@ -68,6 +72,7 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
   const [resetPassword, setResetPassword] = useState('');
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [savingReset, setSavingReset] = useState(false);
+  const [downloadingLogs, setDownloadingLogs] = useState(false);
 
   // Conversation history
   const [conversations, setConversations] = useState<SavedConversation[]>([]);
@@ -99,6 +104,7 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
         });
         setHasAnthropicKey(!!data.anthropicApiKey);
         setSystemPrompt(data.systemPrompt || '');
+        setHasSlackToken(!!data.slackUserToken);
       })
       .catch(() => {});
     refreshUsers();
@@ -231,6 +237,23 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
     } finally { setSavingPrompt(false); }
   };
 
+  const saveSlackToken = async () => {
+    if (!slackToken.trim()) return;
+    setSavingSlack(true);
+    setSlackSaved(false);
+    try {
+      await fetch('/api/config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slackUserToken: slackToken.trim() }),
+      });
+      setHasSlackToken(true);
+      setSlackToken('');
+      setSlackSaved(true);
+      setTimeout(() => setSlackSaved(false), 2000);
+    } finally { setSavingSlack(false); }
+  };
+
   const refreshUsers = async () => {
     setLoadingUsers(true);
     try {
@@ -278,6 +301,20 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
       });
       if (res.ok) { setResetTarget(null); setResetPassword(''); }
     } finally { setSavingReset(false); }
+  };
+
+  const downloadLogs = async () => {
+    setDownloadingLogs(true);
+    try {
+      const res = await fetch('/api/logs?format=csv');
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `wint-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+    } finally {
+      setDownloadingLogs(false);
+    }
   };
 
   return (
@@ -521,6 +558,34 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
 
             <div className="border-t border-white/10" />
 
+            {/* Slack Fallback */}
+            <section>
+              <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider px-1 mb-2">Slack Fallback</p>
+              {hasSlackToken ? (
+                <p className="text-green-400 text-xs px-1 mb-2">✓ Slack token configured — searched when KB has no match</p>
+              ) : (
+                <p className="text-gray-500 text-xs px-1 mb-2">No token set — Slack fallback disabled</p>
+              )}
+              <div className="flex gap-1">
+                <input
+                  type="password"
+                  value={slackToken}
+                  onChange={e => setSlackToken(e.target.value)}
+                  placeholder="xoxp-... user token"
+                  className="flex-1 bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#2d9e4f] placeholder-gray-600"
+                />
+                <button
+                  onClick={saveSlackToken}
+                  disabled={savingSlack || !slackToken.trim()}
+                  className="bg-[#2d9e4f]/20 hover:bg-[#2d9e4f]/40 disabled:opacity-40 text-[#2d9e4f] text-xs font-medium px-3 rounded-lg transition"
+                >
+                  {savingSlack ? '…' : slackSaved ? '✓' : 'Save'}
+                </button>
+              </div>
+            </section>
+
+            <div className="border-t border-white/10" />
+
             {/* Users */}
             <section>
               <div className="flex items-center justify-between px-1 mb-2">
@@ -603,6 +668,15 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
                   {addingUser ? 'Adding…' : '+ Add User'}
                 </button>
               </div>
+            </section>
+
+            {/* Logs */}
+            <section>
+              <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider px-1 mb-2">Logs</p>
+              <button onClick={downloadLogs} disabled={downloadingLogs}
+                className="w-full bg-white/5 hover:bg-white/10 disabled:opacity-40 text-gray-300 hover:text-white text-xs font-medium py-1.5 rounded-lg transition">
+                {downloadingLogs ? 'Downloading…' : '↓ Download Logs (CSV)'}
+              </button>
             </section>
 
           </div>

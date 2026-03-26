@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import Anthropic from '@anthropic-ai/sdk';
-import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
+import { fetchKnowledgeChunks, retrieveRelevantChunks, getTopKBScore } from '@/lib/drive';
+import { searchSlack } from '@/lib/slack';
 import { readConfig } from '@/lib/config';
 import { logChatMessage } from '@/lib/logger';
 import { getOrderedGeminiKeys, geminiGenerate, geminiStream } from '@/lib/gemini';
@@ -52,11 +53,18 @@ Return ONLY the keywords, space-separated, nothing else.`,
   }
 }
 
+interface ChatRequest {
+  messages: { role: string; content: string }[];
+  formAnswers?: Record<string, string>;
+  queryType?: 'direct' | 'process' | 'clarify';
+  category?: string | null;
+}
+
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { messages, formAnswers, queryType, category } = await req.json();
+  const { messages, formAnswers, queryType, category }: ChatRequest = await req.json();
   const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
   // Exclude injected context messages from query extraction
   const rawContent = latestUserMessage?.content || '';
@@ -117,13 +125,37 @@ export async function POST(req: NextRequest) {
     // so we can pull more chunks without noise — both use 15
     const topK = 15;
     const relevant = retrieveRelevantChunks(chunks, searchQuery, topK);
-    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK})`);
-    if (relevant.length > 0) {
+    const topScore = getTopKBScore(chunks, searchQuery);
+    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore})`);
+    if (relevant.length > 0 && topScore > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
       sources = relevant.map(c => ({ fileId: c.fileId, fileName: c.fileName, excerpt: c.content.slice(0, 200) + '...' }));
     }
   } catch (err) {
     console.error('[chat] KB error:', err);
+  }
+
+  // Slack fallback: only when KB has zero keyword match and token is configured
+  let fromSlack = false;
+  if (context === '' && config.slackUserToken && query) {
+    try {
+      console.log('[chat] KB score=0, trying Slack fallback...');
+      const slackResults = await searchSlack(query, config.slackUserToken);
+      if (slackResults.length > 0) {
+        fromSlack = true;
+        context = slackResults
+          .map((r, i) => `[Slack ${i + 1}: #${r.channelName} | validated via ${r.validatedBy}]\n${r.text}`)
+          .join('\n\n---\n\n');
+        sources = slackResults.map(r => ({
+          fileId: r.permalink,
+          fileName: `Slack #${r.channelName}`,
+          excerpt: r.text.slice(0, 200) + '...',
+        }));
+        console.log(`[chat] Slack fallback: ${slackResults.length} validated result(s)`);
+      }
+    } catch (err) {
+      console.error('[chat] Slack fallback error:', err);
+    }
   }
 
   await logChatMessage(session.user?.name || 'unknown', query, modelName);
@@ -189,9 +221,10 @@ KYC — Layer 3 (nominee/form signing):
   nominee_or_signing_issue=Signing error on a form → confirm form type; confirm own Aadhaar used; if name mismatch → collect PAN + Aadhaar → escalate #bond-kyc-discrepancies, tag Yashika
 
 PAYMENT / BUY ORDER:
-  payment_situation=bond not showing + first_investment=Yes → first investment flow; check demat creation (kra/aml/insta/ucc statuses); T+3 working day window
-  payment_situation=bond not showing + first_investment=No + payment_status_confirmed=Success → T+1 settlement delay — check RFQ tab
+  payment_situation=bond not showing + first_investment=Yes → first investment flow; check demat creation (kra/aml/insta/ucc statuses in Finder); T+3 working day window — tell user to wait if all statuses OK
+  payment_situation=bond not showing + first_investment=No + payment_status_confirmed=Success → T+1 settlement delay — check RFQ tab; bond should appear within 1 working day
   payment_situation=bond not showing + first_investment=No + payment_status_confirmed=Failed → payment did not succeed — redirect to payment failing flow
+  payment_situation=bond not showing + first_investment=No + payment_status_confirmed=Pending → payment still processing; tell user to wait until EOD; if still pending next day, check gateway portal and raise #cx-email-coordination
   payment_error_type=Amount was deducted but no order + order_visible_on_finder=Yes → order exists on Finder, settlement delay — check RFQ tab status
   payment_error_type=Amount was deducted but no order + order_visible_on_finder=No → deduction without order — raise #cx-email-coordination, tag @email; 10–15 day SLA
   payment_error_type=Bank website redirect failed → known intermittent bank error; guide user to retry or switch to UPI
@@ -231,6 +264,7 @@ SELL / DDPI:
   sell_situation=DDPI active but sell unavailable + sell_blocked_reason=Near or on record date → sell temporarily restricted near record date; explain
   sell_situation=DDPI active but sell unavailable + sell_blocked_reason=Bond flagged / negative news → sell restricted due to news; escalate #cx-ops
   sell_situation=DDPI active but sell unavailable + sell_blocked_reason=Flexi tenure → predefined exit dates; no buyer = auto-extends to maturity; extend option available on app
+  sell_situation=DDPI active but sell unavailable + sell_blocked_reason=Other reason → reason does not match a known pattern; escalate #cx-ops with mobile number, sell order details, and screenshot of blocked sell button
   sell_situation=Sell proceeds not received + t1_elapsed_since_order=No → T+1 settlement still in progress; ask user to wait
   sell_situation=Sell proceeds not received + t1_elapsed_since_order=Yes → settlement overdue; user sends bank statement to hello@wintwealth.com
   sell_situation=User wants to deactivate DDPI → offline process; email hello@wintwealth.com; 2 working days
@@ -246,6 +280,14 @@ REFERRAL:
   referral_issue_type=reward calculation dispute → one-time order vs SIP order (calculation differs); explain the difference
   referral_issue_type=remove or replace + referee_has_investments=Yes → cannot remove referee who has investments
   referral_issue_type=remove or replace + referee_has_investments=No → need 3-party email consent (existing referee + new referee + referrer); escalate #cx-api
+
+DASHBOARD / PROFILE:
+  profile_issue_type=Bank account update + bank_update_submitted=Yes → bank update request is in review; SLA is 48 working hours to activate; tell user to wait; check Finder for current status
+  profile_issue_type=Bank account update + bank_update_submitted=No → guide user to Settings > Bank Account in the Wint app to submit the change request
+  profile_issue_type=Account deletion + active_holdings_check=Yes → cannot delete account while bonds or FDs are active; user must wait for all investments to mature before requesting deletion
+  profile_issue_type=Account deletion + active_holdings_check=No → user has no active holdings; instruct agent to collect deletion request via email hello@wintwealth.com
+  profile_issue_type=Bond not showing + payment_status_confirmed=Success + t1_elapsed_since_payment=No → T+1 settlement in progress; bond will appear in portfolio within 1 working day; tell user to wait
+  profile_issue_type=Bond not showing + payment_status_confirmed=Success + t1_elapsed_since_payment=Yes → more than 1 working day since payment confirmed but bond still missing; escalate #cx-email-coordination, tag @email with user's registered email from Finder
 
 ---
 
@@ -307,15 +349,21 @@ ${conversationHistory || 'None'}
 
 ---
 
-${context ? `KNOWLEDGE BASE:\n${context}` : `KNOWLEDGE BASE: No relevant documents found. Please connect with CX-TL or Divyansh.`}
+${context
+  ? fromSlack
+    ? `KNOWLEDGE BASE: No direct match in official docs.\n\nSLACK VALIDATED THREADS (real CX ops examples confirmed by team — use as guidance, not canonical policy):\n${context}`
+    : `KNOWLEDGE BASE:\n${context}`
+  : `KNOWLEDGE BASE: No relevant documents found in KB or Slack. Escalate to CX-TL.`}
 
 ---
 
 Produce only the final briefing. No preamble, no labels, no summary. Just what the agent needs right now.`;
 
   const kbSection = context
-    ? `KNOWLEDGE BASE:\n${context}`
-    : `KNOWLEDGE BASE: No relevant documents found.`;
+    ? fromSlack
+      ? `KNOWLEDGE BASE: No direct match in official docs.\n\nSLACK VALIDATED THREADS (real CX ops examples confirmed by team — use as guidance, not canonical policy):\n${context}`
+      : `KNOWLEDGE BASE:\n${context}`
+    : `KNOWLEDGE BASE: No relevant documents found in KB or Slack. Escalate to CX-TL.`;
 
   // --- DIRECT (educational) mode ---
   const directSystemPrompt = `You are a senior Wint Wealth colleague. A support agent is asking you a policy or process question so they can handle their user correctly. Your job is to explain it clearly to the agent — not to the user.

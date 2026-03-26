@@ -20,6 +20,7 @@ export interface PortalConfig {
   users: PortalUser[];
   systemPrompt?: string;
   conversationHistoryEnabled?: boolean;
+  slackUserToken?: string;
   isConfigured: boolean;
 }
 
