@@ -74,6 +74,8 @@ export default function AnalyticsClient() {
   const [messages, setMessages] = useState<QAMessage[]>([]);
   const [input, setInput] = useState('');
   const [asking, setAsking] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   // Example questions
@@ -85,12 +87,34 @@ export default function AnalyticsClient() {
     'How has usage trended over the last 2 weeks?',
   ];
 
-  useEffect(() => {
+  function loadStats() {
+    setLoading(true);
     fetch('/api/analytics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
       .then(r => r.json())
       .then(d => { setStats(d.stats); setLoading(false); })
       .catch(() => setLoading(false));
-  }, []);
+  }
+
+  useEffect(() => { loadStats(); }, []);
+
+  async function syncNow() {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/cron/sync-logs', { method: 'POST' });
+      const data = await res.json();
+      if (data.error) {
+        setSyncResult(`Error: ${data.error}`);
+      } else {
+        setSyncResult(data.synced === 0 ? 'Already up to date — no new logs.' : `Synced ${data.synced} new row${data.synced !== 1 ? 's' : ''} to sheet.`);
+        loadStats(); // refresh stats after sync
+      }
+    } catch {
+      setSyncResult('Sync failed — check Vercel logs.');
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -130,7 +154,23 @@ export default function AnalyticsClient() {
           <h1 className="text-[#1a1a1a] font-semibold text-sm tracking-tight">Usage Analytics</h1>
           <p className="text-gray-400 text-xs mt-0.5">Wint Wealth · Admin only</p>
         </div>
-        <Link href="/" className="text-xs text-[#2d6a4f] hover:underline font-medium">← Back to Chat</Link>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={syncNow}
+              disabled={syncing}
+              className="text-xs px-3 py-1.5 bg-[#2d6a4f] text-white rounded-lg hover:bg-[#245a41] disabled:opacity-50 transition-colors font-medium"
+            >
+              {syncing ? 'Syncing…' : 'Sync Sheet Now'}
+            </button>
+            {syncResult && (
+              <span className={`text-xs ${syncResult.startsWith('Error') ? 'text-red-500' : 'text-green-600'}`}>
+                {syncResult}
+              </span>
+            )}
+          </div>
+          <Link href="/" className="text-xs text-[#2d6a4f] hover:underline font-medium">← Back to Chat</Link>
+        </div>
       </header>
 
       <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">

@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/auth';
 import { google } from 'googleapis';
 import { readLogs } from '@/lib/logger';
 
 const SHEET_ID = '1d8LE5opfdIDdsHYZ9AxaX1Z7TImUwAW_Kzk29xtzOTA';
-const SHEET_TAB = 'Logs'; // change if your tab is named differently
+const SHEET_TAB = 'Logs';
 
 function getAuth() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -15,7 +17,6 @@ function getAuth() {
   });
 }
 
-// Returns the latest ISO timestamp already in the sheet (col A), or null if sheet is empty
 async function getLastSyncedTimestamp(sheets: any): Promise<string | null> {
   try {
     const res = await sheets.spreadsheets.values.get({
@@ -23,9 +24,7 @@ async function getLastSyncedTimestamp(sheets: any): Promise<string | null> {
       range: `${SHEET_TAB}!A:A`,
     });
     const rows: string[][] = res.data.values || [];
-    // rows[0] is the header row ("Timestamp")
     if (rows.length <= 1) return null;
-    // Last row with data
     const last = rows[rows.length - 1][0];
     return last || null;
   } catch {
@@ -33,7 +32,6 @@ async function getLastSyncedTimestamp(sheets: any): Promise<string | null> {
   }
 }
 
-// Ensures the header row exists; creates the sheet tab if needed
 async function ensureHeader(sheets: any) {
   try {
     const res = await sheets.spreadsheets.values.get({
@@ -49,7 +47,7 @@ async function ensureHeader(sheets: any) {
       });
     }
   } catch {
-    // Tab may not exist — create it then write header
+    // Tab doesn't exist — create it
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: SHEET_ID,
       requestBody: { requests: [{ addSheet: { properties: { title: SHEET_TAB } } }] },
@@ -63,47 +61,70 @@ async function ensureHeader(sheets: any) {
   }
 }
 
+async function runSync() {
+  const auth = getAuth();
+  const sheets = google.sheets({ version: 'v4', auth });
+
+  await ensureHeader(sheets);
+  const lastTs = await getLastSyncedTimestamp(sheets);
+  console.log(`[cron/sync-logs] Last synced timestamp: ${lastTs ?? 'none (first run)'}`);
+
+  const logs = await readLogs();
+  const newLogs = lastTs ? logs.filter(l => l.timestamp > lastTs) : logs;
+
+  if (newLogs.length === 0) {
+    console.log('[cron/sync-logs] No new logs to sync');
+    return { synced: 0, lastTs };
+  }
+
+  const rows = [...newLogs].reverse().map(l => [l.timestamp, l.username, l.query, l.model]);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId: SHEET_ID,
+    range: `${SHEET_TAB}!A:D`,
+    valueInputOption: 'RAW',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: rows },
+  });
+
+  console.log(`[cron/sync-logs] Synced ${rows.length} new entries`);
+  return { synced: rows.length, lastTs };
+}
+
+// Called by Vercel cron (hourly)
+// Auth: x-vercel-cron header (automatically added by Vercel) OR CRON_SECRET bearer token
 export async function GET(request: Request) {
-  // Vercel cron requests include this header; reject anything else
+  const isVercelCron = request.headers.get('x-vercel-cron') === '1';
   const authHeader = request.headers.get('authorization');
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const cronSecret = process.env.CRON_SECRET;
+  const hasValidSecret = cronSecret && authHeader === `Bearer ${cronSecret}`;
+
+  if (!isVercelCron && !hasValidSecret) {
+    console.warn('[cron/sync-logs] Unauthorized GET — missing x-vercel-cron header and no valid CRON_SECRET');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const auth = getAuth();
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    await ensureHeader(sheets);
-    const lastTs = await getLastSyncedTimestamp(sheets);
-    console.log(`[cron/sync-logs] Last synced timestamp in sheet: ${lastTs ?? 'none'}`);
-
-    const logs = await readLogs(); // newest-first from Redis
-    // Keep only logs newer than what's already in the sheet
-    const newLogs = lastTs
-      ? logs.filter(l => l.timestamp > lastTs)
-      : logs;
-
-    if (newLogs.length === 0) {
-      console.log('[cron/sync-logs] No new logs to sync');
-      return NextResponse.json({ synced: 0 });
-    }
-
-    // Append oldest-first so sheet stays chronological
-    const rows = [...newLogs].reverse().map(l => [l.timestamp, l.username, l.query, l.model]);
-
-    await sheets.spreadsheets.values.append({
-      spreadsheetId: SHEET_ID,
-      range: `${SHEET_TAB}!A:D`,
-      valueInputOption: 'RAW',
-      insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: rows },
-    });
-
-    console.log(`[cron/sync-logs] Synced ${rows.length} new log entries`);
-    return NextResponse.json({ synced: rows.length });
+    const result = await runSync();
+    return NextResponse.json(result);
   } catch (err: any) {
     console.error('[cron/sync-logs] Error:', err?.message || err);
+    return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 });
+  }
+}
+
+// Called manually by admins from the Analytics page
+export async function POST(request: Request) {
+  const session = await getServerSession(authOptions);
+  if (!(session?.user as any)?.isAdmin) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  try {
+    const result = await runSync();
+    return NextResponse.json(result);
+  } catch (err: any) {
+    console.error('[cron/sync-logs] Manual sync error:', err?.message || err);
     return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 });
   }
 }
