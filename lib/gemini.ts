@@ -14,8 +14,11 @@ export function getOrderedGeminiKeys(config: any): string[] {
   return order.map(k => keyMap[k]).filter(Boolean) as string[];
 }
 
-function isRateLimit(err: any): boolean {
-  return err?.status === 429 || String(err?.message).includes('429') || String(err?.message).toLowerCase().includes('quota');
+function isRetryable(err: any): boolean {
+  const msg = String(err?.message).toLowerCase();
+  return err?.status === 429 || err?.status === 503
+    || msg.includes('429') || msg.includes('503')
+    || msg.includes('quota') || msg.includes('unavailable') || msg.includes('high demand');
 }
 
 const FALLBACK_MODEL: Record<string, string> = {
@@ -48,7 +51,7 @@ export async function geminiGenerate(
         if (currentModel !== model) console.warn(`[gemini] Pro quota exhausted — using ${currentModel} fallback`);
         return response.text || '';
       } catch (err: any) {
-        if (isRateLimit(err)) { lastError = err; continue; }
+        if (isRetryable(err)) { lastError = err; continue; }
         throw err;
       }
     }
@@ -81,7 +84,7 @@ export async function geminiStream(
           config: { systemInstruction, ...thinkingConfig },
         });
       } catch (err: any) {
-        if (isRateLimit(err)) { lastError = err; continue; }
+        if (isRetryable(err)) { lastError = err; continue; }
         throw err;
       }
     }
