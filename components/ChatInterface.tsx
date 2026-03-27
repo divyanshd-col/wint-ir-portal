@@ -587,6 +587,38 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                                       </button>
                                     );
                                   })}
+                                  {/* Other: escape hatch when no option fits */}
+                                  {(() => {
+                                    const cur = msg.form!.answers[q.id] ?? '';
+                                    const isOtherMode = cur === '__other__' || (cur !== '' && !(q.options ?? []).includes(cur));
+                                    return (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={loading}
+                                          onClick={() => updateFormAnswer(msg.id, q.id, '__other__')}
+                                          className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${
+                                            isOtherMode
+                                              ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
+                                              : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
+                                          }`}
+                                        >
+                                          Other
+                                        </button>
+                                        {isOtherMode && (
+                                          <input
+                                            type="text"
+                                            autoFocus
+                                            disabled={loading}
+                                            value={cur === '__other__' ? '' : cur}
+                                            onChange={e => updateFormAnswer(msg.id, q.id, e.target.value || '__other__')}
+                                            placeholder="Describe the situation…"
+                                            className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
+                                          />
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -596,7 +628,10 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                         <div className="px-5 pb-5">
                           <button
                             onClick={() => submitForm(msg.id)}
-                            disabled={loading || msg.form.questions.some(q => !msg.form!.answers[q.id]?.trim())}
+                            disabled={loading || msg.form.questions.some(q => {
+                              const ans = msg.form!.answers[q.id] ?? '';
+                              return !ans.trim() || ans === '__other__';
+                            })}
                             className="w-full bg-[#111827] hover:bg-[#1f2937] disabled:opacity-25 disabled:cursor-not-allowed text-white text-[13.5px] font-[600] py-2.5 rounded-xl transition-all"
                           >
                             {loading
