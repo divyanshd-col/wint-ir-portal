@@ -109,6 +109,7 @@ export async function POST(req: NextRequest) {
   let context = '';
   let sources: { fileId: string; fileName: string; excerpt: string }[] = [];
   let originalTopScore = 0;
+  let relevantChunks: { content: string; fileId: string; fileName: string }[] = [];
 
   try {
     console.log('[chat] Fetching knowledge base + expanding query in parallel...');
@@ -151,6 +152,7 @@ export async function POST(req: NextRequest) {
     const topScore = getTopKBScore(chunks, searchQuery);
     originalTopScore = topScore; // expansion now returns distilled keywords so topScore is the meaningful signal
     console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore})`);
+    relevantChunks = relevant;
     if (relevant.length > 0 && topScore > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
       sources = relevant.map(c => ({ fileId: c.fileId, fileName: c.fileName, excerpt: c.content.slice(0, 200) + '...' }));
@@ -159,13 +161,30 @@ export async function POST(req: NextRequest) {
     console.error('[chat] KB error:', err);
   }
 
-  // Slack fallback: trigger when the original (unexpanded) query has low KB coverage.
-  // originalTopScore < 50 means the topic's actual words barely appear in the KB.
-  // "Wint wisdom showing error" scores ~31 (weak match), a real repayment query scores 100+.
+  // Named entity detection: extract capitalized multi-word phrases from original query
+  // e.g. "Best Finance" from "...company name 'Best Finance' and why was it listed"
+  // Filter out known platform names that will naturally appear in every KB chunk.
+  const KNOWN_ENTITIES = ['wint wealth', 'wint ir', 'wint widom', 'wint wisdom'];
+  const namedEntities = (query.match(/\b[A-Z][a-zA-Z]{1,}(?:\s+[A-Z][a-zA-Z]{1,})+/g) || [])
+    .filter(e => !KNOWN_ENTITIES.includes(e.toLowerCase()));
+
+  const allKBText = relevantChunks.map(c => c.content).join(' ').toLowerCase();
+  const entityMissingFromKB = namedEntities.length > 0 &&
+    namedEntities.every(e => !allKBText.includes(e.toLowerCase()));
+
+  if (namedEntities.length > 0) {
+    console.log(`[chat] Named entities detected: ${namedEntities.join(', ')} | missing from KB: ${entityMissingFromKB}`);
+  }
+
+  // Trigger Slack when:
+  //   (a) topScore < 100 — KB has no strong match for the distilled query terms, OR
+  //   (b) a named entity in the query (e.g. "Best Finance") is absent from all KB chunks
+  //       — KB has generic info but not about this specific company/product
+  const weakKBMatch = originalTopScore < 100;
   let fromSlack = false;
-  if (originalTopScore < 50 && config.slackUserToken && query) {
+  if ((weakKBMatch || entityMissingFromKB) && config.slackUserToken && query) {
     try {
-      console.log('[chat] KB score=0, trying Slack fallback...');
+      console.log(`[chat] Trying Slack fallback (weakKB=${weakKBMatch}, entityMissing=${entityMissingFromKB})...`);
       const slackResults = await searchSlack(query, config.slackUserToken);
       if (slackResults.length > 0) {
         fromSlack = true;
