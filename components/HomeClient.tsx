@@ -42,14 +42,6 @@ export default function HomeClient({ username, isAdmin, historyEnabled }: HomeCl
             <h1 className="text-[#1a1a1a] font-semibold text-sm tracking-tight">IR Support Assistant</h1>
             <p className="text-gray-400 text-xs mt-0.5">Wint Wealth · Internal use only</p>
           </div>
-          {isAdmin && (
-            <Link
-              href="/analytics"
-              className="text-xs text-[#2d6a4f] hover:underline font-medium"
-            >
-              Analytics →
-            </Link>
-          )}
         </header>
         <div className="flex-1 overflow-hidden">
           <ChatInterface

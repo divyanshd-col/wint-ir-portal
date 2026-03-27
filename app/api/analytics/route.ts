@@ -13,26 +13,30 @@ interface LogEntry {
   model: string;
 }
 
+function categorize(q: string): string {
+  const s = q.toLowerCase();
+  if (/repayment|payout|interest paid|record date|maturity|coupon|credited|not received/.test(s)) return 'Repayment';
+  if (/account|kyc|onboard|registr|pan|bank|ifsc|mandate|nominee/.test(s)) return 'Account & KYC';
+  if (/bond|yield|return|invest|fixed deposit|wint wisdom|portfolio/.test(s)) return 'Investment';
+  if (/withdraw|redeem|redemption|exit/.test(s)) return 'Withdrawal';
+  if (/app|website|platform|login|error|not working|not showing|not loading|technical|bug|glitch/.test(s)) return 'Platform Issue';
+  return 'General';
+}
+
 function computeStats(logs: LogEntry[]) {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
 
-  // Per-agent breakdown
   const agentMap: Record<string, { count: number; lastSeen: string; queries: string[] }> = {};
   for (const log of logs) {
-    if (!agentMap[log.username]) {
-      agentMap[log.username] = { count: 0, lastSeen: log.timestamp, queries: [] };
-    }
+    if (!agentMap[log.username]) agentMap[log.username] = { count: 0, lastSeen: log.timestamp, queries: [] };
     agentMap[log.username].count++;
-    if (log.timestamp > agentMap[log.username].lastSeen) {
-      agentMap[log.username].lastSeen = log.timestamp;
-    }
+    if (log.timestamp > agentMap[log.username].lastSeen) agentMap[log.username].lastSeen = log.timestamp;
     agentMap[log.username].queries.push(log.query);
   }
 
   const agentBreakdown = Object.entries(agentMap)
     .map(([username, data]) => {
-      // Find top query for this agent
       const qCount: Record<string, number> = {};
       for (const q of data.queries) { qCount[q] = (qCount[q] || 0) + 1; }
       const topQuery = Object.entries(qCount).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
@@ -40,7 +44,6 @@ function computeStats(logs: LogEntry[]) {
     })
     .sort((a, b) => b.count - a.count);
 
-  // Top queries
   const queryCount: Record<string, { count: number; agents: Set<string> }> = {};
   for (const log of logs) {
     const key = log.query.toLowerCase().trim();
@@ -50,24 +53,32 @@ function computeStats(logs: LogEntry[]) {
   }
   const topQueries = Object.entries(queryCount)
     .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 15)
+    .slice(0, 5)
     .map(([query, data]) => ({ query, count: data.count, agents: [...data.agents] }));
 
-  // Model distribution
+  const PROBLEM_RE = /error|not (working|showing|loading|received|credited)|failed|issue|problem|wrong|broken|stuck|unable|can't|cannot/i;
+  const unansweredQueries = Object.entries(queryCount)
+    .filter(([q]) => PROBLEM_RE.test(q))
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 5)
+    .map(([query, data]) => ({ query, count: data.count, agents: [...data.agents] }));
+
+  const categoryCount: Record<string, number> = {};
+  for (const log of logs) {
+    const cat = categorize(log.query);
+    categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+  }
+  const total = logs.length || 1;
+  const categoryBreakdown = Object.entries(categoryCount)
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, count]) => ({ category, count, pct: Math.round((count / total) * 100) }));
+
   const modelDist: Record<string, number> = {};
   for (const log of logs) {
     const m = log.model?.includes('claude') ? 'claude' : 'gemini';
     modelDist[m] = (modelDist[m] || 0) + 1;
   }
 
-  // Hourly distribution (24 buckets, based on all logs)
-  const hourlyDist = new Array(24).fill(0);
-  for (const log of logs) {
-    const h = new Date(log.timestamp).getHours();
-    hourlyDist[h]++;
-  }
-
-  // Daily trend (last 14 days)
   const dailyMap: Record<string, number> = {};
   for (const log of logs) {
     const d = log.timestamp.slice(0, 10);
@@ -85,8 +96,9 @@ function computeStats(logs: LogEntry[]) {
     mostActiveAgent: agentBreakdown[0]?.username || '—',
     agentBreakdown,
     topQueries,
+    unansweredQueries,
+    categoryBreakdown,
     modelDistribution: modelDist,
-    hourlyDistribution: hourlyDist,
     dailyTrend,
     recentLogs: logs.slice(0, 50),
   };
@@ -142,6 +154,10 @@ export async function POST(req: Request) {
     .map((q, i) => `${i + 1}. "${q.query}" — ${q.count}x by [${q.agents.join(', ')}]`)
     .join('\n');
 
+  const categorySummary = stats.categoryBreakdown
+    .map(c => `${c.category}: ${c.count} (${c.pct}%)`)
+    .join(', ');
+
   const prompt = `You are an analytics assistant for the Wint Wealth IR Portal — an internal AI tool used by CX agents.
 
 OVERALL STATS:
@@ -156,6 +172,9 @@ ${agentSummary}
 
 TOP QUERIES (by frequency):
 ${topQueriesSummary}
+
+QUERY CATEGORIES:
+${categorySummary}
 
 RAW LOG (last 300 entries, format: timestamp | agent | model | query):
 ${logTable}

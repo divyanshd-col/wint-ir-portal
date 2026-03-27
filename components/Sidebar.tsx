@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 import type { SavedConversation } from '@/lib/types';
 
@@ -336,7 +337,7 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
           <div>
             <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/wint-logo.png" alt="Wint Wealth" width={88} height={28} className="object-contain block" />
+              <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
             </div>
             <p className="text-gray-500 text-xs mt-2">IR Portal{isAdmin ? ' · Admin' : ''}</p>
           </div>
@@ -362,19 +363,6 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
               New Chat
             </button>
 
-            {isAdmin && (
-              <button
-                onClick={() => setView('settings')}
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
-              >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <circle cx="8" cy="8" r="2.5"/>
-                  <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
-                </svg>
-                Settings
-              </button>
-            )}
-
             {/* Recent conversations */}
             {historyEnabledLocal && conversations.length > 0 && (
               <div className="pt-3">
@@ -391,6 +379,21 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {isAdmin && (
+              <div className="pt-2">
+                <Link
+                  href="/analytics"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+                >
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M2 12l3-4 3 2 3-5 3 3"/>
+                    <rect x="1" y="1" width="14" height="14" rx="1.5"/>
+                  </svg>
+                  Analytics
+                </Link>
               </div>
             )}
           </nav>
@@ -686,7 +689,19 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
         )}
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-white/10">
+        <div className="px-4 py-4 border-t border-white/10 space-y-2">
+          {isAdmin && view === 'main' && (
+            <button
+              onClick={() => setView('settings')}
+              className="w-full flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="8" cy="8" r="2.5"/>
+                <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
+              </svg>
+              Settings
+            </button>
+          )}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-[#2d9e4f] rounded-full flex items-center justify-center text-white text-xs font-bold uppercase">
