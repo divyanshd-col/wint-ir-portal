@@ -456,10 +456,13 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
                     <p className="text-gray-500 text-xs mb-1">Routing model</p>
                     <select value={geminiModel} onChange={e => switchGeminiModel(e.target.value)}
                       className="w-full bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#2d9e4f]">
+                      <optgroup label="Gemini 3">
+                        <option value="gemini-3-flash">3 Flash (default)</option>
+                      </optgroup>
                       <optgroup label="Gemini 2.5">
-                        <option value="gemini-2.5-flash">2.5 Flash (default)</option>
+                        <option value="gemini-2.5-pro">2.5 Pro (fallback)</option>
+                        <option value="gemini-2.5-flash">2.5 Flash</option>
                         <option value="gemini-2.5-flash-lite">2.5 Flash Lite</option>
-                        <option value="gemini-2.5-pro">2.5 Pro</option>
                       </optgroup>
                       <optgroup label="Gemini 2.0">
                         <option value="gemini-2.0-flash">2.0 Flash</option>

@@ -76,7 +76,7 @@ export async function POST(req: NextRequest) {
   const config = await readConfig();
   const provider = config.llmProvider || 'gemini';
   // Final answers always use the most capable model per provider
-  const modelName = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-pro';
+  const modelName = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-3-flash';
   const geminiKeys = getOrderedGeminiKeys(config);
 
   if (provider === 'gemini' && geminiKeys.length === 0) {
