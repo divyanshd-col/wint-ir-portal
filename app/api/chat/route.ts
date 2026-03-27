@@ -143,10 +143,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Slack fallback: trigger when the original (unexpanded) query has low KB coverage.
-  // originalTopScore < 20 means the topic's actual words barely appear in the KB,
-  // regardless of how many generic expansion terms matched.
+  // originalTopScore < 50 means the topic's actual words barely appear in the KB.
+  // "Wint wisdom showing error" scores ~31 (weak match), a real repayment query scores 100+.
   let fromSlack = false;
-  if (originalTopScore < 20 && config.slackUserToken && query) {
+  if (originalTopScore < 50 && config.slackUserToken && query) {
     try {
       console.log('[chat] KB score=0, trying Slack fallback...');
       const slackResults = await searchSlack(query, config.slackUserToken);
