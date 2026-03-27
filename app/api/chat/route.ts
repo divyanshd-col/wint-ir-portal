@@ -21,35 +21,55 @@ async function expandQuery(keys: string[], query: string): Promise<string> {
   try {
     const result = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',  // Flash sufficient for keyword expansion — no reasoning needed
+      'gemini-2.5-flash',
       [{
         role: 'user',
         parts: [{
-          text: `You are a search query expander for an internal Wint Wealth CX knowledge base.
-The KB uses operational/fintech terminology that may differ from how agents phrase questions.
+          text: `You are a search query distiller for the Wint Wealth CX knowledge base.
 
-Given this query, return 8–12 space-separated search keywords that would match the relevant KB sections.
-Include: synonyms, related internal terms, fintech jargon, and alternative phrasings.
+Your job: extract the CORE search signal from the agent's question — strip conversational noise, preserve what matters.
 
-Examples of the kind of mapping needed:
-- "pledge bonds" → pledge lien hypothecation collateral margin encumber securities
-- "cancel SIP" → cancel pause stop deactivate SIP mandate autopay instalment
-- "joint account" → joint family co-applicant co-holder member
-- "transfer bonds" → transfer demat off-market delivery instruction DIS CDSL NSDL
-- "interest payout" → repayment coupon interest credit payout record date
-- "account closure" → closure delete deactivate demat account terminate
+STRICT RULES:
+1. Named entities (company names, product names, people) → keep EXACTLY as written
+2. Negations ("not related to X", "not a SIP") → EXCLUDE the negated topic entirely
+3. Core intent → map to 4–6 focused KB synonyms
+4. Total output: 6–10 keywords, space-separated, nothing else
+
+EXAMPLES:
+Query: "no this is not related to SIP, it is a bond with company name 'Best Finance' — why was it listed on the platform"
+Output: Best Finance bond onboarding listing rationale selection criteria
+
+Query: "cancel SIP"
+Output: cancel pause stop SIP mandate autopay instalment
+
+Query: "pledge bonds"
+Output: pledge lien hypothecation collateral margin encumber securities
+
+Query: "transfer bonds to another demat"
+Output: transfer demat off-market delivery instruction DIS CDSL NSDL
+
+Query: "interest payout not received"
+Output: repayment coupon interest credit payout record date not received
+
+Query: "account closure"
+Output: closure delete deactivate demat account terminate
+
+Query: "joint account holder"
+Output: joint family co-applicant co-holder member
 
 Query: ${query}
-
-Return ONLY the keywords, space-separated, nothing else.`,
+Output:`,
         }],
       }],
       undefined,
-      15000  // 15s max for query expansion; falls back to original query on timeout
+      15000
     );
     const expanded = result.trim();
     console.log(`[chat] Query expansion: "${query}" → "${expanded}"`);
-    return `${query} ${expanded}`;
+    // Return ONLY the distilled keywords — not the full original query.
+    // Original query has too much noise for long/conversational messages
+    // (negations, filler words, repeated context all inflate irrelevant KB scores).
+    return expanded;
   } catch {
     return query;
   }
@@ -129,11 +149,8 @@ export async function POST(req: NextRequest) {
     const topK = 20;
     const relevant = retrieveRelevantChunks(chunks, searchQuery, topK);
     const topScore = getTopKBScore(chunks, searchQuery);
-    // Score the ORIGINAL query (not expanded) to check if the topic is actually in the KB.
-    // Expanded query inflates scores with generic terms (e.g. "error", "platform") that
-    // match everywhere — originalTopScore stays near-zero for unrecognised topics.
-    originalTopScore = getTopKBScore(chunks, query);
-    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore}, originalTopScore=${originalTopScore})`);
+    originalTopScore = topScore; // expansion now returns distilled keywords so topScore is the meaningful signal
+    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore})`);
     if (relevant.length > 0 && topScore > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
       sources = relevant.map(c => ({ fileId: c.fileId, fileName: c.fileName, excerpt: c.content.slice(0, 200) + '...' }));
