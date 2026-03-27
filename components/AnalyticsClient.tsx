@@ -35,6 +35,8 @@ interface Stats {
   hourlyDistribution: number[];
   dailyTrend: DayCount[];
   recentLogs: LogEntry[];
+  source?: 'sheet' | 'kv';
+  totalInSheet?: number;
 }
 
 interface QAMessage {
@@ -139,9 +141,16 @@ export default function AnalyticsClient() {
 
         {!loading && stats && (
           <>
+            {/* Source badge */}
+            <div className="flex items-center gap-2">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${stats.source === 'sheet' ? 'bg-green-50 text-green-700' : 'bg-yellow-50 text-yellow-700'}`}>
+                {stats.source === 'sheet' ? `Google Sheet · ${stats.totalInSheet?.toLocaleString()} rows` : 'KV store (Sheet unavailable)'}
+              </span>
+            </div>
+
             {/* Stat Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard label="Total Queries" value={stats.totalQueries} />
+              <StatCard label="Total Queries" value={stats.totalQueries.toLocaleString()} />
               <StatCard label="Unique Agents" value={stats.uniqueAgents} />
               <StatCard label="Today" value={stats.queriesToday} sub="queries so far" />
               <StatCard label="Most Active" value={stats.mostActiveAgent} sub="agent" />

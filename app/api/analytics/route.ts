@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readLogs } from '@/lib/logger';
+import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 
@@ -100,8 +101,21 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const question: string = body.question?.trim() || '';
 
-  const logs = await readLogs();
-  const stats = computeStats(logs);
+  // Sheet is the source of truth — has full history.
+  // Fall back to KV/file if service account is not configured.
+  let logs: LogEntry[];
+  let source: 'sheet' | 'kv';
+  try {
+    logs = await readLogsFromSheet();
+    source = 'sheet';
+    console.log(`[analytics] Loaded ${logs.length} logs from Google Sheet`);
+  } catch (err: any) {
+    console.warn(`[analytics] Sheet read failed (${err.message}), falling back to KV`);
+    logs = await readLogs();
+    source = 'kv';
+  }
+
+  const stats = { ...computeStats(logs), source, totalInSheet: logs.length };
 
   if (!question) {
     return NextResponse.json({ stats });
