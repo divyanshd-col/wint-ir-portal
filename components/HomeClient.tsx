@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import Sidebar from './Sidebar';
 import ChatInterface from './ChatInterface';
 import type { SavedConversation } from '@/lib/types';
@@ -36,11 +37,19 @@ export default function HomeClient({ username, isAdmin, historyEnabled }: HomeCl
         onNewChat={handleNewChat}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white border-b border-gray-100 px-6 py-3.5 flex items-center shrink-0">
+        <header className="bg-white border-b border-gray-100 px-6 py-3.5 flex items-center justify-between shrink-0">
           <div>
             <h1 className="text-[#1a1a1a] font-semibold text-sm tracking-tight">IR Support Assistant</h1>
             <p className="text-gray-400 text-xs mt-0.5">Wint Wealth · Internal use only</p>
           </div>
+          {isAdmin && (
+            <Link
+              href="/analytics"
+              className="text-xs text-[#2d6a4f] hover:underline font-medium"
+            >
+              Analytics →
+            </Link>
+          )}
         </header>
         <div className="flex-1 overflow-hidden">
           <ChatInterface
