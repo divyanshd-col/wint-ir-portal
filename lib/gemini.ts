@@ -19,7 +19,7 @@ function isRateLimit(err: any): boolean {
 }
 
 const FALLBACK_MODEL: Record<string, string> = {
-  'gemini-3-flash': 'gemini-2.5-pro',
+  'gemini-3-flash-preview': 'gemini-2.5-pro',
   'gemini-2.5-pro': 'gemini-2.5-flash',
 };
 
