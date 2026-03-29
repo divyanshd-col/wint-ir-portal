@@ -80,13 +80,14 @@ interface ChatRequest {
   formAnswers?: Record<string, string>;
   queryType?: 'direct' | 'process' | 'clarify';
   category?: string | null;
+  imageData?: { base64: string; mimeType: string };
 }
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { messages, formAnswers, queryType, category }: ChatRequest = await req.json();
+  const { messages, formAnswers, queryType, category, imageData }: ChatRequest = await req.json();
   const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
   // Exclude injected context messages from query extraction
   const rawContent = latestUserMessage?.content || '';
@@ -473,15 +474,25 @@ ${kbSection}`;
   const readable = new ReadableStream({
     async start(controller) {
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`));
+      let briefingText = '';
       try {
         console.log(`[chat] Calling ${provider} (${modelName})...`);
 
         if (provider === 'claude') {
           const client = new Anthropic({ apiKey: config.anthropicApiKey });
-          const anthropicMessages = messages.map((m: any) => ({
-            role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
-            content: m.content,
-          }));
+          const anthropicMessages = messages.map((m: any, i: number) => {
+            const isLastUser = m.role === 'user' && i === messages.length - 1;
+            if (isLastUser && imageData) {
+              return {
+                role: 'user' as const,
+                content: [
+                  { type: 'image' as const, source: { type: 'base64' as const, media_type: imageData.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: imageData.base64 } },
+                  { type: 'text' as const, text: m.content },
+                ],
+              };
+            }
+            return { role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant', content: m.content };
+          });
           const stream = client.messages.stream({
             model: modelName,
             max_tokens: 8096,
@@ -494,7 +505,10 @@ ${kbSection}`;
               (event.delta as any).type === 'text_delta'
             ) {
               const text = (event.delta as any).text;
-              if (text) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text })}\n\n`));
+              if (text) {
+                briefingText += text;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text })}\n\n`));
+              }
             }
           }
         } else {
@@ -502,15 +516,20 @@ ${kbSection}`;
             role: m.role === 'assistant' ? 'model' : 'user',
             parts: [{ text: m.content }],
           }));
+          const lastParts: any[] = [{ text: query }];
+          if (imageData) lastParts.push({ inline_data: { mime_type: imageData.mimeType, data: imageData.base64 } });
           const response = await geminiStream(
             geminiKeys,
             modelName,
-            [...history, { role: 'user', parts: [{ text: query }] }],
+            [...history, { role: 'user', parts: lastParts }],
             systemPromptWithAnswers
           );
           for await (const chunk of response) {
             const text = chunk.text;
-            if (text) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text })}\n\n`));
+            if (text) {
+              briefingText += text;
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text })}\n\n`));
+            }
           }
         }
 
@@ -520,6 +539,45 @@ ${kbSection}`;
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text: `Error: ${err.message}` })}\n\n`));
       }
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+
+      // Secondary call: generate educational explanation for process queries
+      if (queryType === 'process' && briefingText.length > 50 && geminiKeys.length > 0) {
+        try {
+          const formAnswerLines = formAnswers && Object.keys(formAnswers).length > 0
+            ? Object.entries(formAnswers as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join('\n')
+            : 'None';
+          const educationPrompt = `You are a support assistant at a fintech investment platform. A support agent just received this internal briefing about a customer issue:
+---
+${briefingText}
+---
+CONFIRMED CASE FACTS:
+${formAnswerLines}
+---
+
+Write 2–4 sentences explaining the underlying technical or regulatory reason WHY this situation exists. Help the agent understand the root cause — for example: why UCC is required for demat activation, why record date cut-off exists, why T+1 settlement applies, why a mandate cannot be modified once placed, why a sell is blocked near record date, why DDPI activation takes 24–48 hours, etc.
+Write to the agent directly. Be factual and concise. Prose only — no bullet points, no headers.
+
+Return ONLY valid JSON with no markdown fencing:
+{"education":"<your 2–4 sentence explanation>"}`;
+
+          const raw = await geminiGenerate(
+            geminiKeys,
+            'gemini-2.5-flash',
+            [{ role: 'user', parts: [{ text: educationPrompt }] }],
+            undefined,
+            20000
+          );
+          const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+          const parsed = JSON.parse(cleaned);
+          if (parsed.education) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'education', text: parsed.education })}\n\n`));
+          }
+        } catch (e) {
+          console.error('[chat] Education call failed:', e);
+        }
+      }
+
+      controller.enqueue(encoder.encode('data: [FINAL]\n\n'));
       controller.close();
     },
   });

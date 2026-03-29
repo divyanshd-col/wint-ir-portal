@@ -8,13 +8,14 @@ import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
 interface AnalyzeRequest {
   messages: { role: string; content: string }[];
   allAnswers?: Record<string, string>;
+  imageData?: { base64: string; mimeType: string };
 }
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { messages, allAnswers }: AnalyzeRequest = await req.json();
+  const { messages, allAnswers, imageData }: AnalyzeRequest = await req.json();
   const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
   const query = latestUserMessage?.content || '';
 
@@ -38,10 +39,25 @@ Stage 2 (answer generator): Once all needed facts are confirmed, generates the r
 
 Your output feeds directly into Stage 2. The field IDs you generate MUST match the canonical IDs in the schemas below — Stage 2 reads them by exact name to identify the scenario and generate the correct answer. Never invent new field IDs.
 
+If a screenshot is attached, treat visible UI state (error messages, status labels, button states) as confirmed facts and extract them into your Known Set exactly as if the agent had stated them explicitly.
+
 ---
 
 RETURN FORMAT — return ONLY valid JSON, no markdown, no explanation:
-{"queryType":"direct"|"process"|"clarify","category":"repayment"|"kyc"|"payment"|"sip"|"sell"|"referral"|"taxation"|"dashboard"|"fd"|"huf"|null,"questions":[{"id":"field_id","label":"Question label","options":["opt1","opt2"],"type":"select"|"text"}],"stepTitle":"Step N: Description","clarificationMessage":"only when queryType=clarify"}
+
+When asking a clarifying question (process, has questions):
+{"queryType":"process","category":"repayment"|"kyc"|"payment"|"sip"|"sell"|"referral"|"taxation"|"dashboard"|"fd"|"huf","questions":[{"id":"field_id","label":"Question label","options":["opt1","opt2"],"type":"select"|"text"}],"stepTitle":"Step N: Description","reasoning":"One sentence: what you understand so far and why you need this information","extractedFacts":{}}
+
+When all facts are known and scenario is resolved (process, no questions):
+{"queryType":"process","category":"repayment"|"kyc"|"payment"|"sip"|"sell"|"referral"|"taxation"|"dashboard"|"fd"|"huf","questions":[],"stepTitle":"Resolution","reasoning":"","extractedFacts":{"<canonical_field_id>":"<value>","<canonical_field_id>":"<value>"}}
+
+extractedFacts MUST use the exact canonical field IDs from the schemas below (e.g. "sell_situation", "ddpi_activation_status", "holding_on_record_date"). Never invent new field IDs here. Include all facts from the Known Set that map to a canonical ID.
+
+For direct queries:
+{"queryType":"direct","category":null,"questions":[],"stepTitle":"","reasoning":"","extractedFacts":{}}
+
+For clarify (area cannot be determined):
+{"queryType":"clarify","category":null,"questions":[],"stepTitle":"","reasoning":"","extractedFacts":{},"clarificationMessage":"one direct sentence"}
 
 category must be set for every "process" query. Set to null for "direct" and "clarify".
 
@@ -87,7 +103,7 @@ Read the latest message + conversation history. Identify:
 - The stage (first message or continuing from previous steps)
 - What's already known from EXISTING CONFIRMED ANSWERS and the conversation
 
-Extract facts explicitly stated in the message and add them to the Known Set:
+Extract facts explicitly stated in the message and add them to the Known Set. When you return {"questions":[]}, these extracted facts MUST be included in "extractedFacts" using the canonical field IDs from the schemas below:
 - "payment failed on Razorpay" → gateway=Razorpay (use as known, skip asking)
 - "paying via net banking" → payment_mode=Net Banking
 - "AOF has expired" → aof_status=expired
@@ -539,25 +555,33 @@ Step 1 — id: huf_in_tracking_sheet
 ---
 
 FINAL RULE:
-The moment the Known Set (EXISTING CONFIRMED ANSWERS + extracted facts) uniquely identifies one scenario in any category above → return {"questions":[]}.
+The moment the Known Set (EXISTING CONFIRMED ANSWERS + extracted facts) uniquely identifies one scenario in any category above → return {"questions":[],"extractedFacts":{...all known canonical field/value pairs}}.
 The answer generator handles the rest. Never ask more questions than the minimum needed to reach that point.`;
 
   try {
-    let text = '{"questions":[]}';
+    let text = '{"questions":[],"reasoning":"","extractedFacts":{}}';
 
     if (provider === 'claude') {
       const client = new Anthropic({ apiKey: config.anthropicApiKey });
+      const userContent: Anthropic.MessageParam['content'] = imageData
+        ? [
+            { type: 'image', source: { type: 'base64', media_type: imageData.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: imageData.base64 } },
+            { type: 'text', text: analyzePrompt },
+          ]
+        : analyzePrompt;
       const response = await client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 1024,
-        messages: [{ role: 'user', content: analyzePrompt }],
+        messages: [{ role: 'user', content: userContent }],
       });
       text = response.content[0].type === 'text' ? response.content[0].text : text;
     } else {
+      const parts: any[] = [{ text: analyzePrompt }];
+      if (imageData) parts.push({ inline_data: { mime_type: imageData.mimeType, data: imageData.base64 } });
       text = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',
-        [{ role: 'user', parts: [{ text: analyzePrompt }] }],
+        [{ role: 'user', parts }],
         undefined,
         60000  // analyze prompt is large — allow up to 60s
       );
