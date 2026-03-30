@@ -172,6 +172,8 @@ export default function ChatInterface({ username, historyEnabled = false, initia
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({});
   const [copiedDraft, setCopiedDraft] = useState<Record<string, boolean>>({});
   const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({});
+  const [draftExpanded, setDraftExpanded] = useState<Record<string, boolean>>({});
+  const [draftContext, setDraftContext] = useState<Record<string, string>>({});
   const [attachedImage, setAttachedImage] = useState<{ base64: string; mimeType: string; previewUrl: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -237,13 +239,14 @@ export default function ChatInterface({ username, historyEnabled = false, initia
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
 
-  const fetchDraft = async (msgId: string, briefing: string, formAnswers?: Record<string, string>) => {
+  const fetchDraft = async (msgId: string, briefing: string, formAnswers?: Record<string, string>, agentContext?: string) => {
     setDraftLoading(prev => ({ ...prev, [msgId]: true }));
+    setDraftExpanded(prev => ({ ...prev, [msgId]: false }));
     try {
       const res = await fetch('/api/chat/draft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ briefing, formAnswers: formAnswers || {} }),
+        body: JSON.stringify({ briefing, formAnswers: formAnswers || {}, agentContext: agentContext || '' }),
       });
       if (!res.ok) throw new Error('Failed');
       const { draft } = await res.json();
@@ -777,13 +780,9 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                 {/* Assistant: text answer */}
                 {msg.role === 'assistant' && !msg.loading && !msg.form && msg.content && (
                   <>
-                    <div className="px-6 py-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
-                      {renderContent(msg.content)}
-                    </div>
-
-                    {/* Education panel — auto-appears for process queries */}
+                    {/* Why This Happens — shown FIRST, before the answer */}
                     {msg.education && (
-                      <div className="mt-3 bg-amber-50 border border-amber-200/70 rounded-xl overflow-hidden">
+                      <div className="mb-3 bg-amber-50 border border-amber-200/70 rounded-xl overflow-hidden">
                         <button
                           className="w-full px-4 py-2.5 flex items-center gap-2 text-left"
                           onClick={() => setCollapsedPanels(prev => ({ ...prev, [`${msg.id}-education`]: !prev[`${msg.id}-education`] }))}
@@ -808,7 +807,12 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                       </div>
                     )}
 
-                    {/* Draft panel (if generated) or Frame a response button */}
+                    {/* Main answer */}
+                    <div className="px-6 py-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+                      {renderContent(msg.content)}
+                    </div>
+
+                    {/* Draft panel (if generated) or Frame a response with context input */}
                     {msg.queryType === 'process' && (
                       msg.draft ? (
                         <div className="mt-3 bg-blue-50 border border-blue-200/70 rounded-xl overflow-hidden">
@@ -819,6 +823,16 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                             </svg>
                             <span className="flex-1 text-[11px] font-[700] text-blue-700 uppercase tracking-[0.09em]">Customer Message Draft</span>
                             <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, draft: undefined } : m));
+                                  setDraftExpanded(prev => ({ ...prev, [msg.id]: true }));
+                                }}
+                                className="text-blue-400 hover:text-blue-600 transition-colors text-[11px] font-medium mr-1"
+                                title="Regenerate with different context"
+                              >
+                                Redo
+                              </button>
                               <button
                                 onClick={() => setCollapsedPanels(prev => ({ ...prev, [`${msg.id}-draft`]: !prev[`${msg.id}-draft`] }))}
                                 className="text-blue-400 hover:text-blue-600 transition-colors"
@@ -859,27 +873,66 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                             </div>
                           )}
                         </div>
+                      ) : draftExpanded[msg.id] ? (
+                        /* Expanded: context input form */
+                        <div className="mt-3 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+                          <div className="px-4 pt-3.5 pb-1 flex items-center gap-2 border-b border-gray-100">
+                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0">
+                              <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
+                            </svg>
+                            <span className="text-[11px] font-[700] text-gray-500 uppercase tracking-[0.09em]">Frame a response</span>
+                          </div>
+                          <div className="px-4 py-3.5 space-y-3">
+                            <div>
+                              <label className="block text-[12px] font-[600] text-gray-500 mb-1.5">
+                                Add context <span className="text-gray-400 font-normal">(optional)</span>
+                              </label>
+                              <textarea
+                                autoFocus
+                                rows={2}
+                                value={draftContext[msg.id] || ''}
+                                onChange={e => setDraftContext(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                                placeholder="e.g. User already tried reinstalling the app · This is a premium investor · User is frustrated, second time reaching out…"
+                                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 focus:border-[#2d9e4f]/50 resize-none leading-relaxed transition"
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => fetchDraft(msg.id, msg.content, msg.formAnswers, draftContext[msg.id])}
+                                disabled={draftLoading[msg.id]}
+                                className="flex items-center gap-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-[12.5px] font-[600] px-4 py-2 rounded-lg transition disabled:opacity-40"
+                              >
+                                {draftLoading[msg.id] ? (
+                                  <>
+                                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
+                                      <path d="M8 2a6 6 0 1 0 6 6"/>
+                                    </svg>
+                                    Drafting…
+                                  </>
+                                ) : (
+                                  <>Generate draft →</>
+                                )}
+                              </button>
+                              <button
+                                onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: false }))}
+                                className="text-[12px] text-gray-400 hover:text-gray-600 px-2 py-2 transition"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        </div>
                       ) : (
+                        /* Collapsed: just the button */
                         <button
-                          onClick={() => fetchDraft(msg.id, msg.content, msg.formAnswers)}
+                          onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: true }))}
                           disabled={draftLoading[msg.id]}
                           className="mt-3 flex items-center gap-2 text-[12px] text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 bg-white"
                         >
-                          {draftLoading[msg.id] ? (
-                            <>
-                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin shrink-0">
-                                <path d="M8 2a6 6 0 1 0 6 6"/>
-                              </svg>
-                              Drafting…
-                            </>
-                          ) : (
-                            <>
-                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
-                                <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
-                              </svg>
-                              Frame a response
-                            </>
-                          )}
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
+                            <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
+                          </svg>
+                          Frame a response
                         </button>
                       )
                     )}

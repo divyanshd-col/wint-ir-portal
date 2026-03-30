@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { briefing, formAnswers } = await req.json();
+  const { briefing, formAnswers, agentContext } = await req.json();
   if (!briefing) return NextResponse.json({ error: 'Missing briefing' }, { status: 400 });
 
   const config = await readConfig();
@@ -21,6 +21,10 @@ export async function POST(req: NextRequest) {
     ? Object.entries(formAnswers as Record<string, string>).map(([k, v]) => `${k}: ${v}`).join('\n')
     : 'None';
 
+  const agentContextLine = agentContext?.trim()
+    ? `\nADDITIONAL CONTEXT FROM AGENT:\n${agentContext.trim()}\n`
+    : '';
+
   const draftPrompt = `Write a warm, clear message that a support agent can send directly to a customer.
 
 CONTEXT — internal briefing the agent received:
@@ -28,6 +32,7 @@ ${briefing}
 
 CONFIRMED CASE FACTS:
 ${formAnswerLines}
+${agentContextLine}
 
 STRICT RULES:
 1. NEVER include: Slack channel names, internal tool names (Finder, Cashfree portal, Razorpay portal, Mixpanel), escalation POC names, internal team names (#cx-live, #cx-api, #cx-ops, #sip-discrepancies, #bond-kyc-discrepancies, #asset-repayment-issues, etc.), or any internal operational details.
