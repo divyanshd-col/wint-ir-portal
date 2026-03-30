@@ -41,6 +41,28 @@ function IQSBar({ iqs, height = 6 }: { iqs: number; height?: number }) {
   );
 }
 
+const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
+
+function ChatLink({ chatId, className = '' }: { chatId: string; className?: string }) {
+  // Only linkify numeric-looking IDs (Robylon chat IDs are integers)
+  const isRobylon = /^\d+$/.test(chatId.trim());
+  if (!isRobylon) return <span className={`font-mono ${className}`}>{chatId}</span>;
+  return (
+    <a
+      href={`${ROBYLON_BASE}/${chatId}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={e => e.stopPropagation()}
+      className={`font-mono text-[#2d6a4f] hover:underline inline-flex items-center gap-1 ${className}`}
+    >
+      {chatId}
+      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" className="opacity-60 shrink-0">
+        <path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8M8 1h3m0 0v3m0-3L5 7"/>
+      </svg>
+    </a>
+  );
+}
+
 function ParamBadge({ val }: { val: ParamScore | undefined }) {
   if (val === 'Yes') return <span className="text-green-500 font-bold">✓</span>;
   if (val === 'No')  return <span className="text-red-500 font-bold">✗</span>;
@@ -201,8 +223,8 @@ function ScoreDetail({ entry, onClose }: { entry: IQSScoreEntry; onClose: () => 
               style={{ background: t.bg, color: t.text }}>{entry.iqs}%</div>
             <div>
               <p className="font-bold text-gray-900 text-base">{entry.agentName || 'Unknown Agent'}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                Chat {entry.chatId} · {entry.scoredAt.slice(0, 10)}
+              <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                <ChatLink chatId={entry.chatId} className="text-xs" /> · {entry.scoredAt.slice(0, 10)}
                 {entry.tags && <> · <span className="text-gray-500">{entry.tags}</span></>}
               </p>
             </div>
@@ -866,7 +888,7 @@ export default function QualityClient() {
                             <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer transition"
                               onClick={() => setDetailEntry(e)}>
                               <td className="py-2.5 px-2 font-semibold text-gray-800">{e.agentName || '—'}</td>
-                              <td className="py-2.5 px-2 text-gray-400 font-mono">{e.chatId}</td>
+                              <td className="py-2.5 px-2"><ChatLink chatId={e.chatId} className="text-xs" /></td>
                               <td className="py-2.5 px-2"><IQSPill iqs={e.iqs} /></td>
                               <td className="py-2.5 px-2 text-gray-500">
                                 {e.csat === '5' ? '👍 Good' : e.csat === '3' ? '😐 Mid' : e.csat === '1' ? '👎 Bad' : '—'}
@@ -1087,7 +1109,7 @@ export default function QualityClient() {
                               className="border-b border-gray-50 hover:bg-[#2d6a4f]/5 cursor-pointer transition"
                               onClick={() => setDetailEntry(e)}>
                               <td className="px-4 py-3 font-semibold text-gray-800">{e.agentName || '—'}</td>
-                              <td className="px-4 py-3 text-gray-400 font-mono">{e.chatId}</td>
+                              <td className="px-4 py-3"><ChatLink chatId={e.chatId} className="text-xs" /></td>
                               <td className="px-4 py-3"><IQSPill iqs={e.iqs} /></td>
                               <td className="px-4 py-3">
                                 {fails.length === 0
