@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 
@@ -11,7 +12,7 @@ interface AgentStat {
   minIqs: number; maxIqs: number; high: number; atRisk: number;
 }
 interface ParsedRow {
-  chatId: string; agent: string; date: string; csat: string; transcript: string;
+  chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string;
 }
 
 // ── IQS Helpers ───────────────────────────────────────────────────────────────
@@ -45,6 +46,62 @@ function ParamBadge({ val }: { val: ParamScore | undefined }) {
   if (val === 'No')  return <span className="text-red-500 font-bold">✗</span>;
   if (val === 'NA')  return <span className="text-gray-300">—</span>;
   return <span className="text-gray-200">·</span>;
+}
+
+// ── Metadata (Excel / CSV) Parsing ────────────────────────────────────────────
+interface MetaRow { agent?: string; tags?: string; csat?: string; date?: string; }
+type MetaMap = Record<string, MetaRow>; // keyed by chat_id
+
+/**
+ * Parse an Excel (.xlsx/.xls) or CSV file and build a chat_id → metadata map.
+ * Detects the chat_id column by looking for "chat_id", "chat id", "id", "chatid" (case-insensitive).
+ * Detects agent, tags, csat, date columns similarly.
+ */
+async function parseMetaFile(file: File): Promise<{ map: MetaMap; headers: string[]; rows: number; error?: string }> {
+  const lc = (s: string) => s.toLowerCase().replace(/[\s_-]/g, '');
+
+  function toMap(rows: Record<string, string>[]): { map: MetaMap; headers: string[]; rows: number; error?: string } {
+    if (!rows.length) return { map: {}, headers: [], rows: 0, error: 'File is empty' };
+    const headers = Object.keys(rows[0]);
+    const find = (patterns: string[]) => headers.find(h => patterns.some(p => lc(h) === p || lc(h).includes(p))) || '';
+    const chatIdCol = find(['chatid', 'chat_id', 'chatid', 'id', 'conversationid']);
+    if (!chatIdCol) return { map: {}, headers, rows: rows.length, error: 'No chat_id column found. Please include a column named "chat_id" or "id".' };
+    const agentCol = find(['agentname', 'agent', 'name', 'assignee', 'assignedto']);
+    const tagsCol  = find(['tags', 'tag', 'category', 'type', 'issue']);
+    const csatCol  = find(['csat', 'rating', 'score', 'feedback', 'satisfaction']);
+    const dateCol  = find(['date', 'createdat', 'time', 'started']);
+    const map: MetaMap = {};
+    for (const r of rows) {
+      const id = String(r[chatIdCol] || '').trim();
+      if (!id) continue;
+      map[id] = {
+        agent: agentCol ? r[agentCol]?.trim() : undefined,
+        tags:  tagsCol  ? r[tagsCol]?.trim()  : undefined,
+        csat:  csatCol  ? r[csatCol]?.trim()  : undefined,
+        date:  dateCol  ? r[dateCol]?.trim()  : undefined,
+      };
+    }
+    return { map, headers, rows: rows.length };
+  }
+
+  const isExcel = file.name.match(/\.(xlsx|xls|ods)$/i);
+  if (isExcel) {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const raw: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    // Normalise keys to strings
+    const rows = raw.map(r => {
+      const out: Record<string, string> = {};
+      for (const k of Object.keys(r)) out[String(k)] = String(r[k]);
+      return out;
+    });
+    return toMap(rows);
+  } else {
+    // CSV
+    const text = await file.text();
+    return toMap(parseRawCSV(text));
+  }
 }
 
 // ── CSV Parsing ────────────────────────────────────────────────────────────────
@@ -310,6 +367,14 @@ export default function QualityClient() {
   const [batchErrors, setBatchErrors] = useState<{ row: number; chatId: string; error: string }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Metadata file state
+  const [metaMap, setMetaMap] = useState<MetaMap>({});
+  const [metaFileName, setMetaFileName] = useState('');
+  const [metaRowCount, setMetaRowCount] = useState(0);
+  const [metaError, setMetaError] = useState('');
+  const [metaHeaders, setMetaHeaders] = useState<string[]>([]);
+  const metaFileRef = useRef<HTMLInputElement>(null);
+
   // Scores state
   const [entries, setEntries] = useState<IQSScoreEntry[]>([]);
   const [agentStats, setAgentStats] = useState<AgentStat[]>([]);
@@ -398,9 +463,26 @@ export default function QualityClient() {
     reader.readAsText(file);
   };
 
+  const handleMetaFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setMetaFileName(file.name);
+    setMetaError('');
+    const result = await parseMetaFile(file);
+    if (result.error) {
+      setMetaError(result.error);
+      setMetaMap({});
+      setMetaRowCount(0);
+    } else {
+      setMetaMap(result.map);
+      setMetaRowCount(result.rows);
+      setMetaHeaders(result.headers);
+    }
+  };
+
   // ── Batch score ─────────────────────────────────────────────────────────────
   const runBatch = async () => {
-    const rows: ParsedRow[] = isWint
+    const baseRows: ParsedRow[] = isWint
       ? (rowLimit > 0 ? parsedRows.slice(0, rowLimit) : parsedRows)
       : (rowLimit > 0 ? rawRows.slice(0, rowLimit) : rawRows).map(r => ({
           chatId: manualCols.chatId ? r[manualCols.chatId] : `row_${rawRows.indexOf(r) + 1}`,
@@ -409,6 +491,19 @@ export default function QualityClient() {
           csat: manualCols.csat ? r[manualCols.csat] : '',
           transcript: manualCols.transcript ? r[manualCols.transcript] : '',
         }));
+
+    // Merge metadata by chat_id (metadata file takes priority over transcript-extracted values)
+    const rows: ParsedRow[] = baseRows.map(r => {
+      const meta = metaMap[r.chatId] || metaMap[String(Number(r.chatId))]; // handle int/string mismatch
+      if (!meta) return r;
+      return {
+        ...r,
+        agent: meta.agent || r.agent,
+        tags:  meta.tags  || '',
+        csat:  meta.csat  || r.csat,
+        date:  meta.date  || r.date,
+      };
+    });
 
     if (!rows.length) return;
     setScoring(true); setBatchResults([]); setBatchErrors([]);
@@ -428,7 +523,7 @@ export default function QualityClient() {
         const res = await fetch('/api/quality/score', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript: row.transcript, chatId, agentName: row.agent, date: row.date, csat: row.csat, tags: '' }),
+          body: JSON.stringify({ transcript: row.transcript, chatId, agentName: row.agent, date: row.date, csat: row.csat, tags: row.tags || '' }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');
@@ -561,7 +656,71 @@ export default function QualityClient() {
                 )}
               </div>
 
-              {/* Wint format: agent preview */}
+              {/* Metadata file upload (optional, always shown when transcript is loaded) */}
+              {(isWint ? parsedRows.length : rawRows.length) > 0 && !scoring && batchResults.length === 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 className="text-sm font-bold text-gray-900">Metadata file <span className="text-gray-400 font-normal">(optional)</span></h2>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Upload an Excel or CSV with <strong className="text-gray-600">chat_id, agent_name, tags, csat</strong> columns
+                        to enrich transcripts. Data is matched by chat_id.
+                      </p>
+                    </div>
+                    <input ref={metaFileRef} type="file" accept=".csv,.xlsx,.xls,.ods" className="hidden" onChange={handleMetaFile} />
+                    <button
+                      onClick={() => metaFileRef.current?.click()}
+                      className="shrink-0 text-xs px-4 py-2 border border-gray-200 rounded-xl text-gray-600 hover:border-[#2d6a4f] hover:text-[#2d6a4f] transition font-semibold">
+                      {metaFileName ? '↺ Change file' : '+ Upload Excel / CSV'}
+                    </button>
+                  </div>
+
+                  {metaFileName && !metaError && (
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <div className="flex items-center gap-2 bg-[#2d6a4f]/10 text-[#2d6a4f] rounded-xl px-3 py-2">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span className="text-xs font-semibold">{metaFileName}</span>
+                      </div>
+                      <span className="text-xs text-gray-500">
+                        {Object.keys(metaMap).length} chat IDs loaded · {metaRowCount} rows
+                      </span>
+                      {metaHeaders.length > 0 && (
+                        <span className="text-xs text-gray-400">
+                          Columns: {metaHeaders.slice(0, 6).join(', ')}{metaHeaders.length > 6 ? '…' : ''}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {metaError && (
+                    <div className="mt-3 flex items-center gap-2 text-red-500 text-xs bg-red-50 rounded-xl px-3 py-2">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                      </svg>
+                      {metaError}
+                    </div>
+                  )}
+
+                  {/* Match preview: how many transcript rows have metadata */}
+                  {Object.keys(metaMap).length > 0 && (isWint ? parsedRows : rawRows).length > 0 && (() => {
+                    const total = isWint ? parsedRows.length : rawRows.length;
+                    const matched = (isWint ? parsedRows : rawRows as any[]).filter((r: any) => {
+                      const id = isWint ? r.chatId : (manualCols.chatId ? r[manualCols.chatId] : '');
+                      return metaMap[id] || metaMap[String(Number(id))];
+                    }).length;
+                    return (
+                      <div className="mt-3 text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
+                        <span className="font-semibold text-amber-700">{matched} of {total}</span> transcripts matched to metadata
+                        {matched < total && <span className="text-amber-600"> · {total - matched} will use values from the transcript</span>}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* Transcript preview + score button */}
               {isWint && wintAgentPreview.length > 0 && !scoring && batchResults.length === 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                   <div className="flex items-center justify-between mb-4">
