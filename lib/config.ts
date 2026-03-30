@@ -1,9 +1,13 @@
 import { storeGetConfig, storeSetConfig } from './store';
 
+export type UserRole = 'agent' | 'admin' | 'quality' | 'tl';
+
 export interface PortalUser {
-  username: string;
-  password: string;
-  isAdmin?: boolean;
+  username: string;   // kept for legacy credentials users; email for Google users
+  password?: string;  // optional — Google OAuth users have no password
+  isAdmin?: boolean;  // legacy — derived from role === 'admin'
+  role?: UserRole;    // new role field
+  email?: string;     // Google email (primary identifier for OAuth users)
 }
 
 export interface PortalConfig {

@@ -8,8 +8,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname === '/setup' ||
-    pathname === '/login' ||
-    pathname === '/register'
+    pathname === '/login'
   ) {
     return NextResponse.next();
   }
@@ -18,6 +17,22 @@ export async function middleware(req: NextRequest) {
   if (!token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
+
+  // Quality section: only admin, quality, tl
+  if (pathname.startsWith('/quality')) {
+    const role = token.role as string | undefined;
+    if (!role || !['admin', 'quality', 'tl'].includes(role)) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
+  // Analytics: admin only
+  if (pathname.startsWith('/analytics')) {
+    if (!token.isAdmin) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
   return NextResponse.next();
 }
 

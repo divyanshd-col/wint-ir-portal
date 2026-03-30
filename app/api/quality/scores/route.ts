@@ -1,0 +1,76 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/auth';
+import { storeGetIQSScores } from '@/lib/store';
+import type { IQSScoreEntry } from '@/lib/quality';
+
+function qualityAccess(session: any): boolean {
+  const role = session?.user?.role;
+  return !!role && ['admin', 'quality', 'tl'].includes(role);
+}
+
+export async function GET(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session || !qualityAccess(session)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(req.url);
+  const agentFilter = searchParams.get('agent') || '';
+  const minScore = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) : 0;
+  const maxScore = searchParams.get('maxScore') ? parseInt(searchParams.get('maxScore')!) : 100;
+  const tagFilter = searchParams.get('tag') || '';
+  const dateFrom = searchParams.get('dateFrom') || '';
+  const dateTo = searchParams.get('dateTo') || '';
+  const limit = Math.min(parseInt(searchParams.get('limit') || '500'), 2000);
+
+  const raw = await storeGetIQSScores();
+  let entries: IQSScoreEntry[] = raw.map(r => {
+    try { return JSON.parse(r); } catch { return null; }
+  }).filter(Boolean);
+
+  if (agentFilter) entries = entries.filter(e => e.agentName === agentFilter);
+  if (tagFilter) entries = entries.filter(e => (e.tags || '').toLowerCase().includes(tagFilter.toLowerCase()));
+  if (dateFrom) entries = entries.filter(e => (e.date || e.scoredAt) >= dateFrom);
+  if (dateTo) entries = entries.filter(e => (e.date || e.scoredAt) <= dateTo + 'T23:59:59');
+  entries = entries.filter(e => e.iqs >= minScore && e.iqs <= maxScore);
+
+  // Already newest-first from LPUSH
+  entries = entries.slice(0, limit);
+
+  // Agent stats
+  const agentMap: Record<string, { total: number; sum: number; scores: number[] }> = {};
+  for (const e of entries) {
+    const a = e.agentName || 'Unknown';
+    if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [] };
+    agentMap[a].total++;
+    agentMap[a].sum += e.iqs;
+    agentMap[a].scores.push(e.iqs);
+  }
+  const agentStats = Object.entries(agentMap).map(([agent, d]) => ({
+    agent,
+    chats: d.total,
+    avgIqs: Math.round(d.sum / d.total),
+    minIqs: Math.min(...d.scores),
+    maxIqs: Math.max(...d.scores),
+    high: d.scores.filter(s => s >= 90).length,
+    atRisk: d.scores.filter(s => s < 70).length,
+  })).sort((a, b) => b.avgIqs - a.avgIqs);
+
+  // Param failure rates
+  const paramFails: Record<string, number> = {};
+  if (entries.length) {
+    for (const e of entries) {
+      for (const [p, v] of Object.entries(e.scores)) {
+        if (v === 'No') paramFails[p] = (paramFails[p] || 0) + 1;
+      }
+    }
+    for (const p of Object.keys(paramFails)) {
+      paramFails[p] = Math.round((paramFails[p] / entries.length) * 100);
+    }
+  }
+
+  const availableAgents = [...new Set(raw.map(r => { try { return JSON.parse(r).agentName; } catch { return null; } }).filter(Boolean))].sort();
+
+  return NextResponse.json({ entries, agentStats, paramFails, availableAgents, total: entries.length });
+}

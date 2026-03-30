@@ -9,10 +9,11 @@ import type { SavedConversation } from '@/lib/types';
 interface HomeClientProps {
   username: string;
   isAdmin: boolean;
+  role?: string;
   historyEnabled: boolean;
 }
 
-export default function HomeClient({ username, isAdmin, historyEnabled }: HomeClientProps) {
+export default function HomeClient({ username, isAdmin, role, historyEnabled }: HomeClientProps) {
   // chatKey causes ChatInterface to fully remount (clean slate) on new chat or restore
   const [chatKey, setChatKey] = useState(0);
   const [pendingRestore, setPendingRestore] = useState<SavedConversation | null>(null);
@@ -32,6 +33,7 @@ export default function HomeClient({ username, isAdmin, historyEnabled }: HomeCl
       <Sidebar
         username={username}
         isAdmin={isAdmin}
+        role={role}
         historyEnabled={historyEnabled}
         onRestoreConversation={handleRestore}
         onNewChat={handleNewChat}

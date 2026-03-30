@@ -8,6 +8,7 @@ import type { SavedConversation } from '@/lib/types';
 interface SidebarProps {
   username: string;
   isAdmin?: boolean;
+  role?: string;
   historyEnabled?: boolean;
   onRestoreConversation?: (conv: SavedConversation) => void;
   onNewChat?: () => void;
@@ -31,7 +32,8 @@ function shortLabel(url: string): string {
   } catch { return url; }
 }
 
-export default function Sidebar({ username, isAdmin, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
+export default function Sidebar({ username, isAdmin, role, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
+  const canSeeQuality = isAdmin || role === 'quality' || role === 'tl';
   const [open, setOpen] = useState(true);
   const [view, setView] = useState<'main' | 'settings'>('main');
 
@@ -61,18 +63,12 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
   const [slackSaved, setSlackSaved] = useState(false);
 
   // User management
-  const [users, setUsers] = useState<{ username: string; isAdmin: boolean }[]>([]);
+  const [users, setUsers] = useState<{ username: string; email: string; role: string; isAdmin: boolean }[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newIsAdmin, setNewIsAdmin] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState<'agent' | 'admin' | 'quality' | 'tl'>('agent');
   const [addingUser, setAddingUser] = useState(false);
   const [userError, setUserError] = useState('');
-  const [resetTarget, setResetTarget] = useState<string | null>(null);
-  const [resetPassword, setResetPassword] = useState('');
-  const [showResetPassword, setShowResetPassword] = useState(false);
-  const [savingReset, setSavingReset] = useState(false);
   const [downloadingLogs, setDownloadingLogs] = useState(false);
 
   // Conversation history
@@ -264,44 +260,39 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
   };
 
   const addUser = async () => {
-    if (!newUsername.trim() || !newPassword.trim()) return;
+    if (!newEmail.trim()) return;
     setAddingUser(true);
     setUserError('');
     try {
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: newUsername.trim(), password: newPassword.trim(), isAdmin: newIsAdmin }),
+        body: JSON.stringify({ email: newEmail.trim(), role: newRole }),
       });
       const data = await res.json();
       if (!res.ok) { setUserError(data.error || 'Failed'); return; }
-      setUsers(prev => [...prev, { username: newUsername.trim(), isAdmin: newIsAdmin }]);
-      setNewUsername('');
-      setNewPassword('');
-      setNewIsAdmin(false);
+      await refreshUsers();
+      setNewEmail('');
+      setNewRole('agent');
     } finally { setAddingUser(false); }
   };
 
-  const deleteUser = async (uname: string) => {
+  const updateUserRole = async (email: string, role: string) => {
+    await fetch('/api/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role }),
+    });
+    await refreshUsers();
+  };
+
+  const deleteUser = async (email: string) => {
     const res = await fetch('/api/users', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: uname }),
+      body: JSON.stringify({ email }),
     });
-    if (res.ok) setUsers(prev => prev.filter(u => u.username !== uname));
-  };
-
-  const doResetPassword = async () => {
-    if (!resetTarget || !resetPassword.trim()) return;
-    setSavingReset(true);
-    try {
-      const res = await fetch('/api/users', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: resetTarget, password: resetPassword.trim() }),
-      });
-      if (res.ok) { setResetTarget(null); setResetPassword(''); }
-    } finally { setSavingReset(false); }
+    if (res.ok) setUsers(prev => prev.filter(u => u.email !== email));
   };
 
   const downloadLogs = async () => {
@@ -339,7 +330,7 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
             </div>
-            <p className="text-gray-500 text-xs mt-2">IR Portal{isAdmin ? ' · Admin' : ''}</p>
+            <p className="text-gray-500 text-xs mt-2">IR Portal{role ? ` · ${role.charAt(0).toUpperCase() + role.slice(1)}` : ''}</p>
           </div>
           {isAdmin && view === 'settings' && (
             <button onClick={() => setView('main')} className="text-gray-400 hover:text-white transition p-1" title="Back">
@@ -393,6 +384,19 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
                     <rect x="1" y="1" width="14" height="14" rx="1.5"/>
                   </svg>
                   Analytics
+                </Link>
+              </div>
+            )}
+            {canSeeQuality && (
+              <div className={isAdmin ? '' : 'pt-2'}>
+                <Link
+                  href="/quality"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+                >
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
+                  </svg>
+                  Quality
                 </Link>
               </div>
             )}
@@ -607,26 +611,29 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-white/5">
-                      <th className="text-left px-3 py-2 text-gray-400 font-medium">Username</th>
+                      <th className="text-left px-3 py-2 text-gray-400 font-medium">Email</th>
                       <th className="text-left px-3 py-2 text-gray-400 font-medium">Role</th>
                       <th className="px-2 py-2" />
                     </tr>
                   </thead>
                   <tbody>
                     {users.map(u => (
-                      <tr key={u.username} className="border-t border-white/5">
-                        <td className="px-3 py-2 text-gray-200">{u.username}</td>
+                      <tr key={u.email} className="border-t border-white/5">
+                        <td className="px-3 py-2 text-gray-200 text-[10px] truncate max-w-[100px]">{u.email}</td>
                         <td className="px-3 py-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${u.isAdmin ? 'bg-[#2d9e4f]/20 text-[#2d9e4f]' : 'bg-white/10 text-gray-400'}`}>
-                            {u.isAdmin ? 'Admin' : 'User'}
-                          </span>
+                          <select
+                            value={u.role}
+                            onChange={e => updateUserRole(u.email, e.target.value)}
+                            className="bg-transparent border border-white/10 text-gray-300 text-[10px] rounded px-1.5 py-0.5 focus:outline-none focus:border-[#2d9e4f]"
+                          >
+                            <option value="agent">Agent</option>
+                            <option value="tl">TL</option>
+                            <option value="quality">Quality</option>
+                            <option value="admin">Admin</option>
+                          </select>
                         </td>
                         <td className="px-2 py-2">
-                          <div className="flex gap-1.5 justify-end">
-                            <button onClick={() => { setResetTarget(u.username); setResetPassword(''); setShowResetPassword(false); }}
-                              className="text-gray-500 hover:text-blue-400 transition text-[10px]" title="Reset password">Reset</button>
-                            <button onClick={() => deleteUser(u.username)} className="text-gray-500 hover:text-red-400 transition" title="Delete">×</button>
-                          </div>
+                          <button onClick={() => deleteUser(u.email)} className="text-gray-500 hover:text-red-400 transition" title="Remove">×</button>
                         </td>
                       </tr>
                     ))}
@@ -634,45 +641,22 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
                 </table>
               </div>
 
-              {resetTarget && (
-                <div className="mb-3 p-3 bg-white/5 rounded-lg border border-white/10 space-y-2">
-                  <p className="text-gray-400 text-xs">Reset password for <span className="text-white font-medium">{resetTarget}</span></p>
-                  <div className="relative">
-                    <input type={showResetPassword ? 'text' : 'password'} value={resetPassword} onChange={e => setResetPassword(e.target.value)} placeholder="New password"
-                      className="w-full bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#2d9e4f] placeholder-gray-600" />
-                    <button type="button" onClick={() => setShowResetPassword(p => !p)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[10px]">
-                      {showResetPassword ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <button onClick={doResetPassword} disabled={savingReset || !resetPassword.trim()}
-                      className="flex-1 bg-[#2d9e4f]/20 hover:bg-[#2d9e4f]/40 disabled:opacity-40 text-[#2d9e4f] text-xs font-medium py-1.5 rounded-lg transition">
-                      {savingReset ? 'Saving…' : 'Save'}
-                    </button>
-                    <button onClick={() => setResetTarget(null)} className="px-3 bg-white/5 text-gray-400 hover:text-white text-xs rounded-lg transition">Cancel</button>
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-2">
-                <input type="text" value={newUsername} onChange={e => setNewUsername(e.target.value)} placeholder="Username"
+                <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="name@wintwealth.com"
                   className="w-full bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#2d9e4f] placeholder-gray-600" />
-                <div className="relative">
-                  <input type={showNewPassword ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Password"
-                    className="w-full bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-2 pr-8 focus:outline-none focus:ring-1 focus:ring-[#2d9e4f] placeholder-gray-600" />
-                  <button type="button" onClick={() => setShowNewPassword(p => !p)} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-[10px]">
-                    {showNewPassword ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={newIsAdmin} onChange={e => setNewIsAdmin(e.target.checked)} className="rounded border-white/20 bg-white/5 text-[#2d9e4f]" />
-                  <span className="text-gray-400 text-xs">Admin access</span>
-                </label>
+                <select value={newRole} onChange={e => setNewRole(e.target.value as any)}
+                  className="w-full bg-white/5 border border-white/10 text-gray-300 text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#2d9e4f]">
+                  <option value="agent">Agent</option>
+                  <option value="tl">TL</option>
+                  <option value="quality">Quality</option>
+                  <option value="admin">Admin</option>
+                </select>
                 {userError && <p className="text-red-400 text-xs">{userError}</p>}
-                <button onClick={addUser} disabled={addingUser || !newUsername.trim() || !newPassword.trim()}
+                <button onClick={addUser} disabled={addingUser || !newEmail.trim()}
                   className="w-full bg-[#2d9e4f]/20 hover:bg-[#2d9e4f]/40 disabled:opacity-40 text-[#2d9e4f] text-xs font-medium py-1.5 rounded-lg transition">
-                  {addingUser ? 'Adding…' : '+ Add User'}
+                  {addingUser ? 'Adding…' : '+ Add / Update User'}
                 </button>
+                <p className="text-gray-600 text-[10px]">User signs in via Google — no password needed</p>
               </div>
             </section>
 
@@ -707,7 +691,10 @@ export default function Sidebar({ username, isAdmin, historyEnabled = false, onR
               <div className="w-7 h-7 bg-[#2d9e4f] rounded-full flex items-center justify-center text-white text-xs font-bold uppercase">
                 {username?.[0] || 'I'}
               </div>
-              <span className="text-gray-300 text-sm truncate max-w-[100px]">{username}</span>
+              <div>
+                <span className="text-gray-300 text-sm truncate max-w-[100px] block">{username.split('@')[0]}</span>
+                {role && <span className="text-gray-600 text-[10px] capitalize">{role}</span>}
+              </div>
             </div>
             <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-gray-500 hover:text-white transition text-xs" title="Sign out">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">

@@ -143,6 +143,25 @@ export async function storeSetCorrections(entries: object[]): Promise<void> {
   await kv_set(CORRECTIONS_KEY, JSON.stringify(entries));
 }
 
+// --- IQS Quality Scores ---
+
+const IQS_SCORES_KEY = 'wint_iqs_scores';
+
+export async function storeAppendIQSScore(entry: object): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LPUSH', IQS_SCORES_KEY, JSON.stringify(entry)], ['LTRIM', IQS_SCORES_KEY, '0', '4999']]),
+    });
+  } catch {}
+}
+
+export async function storeGetIQSScores(): Promise<string[]> {
+  return kv_lrange(IQS_SCORES_KEY, 0, 4999);
+}
+
 // --- Conversations ---
 
 export async function storeGetConversations(username: string): Promise<SavedConversation[]> {
