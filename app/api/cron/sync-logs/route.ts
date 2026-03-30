@@ -43,7 +43,7 @@ async function ensureHeader(sheets: any) {
         spreadsheetId: SHEET_ID,
         range: `${SHEET_TAB}!A1`,
         valueInputOption: 'RAW',
-        requestBody: { values: [['Timestamp', 'Username', 'Query', 'Model']] },
+        requestBody: { values: [['Timestamp', 'Username', 'Query', 'Model', 'Category', 'Query Type']] },
       });
     }
   } catch {
@@ -56,7 +56,7 @@ async function ensureHeader(sheets: any) {
       spreadsheetId: SHEET_ID,
       range: `${SHEET_TAB}!A1`,
       valueInputOption: 'RAW',
-      requestBody: { values: [['Timestamp', 'Username', 'Query', 'Model']] },
+      requestBody: { values: [['Timestamp', 'Username', 'Query', 'Model', 'Category', 'Query Type']] },
     });
   }
 }
@@ -77,11 +77,11 @@ async function runSync() {
     return { synced: 0, lastTs };
   }
 
-  const rows = [...newLogs].reverse().map(l => [l.timestamp, l.username, l.query, l.model]);
+  const rows = [...newLogs].reverse().map(l => [l.timestamp, l.username, l.query, l.model, (l as any).category || '', (l as any).queryType || '']);
 
   await sheets.spreadsheets.values.append({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A:D`,
+    range: `${SHEET_TAB}!A:F`,
     valueInputOption: 'RAW',
     insertDataOption: 'INSERT_ROWS',
     requestBody: { values: rows },

@@ -8,6 +8,8 @@ export interface LogEntry {
   username: string;
   query: string;
   model: string;
+  category?: string;
+  queryType?: string;
 }
 
 function getAuth() {
@@ -31,13 +33,13 @@ export async function readLogsFromSheet(): Promise<LogEntry[]> {
 
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: `${SHEET_TAB}!A:D`,
+    range: `${SHEET_TAB}!A:F`,
   });
 
   const rows: string[][] = res.data.values || [];
   if (rows.length <= 1) return []; // only header or empty
 
-  // Skip header row, parse the rest
+  // Skip header row, parse the rest (columns: Timestamp, Username, Query, Model, Category, Query Type)
   const entries: LogEntry[] = rows
     .slice(1)
     .filter(r => r[0] && r[1]) // must have timestamp + username
@@ -46,6 +48,8 @@ export async function readLogsFromSheet(): Promise<LogEntry[]> {
       username: r[1] || '',
       query: r[2] || '',
       model: r[3] || '',
+      ...(r[4] ? { category: r[4] } : {}),
+      ...(r[5] ? { queryType: r[5] } : {}),
     }));
 
   // Newest-first

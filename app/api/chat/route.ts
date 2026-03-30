@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await logChatMessage(session.user?.name || 'unknown', query, modelName);
+  await logChatMessage(session.user?.name || 'unknown', query, modelName, category ?? undefined, queryType ?? undefined);
 
   const conversationHistory = messages
     .slice(0, -1)

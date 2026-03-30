@@ -2,6 +2,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import type { SavedConversation } from '@/lib/types';
+import type { SourceChunk } from '@/lib/corrections';
+import CorrectionPanel from './CorrectionPanel';
 
 interface FormQuestion {
   id: string;
@@ -33,6 +35,9 @@ interface Message {
   formAnswers?: Record<string, string>;
   isClarify?: boolean;
   imagePreviewUrl?: string;
+  sourceChunks?: SourceChunk[];
+  showCorrectionPanel?: boolean;
+  category?: string;
 }
 
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
@@ -261,7 +266,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
     imageData?: { base64: string; mimeType: string } | null
   ) => {
     const assistantId = (Date.now() + 2).toString();
-    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', loading: true, queryType, formAnswers };
+    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', loading: true, queryType, formAnswers, category: category ?? undefined };
     setMessages(prev => [...prev, assistantMsg]);
 
     try {
@@ -297,6 +302,17 @@ export default function ChatInterface({ username, historyEnabled = false, initia
             } else if (parsed.type === 'education') {
               setMessages(prev =>
                 prev.map(m => m.id === assistantId ? { ...m, education: parsed.text } : m)
+              );
+            } else if (parsed.type === 'sources' && Array.isArray(parsed.sources)) {
+              // Capture source chunks so the correction panel can reference them
+              const chunks: SourceChunk[] = parsed.sources.map((s: any) => ({
+                fileId: s.fileId || '',
+                fileName: s.fileName || '',
+                breadcrumb: s.excerpt?.split('\n')[0] || '',
+                excerpt: s.excerpt || '',
+              }));
+              setMessages(prev =>
+                prev.map(m => m.id === assistantId ? { ...m, sourceChunks: chunks } : m)
               );
             }
           } catch {}
@@ -866,6 +882,31 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                           )}
                         </button>
                       )
+                    )}
+
+                    {/* Flag & Correct button — available on all process answers */}
+                    {msg.queryType === 'process' && !msg.showCorrectionPanel && (
+                      <button
+                        onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, showCorrectionPanel: true } : m))}
+                        className="mt-3 flex items-center gap-2 text-[12px] text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-300 rounded-lg px-3 py-1.5 transition-colors bg-white"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
+                          <path d="M3 2v12M3 2l10 5-10 5"/>
+                        </svg>
+                        Flag & Correct
+                      </button>
+                    )}
+
+                    {/* Correction panel */}
+                    {msg.showCorrectionPanel && (
+                      <CorrectionPanel
+                        originalQuery={messages.find(m => m.role === 'user' && messages.indexOf(m) < messages.indexOf(msg))?.content || ''}
+                        originalAnswer={msg.content}
+                        sourceChunks={msg.sourceChunks || []}
+                        formAnswers={msg.formAnswers}
+                        category={msg.category}
+                        onClose={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, showCorrectionPanel: false } : m))}
+                      />
                     )}
                   </>
                 )}

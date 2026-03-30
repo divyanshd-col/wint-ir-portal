@@ -1,18 +1,22 @@
 import { storeAppendLog, storeGetLogs } from './store';
 
-interface LogEntry {
+export interface LogEntry {
   timestamp: string;
   username: string;
   query: string;
   model: string;
+  category?: string;
+  queryType?: string;
 }
 
-export async function logChatMessage(username: string, query: string, model: string): Promise<void> {
+export async function logChatMessage(username: string, query: string, model: string, category?: string, queryType?: string): Promise<void> {
   const entry: LogEntry = {
     timestamp: new Date().toISOString(),
     username,
     query,
     model,
+    ...(category ? { category } : {}),
+    ...(queryType ? { queryType } : {}),
   };
   console.log('[IR_LOG]', JSON.stringify(entry));
   // KV (Vercel) + file (local) in parallel

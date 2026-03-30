@@ -11,9 +11,16 @@ interface LogEntry {
   username: string;
   query: string;
   model: string;
+  category?: string;
+  queryType?: string;
 }
 
-function categorize(q: string): string {
+function categorize(q: string, storedCategory?: string): string {
+  if (storedCategory) {
+    // Map canonical analyze category IDs to display names
+    const map: Record<string, string> = { repayment: 'Repayment', kyc: 'Account & KYC', payment: 'Investment', sip: 'Investment', sell: 'Investment', referral: 'General', taxation: 'General', dashboard: 'Platform Issue', fd: 'Investment', huf: 'Account & KYC' };
+    return map[storedCategory] || (storedCategory.charAt(0).toUpperCase() + storedCategory.slice(1));
+  }
   const s = q.toLowerCase();
   if (/repayment|payout|interest paid|record date|maturity|coupon|credited|not received/.test(s)) return 'Repayment';
   if (/account|kyc|onboard|registr|pan|bank|ifsc|mandate|nominee/.test(s)) return 'Account & KYC';
@@ -65,7 +72,7 @@ function computeStats(logs: LogEntry[]) {
 
   const categoryCount: Record<string, number> = {};
   for (const log of logs) {
-    const cat = categorize(log.query);
+    const cat = categorize(log.query, log.category);
     categoryCount[cat] = (categoryCount[cat] || 0) + 1;
   }
   const total = logs.length || 1;
@@ -112,22 +119,32 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const question: string = body.question?.trim() || '';
+  const filters: { dateFrom?: string; dateTo?: string; agent?: string; category?: string; queryType?: string } = body.filters || {};
 
   // Sheet is the source of truth — has full history.
   // Fall back to KV/file if service account is not configured.
-  let logs: LogEntry[];
+  let allLogs: LogEntry[];
   let source: 'sheet' | 'kv';
   try {
-    logs = await readLogsFromSheet();
+    allLogs = await readLogsFromSheet();
     source = 'sheet';
-    console.log(`[analytics] Loaded ${logs.length} logs from Google Sheet`);
+    console.log(`[analytics] Loaded ${allLogs.length} logs from Google Sheet`);
   } catch (err: any) {
     console.warn(`[analytics] Sheet read failed (${err.message}), falling back to KV`);
-    logs = await readLogs();
+    allLogs = await readLogs();
     source = 'kv';
   }
 
-  const stats = { ...computeStats(logs), source, totalInSheet: logs.length };
+  // Apply filters
+  let logs = allLogs;
+  if (filters.dateFrom) logs = logs.filter(l => l.timestamp >= filters.dateFrom!);
+  if (filters.dateTo)   logs = logs.filter(l => l.timestamp <= filters.dateTo! + 'T23:59:59');
+  if (filters.agent)    logs = logs.filter(l => l.username === filters.agent);
+  if (filters.category) logs = logs.filter(l => categorize(l.query, l.category) === filters.category);
+  if (filters.queryType) logs = logs.filter(l => l.queryType === filters.queryType);
+
+  const availableAgents = [...new Set(allLogs.map(l => l.username))].sort();
+  const stats = { ...computeStats(logs), source, totalInSheet: allLogs.length, availableAgents };
 
   if (!question) {
     return NextResponse.json({ stats });

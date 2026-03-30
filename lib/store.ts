@@ -120,6 +120,29 @@ export async function storeClearKBCache(): Promise<void> {
   await kv_set(KB_CACHE_KEY, 'null');
 }
 
+// --- Corrections ---
+
+const CORRECTIONS_KEY = 'wint_corrections';
+
+export async function storeAppendCorrection(entry: object): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LPUSH', CORRECTIONS_KEY, JSON.stringify(entry)], ['LTRIM', CORRECTIONS_KEY, '0', '199']]),
+    });
+  } catch {}
+}
+
+export async function storeGetCorrections(): Promise<string[]> {
+  return kv_lrange(CORRECTIONS_KEY, 0, -1);
+}
+
+export async function storeSetCorrections(entries: object[]): Promise<void> {
+  await kv_set(CORRECTIONS_KEY, JSON.stringify(entries));
+}
+
 // --- Conversations ---
 
 export async function storeGetConversations(username: string): Promise<SavedConversation[]> {
