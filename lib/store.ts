@@ -150,16 +150,32 @@ const IQS_SCORES_KEY = 'wint_iqs_scores';
 export async function storeAppendIQSScore(entry: object): Promise<void> {
   if (!ready()) return;
   try {
+    // No LTRIM — scores are kept forever
     await fetch(`${UPSTASH_URL}/pipeline`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LPUSH', IQS_SCORES_KEY, JSON.stringify(entry)], ['LTRIM', IQS_SCORES_KEY, '0', '4999']]),
+      body: JSON.stringify([['LPUSH', IQS_SCORES_KEY, JSON.stringify(entry)]]),
     });
   } catch {}
 }
 
 export async function storeGetIQSScores(): Promise<string[]> {
-  return kv_lrange(IQS_SCORES_KEY, 0, 4999);
+  // Fetch all entries — no cap
+  return kv_lrange(IQS_SCORES_KEY, 0, -1);
+}
+
+export async function storeGetIQSScoreCount(): Promise<number> {
+  if (!ready()) return 0;
+  try {
+    const res = await fetch(`${UPSTASH_URL}/llen/${IQS_SCORES_KEY}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    return typeof data.result === 'number' ? data.result : 0;
+  } catch {
+    return 0;
+  }
 }
 
 // --- Conversations ---

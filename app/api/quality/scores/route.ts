@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { storeGetIQSScores } from '@/lib/store';
+import { storeGetIQSScores, storeGetIQSScoreCount } from '@/lib/store';
 import type { IQSScoreEntry } from '@/lib/quality';
 
 function qualityAccess(session: any): boolean {
@@ -17,30 +17,52 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const agentFilter = searchParams.get('agent') || '';
-  const minScore = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) : 0;
-  const maxScore = searchParams.get('maxScore') ? parseInt(searchParams.get('maxScore')!) : 100;
-  const tagFilter = searchParams.get('tag') || '';
-  const dateFrom = searchParams.get('dateFrom') || '';
-  const dateTo = searchParams.get('dateTo') || '';
-  const limit = Math.min(parseInt(searchParams.get('limit') || '500'), 2000);
+  const minScore    = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) : 0;
+  const maxScore    = searchParams.get('maxScore') ? parseInt(searchParams.get('maxScore')!) : 100;
+  const tagFilter   = searchParams.get('tag') || '';
+  const dateFrom    = searchParams.get('dateFrom') || '';
+  const dateTo      = searchParams.get('dateTo') || '';
+  // display limit — only affects what's returned to the UI, not what's stored
+  const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 0; // 0 = no limit
 
-  const raw = await storeGetIQSScores();
+  const [raw, totalStored] = await Promise.all([
+    storeGetIQSScores(),
+    storeGetIQSScoreCount(),
+  ]);
+
   let entries: IQSScoreEntry[] = raw.map(r => {
     try { return JSON.parse(r); } catch { return null; }
   }).filter(Boolean);
 
+  // Build available agents from the full unfiltered set
+  const availableAgents = [...new Set(entries.map(e => e.agentName).filter(Boolean))].sort();
+
+  // Apply filters
   if (agentFilter) entries = entries.filter(e => e.agentName === agentFilter);
-  if (tagFilter) entries = entries.filter(e => (e.tags || '').toLowerCase().includes(tagFilter.toLowerCase()));
-  if (dateFrom) entries = entries.filter(e => (e.date || e.scoredAt) >= dateFrom);
-  if (dateTo) entries = entries.filter(e => (e.date || e.scoredAt) <= dateTo + 'T23:59:59');
+  if (tagFilter)   entries = entries.filter(e => (e.tags || '').toLowerCase().includes(tagFilter.toLowerCase()));
+  if (dateFrom)    entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) >= dateFrom);
+  if (dateTo)      entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) <= dateTo);
   entries = entries.filter(e => e.iqs >= minScore && e.iqs <= maxScore);
 
-  // Already newest-first from LPUSH
-  entries = entries.slice(0, limit);
+  const totalFiltered = entries.length;
 
-  // Agent stats
+  // Apply display limit (newest-first, LPUSH order)
+  if (limit > 0) entries = entries.slice(0, limit);
+
+  // Agent stats — computed over ALL filtered entries (not just the display page)
   const agentMap: Record<string, { total: number; sum: number; scores: number[] }> = {};
-  for (const e of entries) {
+  const filteredForStats: IQSScoreEntry[] = raw.map(r => {
+    try { return JSON.parse(r); } catch { return null; }
+  }).filter(Boolean).filter(e => {
+    if (agentFilter && e.agentName !== agentFilter) return false;
+    if (tagFilter && !(e.tags || '').toLowerCase().includes(tagFilter.toLowerCase())) return false;
+    if (dateFrom && (e.date || e.scoredAt?.slice(0, 10)) < dateFrom) return false;
+    if (dateTo && (e.date || e.scoredAt?.slice(0, 10)) > dateTo) return false;
+    if (e.iqs < minScore || e.iqs > maxScore) return false;
+    return true;
+  });
+
+  for (const e of filteredForStats) {
     const a = e.agentName || 'Unknown';
     if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [] };
     agentMap[a].total++;
@@ -57,20 +79,25 @@ export async function GET(req: NextRequest) {
     atRisk: d.scores.filter(s => s < 70).length,
   })).sort((a, b) => b.avgIqs - a.avgIqs);
 
-  // Param failure rates
+  // Param failure rates across all filtered entries
   const paramFails: Record<string, number> = {};
-  if (entries.length) {
-    for (const e of entries) {
-      for (const [p, v] of Object.entries(e.scores)) {
+  if (filteredForStats.length) {
+    for (const e of filteredForStats) {
+      for (const [p, v] of Object.entries(e.scores || {})) {
         if (v === 'No') paramFails[p] = (paramFails[p] || 0) + 1;
       }
     }
     for (const p of Object.keys(paramFails)) {
-      paramFails[p] = Math.round((paramFails[p] / entries.length) * 100);
+      paramFails[p] = Math.round((paramFails[p] / filteredForStats.length) * 100);
     }
   }
 
-  const availableAgents = [...new Set(raw.map(r => { try { return JSON.parse(r).agentName; } catch { return null; } }).filter(Boolean))].sort();
-
-  return NextResponse.json({ entries, agentStats, paramFails, availableAgents, total: entries.length });
+  return NextResponse.json({
+    entries,
+    agentStats,
+    paramFails,
+    availableAgents,
+    total: totalFiltered,       // filtered count
+    totalStored,                 // total ever stored (no cap)
+  });
 }

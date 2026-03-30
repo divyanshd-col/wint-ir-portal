@@ -402,8 +402,10 @@ export default function QualityClient() {
   const [agentStats, setAgentStats] = useState<AgentStat[]>([]);
   const [paramFails, setParamFails] = useState<Record<string, number>>({});
   const [availableAgents, setAvailableAgents] = useState<string[]>([]);
+  const [totalStored, setTotalStored] = useState<number>(0);
   const [logsLoaded, setLogsLoaded] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Log filters
   const [filterAgent, setFilterAgent] = useState('');
@@ -437,15 +439,35 @@ export default function QualityClient() {
   const loadScores = useCallback(async () => {
     setLogsLoading(true);
     try {
-      const data = await fetch(`/api/quality/scores?limit=2000`).then(r => r.json());
+      // No limit — fetch all stored scores
+      const data = await fetch(`/api/quality/scores`).then(r => r.json());
       setEntries(data.entries || []);
       setAgentStats(data.agentStats || []);
       setParamFails(data.paramFails || {});
       setAvailableAgents(data.availableAgents || []);
+      setTotalStored(data.totalStored ?? data.total ?? 0);
       setLogsLoaded(true);
     } catch {}
     setLogsLoading(false);
   }, []);
+
+  const exportAll = useCallback(async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (filterAgent) params.set('agent', filterAgent);
+      if (filterTag) params.set('tag', filterTag);
+      const res = await fetch(`/api/quality/export?${params}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wint_iqs_export_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+    setExporting(false);
+  }, [filterAgent, filterTag]);
 
   const switchTab = (t: typeof tab) => {
     setTab(t);
@@ -942,7 +964,11 @@ export default function QualityClient() {
                   {/* Top KPIs */}
                   <div className="grid grid-cols-4 gap-4">
                     {[
-                      { label: 'Total Chats', value: entries.length },
+                      {
+                        label: 'All-time Scored',
+                        value: totalStored,
+                        sub: totalStored !== entries.length ? `${entries.length} shown` : undefined,
+                      },
                       {
                         label: 'Team Avg IQS',
                         value: `${Math.round(entries.reduce((s, e) => s + e.iqs, 0) / (entries.length || 1))}%`,
@@ -953,7 +979,8 @@ export default function QualityClient() {
                     ].map(s => (
                       <div key={s.label} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
                         <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">{s.label}</p>
-                        <p className="text-3xl font-bold mt-1" style={{ color: s.color || '#111827' }}>{s.value}</p>
+                        <p className="text-3xl font-bold mt-1" style={{ color: (s as any).color || '#111827' }}>{s.value}</p>
+                        {(s as any).sub && <p className="text-[10px] text-gray-400 mt-0.5">{(s as any).sub}</p>}
                       </div>
                     ))}
                   </div>
@@ -1052,10 +1079,19 @@ export default function QualityClient() {
                       className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-[#2d6a4f]/30" />
                   </div>
 
-                  <button onClick={loadScores} disabled={logsLoading}
-                    className="text-xs px-4 py-1.5 border border-[#2d6a4f] text-[#2d6a4f] rounded-xl font-semibold hover:bg-[#2d6a4f] hover:text-white disabled:opacity-50 transition">
-                    {logsLoading ? 'Loading…' : '↻ Refresh'}
-                  </button>
+                  <div className="flex items-center gap-2 ml-auto">
+                    <button onClick={loadScores} disabled={logsLoading}
+                      className="text-xs px-4 py-1.5 border border-gray-200 text-gray-500 rounded-xl font-semibold hover:border-[#2d6a4f] hover:text-[#2d6a4f] disabled:opacity-50 transition">
+                      {logsLoading ? 'Loading…' : '↻ Refresh'}
+                    </button>
+                    <button onClick={exportAll} disabled={exporting || !logsLoaded}
+                      className="text-xs px-4 py-1.5 bg-[#2d6a4f] text-white rounded-xl font-semibold hover:bg-[#245a41] disabled:opacity-50 transition flex items-center gap-1.5">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                      </svg>
+                      {exporting ? 'Exporting…' : `Export all${totalStored ? ` (${totalStored})` : ''}`}
+                    </button>
+                  </div>
                 </div>
               </div>
 
