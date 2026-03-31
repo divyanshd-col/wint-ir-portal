@@ -265,54 +265,64 @@ function ScoreDetail({ entry, onClose }: { entry: IQSScoreEntry; onClose: () => 
 }
 
 // ── Agent Card ────────────────────────────────────────────────────────────────
-function AgentCard({ stat, entries, onClick }: { stat: AgentStat; entries: IQSScoreEntry[]; onClick?: () => void }) {
-  const [expanded, setExpanded] = useState(false);
+function AgentCard({ stat, entries }: { stat: AgentStat; entries: IQSScoreEntry[] }) {
   const t = iqsTheme(stat.avgIqs);
-  const initials = stat.agent.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
-  const agentEntries = entries.filter(e => e.agentName === stat.agent);
+  // normalise empty agentName → 'Unknown' so it matches stat.agent
+  const agentEntries = entries.filter(e => (e.agentName || 'Unknown') === stat.agent);
 
   const paramData = useMemo(() => PARAM_ORDER.map(p => {
     const n = agentEntries.filter(e => e.scores[p] === 'No').length;
     return { p, failPct: agentEntries.length ? Math.round(n / agentEntries.length * 100) : 0 };
-  }).sort((a, b) => b.failPct - a.failPct).slice(0, 6), [agentEntries]);
+  }).sort((a, b) => b.failPct - a.failPct), [agentEntries]);
+
+  const topFails = paramData.filter(d => d.failPct > 0).slice(0, 4);
+  const isAtRisk = stat.avgIqs < 70;
+  const needsCoaching = stat.atRisk > 0;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-      <div className="p-5">
+    <div className={`bg-white rounded-2xl shadow-sm overflow-hidden border ${isAtRisk ? 'border-red-200' : 'border-gray-100'}`}>
+      {/* Card header */}
+      <div className={`px-5 pt-5 pb-4 ${isAtRisk ? 'bg-red-50/40' : ''}`}>
         <div className="flex items-start gap-3">
-          <div className="shrink-0"><IQSRing iqs={stat.avgIqs} size={52} /></div>
-          <div className="flex-1 min-w-0 pt-1">
-            <p className="font-bold text-gray-900 text-sm truncate">{stat.agent}</p>
-            <p className="text-xs text-gray-400 mt-0.5">{stat.chats} scored · range {stat.minIqs}–{stat.maxIqs}%</p>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="text-[10px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full">{stat.high} ≥90%</span>
-              {stat.atRisk > 0 && <span className="text-[10px] bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full">{stat.atRisk} at risk</span>}
+          <div className="shrink-0"><IQSRing iqs={stat.avgIqs} size={56} /></div>
+          <div className="flex-1 min-w-0 pt-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-bold text-gray-900 text-sm truncate">{stat.agent}</p>
+              {isAtRisk && (
+                <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full shrink-0">⚠ At Risk</span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">{stat.chats} chats · range {stat.minIqs}–{stat.maxIqs}%</p>
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
+              {stat.high > 0 && <span className="text-[10px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full">{stat.high} excellent</span>}
+              {stat.atRisk > 0 && <span className="text-[10px] bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full">{stat.atRisk} need review</span>}
             </div>
           </div>
         </div>
-
-        <button onClick={() => setExpanded(!expanded)}
-          className="mt-4 w-full text-[11px] text-gray-400 hover:text-emerald-600 transition flex items-center justify-center gap-1.5 font-medium">
-          {expanded ? '↑ Hide breakdown' : '↓ Top failure params'}
-        </button>
       </div>
 
-      {expanded && (
-        <div className="border-t border-gray-100 bg-gray-50/80 px-5 py-4 space-y-2.5">
-          {paramData.map(({ p, failPct }) => (
-            <div key={p} className="flex items-center gap-3">
-              <span className="text-[11px] text-gray-600 w-36 shrink-0 truncate">{PARAM_NAMES[p]}</span>
-              <div className="flex-1 bg-gray-200 rounded-full h-1.5">
-                <div className="h-1.5 rounded-full" style={{
-                  width: `${failPct}%`,
-                  background: failPct >= 40 ? '#ef4444' : failPct >= 20 ? '#f97316' : '#22c55e'
-                }} />
+      {/* Failure breakdown — always visible */}
+      <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4">
+        {topFails.length === 0 ? (
+          <p className="text-xs text-emerald-600 font-semibold text-center py-1">✓ No consistent failure areas</p>
+        ) : (
+          <div className="space-y-2.5">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Coaching Focus</p>
+            {topFails.map(({ p, failPct }) => (
+              <div key={p} className="flex items-center gap-3">
+                <span className="text-[11px] text-gray-700 w-36 shrink-0 truncate font-medium">{PARAM_NAMES[p]}</span>
+                <div className="flex-1 bg-gray-200 rounded-full h-2">
+                  <div className="h-2 rounded-full transition-all" style={{
+                    width: `${failPct}%`,
+                    background: failPct >= 40 ? '#ef4444' : failPct >= 20 ? '#f97316' : '#22c55e'
+                  }} />
+                </div>
+                <span className={`text-[11px] font-bold w-9 text-right tabular-nums ${failPct >= 40 ? 'text-red-500' : failPct >= 20 ? 'text-orange-500' : 'text-emerald-600'}`}>{failPct}%</span>
               </div>
-              <span className={`text-[11px] font-bold w-8 text-right tabular-nums ${failPct >= 40 ? 'text-red-500' : failPct >= 20 ? 'text-orange-500' : 'text-emerald-600'}`}>{failPct}%</span>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -688,28 +698,64 @@ export default function QualityClient() {
               {!logsLoading && agentStats.length > 0 && (
                 <div className="space-y-6 max-w-5xl">
                   {/* KPI strip */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    {[
-                      { label: 'All-time Scored', value: totalStored.toLocaleString(), sub: `${entries.length} in view` },
-                      {
-                        label: 'Team Avg IQS',
-                        value: `${Math.round(entries.reduce((s, e) => s + e.iqs, 0) / (entries.length || 1))}%`,
-                        color: iqsTheme(Math.round(entries.reduce((s, e) => s + e.iqs, 0) / (entries.length || 1))).text,
-                      },
-                      { label: 'Agents Tracked', value: agentStats.length },
-                      { label: 'At Risk (<70%)', value: entries.filter(e => e.iqs < 70).length, color: '#dc2626' },
-                    ].map(s => (
-                      <div key={s.label} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{s.label}</p>
-                        <p className="text-2xl font-bold mt-1" style={{ color: (s as any).color || '#111827' }}>{s.value}</p>
-                        {(s as any).sub && <p className="text-[10px] text-gray-400 mt-0.5">{(s as any).sub}</p>}
-                      </div>
-                    ))}
-                  </div>
+                  {(() => {
+                    const teamAvg = Math.round(entries.reduce((s, e) => s + e.iqs, 0) / (entries.length || 1));
+                    const atRiskCount = entries.filter(e => e.iqs < 70).length;
+                    const atRiskAgents = agentStats.filter(a => a.avgIqs < 70);
+                    // top failing param
+                    const topParam = PARAM_ORDER.map(p => ({ p, pct: paramFails[p] || 0 })).sort((a, b) => b.pct - a.pct)[0];
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          {[
+                            { label: 'All-time Scored', value: totalStored.toLocaleString(), sub: `${entries.length} loaded` },
+                            { label: 'Team Avg IQS', value: `${teamAvg}%`, color: iqsTheme(teamAvg).text },
+                            { label: 'Agents Tracked', value: agentStats.length },
+                            { label: 'At Risk (<70%)', value: atRiskCount, color: atRiskCount > 0 ? '#dc2626' : '#15803d' },
+                          ].map(s => (
+                            <div key={s.label} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{s.label}</p>
+                              <p className="text-2xl font-bold mt-1" style={{ color: (s as any).color || '#111827' }}>{s.value}</p>
+                              {(s as any).sub && <p className="text-[10px] text-gray-400 mt-0.5">{(s as any).sub}</p>}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Attention needed banner */}
+                        {(atRiskAgents.length > 0 || (topParam && topParam.pct >= 25)) && (
+                          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
+                            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3">⚠ Needs Attention</p>
+                            <div className="flex flex-wrap gap-4">
+                              {atRiskAgents.length > 0 && (
+                                <div>
+                                  <p className="text-[11px] text-amber-700 font-semibold mb-1">Agents below 70% IQS</p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {atRiskAgents.map(a => (
+                                      <span key={a.agent} className="text-[11px] bg-red-100 text-red-700 font-semibold px-2.5 py-1 rounded-lg">
+                                        {a.agent} — {a.avgIqs}%
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              {topParam && topParam.pct >= 25 && (
+                                <div>
+                                  <p className="text-[11px] text-amber-700 font-semibold mb-1">Highest team failure</p>
+                                  <span className="text-[11px] bg-orange-100 text-orange-700 font-semibold px-2.5 py-1 rounded-lg">
+                                    {PARAM_NAMES[topParam.p]} — {topParam.pct}% failure rate
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {/* Agent grid */}
                   <div>
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-3">Agent Scorecards</p>
+                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Agent Scorecards</p>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {agentStats.map(a => (
                         <AgentCard key={a.agent} stat={a} entries={entries} />
@@ -720,21 +766,22 @@ export default function QualityClient() {
                   {/* Team params */}
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                     <p className="text-sm font-bold text-gray-900 mb-1">Team Parameter Breakdown</p>
-                    <p className="text-xs text-gray-400 mb-4">Failure rate across all {entries.length} scored chats</p>
+                    <p className="text-xs text-gray-500 mb-4">Failure rate across all {entries.length} scored chats — sorted by severity</p>
                     <div className="space-y-3">
-                      {PARAM_ORDER.map(p => {
+                      {[...PARAM_ORDER].sort((a, b) => (paramFails[b] || 0) - (paramFails[a] || 0)).map(p => {
                         const pct = paramFails[p] || 0;
+                        const failCount = Math.round(pct / 100 * entries.length);
                         return (
                           <div key={p} className="flex items-center gap-3">
-                            <span className="text-xs text-gray-600 w-44 shrink-0 truncate">{PARAM_NAMES[p]}</span>
-                            <div className="flex-1 bg-gray-100 rounded-full h-2">
-                              <div className="rounded-full h-2 transition-all" style={{
-                                width: `${Math.round((pct / maxParamFail) * 100)}%`,
+                            <span className="text-xs text-gray-700 w-44 shrink-0 truncate font-medium">{PARAM_NAMES[p]}</span>
+                            <div className="flex-1 bg-gray-100 rounded-full h-2.5">
+                              <div className="rounded-full h-2.5 transition-all" style={{
+                                width: `${pct}%`,
                                 background: pct >= 40 ? '#ef4444' : pct >= 20 ? '#f97316' : '#22c55e'
                               }} />
                             </div>
                             <span className={`text-xs font-bold w-10 text-right tabular-nums ${pct >= 40 ? 'text-red-500' : pct >= 20 ? 'text-orange-500' : 'text-emerald-600'}`}>{pct}%</span>
-                            <span className="text-[10px] text-gray-300 w-8 text-right">{Math.round(WEIGHTS[p] * 100)}%w</span>
+                            <span className="text-[10px] text-gray-400 w-12 text-right">{failCount} chats</span>
                           </div>
                         );
                       })}
@@ -835,19 +882,19 @@ export default function QualityClient() {
                           return (
                             <tr key={i} className="border-b border-gray-50 hover:bg-emerald-50/40 cursor-pointer transition"
                               onClick={() => setDetailEntry(e)}>
-                              <td className="px-4 py-3 font-semibold text-gray-800">{e.agentName || '—'}</td>
+                              <td className="px-4 py-3 font-semibold text-gray-900">{e.agentName || '—'}</td>
                               <td className="px-4 py-3"><ChatLink chatId={e.chatId} className="text-xs" /></td>
                               <td className="px-4 py-3"><IQSPill iqs={e.iqs} /></td>
                               <td className="px-4 py-3">
                                 {fails.length === 0
-                                  ? <span className="text-emerald-600 font-semibold">✓ Clean</span>
-                                  : <span className="text-red-500 font-semibold">{fails.length} ✗</span>}
+                                  ? <span className="text-emerald-600 font-semibold text-xs">✓ Clean</span>
+                                  : <span className="text-red-500 font-semibold text-xs">{fails.length} fail{fails.length > 1 ? 's' : ''}</span>}
                               </td>
-                              <td className="px-4 py-3 text-gray-500">
-                                {e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : '—'}
+                              <td className="px-4 py-3 text-gray-700 text-sm">
+                                {e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : <span className="text-gray-400">—</span>}
                               </td>
-                              <td className="px-4 py-3 text-gray-400 max-w-[100px] truncate">{e.tags || '—'}</td>
-                              <td className="px-4 py-3 text-gray-400 whitespace-nowrap">{(e.date || e.scoredAt || '').slice(0, 10)}</td>
+                              <td className="px-4 py-3 text-gray-600 max-w-[100px] truncate text-xs">{e.tags || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">{(e.date || e.scoredAt || '').slice(0, 10)}</td>
                             </tr>
                           );
                         })}
