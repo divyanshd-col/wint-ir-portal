@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
       provider,
       model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash',
       scoredBy: `webhook:${channel}`,   // marks this as auto-scored
-      agentName,
+      agentName: agentName || (parsed as any).extractedAgentName || '',
       date,
       tags,
       csat: csatNorm,

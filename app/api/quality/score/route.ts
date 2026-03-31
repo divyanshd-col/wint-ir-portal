@@ -77,7 +77,8 @@ export async function POST(req: NextRequest) {
       provider,
       model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash',
       scoredBy: session.user?.email || session.user?.name || 'unknown',
-      agentName,
+      // Use passed agentName if available; fall back to what the LLM extracted from the transcript
+      agentName: agentName || (parsed as any).extractedAgentName || '',
       date,
       tags,
       csat,

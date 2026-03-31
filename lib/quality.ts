@@ -181,7 +181,8 @@ Respond with EXACTLY this JSON structure:
     "Empathy": "brief reason"
   },
   "iqs_score": 85,
-  "summary": "1-2 sentence overall assessment"
+  "summary": "1-2 sentence overall assessment",
+  "agentName": "First name of the support agent extracted from the transcript, or empty string if not identifiable"
 }
 \`\`\`
 
@@ -202,7 +203,7 @@ Score this chat across all 12 parameters. Output ONLY the JSON.`;
 }
 
 // ── Parse LLM response ───────────────────────────────────────────────────────
-export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> {
+export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> & { extractedAgentName?: string } {
   // Extract JSON from potential markdown code blocks
   let jsonStr = raw.trim();
   const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -223,5 +224,6 @@ export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScore
     reasoning: data.reasoning || {},
     iqs,
     summary: data.summary || '',
+    extractedAgentName: (data.agentName || '').trim(),
   };
 }

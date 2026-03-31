@@ -35,7 +35,10 @@ function shortLabel(url: string): string {
 export default function Sidebar({ username, isAdmin, role, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
   const canSeeQuality = isAdmin || role === 'quality' || role === 'tl';
   const [open, setOpen] = useState(true);
-  const [view, setView] = useState<'main' | 'settings'>('main');
+  const [view, setView] = useState<'main' | 'settings'>(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('settings') === '1') return 'settings';
+    return 'main';
+  });
 
   // Admin state
   const [docs, setDocs] = useState<string[]>([]);
@@ -675,7 +678,8 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         {/* Footer */}
         <div className="px-4 py-4 border-t border-white/10 space-y-2">
           {isAdmin && view === 'main' && (
-            <button
+            <Link
+              href="/?settings=1"
               onClick={() => setView('settings')}
               className="w-full flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
             >
@@ -684,7 +688,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
                 <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
               </svg>
               Settings
-            </button>
+            </Link>
           )}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
