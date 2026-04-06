@@ -1,43 +1,44 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
-import GoogleProvider from 'next-auth/providers/google';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import bcrypt from 'bcryptjs';
 import type { UserRole } from './next-auth';
 
 const ALLOWED_DOMAIN = 'wintwealth.com';
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    CredentialsProvider({
+      name: 'Credentials',
+      credentials: {
+        email: { label: 'Email', type: 'email' },
+        password: { label: 'Password', type: 'password' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
+
+        const email = credentials.email.toLowerCase().trim();
+        if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) return null;
+
+        const { readConfig } = await import('./lib/config');
+        const config = await readConfig();
+        const found = config.users.find(
+          u => (u.email ?? u.username).toLowerCase() === email
+        );
+        if (!found || !found.password) return null;
+
+        const ok = await bcrypt.compare(credentials.password, found.password);
+        if (!ok) return null;
+
+        const role: UserRole = found.role ?? (found.isAdmin ? 'admin' : 'agent');
+        return { id: found.username, name: found.username, email, role } as any;
+      },
     }),
   ],
   callbacks: {
-    async signIn({ user }) {
-      // Only allow @wintwealth.com Google accounts
-      const email = user.email || '';
-      return email.endsWith(`@${ALLOWED_DOMAIN}`);
-    },
-
     async jwt({ token, user, account }) {
       if (account && user) {
-        // First sign-in — look up role from config
-        const { readConfig, writeConfig } = await import('./lib/config');
-        const config = await readConfig();
-        const email = user.email || '';
-
-        let existing = config.users.find(u => u.email === email || u.username === email);
-
-        if (!existing) {
-          // Auto-provision new @wintwealth.com user as agent
-          const newUser = { username: email, email, role: 'agent' as UserRole };
-          config.users.push(newUser);
-          await writeConfig(config);
-          existing = newUser;
-        }
-
-        const role: UserRole = existing.role || (existing.isAdmin ? 'admin' : 'agent');
-        token.role = role;
-        token.isAdmin = role === 'admin';
+        token.role = (user as any).role ?? 'agent';
+        token.isAdmin = token.role === 'admin';
       }
       return token;
     },

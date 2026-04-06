@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function RegisterPage() {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
@@ -17,6 +17,10 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
 
+    if (!email.toLowerCase().endsWith('@wintwealth.com')) {
+      setError('Only @wintwealth.com email addresses are permitted.');
+      return;
+    }
     if (password !== confirm) {
       setError('Passwords do not match.');
       return;
@@ -27,7 +31,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
 
@@ -37,7 +41,7 @@ export default function RegisterPage() {
       }
 
       // Auto sign-in after successful registration
-      const result = await signIn('credentials', { username, password, redirect: false });
+      const result = await signIn('credentials', { email, password, redirect: false });
       if (result?.error) {
         router.push('/login');
       } else {
@@ -67,18 +71,18 @@ export default function RegisterPage() {
           </div>
           <div className="px-8 py-8">
             <h2 className="text-[#1a1a1a] text-xl font-semibold mb-1">Create account</h2>
-            <p className="text-gray-500 text-sm mb-6">Register to access the IR dashboard</p>
+            <p className="text-gray-500 text-sm mb-6">Use your <span className="font-medium text-gray-600">@wintwealth.com</span> email</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
-                  placeholder="Choose a username"
+                  placeholder="you@wintwealth.com"
                   required
-                  minLength={3}
+                  autoComplete="email"
                 />
               </div>
               <div>
