@@ -1,6 +1,5 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import bcrypt from 'bcryptjs';
 import type { UserRole } from './next-auth';
 
 const ALLOWED_DOMAIN = 'wintwealth.com';
@@ -11,26 +10,29 @@ export const authOptions: NextAuthOptions = {
       name: 'Credentials',
       credentials: {
         email: { label: 'Email', type: 'email' },
-        password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email) return null;
 
         const email = credentials.email.toLowerCase().trim();
         if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) return null;
 
-        const { readConfig } = await import('./lib/config');
+        const { readConfig, writeConfig } = await import('./lib/config');
         const config = await readConfig();
-        const found = config.users.find(
+
+        let found = config.users.find(
           u => (u.email ?? u.username).toLowerCase() === email
         );
-        if (!found || !found.password) return null;
 
-        const ok = await bcrypt.compare(credentials.password, found.password);
-        if (!ok) return null;
+        if (!found) {
+          // Auto-provision new user as agent on first login
+          found = { username: email, email, role: 'agent' as UserRole };
+          config.users.push(found);
+          await writeConfig(config);
+        }
 
         const role: UserRole = found.role ?? (found.isAdmin ? 'admin' : 'agent');
-        return { id: found.username, name: found.username, email, role } as any;
+        return { id: email, name: email, email, role } as any;
       },
     }),
   ],
