@@ -4,9 +4,29 @@ import { authOptions } from '@/auth';
 import { storeGetIQSScores, storeGetIQSScoreCount } from '@/lib/store';
 import type { IQSScoreEntry } from '@/lib/quality';
 
+const SLA_THRESHOLD_SECS = 180; // 3 minutes B→T SLA
+
 function qualityAccess(session: any): boolean {
   const role = session?.user?.role;
   return !!role && ['admin', 'quality', 'tl'].includes(role);
+}
+
+/** Compute CSAT score 0-100 (Good=100, CBB=50, Bad=0) */
+function csatScore(csat: string | undefined): number | null {
+  if (csat === '5') return 100;
+  if (csat === '3') return 50;
+  if (csat === '1') return 0;
+  return null;
+}
+
+function avg(nums: number[]): number {
+  if (!nums.length) return 0;
+  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
+}
+
+function avgOrNull(nums: number[]): number | null {
+  if (!nums.length) return null;
+  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
 }
 
 export async function GET(req: NextRequest) {
@@ -22,8 +42,8 @@ export async function GET(req: NextRequest) {
   const tagFilter   = searchParams.get('tag') || '';
   const dateFrom    = searchParams.get('dateFrom') || '';
   const dateTo      = searchParams.get('dateTo') || '';
-  // display limit — only affects what's returned to the UI, not what's stored
-  const limit = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 0; // 0 = no limit
+  const typeFilter  = searchParams.get('type') || ''; // 'bot' | 'agent' | 'hybrid'
+  const limit       = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 0;
 
   const [raw, totalStored] = await Promise.all([
     storeGetIQSScores(),
@@ -42,26 +62,19 @@ export async function GET(req: NextRequest) {
   if (tagFilter)   entries = entries.filter(e => (e.tags || '').toLowerCase().includes(tagFilter.toLowerCase()));
   if (dateFrom)    entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) >= dateFrom);
   if (dateTo)      entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) <= dateTo);
+  if (typeFilter)  entries = entries.filter(e => (e.conversationType || 'agent') === typeFilter);
   entries = entries.filter(e => e.iqs >= minScore && e.iqs <= maxScore);
 
   const totalFiltered = entries.length;
 
-  // Apply display limit (newest-first, LPUSH order)
-  if (limit > 0) entries = entries.slice(0, limit);
+  // Apply display limit
+  const displayEntries = limit > 0 ? entries.slice(0, limit) : entries;
 
-  // Agent stats — computed over ALL filtered entries (not just the display page)
+  // ── Stats over ALL filtered entries (pre-limit) ────────────────────────────
+  const filteredForStats = entries; // already filtered above
+
+  // Agent stats
   const agentMap: Record<string, { total: number; sum: number; scores: number[] }> = {};
-  const filteredForStats: IQSScoreEntry[] = raw.map(r => {
-    try { return JSON.parse(r); } catch { return null; }
-  }).filter(Boolean).filter(e => {
-    if (agentFilter && e.agentName !== agentFilter) return false;
-    if (tagFilter && !(e.tags || '').toLowerCase().includes(tagFilter.toLowerCase())) return false;
-    if (dateFrom && (e.date || e.scoredAt?.slice(0, 10)) < dateFrom) return false;
-    if (dateTo && (e.date || e.scoredAt?.slice(0, 10)) > dateTo) return false;
-    if (e.iqs < minScore || e.iqs > maxScore) return false;
-    return true;
-  });
-
   for (const e of filteredForStats) {
     const a = e.agentName || 'Unknown';
     if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [] };
@@ -79,7 +92,7 @@ export async function GET(req: NextRequest) {
     atRisk: d.scores.filter(s => s < 70).length,
   })).sort((a, b) => b.avgIqs - a.avgIqs);
 
-  // Param failure rates across all filtered entries
+  // Param failure rates
   const paramFails: Record<string, number> = {};
   if (filteredForStats.length) {
     for (const e of filteredForStats) {
@@ -92,12 +105,58 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── Summary metrics ────────────────────────────────────────────────────────
+  const botEntries    = filteredForStats.filter(e => e.conversationType === 'bot');
+  const agentEntries  = filteredForStats.filter(e => e.conversationType !== 'bot'); // agent + hybrid + undefined
+
+  // CSAT
+  const allCsatScores  = filteredForStats.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
+  const botCsatScores  = botEntries.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
+  const agentCsatScores = agentEntries.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
+
+  const good   = filteredForStats.filter(e => e.csat === '5').length;
+  const cbbBad = filteredForStats.filter(e => e.csat === '3' || e.csat === '1').length;
+  const withCsat = filteredForStats.filter(e => e.csat === '5' || e.csat === '3' || e.csat === '1').length;
+
+  // Timing (only entries that have the field)
+  const frtValues       = filteredForStats.map(e => e.frt).filter((v): v is number => typeof v === 'number');
+  const b2tValues       = filteredForStats.map(e => e.botToTeamSecs).filter((v): v is number => typeof v === 'number');
+  const resValues       = filteredForStats.map(e => e.resolutionTime).filter((v): v is number => typeof v === 'number');
+  const closeValues     = filteredForStats.map(e => e.closureTime).filter((v): v is number => typeof v === 'number');
+  const slaOk           = b2tValues.filter(v => v <= SLA_THRESHOLD_SECS).length;
+
+  // IQS over scored subset
+  const iqsEntries     = filteredForStats.filter(e => e.iqs !== undefined);
+  const iqsSampleSize  = iqsEntries.length;
+
+  const summary = {
+    totalConvos:   totalFiltered,
+    botConvos:     botEntries.length,
+    agentConvos:   agentEntries.length,
+    overallCsat:   avgOrNull(allCsatScores),
+    botCsat:       avgOrNull(botCsatScores),
+    agentCsat:     avgOrNull(agentCsatScores),
+    good,
+    cbbBad,
+    cbbBadPct:     withCsat > 0 ? Math.round((cbbBad / withCsat) * 100) : 0,
+    avgFrt:        avgOrNull(frtValues),        // avg seconds I→T
+    avgBotToTeam:  avgOrNull(b2tValues),        // avg seconds B→T
+    slaPercent:    b2tValues.length > 0 ? Math.round((slaOk / b2tValues.length) * 100) : null,
+    slaThresholdSecs: SLA_THRESHOLD_SECS,
+    avgResolution: avgOrNull(resValues),        // avg seconds
+    avgClosure:    avgOrNull(closeValues),      // avg seconds
+    avgIqs:        iqsEntries.length ? avg(iqsEntries.map(e => e.iqs)) : null,
+    iqsSampleSize,
+    samplingPct:   totalFiltered > 0 ? Math.round((iqsSampleSize / totalFiltered) * 100) : 0,
+  };
+
   return NextResponse.json({
-    entries,
+    entries: displayEntries,
     agentStats,
     paramFails,
     availableAgents,
-    total: totalFiltered,       // filtered count
-    totalStored,                 // total ever stored (no cap)
+    total: totalFiltered,
+    totalStored,
+    summary,
   });
 }

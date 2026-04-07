@@ -47,6 +47,7 @@ export async function GET(req: NextRequest) {
     'Chat ID', 'Agent', 'Date', 'Tags', 'CSAT', 'IQS',
     ...paramCols,
     'Summary', 'Scored At', 'Scored By', 'Model', 'Channel',
+    'Conversation Type', 'FRT secs (I→T)', 'B→T secs', 'Resolution secs', 'Closure secs',
   ];
 
   const rows = entries.map(e => [
@@ -62,6 +63,11 @@ export async function GET(req: NextRequest) {
     (e.scoredBy || '').replace('webhook:', 'auto:'),
     e.model || '',
     (e.scoredBy || '').startsWith('webhook:') ? (e.scoredBy || '').replace('webhook:', '') : 'manual',
+    e.conversationType || '',
+    e.frt != null ? e.frt : '',
+    e.botToTeamSecs != null ? e.botToTeamSecs : '',
+    e.resolutionTime != null ? e.resolutionTime : '',
+    e.closureTime != null ? e.closureTime : '',
   ]);
 
   const csv = [headers, ...rows]

@@ -16,13 +16,15 @@
  *   "agent_name": "Bhavana",            // optional — enriches the score entry
  *   "tags": "App Issue",                // optional — issue category
  *   "csat": "Good" | "Could be better" | "Bad" | "5" | "3" | "1",
- *   "conversation_started": "ISO8601",  // optional date
+ *   "conversation_started": "ISO8601",  // optional — conversation start timestamp
+ *   "conversation_ended": "ISO8601",    // optional — conversation end timestamp
  *   "channel": "chat" | "call",         // optional — defaults to "chat"
  *
- *   // Either structured messages (preferred):
+ *   // Either structured messages (preferred) — timestamps optional per message:
  *   "messages": [
- *     { "sender": "User",    "content": "Hi I have a query" },
- *     { "sender": "Bhavana", "content": "Good afternoon!" }
+ *     { "sender": "User",    "content": "Hi I have a query", "timestamp": "2024-01-15T10:30:00Z" },
+ *     { "sender": "Myra",    "content": "Hello! How can I help?", "timestamp": "2024-01-15T10:30:05Z" },
+ *     { "sender": "Bhavana", "content": "Good afternoon!", "timestamp": "2024-01-15T10:35:00Z" }
  *   ],
  *
  *   // Or a flat transcript string:
@@ -33,8 +35,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
-import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse } from '@/lib/quality';
-import type { IQSScoreEntry } from '@/lib/quality';
+import {
+  IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
+  analyzeConversationTiming,
+} from '@/lib/quality';
+import type { IQSScoreEntry, TimedMessage } from '@/lib/quality';
 import { storeAppendIQSScore } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -49,7 +54,7 @@ function normaliseCsat(raw: string | undefined): string {
 }
 
 // ── Messages → transcript text ────────────────────────────────────────────────
-interface RobyMessage { sender?: string; content?: string; role?: string; text?: string; }
+interface RobyMessage { sender?: string; content?: string; role?: string; text?: string; timestamp?: string; }
 
 function messagesToTranscript(messages: RobyMessage[]): string {
   const lines: string[] = [];
@@ -108,6 +113,7 @@ export async function POST(req: NextRequest) {
     tags = '',
     csat,
     conversation_started,
+    conversation_ended,
     channel = 'chat',
     messages,
     transcript: rawTranscript,
@@ -115,10 +121,23 @@ export async function POST(req: NextRequest) {
 
   // Build transcript text
   let transcript = '';
+  const timedMessages: TimedMessage[] = [];
+
   if (rawTranscript) {
     transcript = String(rawTranscript).trim();
   } else if (Array.isArray(messages) && messages.length) {
     transcript = messagesToTranscript(messages);
+    // Collect timed messages for metrics (preserving original sender & timestamp)
+    for (const m of messages as RobyMessage[]) {
+      const sender = m.sender || m.role || '';
+      const content = (m.content || m.text || '').trim();
+      if (!content) continue;
+      const low = content.toLowerCase();
+      if (low.includes('auto-assigned') || low.includes('assigned by') ||
+          low.includes('waiting to assign') || low.includes('please rate your experience') ||
+          (m as any).buttons) continue;
+      timedMessages.push({ sender, content, timestamp: m.timestamp });
+    }
   }
 
   if (!transcript) {
@@ -134,6 +153,11 @@ export async function POST(req: NextRequest) {
   const date      = conversation_started
     ? String(conversation_started).slice(0, 10)
     : new Date().toISOString().slice(0, 10);
+
+  // ── Compute conversation timing metrics ──────────────────────────────────────
+  const timing = timedMessages.length
+    ? analyzeConversationTiming(timedMessages, conversation_ended)
+    : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
   // Add channel note to transcript for call scoring
   const transcriptForScoring = channel === 'call'
@@ -188,18 +212,31 @@ export async function POST(req: NextRequest) {
       csat: csatNorm,
       slackUrl: '',
       transcript,
+      // Timing & conversation metrics
+      conversationType: timing.conversationType,
+      frt: timing.frt,
+      botToTeamSecs: timing.botToTeamSecs,
+      resolutionTime: timing.resolutionTime,
+      closureTime: timing.closureTime,
+      conversationStarted: conversation_started,
+      conversationEnded: conversation_ended,
       ...parsed,
     };
 
     await storeAppendIQSScore(entry);
 
-    console.log(`[webhook] Scored chat ${chatId} → IQS ${entry.iqs}% (${agentName || 'unknown agent'})`);
+    console.log(`[webhook] Scored chat ${chatId} → IQS ${entry.iqs}% (${agentName || 'unknown agent'}) type=${timing.conversationType}`);
 
     return NextResponse.json({
       ok: true,
       chat_id: chatId,
       iqs: entry.iqs,
       agent: agentName,
+      conversation_type: timing.conversationType,
+      frt_secs: timing.frt,
+      b_to_t_secs: timing.botToTeamSecs,
+      resolution_secs: timing.resolutionTime,
+      closure_secs: timing.closureTime,
       scored_at: entry.scoredAt,
     });
   } catch (err: any) {

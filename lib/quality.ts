@@ -59,6 +59,76 @@ export interface IQSScoreEntry {
   summary: string;
   transcript?: string;
   scoredBy?: string; // email of the quality/admin who scored it
+  // ── Conversation metrics ────────────────────────────────────────────────────
+  conversationType?: 'bot' | 'agent' | 'hybrid'; // 'bot' = only Myra responded
+  frt?: number;              // seconds: first customer msg → first human agent msg (I→T)
+  botToTeamSecs?: number;    // seconds: first Myra msg → first human agent msg (B→T)
+  resolutionTime?: number;   // seconds: first customer msg → last msg in transcript
+  closureTime?: number;      // seconds: first customer msg → conversation_ended (or last msg)
+  conversationStarted?: string; // ISO timestamp of conversation start
+  conversationEnded?: string;   // ISO timestamp of conversation end
+}
+
+// ── Bot name used at Wint Wealth ─────────────────────────────────────────────
+const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
+const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
+
+function isCustomer(sender: string) { return CUSTOMER_LABELS.has(sender.toLowerCase()); }
+function isBot(sender: string) { return BOT_NAMES.has(sender.toLowerCase()); }
+function isHumanAgent(sender: string) { return !isCustomer(sender) && !isBot(sender); }
+
+export interface TimedMessage {
+  sender: string;
+  content: string;
+  timestamp?: string; // ISO string
+}
+
+export interface ConversationMetrics {
+  conversationType: 'bot' | 'agent' | 'hybrid';
+  frt?: number;
+  botToTeamSecs?: number;
+  resolutionTime?: number;
+  closureTime?: number;
+}
+
+/** Calculate timing/type metrics from a messages array with optional timestamps. */
+export function analyzeConversationTiming(
+  messages: TimedMessage[],
+  conversationEnded?: string,
+): ConversationMetrics {
+  // Sort by timestamp if available; otherwise use original order
+  const sorted = [...messages].sort((a, b) => {
+    if (!a.timestamp || !b.timestamp) return 0;
+    return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
+  });
+
+  const firstCustomer = sorted.find(m => isCustomer(m.sender));
+  const firstBot = sorted.find(m => isBot(m.sender));
+  const firstHuman = sorted.find(m => isHumanAgent(m.sender));
+  const lastMsg = sorted[sorted.length - 1];
+
+  // Conversation type
+  const hasBot = !!firstBot;
+  const hasHuman = !!firstHuman;
+  let conversationType: 'bot' | 'agent' | 'hybrid';
+  if (hasBot && !hasHuman) conversationType = 'bot';
+  else if (!hasBot && hasHuman) conversationType = 'agent';
+  else conversationType = 'hybrid';
+
+  // Helper: diff in seconds between two ISO timestamps
+  const diffSecs = (a?: string, b?: string) => {
+    if (!a || !b) return undefined;
+    const d = new Date(b).getTime() - new Date(a).getTime();
+    return d >= 0 ? Math.round(d / 1000) : undefined;
+  };
+
+  const frt = diffSecs(firstCustomer?.timestamp, firstHuman?.timestamp);
+  const botToTeamSecs = diffSecs(firstBot?.timestamp, firstHuman?.timestamp);
+  const resolutionTime = diffSecs(firstCustomer?.timestamp, lastMsg?.timestamp);
+  const endTs = conversationEnded ?? lastMsg?.timestamp;
+  const closureTime = diffSecs(firstCustomer?.timestamp, endTs);
+
+  return { conversationType, frt, botToTeamSecs, resolutionTime, closureTime };
 }
 
 // ── IQS calculation ──────────────────────────────────────────────────────────

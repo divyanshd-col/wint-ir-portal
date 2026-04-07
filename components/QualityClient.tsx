@@ -17,6 +17,104 @@ interface ParsedRow {
 interface MetaRow { agent?: string; tags?: string; csat?: string; date?: string; }
 type MetaMap = Record<string, MetaRow>;
 
+interface SummaryMetrics {
+  totalConvos: number; botConvos: number; agentConvos: number;
+  overallCsat: number | null; botCsat: number | null; agentCsat: number | null;
+  good: number; cbbBad: number; cbbBadPct: number;
+  avgFrt: number | null; avgBotToTeam: number | null;
+  slaPercent: number | null; slaThresholdSecs: number;
+  avgResolution: number | null; avgClosure: number | null;
+  avgIqs: number | null; iqsSampleSize: number; samplingPct: number;
+}
+
+// ── Duration formatter ────────────────────────────────────────────────────────
+function fmtDuration(secs: number | undefined | null): string {
+  if (secs == null || secs < 0) return '—';
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+}
+
+// ── Conversation type badge ───────────────────────────────────────────────────
+function TypeBadge({ type }: { type?: string }) {
+  if (type === 'bot') return <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Bot</span>;
+  if (type === 'hybrid') return <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Hybrid</span>;
+  return <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Agent</span>;
+}
+
+// ── Summary stats bar ─────────────────────────────────────────────────────────
+function SummaryBar({ s }: { s: SummaryMetrics }) {
+  const slaColor = s.slaPercent == null ? '#6b7280'
+    : s.slaPercent >= 80 ? '#15803d'
+    : s.slaPercent >= 60 ? '#b45309'
+    : '#b91c1c';
+
+  const groups = [
+    {
+      label: 'CSAT',
+      color: '#7c3aed',
+      items: [
+        { key: 'Overall CSAT', value: s.overallCsat != null ? `${s.overallCsat}%` : '—' },
+        { key: 'Bot CSAT', value: s.botCsat != null ? `${s.botCsat}%` : '—' },
+        { key: 'Agent CSAT', value: s.agentCsat != null ? `${s.agentCsat}%` : '—' },
+        { key: 'Good', value: String(s.good), sub: '(CSAT 👍)' },
+        { key: 'CBB + Bad', value: String(s.cbbBad), sub: `${s.cbbBadPct}%`, valueColor: s.cbbBad > 0 ? '#dc2626' : undefined },
+      ],
+    },
+    {
+      label: 'Volume',
+      color: '#0891b2',
+      items: [
+        { key: 'Total Convos', value: String(s.totalConvos) },
+        { key: 'Bot Convos', value: String(s.botConvos) },
+        { key: 'Agent Convos', value: String(s.agentConvos) },
+      ],
+    },
+    {
+      label: 'Timing',
+      color: '#b45309',
+      items: [
+        { key: 'SLA B→T', value: s.slaPercent != null ? `${s.slaPercent}%` : '—', valueColor: slaColor, sub: `≤${Math.round(s.slaThresholdSecs / 60)}m` },
+        { key: 'Avg FRT', value: fmtDuration(s.avgFrt), sub: 'I→T' },
+        { key: 'Avg B→T', value: fmtDuration(s.avgBotToTeam) },
+        { key: 'Resolution', value: fmtDuration(s.avgResolution) },
+        { key: 'Closure', value: fmtDuration(s.avgClosure) },
+      ],
+    },
+    {
+      label: 'IQS',
+      color: '#15803d',
+      items: [
+        { key: 'Avg IQS', value: s.avgIqs != null ? `${s.avgIqs}%` : '—' },
+        { key: 'Sample Size', value: String(s.iqsSampleSize) },
+        { key: 'Sampling %', value: `${s.samplingPct}%` },
+      ],
+    },
+  ];
+
+  return (
+    <div className="space-y-2">
+      {groups.map(g => (
+        <div key={g.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
+          <p className="text-[9px] font-black uppercase tracking-widest mb-2.5" style={{ color: g.color }}>{g.label}</p>
+          <div className="flex flex-wrap gap-x-6 gap-y-2">
+            {g.items.map(item => (
+              <div key={item.key} className="flex flex-col min-w-[70px]">
+                <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">{item.key}</span>
+                <span className="text-base font-bold leading-tight tabular-nums" style={{ color: item.valueColor || '#111827' }}>
+                  {item.value}
+                </span>
+                {item.sub && <span className="text-[9px] text-gray-400 leading-none mt-0.5">{item.sub}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── IQS Helpers ───────────────────────────────────────────────────────────────
 function iqsTheme(iqs: number) {
   if (iqs >= 90) return { text: '#15803d', bg: '#dcfce7', bar: '#22c55e', label: 'Excellent' };
@@ -381,6 +479,7 @@ export default function QualityClient() {
   const [paramFails, setParamFails] = useState<Record<string, number>>({});
   const [availableAgents, setAvailableAgents] = useState<string[]>([]);
   const [totalStored, setTotalStored] = useState(0);
+  const [summary, setSummary] = useState<SummaryMetrics | null>(null);
   const [logsLoaded, setLogsLoaded] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -420,6 +519,7 @@ export default function QualityClient() {
       setParamFails(data.paramFails || {});
       setAvailableAgents(data.availableAgents || []);
       setTotalStored(data.totalStored ?? data.total ?? 0);
+      if (data.summary) setSummary(data.summary);
       setLogsLoaded(true);
     } catch {}
     setLogsLoading(false);
@@ -853,26 +953,16 @@ export default function QualityClient() {
 
               {!logsLoading && filteredEntries.length > 0 && (
                 <>
-                  <div className="grid grid-cols-4 gap-3">
-                    {[
-                      { label: 'Showing', value: filteredEntries.length },
-                      { label: 'Avg IQS', value: `${Math.round(filteredEntries.reduce((s, e) => s + e.iqs, 0) / filteredEntries.length)}%`, color: iqsTheme(Math.round(filteredEntries.reduce((s, e) => s + e.iqs, 0) / filteredEntries.length)).text },
-                      { label: 'Below 70%', value: filteredEntries.filter(e => e.iqs < 70).length, color: '#dc2626' },
-                      { label: '≥ 90%', value: filteredEntries.filter(e => e.iqs >= 90).length, color: '#15803d' },
-                    ].map(s => (
-                      <div key={s.label} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{s.label}</p>
-                        <p className="text-2xl font-bold mt-0.5" style={{ color: (s as any).color || '#111827' }}>{s.value}</p>
-                      </div>
-                    ))}
-                  </div>
+                  {/* ── Summary stats bar ── */}
+                  {summary && <SummaryBar s={summary} />}
 
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <table className="w-full text-xs">
+                  {/* ── Per-conversation table ── */}
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+                    <table className="w-full text-xs whitespace-nowrap">
                       <thead>
                         <tr className="border-b border-gray-100 bg-gray-50/60">
-                          {['Agent', 'Chat ID', 'IQS', 'Fails', 'CSAT', 'Tags', 'Date'].map(h => (
-                            <th key={h} className="text-left px-4 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>
+                          {['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Tags', 'Date'].map(h => (
+                            <th key={h} className="text-left px-3 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -882,19 +972,24 @@ export default function QualityClient() {
                           return (
                             <tr key={i} className="border-b border-gray-50 hover:bg-emerald-50/40 cursor-pointer transition"
                               onClick={() => setDetailEntry(e)}>
-                              <td className="px-4 py-3 font-semibold text-gray-900">{e.agentName || '—'}</td>
-                              <td className="px-4 py-3"><ChatLink chatId={e.chatId} className="text-xs" /></td>
-                              <td className="px-4 py-3"><IQSPill iqs={e.iqs} /></td>
-                              <td className="px-4 py-3">
-                                {fails.length === 0
-                                  ? <span className="text-emerald-600 font-semibold text-xs">✓ Clean</span>
-                                  : <span className="text-red-500 font-semibold text-xs">{fails.length} fail{fails.length > 1 ? 's' : ''}</span>}
-                              </td>
-                              <td className="px-4 py-3 text-gray-700 text-sm">
+                              <td className="px-3 py-2.5 font-semibold text-gray-900">{e.agentName || '—'}</td>
+                              <td className="px-3 py-2.5"><ChatLink chatId={e.chatId} className="text-xs" /></td>
+                              <td className="px-3 py-2.5"><TypeBadge type={e.conversationType} /></td>
+                              <td className="px-3 py-2.5 text-gray-700 text-sm">
                                 {e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : <span className="text-gray-400">—</span>}
                               </td>
-                              <td className="px-4 py-3 text-gray-600 max-w-[100px] truncate text-xs">{e.tags || <span className="text-gray-300">—</span>}</td>
-                              <td className="px-4 py-3 text-gray-600 whitespace-nowrap text-xs">{(e.date || e.scoredAt || '').slice(0, 10)}</td>
+                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.frt)}</td>
+                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.botToTeamSecs)}</td>
+                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.resolutionTime)}</td>
+                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.closureTime)}</td>
+                              <td className="px-3 py-2.5"><IQSPill iqs={e.iqs} /></td>
+                              <td className="px-3 py-2.5">
+                                {fails.length === 0
+                                  ? <span className="text-emerald-600 font-semibold text-xs">✓</span>
+                                  : <span className="text-red-500 font-semibold text-xs">{fails.length}</span>}
+                              </td>
+                              <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{e.tags || <span className="text-gray-300">—</span>}</td>
+                              <td className="px-3 py-2.5 text-gray-600">{(e.date || e.scoredAt || '').slice(0, 10)}</td>
                             </tr>
                           );
                         })}
