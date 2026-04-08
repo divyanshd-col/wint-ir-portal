@@ -6,6 +6,9 @@ import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 
+// Fix 2 — column visibility
+const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Tags', 'Date'];
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AgentStat {
   agent: string; chats: number; avgIqs: number;
@@ -44,73 +47,88 @@ function TypeBadge({ type }: { type?: string }) {
 }
 
 // ── Summary stats bar ─────────────────────────────────────────────────────────
-function SummaryBar({ s }: { s: SummaryMetrics }) {
-  const slaColor = s.slaPercent == null ? '#6b7280'
-    : s.slaPercent >= 80 ? '#15803d'
-    : s.slaPercent >= 60 ? '#b45309'
-    : '#b91c1c';
+// Fix 5 — summary card click-to-filter
+// Readability pass — portal palette: emerald green, warm neutrals, white. No rainbow section colors.
+function SummaryBar({ s, onFilter }: { s: SummaryMetrics; onFilter?: (f: { filterCsat?: string; filterType?: string; sortByIqs?: boolean }) => void }) {
+  // SLA value gets semantic color; all other values are dark for readability
+  const slaValueColor = s.slaPercent == null ? '#374151'
+    : s.slaPercent >= 80 ? '#166534'   // dark green
+    : s.slaPercent >= 60 ? '#92400e'   // dark amber
+    : '#991b1b';                        // dark red
 
   const groups = [
     {
       label: 'CSAT',
-      color: '#7c3aed',
       items: [
         { key: 'Overall CSAT', value: s.overallCsat != null ? `${s.overallCsat}%` : '—' },
-        { key: 'Bot CSAT', value: s.botCsat != null ? `${s.botCsat}%` : '—' },
-        { key: 'Agent CSAT', value: s.agentCsat != null ? `${s.agentCsat}%` : '—' },
-        { key: 'Good', value: String(s.good), sub: '(CSAT 👍)' },
-        { key: 'CBB + Bad', value: String(s.cbbBad), sub: `${s.cbbBadPct}%`, valueColor: s.cbbBad > 0 ? '#dc2626' : undefined },
+        { key: 'Bot CSAT',     value: s.botCsat    != null ? `${s.botCsat}%`    : '—' },
+        { key: 'Agent CSAT',   value: s.agentCsat  != null ? `${s.agentCsat}%`  : '—' },
+        { key: 'Good',         value: String(s.good),    sub: 'CSAT 👍', onClick: () => onFilter?.({ filterCsat: '5' }) },
+        { key: 'CBB + Bad',    value: String(s.cbbBad),  sub: `${s.cbbBadPct}% of total`,
+          valueColor: s.cbbBad > 0 ? '#991b1b' : undefined },
       ],
     },
     {
       label: 'Volume',
-      color: '#0891b2',
       items: [
         { key: 'Total Convos', value: String(s.totalConvos) },
-        { key: 'Bot Convos', value: String(s.botConvos) },
-        { key: 'Agent Convos', value: String(s.agentConvos) },
+        { key: 'Bot Convos',   value: String(s.botConvos),   onClick: () => onFilter?.({ filterType: 'bot' }) },
+        { key: 'Agent Convos', value: String(s.agentConvos), onClick: () => onFilter?.({ filterType: 'agent' }) },
       ],
     },
     {
       label: 'Timing',
-      color: '#b45309',
       items: [
-        { key: 'SLA B→T', value: s.slaPercent != null ? `${s.slaPercent}%` : '—', valueColor: slaColor, sub: `≤${Math.round(s.slaThresholdSecs / 60)}m` },
-        { key: 'Avg FRT', value: fmtDuration(s.avgFrt), sub: 'I→T' },
-        { key: 'Avg B→T', value: fmtDuration(s.avgBotToTeam) },
+        { key: 'SLA B→T',    value: s.slaPercent != null ? `${s.slaPercent}%` : '—', valueColor: slaValueColor, sub: `target ≤${Math.round(s.slaThresholdSecs / 60)} min` },
+        { key: 'Avg FRT',    value: fmtDuration(s.avgFrt),        sub: 'issue → team' },
+        { key: 'Avg B→T',    value: fmtDuration(s.avgBotToTeam),  sub: 'bot → team' },
         { key: 'Resolution', value: fmtDuration(s.avgResolution) },
-        { key: 'Closure', value: fmtDuration(s.avgClosure) },
+        { key: 'Closure',    value: fmtDuration(s.avgClosure) },
       ],
     },
     {
       label: 'IQS',
-      color: '#15803d',
       items: [
-        { key: 'Avg IQS', value: s.avgIqs != null ? `${s.avgIqs}%` : '—' },
+        { key: 'Avg IQS',     value: s.avgIqs != null ? `${s.avgIqs}%` : '—', onClick: () => onFilter?.({ sortByIqs: true }) },
         { key: 'Sample Size', value: String(s.iqsSampleSize) },
-        { key: 'Sampling %', value: `${s.samplingPct}%` },
+        { key: 'Sampling %',  value: `${s.samplingPct}%` },
       ],
     },
   ];
 
   return (
-    <div className="space-y-2">
-      {groups.map(g => (
-        <div key={g.label} className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-          <p className="text-[9px] font-black uppercase tracking-widest mb-2.5" style={{ color: g.color }}>{g.label}</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            {g.items.map(item => (
-              <div key={item.key} className="flex flex-col min-w-[70px]">
-                <span className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider whitespace-nowrap">{item.key}</span>
-                <span className="text-base font-bold leading-tight tabular-nums" style={{ color: item.valueColor || '#111827' }}>
-                  {item.value}
-                </span>
-                {item.sub && <span className="text-[9px] text-gray-400 leading-none mt-0.5">{item.sub}</span>}
-              </div>
-            ))}
+    // Single card with horizontal sections separated by dividers — cleaner, less noise
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="grid grid-cols-4 divide-x divide-gray-100">
+        {groups.map(g => (
+          <div key={g.label} className="px-5 py-4">
+            {/* Section label — portal green, readable size */}
+            <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-widest mb-3">{g.label}</p>
+            <div className="flex flex-col gap-3">
+              {g.items.map(item => (
+                <div
+                  key={item.key}
+                  className={(item as any).onClick ? 'cursor-pointer group' : ''}
+                  onClick={(item as any).onClick}
+                >
+                  {/* Key label — bigger, darker, readable */}
+                  <p className="text-[11px] font-semibold text-gray-500 mb-0.5 whitespace-nowrap group-hover:text-gray-700 transition-colors">
+                    {item.key}
+                  </p>
+                  {/* Value — large, dark, tabular */}
+                  <p className="text-[17px] font-bold leading-none tabular-nums" style={{ color: (item as any).valueColor || '#111827' }}>
+                    {item.value}
+                  </p>
+                  {/* Sub-label — slightly muted but still legible */}
+                  {(item as any).sub && (
+                    <p className="text-[11px] text-gray-500 mt-0.5">{(item as any).sub}</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
@@ -363,7 +381,19 @@ function ScoreDetail({ entry, onClose }: { entry: IQSScoreEntry; onClose: () => 
 }
 
 // ── Agent Card ────────────────────────────────────────────────────────────────
-function AgentCard({ stat, entries }: { stat: AgentStat; entries: IQSScoreEntry[] }) {
+// Fix 7 — two-layer coaching bars
+// Fix 10 — clickable stat badges
+function AgentCard({
+  stat,
+  entries,
+  teamParamFails,
+  onFilterLog,
+}: {
+  stat: AgentStat;
+  entries: IQSScoreEntry[];
+  teamParamFails?: Record<string, number>;
+  onFilterLog?: (f: { agent: string; minScore?: number; maxScore?: number }) => void;
+}) {
   const t = iqsTheme(stat.avgIqs);
   // normalise empty agentName → 'Unknown' so it matches stat.agent
   const agentEntries = entries.filter(e => (e.agentName || 'Unknown') === stat.agent);
@@ -375,7 +405,6 @@ function AgentCard({ stat, entries }: { stat: AgentStat; entries: IQSScoreEntry[
 
   const topFails = paramData.filter(d => d.failPct > 0).slice(0, 4);
   const isAtRisk = stat.avgIqs < 70;
-  const needsCoaching = stat.atRisk > 0;
 
   return (
     <div className={`bg-white rounded-2xl shadow-sm overflow-hidden border ${isAtRisk ? 'border-red-200' : 'border-gray-100'}`}>
@@ -391,9 +420,24 @@ function AgentCard({ stat, entries }: { stat: AgentStat; entries: IQSScoreEntry[
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">{stat.chats} chats · range {stat.minIqs}–{stat.maxIqs}%</p>
+            {/* Fix 10 — clickable stat badges */}
             <div className="flex items-center gap-2 mt-2 flex-wrap">
-              {stat.high > 0 && <span className="text-[10px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full">{stat.high} excellent</span>}
-              {stat.atRisk > 0 && <span className="text-[10px] bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full">{stat.atRisk} need review</span>}
+              {stat.high > 0 && (
+                <button
+                  className="text-[10px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full cursor-pointer hover:opacity-80"
+                  onClick={() => onFilterLog?.({ agent: stat.agent, minScore: 90 })}
+                >
+                  {stat.high} excellent
+                </button>
+              )}
+              {stat.atRisk > 0 && (
+                <button
+                  className="text-[10px] bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full cursor-pointer hover:opacity-80"
+                  onClick={() => onFilterLog?.({ agent: stat.agent, maxScore: 69 })}
+                >
+                  {stat.atRisk} need review
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -406,18 +450,37 @@ function AgentCard({ stat, entries }: { stat: AgentStat; entries: IQSScoreEntry[
         ) : (
           <div className="space-y-2.5">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Coaching Focus</p>
-            {topFails.map(({ p, failPct }) => (
-              <div key={p} className="flex items-center gap-3">
-                <span className="text-[11px] text-gray-700 w-36 shrink-0 truncate font-medium">{PARAM_NAMES[p]}</span>
-                <div className="flex-1 bg-gray-200 rounded-full h-2">
-                  <div className="h-2 rounded-full transition-all" style={{
-                    width: `${failPct}%`,
-                    background: failPct >= 40 ? '#ef4444' : failPct >= 20 ? '#f97316' : '#22c55e'
-                  }} />
+            {topFails.map(({ p, failPct }) => {
+              // Fix 7 — two-layer coaching bars
+              const teamPct = teamParamFails ? (teamParamFails[p] || 0) : 0;
+              const agentColor = failPct >= 40
+                ? 'var(--color-border-danger)'
+                : failPct > teamPct
+                  ? 'var(--color-border-warning)'
+                  : 'var(--color-border-success)';
+              return (
+                <div key={p} className="flex items-center gap-3">
+                  <span className="text-[11px] text-gray-700 w-36 shrink-0 truncate font-medium">{PARAM_NAMES[p]}</span>
+                  {/* Fix 7 — two-layer bar */}
+                  <div className="bg-gray-200 rounded-full h-2 relative flex-1">
+                    <div style={{ width: `${failPct}%`, background: agentColor }} className="h-full rounded-full transition-all absolute inset-0" />
+                    {teamPct > 0 && <div style={{ left: `${teamPct}%` }} className="absolute top-0 h-full w-0.5 bg-gray-400 opacity-60" />}
+                  </div>
+                  <span className="text-[11px] font-bold w-9 text-right tabular-nums" style={{ color: agentColor }}>{failPct}%</span>
                 </div>
-                <span className={`text-[11px] font-bold w-9 text-right tabular-nums ${failPct >= 40 ? 'text-red-500' : failPct >= 20 ? 'text-orange-500' : 'text-emerald-600'}`}>{failPct}%</span>
+              );
+            })}
+            {/* Fix 7 — legend */}
+            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-2 rounded-sm" style={{ background: 'var(--color-border-success)' }} />
+                <span className="text-[9px]" style={{ color: 'var(--color-text-secondary)' }}>Agent</span>
               </div>
-            ))}
+              <div className="flex items-center gap-1.5">
+                <div className="w-0.5 h-3" style={{ background: 'var(--color-text-tertiary)' }} />
+                <span className="text-[9px]" style={{ color: 'var(--color-text-secondary)' }}>Team avg</span>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -492,6 +555,19 @@ export default function QualityClient() {
   const [dateRange, setDateRange] = useState<'today' | '7d' | '30d' | 'all'>('all');
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
 
+  // Fix 5 — summary card click-to-filter
+  const [filterCsat, setFilterCsat] = useState('');
+  const [filterType, setFilterType] = useState('');
+
+  // Fix 2 — column visibility
+  const [showColPicker, setShowColPicker] = useState(false);
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const [forcedVisibleCols, setForcedVisibleCols] = useState<Set<string>>(new Set());
+
+  // Fix 3 — sortable columns
+  const [sortCol, setSortCol] = useState<'iqs' | 'fails' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
   // ── Filtered entries ─────────────────────────────────────────────────────────
   const filteredEntries = useMemo(() => {
     const now = new Date();
@@ -505,9 +581,47 @@ export default function QualityClient() {
       if (e.iqs < filterMin || e.iqs > filterMax) return false;
       if (filterTag && !(e.tags || '').toLowerCase().includes(filterTag.toLowerCase())) return false;
       if (cutoff && e.scoredAt < cutoff) return false;
+      // Fix 5 — csat/type filters
+      if (filterCsat && e.csat !== filterCsat) return false;
+      if (filterType && (e.conversationType || 'agent') !== filterType) return false;
       return true;
     });
-  }, [entries, filterAgent, filterMin, filterMax, filterTag, dateRange]);
+  }, [entries, filterAgent, filterMin, filterMax, filterTag, dateRange, filterCsat, filterType]);
+
+  // Fix 2 — auto-hide columns with no data
+  const autoHiddenLogCols = useMemo(() => {
+    const hidden = new Set<string>();
+    if (!filteredEntries.some(e => e.frt != null)) hidden.add('FRT (I→T)');
+    if (!filteredEntries.some(e => e.botToTeamSecs != null)) hidden.add('B→T');
+    if (!filteredEntries.some(e => e.resolutionTime != null)) hidden.add('Resolution');
+    if (!filteredEntries.some(e => e.closureTime != null)) hidden.add('Closure');
+    if (!filteredEntries.some(e => e.conversationType)) hidden.add('Type');
+    if (!filteredEntries.some(e => e.csat)) hidden.add('CSAT');
+    if (!filteredEntries.some(e => e.tags)) hidden.add('Tags');
+    return hidden;
+  }, [filteredEntries]);
+
+  // Fix 2 — visible columns
+  const visibleLogCols = useMemo(() => {
+    return ALL_LOG_COLS.filter(col =>
+      !hiddenCols.has(col) && (!autoHiddenLogCols.has(col) || forcedVisibleCols.has(col))
+    );
+  }, [hiddenCols, autoHiddenLogCols, forcedVisibleCols]);
+
+  // Fix 3 — sorted entries
+  const sortedLogEntries = useMemo(() => {
+    if (!sortCol) return filteredEntries;
+    return [...filteredEntries].sort((a, b) => {
+      let aVal: number, bVal: number;
+      if (sortCol === 'iqs') {
+        aVal = a.iqs; bVal = b.iqs;
+      } else {
+        aVal = PARAM_ORDER.filter(p => a.scores[p] === 'No').length;
+        bVal = PARAM_ORDER.filter(p => b.scores[p] === 'No').length;
+      }
+      return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+  }, [filteredEntries, sortCol, sortDir]);
 
   // ── Load scores ──────────────────────────────────────────────────────────────
   const loadScores = useCallback(async () => {
@@ -693,7 +807,7 @@ export default function QualityClient() {
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="h-screen flex bg-slate-100 font-sans antialiased overflow-hidden">
+    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: '#f5f3ee' }}>
       {detailEntry && <ScoreDetail entry={detailEntry} onClose={() => setDetailEntry(null)} />}
 
       {/* ── Left Panel ── */}
@@ -737,10 +851,10 @@ export default function QualityClient() {
         {/* Top bar */}
         <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
           <div>
-            <h1 className="text-sm font-bold text-gray-900">
+            <h1 className="text-base font-bold text-gray-900">
               {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : 'Upload & Score'}
             </h1>
-            <p className="text-[11px] text-gray-400 mt-0.5">
+            <p className="text-xs text-gray-500 mt-0.5">
               {tab === 'performance' && `${agentStats.length} agents · ${entries.length} chats`}
               {tab === 'log' && `${filteredEntries.length} of ${totalStored} total`}
               {tab === 'upload' && (fileName ? `${totalToScore} chats ready` : 'Drop a Wint CSV export to begin')}
@@ -809,31 +923,44 @@ export default function QualityClient() {
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                           {[
                             { label: 'All-time Scored', value: totalStored.toLocaleString(), sub: `${entries.length} loaded` },
-                            { label: 'Team Avg IQS', value: `${teamAvg}%`, color: iqsTheme(teamAvg).text },
-                            { label: 'Agents Tracked', value: agentStats.length },
-                            { label: 'At Risk (<70%)', value: atRiskCount, color: atRiskCount > 0 ? '#dc2626' : '#15803d' },
+                            { label: 'Team Avg IQS',    value: `${teamAvg}%`, color: iqsTheme(teamAvg).text },
+                            { label: 'Agents Tracked',  value: agentStats.length },
+                            { label: 'At Risk (<70%)',   value: atRiskCount, color: atRiskCount > 0 ? '#991b1b' : '#166534' },
                           ].map(s => (
-                            <div key={s.label} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
-                              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">{s.label}</p>
-                              <p className="text-2xl font-bold mt-1" style={{ color: (s as any).color || '#111827' }}>{s.value}</p>
-                              {(s as any).sub && <p className="text-[10px] text-gray-400 mt-0.5">{(s as any).sub}</p>}
+                            <div key={s.label} className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{s.label}</p>
+                              <p className="text-3xl font-bold" style={{ color: (s as any).color || '#111827' }}>{s.value}</p>
+                              {(s as any).sub && <p className="text-[11px] text-gray-500 mt-0.5">{(s as any).sub}</p>}
                             </div>
                           ))}
                         </div>
 
                         {/* Attention needed banner */}
+                        {/* Fix 6 — view failing chats link */}
                         {(atRiskAgents.length > 0 || (topParam && topParam.pct >= 25)) && (
                           <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
-                            <p className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-3">⚠ Needs Attention</p>
+                            <div className="flex items-center justify-between mb-3">
+                              <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">⚠ Needs Attention</p>
+                              <button
+                                className="text-xs text-amber-700 font-semibold hover:underline cursor-pointer"
+                                onClick={() => { setFilterMin(0); setFilterMax(69); switchTab('log'); }}
+                              >
+                                View failing chats →
+                              </button>
+                            </div>
                             <div className="flex flex-wrap gap-4">
                               {atRiskAgents.length > 0 && (
                                 <div>
                                   <p className="text-[11px] text-amber-700 font-semibold mb-1">Agents below 70% IQS</p>
                                   <div className="flex flex-wrap gap-1.5">
                                     {atRiskAgents.map(a => (
-                                      <span key={a.agent} className="text-[11px] bg-red-100 text-red-700 font-semibold px-2.5 py-1 rounded-lg">
+                                      <button
+                                        key={a.agent}
+                                        className="text-[11px] bg-red-100 text-red-700 font-semibold px-2.5 py-1 rounded-lg cursor-pointer hover:bg-red-200 transition"
+                                        onClick={() => { setFilterAgent(a.agent); setFilterMin(0); setFilterMax(69); switchTab('log'); }}
+                                      >
                                         {a.agent} — {a.avgIqs}%
-                                      </span>
+                                      </button>
                                     ))}
                                   </div>
                                 </div>
@@ -855,33 +982,56 @@ export default function QualityClient() {
 
                   {/* Agent grid */}
                   <div>
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Agent Scorecards</p>
+                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Agent Scorecards</p>
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                       {agentStats.map(a => (
-                        <AgentCard key={a.agent} stat={a} entries={entries} />
+                        <AgentCard
+                          key={a.agent}
+                          stat={a}
+                          entries={entries}
+                          teamParamFails={paramFails}
+                          onFilterLog={({ agent, minScore, maxScore }) => {
+                            setFilterAgent(agent);
+                            if (minScore !== undefined) setFilterMin(minScore);
+                            if (maxScore !== undefined) setFilterMax(maxScore ?? 100);
+                            switchTab('log');
+                          }}
+                        />
                       ))}
                     </div>
                   </div>
 
                   {/* Team params */}
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                    <p className="text-sm font-bold text-gray-900 mb-1">Team Parameter Breakdown</p>
-                    <p className="text-xs text-gray-500 mb-4">Failure rate across all {entries.length} scored chats — sorted by severity</p>
+                    <p className="text-sm font-bold text-gray-900 mb-0.5">Team Parameter Breakdown</p>
+                    <p className="text-xs text-gray-500 mb-4">Failure rate across all {entries.length} scored chats — click any row to view in Score Log</p>
                     <div className="space-y-3">
                       {[...PARAM_ORDER].sort((a, b) => (paramFails[b] || 0) - (paramFails[a] || 0)).map(p => {
                         const pct = paramFails[p] || 0;
+                        // Fix 8 — denominator annotation
                         const failCount = Math.round(pct / 100 * entries.length);
                         return (
-                          <div key={p} className="flex items-center gap-3">
+                          // Fix 9 — clickable param rows
+                          <div
+                            key={p}
+                            className="group flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2 transition-colors"
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => { setSortCol('fails'); setSortDir('desc'); switchTab('log'); }}
+                          >
                             <span className="text-xs text-gray-700 w-44 shrink-0 truncate font-medium">{PARAM_NAMES[p]}</span>
                             <div className="flex-1 bg-gray-100 rounded-full h-2.5">
                               <div className="rounded-full h-2.5 transition-all" style={{
                                 width: `${pct}%`,
-                                background: pct >= 40 ? '#ef4444' : pct >= 20 ? '#f97316' : '#22c55e'
+                                background: pct >= 40 ? 'var(--color-border-danger)' : pct >= 20 ? 'var(--color-border-warning)' : 'var(--color-border-success)'
                               }} />
                             </div>
-                            <span className={`text-xs font-bold w-10 text-right tabular-nums ${pct >= 40 ? 'text-red-500' : pct >= 20 ? 'text-orange-500' : 'text-emerald-600'}`}>{pct}%</span>
-                            <span className="text-[10px] text-gray-400 w-12 text-right">{failCount} chats</span>
+                            <span className="text-xs font-bold w-10 text-right tabular-nums" style={{ color: pct >= 40 ? 'var(--color-text-danger)' : pct >= 20 ? 'var(--color-text-warning)' : 'var(--color-text-success)' }}>{pct}%</span>
+                            {/* Fix 8 — denominator annotation */}
+                            <span className="text-[10px] text-gray-400 w-16 text-right">
+                              {failCount} / {entries.length}
+                            </span>
+                            {/* Fix 9 — right-arrow indicator */}
+                            <span className="text-gray-300 text-xs ml-auto opacity-0 group-hover:opacity-100">→</span>
                           </div>
                         );
                       })}
@@ -900,7 +1050,7 @@ export default function QualityClient() {
                 <div className="flex flex-wrap items-end gap-4">
                   {/* Date chips */}
                   <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Period</p>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Period</p>
                     <div className="flex items-center gap-1">
                       {(['today', '7d', '30d', 'all'] as const).map(r => (
                         <button key={r} onClick={() => setDateRange(r)}
@@ -914,7 +1064,7 @@ export default function QualityClient() {
                   </div>
                   {/* Agent */}
                   <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Agent</p>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
                     <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)}
                       className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px]">
                       <option value="">All agents</option>
@@ -923,7 +1073,7 @@ export default function QualityClient() {
                   </div>
                   {/* IQS range */}
                   <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">IQS Range</p>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
                     <div className="flex items-center gap-2">
                       <input type="number" min={0} max={100} value={filterMin} onChange={e => setFilterMin(parseInt(e.target.value) || 0)}
                         className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
@@ -934,9 +1084,43 @@ export default function QualityClient() {
                   </div>
                   {/* Tag */}
                   <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">Tag</p>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Tag</p>
                     <input value={filterTag} onChange={e => setFilterTag(e.target.value)} placeholder="e.g. Repayment"
                       className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                  </div>
+                  {/* Fix 2 — Columns button */}
+                  <div className="relative ml-auto">
+                    <button
+                      onClick={() => setShowColPicker(v => !v)}
+                      className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 transition font-medium"
+                    >
+                      Columns ⚙
+                    </button>
+                    {showColPicker && (
+                      <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-lg rounded-xl z-10 p-3 min-w-[160px]">
+                        {ALL_LOG_COLS.map(col => {
+                          const isVisible = !hiddenCols.has(col) && (!autoHiddenLogCols.has(col) || forcedVisibleCols.has(col));
+                          return (
+                            <label key={col} className="flex items-center gap-2 py-1 cursor-pointer hover:text-gray-900 text-xs text-gray-600">
+                              <input
+                                type="checkbox"
+                                checked={isVisible}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setHiddenCols(prev => { const s = new Set(prev); s.delete(col); return s; });
+                                    setForcedVisibleCols(prev => { const s = new Set(prev); s.add(col); return s; });
+                                  } else {
+                                    setHiddenCols(prev => { const s = new Set(prev); s.add(col); return s; });
+                                    setForcedVisibleCols(prev => { const s = new Set(prev); s.delete(col); return s; });
+                                  }
+                                }}
+                              />
+                              {col}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -954,42 +1138,104 @@ export default function QualityClient() {
               {!logsLoading && filteredEntries.length > 0 && (
                 <>
                   {/* ── Summary stats bar ── */}
-                  {summary && <SummaryBar s={summary} />}
+                  {/* Fix 5 — summary card click-to-filter */}
+                  {summary && (
+                    <SummaryBar
+                      s={summary}
+                      onFilter={({ filterCsat: fc, filterType: ft, sortByIqs }) => {
+                        if (fc !== undefined) setFilterCsat(fc);
+                        if (ft !== undefined) setFilterType(ft);
+                        if (sortByIqs) { setSortCol('iqs'); setSortDir('asc'); }
+                      }}
+                    />
+                  )}
 
                   {/* ── Per-conversation table ── */}
+                  {/* Fix 2 — column visibility */}
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
                     <table className="w-full text-xs whitespace-nowrap">
                       <thead>
                         <tr className="border-b border-gray-100 bg-gray-50/60">
-                          {['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Tags', 'Date'].map(h => (
-                            <th key={h} className="text-left px-3 py-3 text-[10px] font-bold text-gray-400 uppercase tracking-wider">{h}</th>
-                          ))}
+                          {/* Fix 3 — sortable column headers */}
+                          {visibleLogCols.map(h => {
+                            const isSortable = h === 'IQS' || h === 'Fails';
+                            const colKey = h === 'IQS' ? 'iqs' : 'fails';
+                            const isActive = sortCol === colKey;
+                            return (
+                              <th
+                                key={h}
+                                className={`text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider${isSortable ? ' cursor-pointer select-none hover:text-gray-700' : ''}`}
+                                onClick={isSortable ? () => {
+                                  if (isActive) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                                  else { setSortCol(colKey as 'iqs' | 'fails'); setSortDir('desc'); }
+                                } : undefined}
+                              >
+                                {h}{isSortable && (isActive ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ' ↕')}
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredEntries.map((e, i) => {
+                        {sortedLogEntries.map((e, i) => {
                           const fails = PARAM_ORDER.filter(p => e.scores[p] === 'No');
+                          // Fix 4 — row danger highlight for IQS <50
+                          const rowStyle = e.iqs < 50
+                            ? { background: 'color-mix(in srgb, var(--color-background-danger) 60%, transparent)' }
+                            : undefined;
                           return (
-                            <tr key={i} className="border-b border-gray-50 hover:bg-emerald-50/40 cursor-pointer transition"
-                              onClick={() => setDetailEntry(e)}>
-                              <td className="px-3 py-2.5 font-semibold text-gray-900">{e.agentName || '—'}</td>
-                              <td className="px-3 py-2.5"><ChatLink chatId={e.chatId} className="text-xs" /></td>
-                              <td className="px-3 py-2.5"><TypeBadge type={e.conversationType} /></td>
-                              <td className="px-3 py-2.5 text-gray-700 text-sm">
-                                {e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : <span className="text-gray-400">—</span>}
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.frt)}</td>
-                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.botToTeamSecs)}</td>
-                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.resolutionTime)}</td>
-                              <td className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.closureTime)}</td>
-                              <td className="px-3 py-2.5"><IQSPill iqs={e.iqs} /></td>
-                              <td className="px-3 py-2.5">
-                                {fails.length === 0
-                                  ? <span className="text-emerald-600 font-semibold text-xs">✓</span>
-                                  : <span className="text-red-500 font-semibold text-xs">{fails.length}</span>}
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{e.tags || <span className="text-gray-300">—</span>}</td>
-                              <td className="px-3 py-2.5 text-gray-600">{(e.date || e.scoredAt || '').slice(0, 10)}</td>
+                            <tr
+                              key={i}
+                              className="border-b border-gray-50 hover:bg-emerald-50/40 cursor-pointer transition"
+                              style={rowStyle}
+                              onClick={() => setDetailEntry(e)}
+                            >
+                              {/* Fix 2 — render only visible columns */}
+                              {visibleLogCols.map(col => {
+                                if (col === 'Agent') return <td key={col} className="px-3 py-2.5 font-semibold text-gray-900">{e.agentName || '—'}</td>;
+                                if (col === 'Chat ID') return <td key={col} className="px-3 py-2.5"><ChatLink chatId={e.chatId} className="text-xs" /></td>;
+                                if (col === 'Type') return <td key={col} className="px-3 py-2.5"><TypeBadge type={e.conversationType} /></td>;
+                                if (col === 'CSAT') return <td key={col} className="px-3 py-2.5 text-gray-700 text-sm">{e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : <span className="text-gray-400">—</span>}</td>;
+                                if (col === 'FRT (I→T)') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.frt)}</td>;
+                                if (col === 'B→T') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.botToTeamSecs)}</td>;
+                                if (col === 'Resolution') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.resolutionTime)}</td>;
+                                if (col === 'Closure') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.closureTime)}</td>;
+                                if (col === 'IQS') return <td key={col} className="px-3 py-2.5"><IQSPill iqs={e.iqs} /></td>;
+                                if (col === 'Fails') return (
+                                  // Fix 1 — fails severity bar
+                                  <td key={col} className="px-3 py-2.5">
+                                    {fails.length === 0 ? (
+                                      <span style={{ color: 'var(--color-text-success)' }} className="font-semibold text-xs">✓</span>
+                                    ) : (
+                                      <div className="flex items-center gap-1.5">
+                                        {/* Fix 1 — inline horizontal severity bar */}
+                                        <div style={{ width: 80, height: 4, background: 'var(--color-background-tertiary)', borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+                                          <div style={{
+                                            width: `${Math.min(fails.length / 10 * 100, 100)}%`,
+                                            height: '100%',
+                                            background: fails.length >= 6
+                                              ? 'var(--color-border-danger)'
+                                              : fails.length >= 3
+                                                ? 'var(--color-border-warning)'
+                                                : 'var(--color-border-success)',
+                                            borderRadius: 2,
+                                          }} />
+                                        </div>
+                                        <span className="font-semibold text-xs tabular-nums" style={{
+                                          color: fails.length >= 6
+                                            ? 'var(--color-text-danger)'
+                                            : fails.length >= 3
+                                              ? 'var(--color-text-warning)'
+                                              : 'var(--color-text-success)',
+                                        }}>{fails.length}</span>
+                                      </div>
+                                    )}
+                                  </td>
+                                );
+                                if (col === 'Tags') return <td key={col} className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{e.tags || <span className="text-gray-300">—</span>}</td>;
+                                if (col === 'Date') return <td key={col} className="px-3 py-2.5 text-gray-600">{(e.date || e.scoredAt || '').slice(0, 10)}</td>;
+                                return null;
+                              })}
                             </tr>
                           );
                         })}
