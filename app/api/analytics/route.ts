@@ -5,6 +5,8 @@ import { readLogs } from '@/lib/logger';
 import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
+import { storeGetIQSScores } from '@/lib/store';
+import { PARAM_NAMES, PARAM_ORDER, WEIGHTS, type IQSScoreEntry } from '@/lib/quality';
 
 interface LogEntry {
   timestamp: string;
@@ -15,9 +17,17 @@ interface LogEntry {
   queryType?: string;
 }
 
+// ── Block types the LLM can produce ─────────────────────────────────────────
+export type AnalyticsBlock =
+  | { type: 'stat_row'; stats: { label: string; value: string; sub?: string; color?: string }[] }
+  | { type: 'table'; title: string; columns: string[]; rows: (string | number)[][] }
+  | { type: 'bar_chart'; title: string; data: { name: string; value: number; sub?: string }[]; unit?: string }
+  | { type: 'line_chart'; title: string; data: { date: string; value: number }[]; unit?: string }
+  | { type: 'insight'; text: string; severity?: 'info' | 'warning' | 'danger' };
+
+// ── Log helpers ───────────────────────────────────────────────────────────────
 function categorize(q: string, storedCategory?: string): string {
   if (storedCategory) {
-    // Map canonical analyze category IDs to display names
     const map: Record<string, string> = { repayment: 'Repayment', kyc: 'Account & KYC', payment: 'Investment', sip: 'Investment', sell: 'Investment', referral: 'General', taxation: 'General', dashboard: 'Platform Issue', fd: 'Investment', huf: 'Account & KYC' };
     return map[storedCategory] || (storedCategory.charAt(0).toUpperCase() + storedCategory.slice(1));
   }
@@ -30,7 +40,7 @@ function categorize(q: string, storedCategory?: string): string {
   return 'General';
 }
 
-function computeStats(logs: LogEntry[]) {
+function computeLogStats(logs: LogEntry[]) {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
 
@@ -59,13 +69,6 @@ function computeStats(logs: LogEntry[]) {
     queryCount[key].agents.add(log.username);
   }
   const topQueries = Object.entries(queryCount)
-    .sort((a, b) => b[1].count - a[1].count)
-    .slice(0, 5)
-    .map(([query, data]) => ({ query, count: data.count, agents: [...data.agents] }));
-
-  const PROBLEM_RE = /error|not (working|showing|loading|received|credited)|failed|issue|problem|wrong|broken|stuck|unable|can't|cannot/i;
-  const unansweredQueries = Object.entries(queryCount)
-    .filter(([q]) => PROBLEM_RE.test(q))
     .sort((a, b) => b[1].count - a[1].count)
     .slice(0, 5)
     .map(([query, data]) => ({ query, count: data.count, agents: [...data.agents] }));
@@ -103,7 +106,6 @@ function computeStats(logs: LogEntry[]) {
     mostActiveAgent: agentBreakdown[0]?.username || '—',
     agentBreakdown,
     topQueries,
-    unansweredQueries,
     categoryBreakdown,
     modelDistribution: modelDist,
     dailyTrend,
@@ -111,6 +113,113 @@ function computeStats(logs: LogEntry[]) {
   };
 }
 
+// ── Quality data helpers ──────────────────────────────────────────────────────
+function csatScore(csat: string | undefined): number | null {
+  if (csat === '5') return 100;
+  if (csat === '3') return 50;
+  if (csat === '1') return 0;
+  return null;
+}
+
+function avgOrNull(nums: number[]): number | null {
+  if (!nums.length) return null;
+  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
+}
+
+function computeQualitySummary(entries: IQSScoreEntry[]) {
+  if (!entries.length) return null;
+
+  const botEntries = entries.filter(e => e.conversationType === 'bot');
+  const agentEntries = entries.filter(e => e.conversationType !== 'bot');
+
+  const csatNums = entries.map(e => csatScore(e.csat)).filter((n): n is number => n !== null);
+  const botCsatNums = botEntries.map(e => csatScore(e.csat)).filter((n): n is number => n !== null);
+  const agentCsatNums = agentEntries.map(e => csatScore(e.csat)).filter((n): n is number => n !== null);
+
+  const good = entries.filter(e => e.csat === '5').length;
+  const cbbBad = entries.filter(e => e.csat === '3' || e.csat === '1').length;
+
+  const frtNums = entries.map(e => e.frt).filter((n): n is number => n !== undefined);
+  const b2tNums = entries.map(e => e.botToTeamSecs).filter((n): n is number => n !== undefined);
+  const resNums = entries.map(e => e.resolutionTime).filter((n): n is number => n !== undefined);
+  const closNums = entries.map(e => e.closureTime).filter((n): n is number => n !== undefined);
+  const iqsNums = entries.map(e => e.iqs);
+
+  const slaMet = b2tNums.filter(s => s <= 180).length;
+
+  // Per-agent stats
+  const agentMap: Record<string, { chats: number; iqsSum: number; csatNums: number[]; frtNums: number[] }> = {};
+  for (const e of entries) {
+    const a = e.agentName || 'Unknown';
+    if (!agentMap[a]) agentMap[a] = { chats: 0, iqsSum: 0, csatNums: [], frtNums: [] };
+    agentMap[a].chats++;
+    agentMap[a].iqsSum += e.iqs;
+    const cs = csatScore(e.csat);
+    if (cs !== null) agentMap[a].csatNums.push(cs);
+    if (e.frt !== undefined) agentMap[a].frtNums.push(e.frt);
+  }
+  const agentStats = Object.entries(agentMap).map(([agent, d]) => ({
+    agent,
+    chats: d.chats,
+    avgIqs: Math.round(d.iqsSum / d.chats),
+    avgCsat: avgOrNull(d.csatNums),
+    avgFrtSecs: avgOrNull(d.frtNums),
+  })).sort((a, b) => b.chats - a.chats);
+
+  // Parameter fail rates
+  const paramFails: Record<string, number> = {};
+  for (const param of PARAM_ORDER) {
+    const fails = entries.filter(e => e.scores?.[param] === 'No').length;
+    paramFails[param] = entries.length ? Math.round((fails / entries.length) * 100) : 0;
+  }
+
+  // Tag frequency
+  const tagCount: Record<string, number> = {};
+  for (const e of entries) {
+    if (e.tags) {
+      for (const t of e.tags.split(',').map(s => s.trim()).filter(Boolean)) {
+        tagCount[t] = (tagCount[t] || 0) + 1;
+      }
+    }
+  }
+  const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+  // Daily IQS trend (last 30 days)
+  const dailyIqs: Record<string, number[]> = {};
+  for (const e of entries) {
+    const d = (e.date || e.scoredAt?.slice(0, 10) || '');
+    if (d) { if (!dailyIqs[d]) dailyIqs[d] = []; dailyIqs[d].push(e.iqs); }
+  }
+  const dailyIqsTrend = Object.entries(dailyIqs)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .slice(-30)
+    .map(([date, scores]) => ({ date, avgIqs: Math.round(scores.reduce((s, n) => s + n, 0) / scores.length), count: scores.length }));
+
+  return {
+    totalConvos: entries.length,
+    botConvos: botEntries.length,
+    agentConvos: agentEntries.length,
+    overallCsat: avgOrNull(csatNums),
+    botCsat: avgOrNull(botCsatNums),
+    agentCsat: avgOrNull(agentCsatNums),
+    good,
+    cbbBad,
+    cbbBadPct: csatNums.length ? Math.round((cbbBad / csatNums.length) * 100) : 0,
+    avgFrt: avgOrNull(frtNums),
+    avgBotToTeam: avgOrNull(b2tNums),
+    slaPercent: b2tNums.length ? Math.round((slaMet / b2tNums.length) * 100) : null,
+    avgResolution: avgOrNull(resNums),
+    avgClosure: avgOrNull(closNums),
+    avgIqs: avgOrNull(iqsNums),
+    iqsSampleSize: entries.length,
+    agentStats,
+    paramFails,
+    topTags,
+    dailyIqsTrend,
+  };
+}
+
+// ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
@@ -121,21 +230,19 @@ export async function POST(req: Request) {
   const question: string = body.question?.trim() || '';
   const filters: { dateFrom?: string; dateTo?: string; agent?: string; category?: string; queryType?: string } = body.filters || {};
 
-  // Sheet is the source of truth — has full history.
-  // Fall back to KV/file if service account is not configured.
+  // Load logs
   let allLogs: LogEntry[];
   let source: 'sheet' | 'kv';
   try {
     allLogs = await readLogsFromSheet();
     source = 'sheet';
-    console.log(`[analytics] Loaded ${allLogs.length} logs from Google Sheet`);
   } catch (err: any) {
     console.warn(`[analytics] Sheet read failed (${err.message}), falling back to KV`);
     allLogs = await readLogs();
     source = 'kv';
   }
 
-  // Apply filters
+  // Apply log filters
   let logs = allLogs;
   if (filters.dateFrom) logs = logs.filter(l => l.timestamp >= filters.dateFrom!);
   if (filters.dateTo)   logs = logs.filter(l => l.timestamp <= filters.dateTo! + 'T23:59:59');
@@ -144,74 +251,129 @@ export async function POST(req: Request) {
   if (filters.queryType) logs = logs.filter(l => l.queryType === filters.queryType);
 
   const availableAgents = [...new Set(allLogs.map(l => l.username))].sort();
-  const stats = { ...computeStats(logs), source, totalInSheet: allLogs.length, availableAgents };
+  const stats = { ...computeLogStats(logs), source, totalInSheet: allLogs.length, availableAgents };
 
-  if (!question) {
-    return NextResponse.json({ stats });
+  // Load quality scores
+  let qualitySummary: ReturnType<typeof computeQualitySummary> = null;
+  let qualityAgents: string[] = [];
+  try {
+    const raw = await storeGetIQSScores();
+    let entries: IQSScoreEntry[] = raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+
+    // Apply same date/agent filters to quality data
+    if (filters.dateFrom) entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10) || '') >= filters.dateFrom!);
+    if (filters.dateTo)   entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10) || '') <= filters.dateTo!);
+    if (filters.agent)    entries = entries.filter(e => e.agentName === filters.agent);
+
+    qualityAgents = [...new Set(entries.map(e => e.agentName).filter(Boolean))].sort();
+    qualitySummary = computeQualitySummary(entries);
+  } catch (err: any) {
+    console.warn('[analytics] Quality scores load failed:', err.message);
   }
 
-  // LLM-powered Q&A over log data
+  if (!question) {
+    return NextResponse.json({ stats, qualitySummary, qualityAgents });
+  }
+
+  // LLM-powered analyst
   const config = await readConfig();
   const keys = getOrderedGeminiKeys(config);
   if (!keys.length) {
-    return NextResponse.json({ stats, answer: 'No Gemini API key configured.' });
+    return NextResponse.json({ stats, qualitySummary, qualityAgents, answer: 'No Gemini API key configured.', blocks: [] });
   }
 
-  // Build a compact log table (last 300 entries) for LLM context
-  const logTable = logs
-    .slice(0, 300)
-    .map(l => `${l.timestamp.slice(0, 16)} | ${l.username} | ${l.model} | ${l.query}`)
-    .join('\n');
+  // Build context for the LLM
+  const logSummary = `
+PORTAL USAGE (IR agent queries):
+- Total queries: ${stats.totalQueries} | Unique agents: ${stats.uniqueAgents} | Today: ${stats.queriesToday}
+- Most active: ${stats.mostActiveAgent}
+- By agent: ${stats.agentBreakdown.slice(0, 10).map(a => `${a.username}(${a.count})`).join(', ')}
+- By category: ${stats.categoryBreakdown.map(c => `${c.category}:${c.count}(${c.pct}%)`).join(', ')}
+- Daily trend (last 14d): ${stats.dailyTrend.map(d => `${d.date}:${d.count}`).join(', ')}
+`.trim();
 
-  const agentSummary = stats.agentBreakdown
-    .map(a => `${a.username}: ${a.count} queries, last active ${a.lastSeen.slice(0, 10)}, top query: "${a.topQuery}"`)
-    .join('\n');
+  const qualCtx = qualitySummary ? `
+ROBYLON CONVERSATION QUALITY:
+- Total scored convos: ${qualitySummary.totalConvos} | Bot: ${qualitySummary.botConvos} | Agent: ${qualitySummary.agentConvos}
+- Avg IQS: ${qualitySummary.avgIqs ?? 'N/A'} | CSAT: ${qualitySummary.overallCsat ?? 'N/A'}% | Good: ${qualitySummary.good} | CBB+Bad: ${qualitySummary.cbbBad} (${qualitySummary.cbbBadPct}%)
+- SLA (B→T ≤3min): ${qualitySummary.slaPercent ?? 'N/A'}% | Avg FRT: ${qualitySummary.avgFrt != null ? Math.round(qualitySummary.avgFrt / 60) + 'min' : 'N/A'} | Avg Resolution: ${qualitySummary.avgResolution != null ? Math.round(qualitySummary.avgResolution / 60) + 'min' : 'N/A'}
 
-  const topQueriesSummary = stats.topQueries
-    .map((q, i) => `${i + 1}. "${q.query}" — ${q.count}x by [${q.agents.join(', ')}]`)
-    .join('\n');
+PER-AGENT QUALITY:
+${qualitySummary.agentStats.map(a => `  ${a.agent}: ${a.chats} chats, IQS ${a.avgIqs}, CSAT ${a.avgCsat ?? 'N/A'}%, FRT ${a.avgFrtSecs != null ? Math.round(a.avgFrtSecs / 60) + 'min' : 'N/A'}`).join('\n')}
 
-  const categorySummary = stats.categoryBreakdown
-    .map(c => `${c.category}: ${c.count} (${c.pct}%)`)
-    .join(', ');
+PARAMETER FAIL RATES (% of chats where parameter scored No):
+${PARAM_ORDER.map(p => `  ${PARAM_NAMES[p]}: ${qualitySummary!.paramFails[p]}%`).join('\n')}
 
-  const prompt = `You are an analytics assistant for the Wint Wealth IR Portal — an internal AI tool used by CX agents.
+TOP TAGS: ${qualitySummary.topTags.map(([t, n]) => `${t}(${n})`).join(', ')}
 
-OVERALL STATS:
-- Total queries logged: ${stats.totalQueries}
-- Unique agents: ${stats.uniqueAgents}
-- Queries today: ${stats.queriesToday}
-- Most active agent: ${stats.mostActiveAgent}
-- Model distribution: ${JSON.stringify(stats.modelDistribution)}
+DAILY IQS TREND: ${qualitySummary.dailyIqsTrend.map(d => `${d.date}:IQS${d.avgIqs}(n=${d.count})`).join(', ')}
+`.trim() : 'Quality scores: No data available yet.';
 
-PER-AGENT BREAKDOWN:
-${agentSummary}
+  const systemPrompt = `You are an AI business analyst for Wint Wealth, a fintech bond investment company.
+You have access to two data sources:
+1. Portal usage logs — how IR agents use the internal AI assistant
+2. Robylon conversation quality data — IQS scores, CSAT, timing metrics for customer chats
 
-TOP QUERIES (by frequency):
-${topQueriesSummary}
+Your job is to answer the founder/co-founder's questions analytically, like a senior data analyst would.
 
-QUERY CATEGORIES:
-${categorySummary}
+ALWAYS return a valid JSON object (no markdown fences) with this exact shape:
+{
+  "answer": "<1-3 sentence narrative summary>",
+  "blocks": [<array of Block objects>]
+}
 
-RAW LOG (last 300 entries, format: timestamp | agent | model | query):
-${logTable}
+Block types you can use:
+- {"type":"stat_row","stats":[{"label":"...","value":"...","sub":"...","color":"green|red|orange"}]}
+- {"type":"table","title":"...","columns":["col1","col2",...],"rows":[["val","val"],...]}
+- {"type":"bar_chart","title":"...","data":[{"name":"...","value":123,"sub":"..."}],"unit":"..."}
+- {"type":"line_chart","title":"...","data":[{"date":"YYYY-MM-DD","value":123}],"unit":"..."}
+- {"type":"insight","text":"...","severity":"info|warning|danger"}
 
----
-ADMIN QUESTION: ${question}
+Rules:
+- Always include at least one block when there is data to show
+- Use bar_chart for comparisons (agents, parameters, categories)
+- Use line_chart for time trends
+- Use table for detailed per-entity data (more than 5 items)
+- Use stat_row for KPI summaries (3-6 key numbers)
+- Use insight for findings that need attention (low IQS, SLA breach, specific agent issues)
+- Sort bar charts descending by value
+- Format seconds as minutes (e.g. 127 → "2m 7s"), percentages with % sign
+- Be specific, use actual numbers from the data provided
+- If the question cannot be answered from the data, say so clearly in "answer" and return empty blocks []`;
 
-Answer analytically with specific numbers and data. Be concise but complete. Use bullet points or short tables where helpful.`;
+  const userPrompt = `DATA CONTEXT:
+${logSummary}
+
+${qualCtx}
+
+QUESTION: ${question}`;
 
   try {
-    const answer = await geminiGenerate(
+    const raw = await geminiGenerate(
       keys,
       'gemini-2.5-flash',
-      [{ role: 'user', parts: [{ text: prompt }] }],
-      {},
-      30000
+      [{ role: 'user', parts: [{ text: userPrompt }] }],
+      { systemInstruction: { parts: [{ text: systemPrompt }] } },
+      45000
     );
-    return NextResponse.json({ stats, answer });
+
+    let answer = 'Here is the analysis.';
+    let blocks: AnalyticsBlock[] = [];
+    try {
+      // Strip markdown fences if model wrapped it
+      const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = JSON.parse(cleaned);
+      answer = parsed.answer || answer;
+      blocks = Array.isArray(parsed.blocks) ? parsed.blocks : [];
+    } catch {
+      // LLM returned plain text — use it as the answer
+      answer = raw.trim();
+      blocks = [];
+    }
+
+    return NextResponse.json({ stats, qualitySummary, qualityAgents, answer, blocks });
   } catch (err: any) {
     console.error('[analytics] LLM error:', err);
-    return NextResponse.json({ stats, answer: `Analysis failed: ${err.message}` });
+    return NextResponse.json({ stats, qualitySummary, qualityAgents, answer: `Analysis failed: ${err.message}`, blocks: [] });
   }
 }

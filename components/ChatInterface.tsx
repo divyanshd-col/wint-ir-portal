@@ -5,6 +5,25 @@ import type { SavedConversation } from '@/lib/types';
 import type { SourceChunk } from '@/lib/corrections';
 import CorrectionPanel from './CorrectionPanel';
 
+// Fix 13 — copy chips
+function CopyChip({ text, display }: { text: string; display?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span
+      className="inline-flex items-center gap-1 font-mono cursor-pointer"
+      style={{ background: 'var(--color-background-secondary)', border: '0.5px solid var(--color-border-secondary)', borderRadius: 4, padding: '2px 8px', fontSize: '12px' }}
+      onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+      title={copied ? 'Copied!' : 'Click to copy'}
+    >
+      {display || text}
+      {copied
+        ? <span style={{ color: 'var(--color-text-success)', fontSize: 10 }}>✓</span>
+        : <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}><rect x="5" y="5" width="8" height="8" rx="1"/><path d="M11 5V3H3v8h2"/></svg>
+      }
+    </span>
+  );
+}
+
 interface FormQuestion {
   id: string;
   label: string;
@@ -40,22 +59,35 @@ interface Message {
   category?: string;
 }
 
+// Fix 13 — copy chips (updated renderInline with CopyChip detection)
 function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
-  const tokenRegex = /\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/\S+)/g;
+  // Groups: 1=bold, 2=link-label, 3=link-href, 4=bare-url, 5=channel, 6=email, 7=command
+  const tokenRegex = /(#[a-zA-Z][a-zA-Z0-9_-]+)|([\w.-]+@[\w.-]+\.[a-zA-Z]{2,})|(\/[a-zA-Z][a-zA-Z0-9_-]*)|\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:\/\/[^)]+)\)|(https?:\/\/\S+)/g;
   const parts: React.ReactNode[] = [];
   let last = 0;
   let match: RegExpExecArray | null;
   while ((match = tokenRegex.exec(text)) !== null) {
     if (match.index > last) parts.push(text.slice(last, match.index));
     if (match[1] !== undefined) {
+      // #channel
+      parts.push(<CopyChip key={`${keyPrefix}-ch-${match.index}`} text={match[1]} />);
+    } else if (match[2] !== undefined) {
+      // email
+      parts.push(<CopyChip key={`${keyPrefix}-em-${match.index}`} text={match[2]} />);
+    } else if (match[3] !== undefined) {
+      // /command
+      parts.push(<CopyChip key={`${keyPrefix}-cmd-${match.index}`} text={match[3]} />);
+    } else if (match[4] !== undefined) {
+      // **bold**
       parts.push(
         <strong key={`${keyPrefix}-b-${match.index}`} className="font-[650] text-[#0a0a0a]">
-          {match[1]}
+          {match[4]}
         </strong>
       );
     } else {
-      const href = match[3] || match[4];
-      const label = match[2] || match[4];
+      // link or bare URL
+      const href = match[6] || match[7];
+      const label = match[5] || match[7];
       parts.push(
         <a key={`${keyPrefix}-link-${match.index}`} href={href} target="_blank" rel="noopener noreferrer"
            className="text-[#2d9e4f] underline underline-offset-2 hover:text-[#238a42] break-all">
@@ -148,6 +180,42 @@ function renderContent(text: string): React.ReactNode {
   );
 }
 
+// Fix 11 — Zone parsing helper
+function parseResponseZones(content: string): { zoneA: string; zoneBSteps: string[]; zoneC: string } {
+  const hasAgentActions = /^Agent actions:/im.test(content);
+  const hasEscalation = /^Escalation:/im.test(content);
+  if (!hasAgentActions && !hasEscalation) {
+    return { zoneA: content, zoneBSteps: [], zoneC: '' };
+  }
+
+  let zoneA = content;
+  let zoneB = '';
+  let zoneC = '';
+
+  if (hasEscalation) {
+    const escIdx = content.search(/^Escalation:/im);
+    zoneC = content.slice(escIdx).replace(/^Escalation:\s*/i, '').trim();
+    zoneA = content.slice(0, escIdx).trim();
+  }
+
+  if (hasAgentActions) {
+    const actIdx = zoneA.search(/^Agent actions:/im);
+    if (actIdx !== -1) {
+      zoneB = zoneA.slice(actIdx).replace(/^Agent actions:\s*/i, '').trim();
+      zoneA = zoneA.slice(0, actIdx).trim();
+    }
+  }
+
+  // Extract numbered steps from zoneB
+  const zoneBSteps: string[] = [];
+  for (const line of zoneB.split('\n')) {
+    const m = line.trim().match(/^\d+[.)]\s+(.+)/);
+    if (m) zoneBSteps.push(m[1]);
+  }
+
+  return { zoneA: zoneA.trim(), zoneBSteps, zoneC: zoneC.trim() };
+}
+
 const SUGGESTED_QUESTIONS = [
   "User's KYC is still showing pending",
   "Bond not showing in portfolio after payment",
@@ -174,6 +242,8 @@ export default function ChatInterface({ username, historyEnabled = false, initia
   const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({});
   const [draftExpanded, setDraftExpanded] = useState<Record<string, boolean>>({});
   const [draftContext, setDraftContext] = useState<Record<string, string>>({});
+  // Fix 12 — step checkboxes
+  const [checkedSteps, setCheckedSteps] = useState<Record<string, Set<number>>>({});
   const [attachedImage, setAttachedImage] = useState<{ base64: string; mimeType: string; previewUrl: string } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -238,6 +308,44 @@ export default function ChatInterface({ username, historyEnabled = false, initia
     setInput(msg.content);
     setTimeout(() => textareaRef.current?.focus(), 0);
   };
+
+  // Fix 12 — step checkboxes helpers
+  const toggleStep = (msgId: string, idx: number) => {
+    setCheckedSteps(prev => {
+      const set = new Set(prev[msgId] || []);
+      if (set.has(idx)) set.delete(idx); else set.add(idx);
+      return { ...prev, [msgId]: set };
+    });
+  };
+  const clearSteps = (msgId: string) => {
+    setCheckedSteps(prev => ({ ...prev, [msgId]: new Set() }));
+  };
+
+  // Fix 14 — why this happens persistence
+  const toggleEducationPanel = (msgId: string) => {
+    const key = `${msgId}-education`;
+    setCollapsedPanels(prev => {
+      const newCollapsed = !prev[key];
+      localStorage.setItem('wint-ir-why-expanded', newCollapsed ? 'false' : 'true');
+      return { ...prev, [key]: newCollapsed };
+    });
+  };
+
+  // Fix 14 — auto-collapse new education panels based on localStorage preference
+  useEffect(() => {
+    const pref = typeof window !== 'undefined' ? localStorage.getItem('wint-ir-why-expanded') : null;
+    if (pref === 'false') {
+      setCollapsedPanels(prev => {
+        const updates: typeof prev = {};
+        for (const msg of messages) {
+          if (msg.education && !(`${msg.id}-education` in prev)) {
+            updates[`${msg.id}-education`] = true;
+          }
+        }
+        return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+      });
+    }
+  }, [messages]);
 
   const fetchDraft = async (msgId: string, briefing: string, formAnswers?: Record<string, string>, agentContext?: string) => {
     setDraftLoading(prev => ({ ...prev, [msgId]: true }));
@@ -783,9 +891,10 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                     {/* Why This Happens — shown FIRST, before the answer */}
                     {msg.education && (
                       <div className="mb-3 bg-amber-50 border border-amber-200/70 rounded-xl overflow-hidden">
+                        {/* Fix 14 — why this happens persistence */}
                         <button
                           className="w-full px-4 py-2.5 flex items-center gap-2 text-left"
-                          onClick={() => setCollapsedPanels(prev => ({ ...prev, [`${msg.id}-education`]: !prev[`${msg.id}-education`] }))}
+                          onClick={() => toggleEducationPanel(msg.id)}
                         >
                           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#92400e" strokeWidth="1.5" className="shrink-0">
                             <circle cx="8" cy="8" r="6"/>
@@ -807,135 +916,196 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                       </div>
                     )}
 
-                    {/* Main answer */}
-                    <div className="px-6 py-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
-                      {renderContent(msg.content)}
-                    </div>
+                    {/* Fix 11 — Zone the response into 3 distinct sections */}
+                    {(() => {
+                      const isProcess = msg.queryType === 'process';
+                      const { zoneA, zoneBSteps, zoneC } = isProcess
+                        ? parseResponseZones(msg.content)
+                        : { zoneA: msg.content, zoneBSteps: [] as string[], zoneC: '' };
+                      const hasZones = isProcess && (zoneBSteps.length > 0 || zoneC !== '');
 
-                    {/* Draft panel (if generated) or Frame a response with context input */}
-                    {msg.queryType === 'process' && (
-                      msg.draft ? (
-                        <div className="mt-3 bg-blue-50 border border-blue-200/70 rounded-xl overflow-hidden">
-                          <div className="px-4 py-2.5 flex items-center gap-2">
-                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#1d4ed8" strokeWidth="1.5" className="shrink-0">
-                              <rect x="1" y="4" width="14" height="10" rx="1"/>
-                              <path d="M1 7l7 4 7-4"/>
-                            </svg>
-                            <span className="flex-1 text-[11px] font-[700] text-blue-700 uppercase tracking-[0.09em]">Customer Message Draft</span>
-                            <div className="flex items-center gap-1.5">
-                              <button
-                                onClick={() => {
-                                  setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, draft: undefined } : m));
-                                  setDraftExpanded(prev => ({ ...prev, [msg.id]: true }));
-                                }}
-                                className="text-blue-400 hover:text-blue-600 transition-colors text-[11px] font-medium mr-1"
-                                title="Regenerate with different context"
-                              >
-                                Redo
-                              </button>
-                              <button
-                                onClick={() => setCollapsedPanels(prev => ({ ...prev, [`${msg.id}-draft`]: !prev[`${msg.id}-draft`] }))}
-                                className="text-blue-400 hover:text-blue-600 transition-colors"
-                                title="Toggle"
-                              >
-                                <svg
-                                  width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
-                                  className={`shrink-0 transition-transform ${collapsedPanels[`${msg.id}-draft`] ? '-rotate-90' : ''}`}
+                      // Helper: Frame a response section (Fix 15 — moved inside Zone A)
+                      const frameAResponseSection = isProcess && (
+                        msg.draft ? (
+                          <div className="mt-3 bg-blue-50 border border-blue-200/70 rounded-xl overflow-hidden">
+                            <div className="px-4 py-2.5 flex items-center gap-2">
+                              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#1d4ed8" strokeWidth="1.5" className="shrink-0">
+                                <rect x="1" y="4" width="14" height="10" rx="1"/>
+                                <path d="M1 7l7 4 7-4"/>
+                              </svg>
+                              <span className="flex-1 text-[11px] font-[700] text-blue-700 uppercase tracking-[0.09em]">Customer Message Draft</span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, draft: undefined } : m));
+                                    setDraftExpanded(prev => ({ ...prev, [msg.id]: true }));
+                                  }}
+                                  className="text-blue-400 hover:text-blue-600 transition-colors text-[11px] font-medium mr-1"
+                                  title="Regenerate with different context"
                                 >
-                                  <path d="M2 4l4 4 4-4"/>
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => {
-                                  navigator.clipboard.writeText(msg.draft!);
-                                  setCopiedDraft(prev => ({ ...prev, [msg.id]: true }));
-                                  setTimeout(() => setCopiedDraft(prev => ({ ...prev, [msg.id]: false })), 2000);
-                                }}
-                                className="text-blue-400 hover:text-blue-600 transition-colors"
-                                title="Copy to clipboard"
-                              >
-                                {copiedDraft[msg.id] ? (
-                                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="M3 8l4 4 6-6"/>
+                                  Redo
+                                </button>
+                                <button
+                                  onClick={() => setCollapsedPanels(prev => ({ ...prev, [`${msg.id}-draft`]: !prev[`${msg.id}-draft`] }))}
+                                  className="text-blue-400 hover:text-blue-600 transition-colors"
+                                  title="Toggle"
+                                >
+                                  <svg
+                                    width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                                    className={`shrink-0 transition-transform ${collapsedPanels[`${msg.id}-draft`] ? '-rotate-90' : ''}`}
+                                  >
+                                    <path d="M2 4l4 4 4-4"/>
                                   </svg>
-                                ) : (
-                                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                    <rect x="5" y="5" width="8" height="8" rx="1"/>
-                                    <path d="M11 5V3H3v8h2"/>
-                                  </svg>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                          {!collapsedPanels[`${msg.id}-draft`] && (
-                            <div className="px-4 pb-3.5">
-                              <p className="text-[13.5px] leading-[1.7] text-blue-900 whitespace-pre-wrap">{msg.draft}</p>
-                            </div>
-                          )}
-                        </div>
-                      ) : draftExpanded[msg.id] ? (
-                        /* Expanded: context input form */
-                        <div className="mt-3 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
-                          <div className="px-4 pt-3.5 pb-1 flex items-center gap-2 border-b border-gray-100">
-                            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0">
-                              <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
-                            </svg>
-                            <span className="text-[11px] font-[700] text-gray-500 uppercase tracking-[0.09em]">Frame a response</span>
-                          </div>
-                          <div className="px-4 py-3.5 space-y-3">
-                            <div>
-                              <label className="block text-[12px] font-[600] text-gray-500 mb-1.5">
-                                Add context <span className="text-gray-400 font-normal">(optional)</span>
-                              </label>
-                              <textarea
-                                autoFocus
-                                rows={2}
-                                value={draftContext[msg.id] || ''}
-                                onChange={e => setDraftContext(prev => ({ ...prev, [msg.id]: e.target.value }))}
-                                placeholder="e.g. User already tried reinstalling the app · This is a premium investor · User is frustrated, second time reaching out…"
-                                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 focus:border-[#2d9e4f]/50 resize-none leading-relaxed transition"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => fetchDraft(msg.id, msg.content, msg.formAnswers, draftContext[msg.id])}
-                                disabled={draftLoading[msg.id]}
-                                className="flex items-center gap-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-[12.5px] font-[600] px-4 py-2 rounded-lg transition disabled:opacity-40"
-                              >
-                                {draftLoading[msg.id] ? (
-                                  <>
-                                    <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
-                                      <path d="M8 2a6 6 0 1 0 6 6"/>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(msg.draft!);
+                                    setCopiedDraft(prev => ({ ...prev, [msg.id]: true }));
+                                    setTimeout(() => setCopiedDraft(prev => ({ ...prev, [msg.id]: false })), 2000);
+                                  }}
+                                  className="text-blue-400 hover:text-blue-600 transition-colors"
+                                  title="Copy to clipboard"
+                                >
+                                  {copiedDraft[msg.id] ? (
+                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="M3 8l4 4 6-6"/>
                                     </svg>
-                                    Drafting…
-                                  </>
-                                ) : (
-                                  <>Generate draft →</>
-                                )}
-                              </button>
-                              <button
-                                onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: false }))}
-                                className="text-[12px] text-gray-400 hover:text-gray-600 px-2 py-2 transition"
-                              >
-                                Cancel
-                              </button>
+                                  ) : (
+                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                      <rect x="5" y="5" width="8" height="8" rx="1"/>
+                                      <path d="M11 5V3H3v8h2"/>
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                            {!collapsedPanels[`${msg.id}-draft`] && (
+                              <div className="px-4 pb-3.5">
+                                <p className="text-[13.5px] leading-[1.7] text-blue-900 whitespace-pre-wrap">{msg.draft}</p>
+                              </div>
+                            )}
+                          </div>
+                        ) : draftExpanded[msg.id] ? (
+                          /* Expanded: context input form */
+                          <div className="mt-2 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+                            <div className="px-4 pt-3.5 pb-1 flex items-center gap-2 border-b border-gray-100">
+                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0">
+                                <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
+                              </svg>
+                              <span className="text-[11px] font-[700] text-gray-500 uppercase tracking-[0.09em]">Frame a response</span>
+                            </div>
+                            <div className="px-4 py-3.5 space-y-3">
+                              <div>
+                                <label className="block text-[12px] font-[600] text-gray-500 mb-1.5">
+                                  Add context <span className="text-gray-400 font-normal">(optional)</span>
+                                </label>
+                                <textarea
+                                  autoFocus
+                                  rows={2}
+                                  value={draftContext[msg.id] || ''}
+                                  onChange={e => setDraftContext(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                                  placeholder="e.g. User already tried reinstalling the app · This is a premium investor · User is frustrated, second time reaching out…"
+                                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 focus:border-[#2d9e4f]/50 resize-none leading-relaxed transition"
+                                />
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => fetchDraft(msg.id, msg.content, msg.formAnswers, draftContext[msg.id])}
+                                  disabled={draftLoading[msg.id]}
+                                  className="flex items-center gap-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-[12.5px] font-[600] px-4 py-2 rounded-lg transition disabled:opacity-40"
+                                >
+                                  {draftLoading[msg.id] ? (
+                                    <>
+                                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
+                                        <path d="M8 2a6 6 0 1 0 6 6"/>
+                                      </svg>
+                                      Drafting…
+                                    </>
+                                  ) : (
+                                    <>Generate draft →</>
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: false }))}
+                                  className="text-[12px] text-gray-400 hover:text-gray-600 px-2 py-2 transition"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ) : (
-                        /* Collapsed: just the button */
-                        <button
-                          onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: true }))}
-                          disabled={draftLoading[msg.id]}
-                          className="mt-3 flex items-center gap-2 text-[12px] text-gray-400 hover:text-gray-600 border border-gray-200 hover:border-gray-300 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50 bg-white"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
-                            <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
-                          </svg>
-                          Frame a response
-                        </button>
-                      )
-                    )}
+                        ) : (
+                          /* Fix 15 — Frame a response as primary CTA inside Zone A */
+                          <div className="flex justify-end mt-2">
+                            <button
+                              onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: true }))}
+                              disabled={draftLoading[msg.id]}
+                              className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                              style={{ backgroundColor: 'var(--color-text-primary)', color: 'var(--color-background-primary)' }}
+                            >
+                              {draftLoading[msg.id] ? 'Drafting…' : 'Frame a response →'}
+                            </button>
+                          </div>
+                        )
+                      );
+
+                      if (hasZones) {
+                        return (
+                          <div className="flex flex-col gap-3 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-3">
+                            {/* Fix 11 — Zone A: Tell the user */}
+                            <div style={{ background: 'color-mix(in srgb, var(--color-background-info) 30%, transparent)', borderLeft: '3px solid var(--color-border-info)', borderRadius: 8 }} className="px-4 py-3">
+                              <p style={{ color: 'var(--color-text-info)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Tell the User</p>
+                              <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneA)}</div>
+                              {/* Fix 15 — Frame a response CTA inside Zone A */}
+                              {frameAResponseSection}
+                            </div>
+
+                            {/* Fix 11 — Zone B: Agent actions */}
+                            {zoneBSteps.length > 0 && (
+                              <div style={{ background: 'var(--color-background-secondary)', borderLeft: '3px solid var(--color-border-secondary)', borderRadius: 8 }} className="px-4 py-3">
+                                <p style={{ color: 'var(--color-text-secondary)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Agent Actions</p>
+                                {/* Fix 12 — step checkboxes */}
+                                {zoneBSteps.map((step, idx) => {
+                                  const isChecked = checkedSteps[msg.id]?.has(idx) ?? false;
+                                  return (
+                                    <div key={idx} className="flex items-start gap-2.5 py-1" style={{ opacity: isChecked ? 0.5 : 1 }}>
+                                      <button
+                                        onClick={() => toggleStep(msg.id, idx)}
+                                        className="mt-0.5 shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
+                                        style={{ borderColor: isChecked ? 'var(--color-border-success)' : 'var(--color-border-secondary)', background: isChecked ? 'var(--color-background-success)' : 'transparent' }}
+                                      >
+                                        {isChecked && <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="var(--color-text-success)" strokeWidth="2.5"><polyline points="1.5 6 4.5 9 10.5 3"/></svg>}
+                                      </button>
+                                      <span style={{ textDecoration: isChecked ? 'line-through' : 'none', color: 'var(--color-text-primary)' }} className="text-sm leading-relaxed">{step}</span>
+                                    </div>
+                                  );
+                                })}
+                                <button onClick={() => clearSteps(msg.id)} className="text-[11px] mt-2" style={{ color: 'var(--color-text-tertiary)' }}>Reset steps</button>
+                              </div>
+                            )}
+
+                            {/* Fix 11 — Zone C: Escalation */}
+                            {zoneC && (
+                              <div style={{ background: 'color-mix(in srgb, var(--color-background-warning) 30%, transparent)', borderLeft: '3px solid var(--color-border-warning)', borderRadius: 8 }} className="px-4 py-3">
+                                <p style={{ color: 'var(--color-text-warning)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Escalation — only if needed</p>
+                                <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneC)}</div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      // No zones — original single-block render
+                      return (
+                        <>
+                          <div className="px-6 py-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+                            {renderContent(msg.content)}
+                          </div>
+                          {/* Frame a response for non-zoned process messages */}
+                          {isProcess && frameAResponseSection}
+                        </>
+                      );
+                    })()}
 
                     {/* Flag & Correct button — available on all process answers */}
                     {msg.queryType === 'process' && !msg.showCorrectionPanel && (
@@ -1023,7 +1193,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                 sendMessage(input);
               }
             }}
-            placeholder="Describe the user issue or ask a policy question..."
+            placeholder="Paste user issue, or try /sip-cancel, /refund-status..." // Fix 16 — input placeholder
             rows={1}
             className="flex-1 resize-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 transition max-h-36 placeholder-gray-400"
           />
