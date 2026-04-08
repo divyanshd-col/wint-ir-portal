@@ -15,7 +15,13 @@ export interface LogEntry {
 function getAuth() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON not set');
-  const credentials = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+  // Accept either raw JSON or base64-encoded JSON
+  let credentials: object;
+  try {
+    credentials = JSON.parse(raw);
+  } catch {
+    credentials = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+  }
   return new google.auth.GoogleAuth({
     credentials,
     scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
