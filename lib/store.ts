@@ -178,6 +178,50 @@ export async function storeGetIQSScoreCount(): Promise<number> {
   }
 }
 
+/** Update the csat field on an existing IQS score by chatId. Returns true if found & updated. */
+export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Promise<boolean> {
+  if (!ready()) return false;
+  const raw = await kv_lrange(IQS_SCORES_KEY, 0, -1);
+  for (let i = 0; i < raw.length; i++) {
+    try {
+      const entry = JSON.parse(raw[i]);
+      if (String(entry.chatId) === String(chatId)) {
+        entry.csat = csat;
+        await fetch(`${UPSTASH_URL}/pipeline`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(i), JSON.stringify(entry)]]),
+        });
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
+// --- Pending CSAT (store rating until TICKET_CLOSED is scored) ---
+
+const PENDING_CSAT_PREFIX = 'wint_csat_pending:';
+
+export async function storePendingCsat(chatId: string | number, csat: string): Promise<void> {
+  await kv_set(`${PENDING_CSAT_PREFIX}${chatId}`, csat);
+}
+
+export async function storeGetAndClearPendingCsat(chatId: string | number): Promise<string | null> {
+  const val = await kv_get(`${PENDING_CSAT_PREFIX}${chatId}`);
+  if (val && ready()) {
+    // Delete after reading
+    try {
+      await fetch(`${UPSTASH_URL}/pipeline`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify([['DEL', `${PENDING_CSAT_PREFIX}${chatId}`]]),
+      });
+    } catch {}
+  }
+  return val;
+}
+
 // --- Conversations ---
 
 export async function storeGetConversations(username: string): Promise<SavedConversation[]> {
