@@ -203,9 +203,10 @@ export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score
 - **NA**: MOST chats — only score Yes or No if a call happened or clearly should have.
 
 ### 10. Tags Accuracy (5%)
-- **Yes**: All applicable tags match the query content.
-- **No**: Missing "Calls_Directly" tag when call was made. Missing query-type tags. Wrong category tagged.
-- **NA**: Very rare. If no tag info available, score NA.
+Tags are applied by Robylon AI as Disposition (L1) and Sub-disposition (L2), provided in CHAT METADATA.
+- **Yes**: Both L1 and L2 accurately reflect the primary issue discussed in the conversation.
+- **No**: L1 or L2 is wrong or mismatched — e.g. tagged "Referral Program" but conversation is about a withdrawal, or sub-disposition doesn't match the specific issue.
+- **NA**: No classification data available (Disposition shows "none").
 
 ### 11. Grammar / Structure (5%)
 - **Yes**: Messages are grammatically correct, complete sentences.
@@ -261,12 +262,13 @@ Respond with EXACTLY this JSON structure:
 
 CRITICAL: Output ONLY the JSON. No other text before or after.`;
 
-export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = '', kbContext = ''): string {
+export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = '', kbContext = '', subDisposition = ''): string {
   return `Score the following customer support chat transcript.
 
 ## CHAT METADATA
 - Chat ID: ${chatId}
-- Tags applied: ${tags || 'none'}
+- Disposition (L1): ${tags || 'none'}
+- Sub-disposition (L2): ${subDisposition || 'none'}
 ${kbContext ? `
 ## WINT KNOWLEDGE BASE REFERENCE
 Use these excerpts from Wint's internal KB to evaluate whether the agent's responses are technically correct per Wint's policies. Pay close attention when scoring the "Technical" parameter.

@@ -165,7 +165,7 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     console.warn('[webhook] KB fetch failed, scoring without context:', err.message);
   }
 
-  const userPrompt = buildScoringPrompt(state.transcript, state.disposition, state.chatId, '', kbContext);
+  const userPrompt = buildScoringPrompt(state.transcript, state.disposition, state.chatId, '', kbContext, state.subDisposition);
 
   let rawResponse: string;
   if (provider === 'claude' && config.anthropicApiKey) {
