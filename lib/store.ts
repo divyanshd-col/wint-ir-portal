@@ -215,6 +215,7 @@ export interface PendingScoreState {
   convStarted: string;
   convEnded: string;
   hasTranscript: boolean;
+  transferTimestamp?: string; // ISO — when chat was assigned to a human agent
   // From CLASSIFICATION_UPDATED
   disposition: string;
   subDisposition: string;

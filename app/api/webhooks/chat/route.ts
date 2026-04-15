@@ -199,7 +199,7 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
 
   const timedMessages: TimedMessage[] = state.timedMessages as TimedMessage[];
   const timing = timedMessages.length
-    ? analyzeConversationTiming(timedMessages, state.convEnded)
+    ? analyzeConversationTiming(timedMessages, state.convEnded, state.transferTimestamp)
     : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
   const model = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
@@ -257,6 +257,17 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   const agentName   = extractAgentName(rawMessages);
   const date        = convStarted ? convStarted.slice(0, 10) : new Date().toISOString().slice(0, 10);
 
+  // Extract assignment timestamp BEFORE the filter loop (the "Assigned by X to Y"
+  // system message is filtered from the transcript but its timestamp is the FRT start)
+  let transferTimestamp: string | undefined;
+  for (const m of rawMessages) {
+    const content = (m.content || m.text || '').trim().toLowerCase();
+    if (content.includes('assigned by') && m.timestamp) {
+      transferTimestamp = parseRobyTimestamp(m.timestamp, year) || undefined;
+      break; // first assignment wins
+    }
+  }
+
   const timedMessages: TimedMessage[] = [];
   const robyMessages: RobyMessage[]   = [];
 
@@ -282,6 +293,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   Object.assign(state, {
     transcript, timedMessages, agentName, date,
     convStarted, convEnded, hasTranscript: true,
+    ...(transferTimestamp && { transferTimestamp }),
   });
   await storeSavePendingScore(state);
 

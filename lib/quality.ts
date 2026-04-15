@@ -61,7 +61,7 @@ export interface IQSScoreEntry {
   scoredBy?: string; // email of the quality/admin who scored it
   // ── Conversation metrics ────────────────────────────────────────────────────
   conversationType?: 'bot' | 'agent' | 'hybrid'; // 'bot' = only Myra responded
-  frt?: number;              // seconds: first customer msg → first human agent msg (I→T)
+  frt?: number;              // seconds: chat assignment → first human agent message
   botToTeamSecs?: number;    // seconds: first Myra msg → first human agent msg (B→T)
   resolutionTime?: number;   // seconds: first customer msg → last msg in transcript
   closureTime?: number;      // seconds: first customer msg → conversation_ended (or last msg)
@@ -98,6 +98,7 @@ export interface ConversationMetrics {
 export function analyzeConversationTiming(
   messages: TimedMessage[],
   conversationEnded?: string,
+  transferTimestamp?: string,  // when the chat was assigned to a human agent
 ): ConversationMetrics {
   // Sort by timestamp if available; otherwise use original order
   const sorted = [...messages].sort((a, b) => {
@@ -125,7 +126,10 @@ export function analyzeConversationTiming(
     return d >= 0 ? Math.round(d / 1000) : undefined;
   };
 
-  const frt = diffSecs(firstCustomer?.timestamp, firstHuman?.timestamp);
+  // FRT = assignment timestamp → first human agent message
+  // Falls back to first customer message → first human agent message if no transfer time
+  const frtStart = transferTimestamp ?? firstCustomer?.timestamp;
+  const frt = diffSecs(frtStart, firstHuman?.timestamp);
   const botToTeamSecs = diffSecs(firstBot?.timestamp, firstHuman?.timestamp);
   const resolutionTime = diffSecs(firstCustomer?.timestamp, lastMsg?.timestamp);
   const endTs = conversationEnded ?? lastMsg?.timestamp;
