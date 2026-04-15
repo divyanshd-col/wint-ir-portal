@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
+import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import {
   IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
@@ -127,13 +128,44 @@ async function getOrCreate(chatId: string): Promise<PendingScoreState> {
   return (await storeGetPendingScore(chatId)) ?? blankPendingState(chatId);
 }
 
+// ── Extract a search query from the transcript (fallback when no disposition) ──
+function extractQueryFromTranscript(transcript: string): string {
+  return transcript.split('\n')
+    .filter(l => l.startsWith('Customer:'))
+    .slice(0, 3)
+    .map(l => l.replace('Customer:', '').trim())
+    .join(' ');
+}
+
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
 export async function executeScoring(state: PendingScoreState): Promise<IQSScoreEntry> {
   const config     = await readConfig();
   const provider   = config.llmProvider || 'gemini';
   const geminiKeys = getOrderedGeminiKeys(config);
 
-  const userPrompt = buildScoringPrompt(state.transcript, state.disposition, state.chatId);
+  // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
+  let kbContext = '';
+  try {
+    const searchQuery = state.disposition
+      ? `${state.disposition} ${state.subDisposition}`.trim()
+      : extractQueryFromTranscript(state.transcript);
+
+    if (searchQuery) {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
+      if (relevant.length) {
+        kbContext = relevant
+          .map(c => `[${c.fileName}]\n${c.content}`)
+          .join('\n---\n');
+        console.log(`[webhook] KB context: ${relevant.length} chunks for query "${searchQuery}"`);
+      }
+    }
+  } catch (err: any) {
+    // KB fetch failure should not block scoring — proceed without context
+    console.warn('[webhook] KB fetch failed, scoring without context:', err.message);
+  }
+
+  const userPrompt = buildScoringPrompt(state.transcript, state.disposition, state.chatId, '', kbContext);
 
   let rawResponse: string;
   if (provider === 'claude' && config.anthropicApiKey) {

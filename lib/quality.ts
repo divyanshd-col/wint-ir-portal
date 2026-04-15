@@ -261,12 +261,17 @@ Respond with EXACTLY this JSON structure:
 
 CRITICAL: Output ONLY the JSON. No other text before or after.`;
 
-export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = ''): string {
+export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = '', kbContext = ''): string {
   return `Score the following customer support chat transcript.
 
 ## CHAT METADATA
 - Chat ID: ${chatId}
 - Tags applied: ${tags || 'none'}
+${kbContext ? `
+## WINT KNOWLEDGE BASE REFERENCE
+Use these excerpts from Wint's internal KB to evaluate whether the agent's responses are technically correct per Wint's policies. Pay close attention when scoring the "Technical" parameter.
+
+${kbContext}` : ''}
 
 ## TRANSCRIPT
 ${transcript}
