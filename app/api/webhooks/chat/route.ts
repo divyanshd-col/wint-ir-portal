@@ -139,6 +139,14 @@ function extractQueryFromTranscript(transcript: string): string {
 
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
 export async function executeScoring(state: PendingScoreState): Promise<IQSScoreEntry> {
+  // Hard requirement: never score without transcript AND tags
+  if (!state.hasTranscript || !state.hasTags) {
+    throw new Error(
+      `Scoring blocked for chat ${state.chatId} — missing required signals ` +
+      `(hasTranscript=${state.hasTranscript}, hasTags=${state.hasTags}). ` +
+      `Scoring requires both transcript and classification tags.`
+    );
+  }
   const config       = await readConfig();
   const provider     = config.llmProvider || 'gemini';
   const geminiKeys   = getIQSGeminiKeys(config);
@@ -386,7 +394,7 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
     });
   }
 
-  // Legacy path: score immediately (no deferred logic)
+  // Legacy path: go through the same pending-state gate — tags still required
   const chatId = String(chat_id || conversation_id || `wh_${Date.now()}`);
 
   const state: PendingScoreState = {
@@ -408,8 +416,10 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   const channelPrefix = channel === 'call' ? '[CHANNEL: PHONE CALL]\n' : '';
   state.transcript = channelPrefix + transcript;
 
-  try {
-    const scored = await executeScoring(state);
+  await storeSavePendingScore(state);
+
+  const scored = await tryScoreIfReady(state);
+  if (scored) {
     return NextResponse.json({
       ok: true, chat_id: chatId, iqs: scored.iqs, agent: scored.agentName,
       conversation_type: scored.conversationType,
@@ -417,10 +427,10 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
       resolution_secs: scored.resolutionTime, closure_secs: scored.closureTime,
       scored_at: scored.scoredAt,
     });
-  } catch (err: any) {
-    console.error('[webhook] Error:', err.message);
-    return NextResponse.json({ error: err.message }, { status: 500 });
   }
+
+  console.log(`[webhook] Legacy payload for chat ${chatId} parked — waiting for tags`);
+  return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'waiting for tags' });
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
