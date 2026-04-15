@@ -199,6 +199,79 @@ export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Pro
   return false;
 }
 
+// --- Pending Score State (accumulates TICKET_CLOSED + CLASSIFICATION + CSAT before scoring) ---
+
+const PENDING_SCORE_PREFIX  = 'wint_ps:';
+const PENDING_SCORE_IDS_KEY = 'wint_ps_ids'; // Redis SET of chatIds awaiting scoring
+
+export interface PendingScoreState {
+  chatId: string;
+  createdAt: string;    // ISO — when the first event for this chat arrived
+  // From TICKET_CLOSED
+  transcript: string;
+  timedMessages: any[]; // TimedMessage[] serialised as plain objects
+  agentName: string;
+  date: string;
+  convStarted: string;
+  convEnded: string;
+  hasTranscript: boolean;
+  // From CLASSIFICATION_UPDATED
+  disposition: string;
+  subDisposition: string;
+  hasTags: boolean;
+  // From CSAT_SUBMITTED
+  csat: string;
+  hasCsat: boolean;
+}
+
+async function kv_sadd(key: string, member: string): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['SADD', key, member]]),
+    });
+  } catch {}
+}
+
+export async function storeSavePendingScore(state: PendingScoreState): Promise<void> {
+  await kv_set(`${PENDING_SCORE_PREFIX}${state.chatId}`, JSON.stringify(state));
+  await kv_sadd(PENDING_SCORE_IDS_KEY, state.chatId);
+}
+
+export async function storeGetPendingScore(chatId: string): Promise<PendingScoreState | null> {
+  const raw = await kv_get(`${PENDING_SCORE_PREFIX}${chatId}`);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+export async function storeDeletePendingScore(chatId: string): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([
+        ['DEL',  `${PENDING_SCORE_PREFIX}${chatId}`],
+        ['SREM', PENDING_SCORE_IDS_KEY, chatId],
+      ]),
+    });
+  } catch {}
+}
+
+export async function storeGetAllPendingScoreIds(): Promise<string[]> {
+  if (!ready()) return [];
+  try {
+    const res = await fetch(`${UPSTASH_URL}/smembers/${PENDING_SCORE_IDS_KEY}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
+      cache: 'no-store',
+    });
+    const data = await res.json();
+    return Array.isArray(data.result) ? data.result : [];
+  } catch { return []; }
+}
+
 /** Update disposition + subDisposition on an existing IQS score by chatId. */
 export async function storeUpdateIQSScoreTags(
   chatId: string,
