@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
       tags,
       csat,
       slackUrl,
-      transcript,
+      // transcript omitted from stored entry — kept small for Redis list
       ...parsed,
     };
 

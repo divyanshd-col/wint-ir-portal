@@ -159,9 +159,10 @@ export async function storeAppendIQSScore(entry: object): Promise<void> {
   } catch {}
 }
 
-export async function storeGetIQSScores(): Promise<string[]> {
-  // Fetch all entries — no cap
-  return kv_lrange(IQS_SCORES_KEY, 0, -1);
+export async function storeGetIQSScores(limit = 1000): Promise<string[]> {
+  // Cap to `limit` most-recent entries to stay within Upstash's 1 MB response limit.
+  // Transcripts are no longer stored inside entries, so 1000 entries ≈ ~200 KB.
+  return kv_lrange(IQS_SCORES_KEY, 0, limit - 1);
 }
 
 export async function storeGetIQSScoreCount(): Promise<number> {

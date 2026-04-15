@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
@@ -649,6 +649,9 @@ export default function QualityClient() {
     if ((t === 'performance' || t === 'log') && !logsLoaded) loadScores();
   };
 
+  // Auto-load on mount
+  useEffect(() => { loadScores(); }, [loadScores]);
+
   const exportAll = useCallback(async () => {
     setExporting(true);
     try {
@@ -832,22 +835,14 @@ export default function QualityClient() {
 
         {/* Nav */}
         <nav className="px-3 py-4 flex-1 space-y-1">
-          <NavItem icon={icons.performance} label="Performance" active={tab === 'performance'} badge={agentStats.length || undefined}
+          <NavItem icon={icons.performance} label="Performance" active={tab === 'performance'}
             onClick={() => switchTab('performance')} />
-          <NavItem icon={icons.log} label="Score Log" active={tab === 'log'} badge={totalStored || undefined}
+          <NavItem icon={icons.log} label="Score Log" active={tab === 'log'}
             onClick={() => switchTab('log')} />
           <NavItem icon={icons.upload} label="Upload & Score" active={tab === 'upload'}
             onClick={() => switchTab('upload')} />
         </nav>
 
-        {/* Footer stats */}
-        {totalStored > 0 && (
-          <div className="px-4 py-4 border-t border-white/10">
-            <p className="text-slate-500 text-[10px] font-semibold uppercase tracking-wider mb-2">All-time</p>
-            <p className="text-white text-xl font-bold">{totalStored.toLocaleString()}</p>
-            <p className="text-slate-500 text-[10px] mt-0.5">chats scored</p>
-          </div>
-        )}
       </aside>
 
       {/* ── Content ── */}

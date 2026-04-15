@@ -683,7 +683,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
   return (
     <div className="flex flex-col h-full bg-[#f7f8fa]">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-6 py-8 space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center px-4">
             <div className="mb-5 bg-white rounded-xl px-4 py-2.5 shadow-sm border border-gray-100 inline-block">
@@ -709,9 +709,9 @@ export default function ChatInterface({ username, historyEnabled = false, initia
         ) : (
           messages.map((msg, index) => (
             <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`w-full ${msg.role === 'user' ? 'max-w-lg' : 'max-w-2xl'}`}>
+              <div className={`w-full ${msg.role === 'user' ? 'max-w-lg' : 'max-w-4xl'}`}>
 
-                {msg.role === 'assistant' && (
+                {msg.role === 'assistant' && (index === 0 || messages[index - 1]?.role !== 'assistant') && (
                   <div className="flex items-center gap-2 mb-2 ml-0.5">
                     <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 bg-white border border-gray-200 shadow-sm flex items-center justify-center p-0.5">
                       {/* eslint-disable-next-line @next/next/no-img-element */}

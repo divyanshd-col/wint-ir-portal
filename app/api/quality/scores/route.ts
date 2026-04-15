@@ -51,7 +51,12 @@ export async function GET(req: NextRequest) {
   ]);
 
   let entries: IQSScoreEntry[] = raw.map(r => {
-    try { return JSON.parse(r); } catch { return null; }
+    try {
+      const e = JSON.parse(r);
+      // Strip transcript from old entries that were stored before the size fix
+      if (e && e.transcript) delete e.transcript;
+      return e;
+    } catch { return null; }
   }).filter(Boolean);
 
   // Build available agents from the full unfiltered set

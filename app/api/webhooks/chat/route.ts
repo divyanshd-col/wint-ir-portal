@@ -216,7 +216,7 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     subDisposition: state.subDisposition,
     csat:       state.csat,
     slackUrl:   '',
-    transcript: state.transcript,
+    // transcript intentionally omitted — stored separately to keep list entries small
     conversationType: timing.conversationType,
     frt:              timing.frt,
     botToTeamSecs:    timing.botToTeamSecs,
