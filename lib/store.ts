@@ -199,6 +199,62 @@ export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Pro
   return false;
 }
 
+/** Update disposition + subDisposition on an existing IQS score by chatId. */
+export async function storeUpdateIQSScoreTags(
+  chatId: string,
+  disposition: string,
+  subDisposition: string,
+): Promise<boolean> {
+  if (!ready()) return false;
+  const raw = await kv_lrange(IQS_SCORES_KEY, 0, -1);
+  for (let i = 0; i < raw.length; i++) {
+    try {
+      const entry = JSON.parse(raw[i]);
+      if (String(entry.chatId) === String(chatId)) {
+        entry.disposition    = disposition;
+        entry.subDisposition = subDisposition;
+        entry.tags           = disposition; // keep tags field in sync for dashboard filters
+        await fetch(`${UPSTASH_URL}/pipeline`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(i), JSON.stringify(entry)]]),
+        });
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
+// --- Pending Classifications (store until TICKET_CLOSED is scored) ---
+
+const PENDING_TAGS_PREFIX = 'wint_tags_pending:';
+
+export async function storePendingTags(
+  chatId: string | number,
+  disposition: string,
+  subDisposition: string,
+): Promise<void> {
+  await kv_set(`${PENDING_TAGS_PREFIX}${chatId}`, JSON.stringify({ disposition, subDisposition }));
+}
+
+export async function storeGetAndClearPendingTags(
+  chatId: string | number,
+): Promise<{ disposition: string; subDisposition: string } | null> {
+  const val = await kv_get(`${PENDING_TAGS_PREFIX}${chatId}`);
+  if (val && ready()) {
+    try {
+      await fetch(`${UPSTASH_URL}/pipeline`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify([['DEL', `${PENDING_TAGS_PREFIX}${chatId}`]]),
+      });
+    } catch {}
+    try { return JSON.parse(val); } catch {}
+  }
+  return null;
+}
+
 // --- Pending CSAT (store rating until TICKET_CLOSED is scored) ---
 
 const PENDING_CSAT_PREFIX = 'wint_csat_pending:';

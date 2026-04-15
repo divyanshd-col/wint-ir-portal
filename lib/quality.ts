@@ -67,6 +67,9 @@ export interface IQSScoreEntry {
   closureTime?: number;      // seconds: first customer msg → conversation_ended (or last msg)
   conversationStarted?: string; // ISO timestamp of conversation start
   conversationEnded?: string;   // ISO timestamp of conversation end
+  // ── Robylon classifications ─────────────────────────────────────────────────
+  disposition?: string;     // l1 name — main tag / disposition
+  subDisposition?: string;  // l2 name — sub tag / sub-disposition
 }
 
 // ── Bot name used at Wint Wealth ─────────────────────────────────────────────

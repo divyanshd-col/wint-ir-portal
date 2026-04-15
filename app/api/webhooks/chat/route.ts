@@ -30,6 +30,9 @@ import {
   storePendingCsat,
   storeGetAndClearPendingCsat,
   storeUpdateIQSScoreCsat,
+  storePendingTags,
+  storeGetAndClearPendingTags,
+  storeUpdateIQSScoreTags,
 } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -152,6 +155,33 @@ async function scoreTranscript(transcript: string, chatId: string) {
   };
 }
 
+// ── Handler: CLASSIFICATION_UPDATED ──────────────────────────────────────────
+async function handleClassificationUpdated(body: any): Promise<NextResponse> {
+  const chatId = String(body.chat_id || '');
+  const classifications: any[] = body.data?.classifications || [];
+
+  // Pick the classification with the deepest level (prefer l2 over l1-only)
+  const primary = classifications.sort((a, b) => (b.level_number ?? 0) - (a.level_number ?? 0))[0];
+  if (!primary) {
+    return NextResponse.json({ ok: true, scored: false, reason: 'No classifications in payload' });
+  }
+
+  const disposition    = primary.names?.l1 || '';
+  const subDisposition = primary.names?.l2 || '';
+
+  // Try to update an existing IQS score entry first (ticket already closed)
+  const updated = await storeUpdateIQSScoreTags(chatId, disposition, subDisposition);
+  if (updated) {
+    console.log(`[webhook] Tags updated for chat ${chatId} → ${disposition} > ${subDisposition}`);
+    return NextResponse.json({ ok: true, event: 'tags_updated', chat_id: chatId, disposition, subDisposition });
+  }
+
+  // Ticket not scored yet — park until TICKET_CLOSED arrives
+  await storePendingTags(chatId, disposition, subDisposition);
+  console.log(`[webhook] Tags stored as pending for chat ${chatId} → ${disposition} > ${subDisposition}`);
+  return NextResponse.json({ ok: true, event: 'tags_pending', chat_id: chatId, disposition, subDisposition });
+}
+
 // ── Handler: CSAT_SUBMITTED ───────────────────────────────────────────────────
 async function handleCsatEvent(body: any): Promise<NextResponse> {
   const chatId = String(body.chat_id || '');
@@ -218,8 +248,9 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     ? analyzeConversationTiming(timedMessages, convEnded)
     : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
-  // Merge any pending CSAT from an earlier CSAT_SUBMITTED event
+  // Merge any pending CSAT / tags from earlier events
   const pendingCsat = await storeGetAndClearPendingCsat(chatId);
+  const pendingTags = await storeGetAndClearPendingTags(chatId);
 
   // Score
   let scoreResult: Awaited<ReturnType<typeof scoreTranscript>>;
@@ -240,7 +271,9 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
       scoredBy: 'webhook:robylon',
       agentName,
       date,
-      tags: '',
+      tags: pendingTags?.disposition || '',
+      disposition: pendingTags?.disposition || '',
+      subDisposition: pendingTags?.subDisposition || '',
       csat: pendingCsat || '',
       slackUrl: '',
       transcript,
@@ -399,7 +432,8 @@ export async function POST(req: NextRequest) {
 
   const eventType = String(body.event_type || '');
 
-  if (eventType === 'CSAT_SUBMITTED') return handleCsatEvent(body);
-  if (eventType === 'TICKET_CLOSED')  return handleTicketClosed(body);
+  if (eventType === 'CSAT_SUBMITTED')        return handleCsatEvent(body);
+  if (eventType === 'TICKET_CLOSED')          return handleTicketClosed(body);
+  if (eventType === 'CLASSIFICATION_UPDATED') return handleClassificationUpdated(body);
   return handleLegacyPayload(body);
 }
