@@ -7,7 +7,7 @@ import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 
 // Fix 2 — column visibility
-const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Tags', 'Date'];
+const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Date'];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AgentStat {
@@ -322,7 +322,8 @@ function ScoreDetail({ entry, onClose }: { entry: IQSScoreEntry; onClose: () => 
             <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
               <ChatLink chatId={entry.chatId} className="text-xs" />
               <span>·</span><span>{entry.scoredAt.slice(0, 10)}</span>
-              {entry.tags && <><span>·</span><span className="text-gray-500">{entry.tags}</span></>}
+              {entry.disposition && <><span>·</span><span className="text-gray-600 font-medium">{entry.disposition}</span></>}
+              {entry.subDisposition && <><span>/</span><span className="text-gray-500">{entry.subDisposition}</span></>}
             </p>
           </div>
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition shrink-0">
@@ -551,7 +552,7 @@ export default function QualityClient() {
   const [filterAgent, setFilterAgent] = useState('');
   const [filterMin, setFilterMin] = useState(0);
   const [filterMax, setFilterMax] = useState(100);
-  const [filterTag, setFilterTag] = useState('');
+  const [filterDisposition, setFilterDisposition] = useState('');
   const [dateRange, setDateRange] = useState<'today' | '7d' | '30d' | 'all'>('all');
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
 
@@ -579,14 +580,17 @@ export default function QualityClient() {
     return entries.filter(e => {
       if (filterAgent && e.agentName !== filterAgent) return false;
       if (e.iqs < filterMin || e.iqs > filterMax) return false;
-      if (filterTag && !(e.tags || '').toLowerCase().includes(filterTag.toLowerCase())) return false;
+      if (filterDisposition) {
+        const haystack = `${e.disposition || ''} ${e.subDisposition || ''}`.toLowerCase();
+        if (!haystack.includes(filterDisposition.toLowerCase())) return false;
+      }
       if (cutoff && e.scoredAt < cutoff) return false;
       // Fix 5 — csat/type filters
       if (filterCsat && e.csat !== filterCsat) return false;
       if (filterType && (e.conversationType || 'agent') !== filterType) return false;
       return true;
     });
-  }, [entries, filterAgent, filterMin, filterMax, filterTag, dateRange, filterCsat, filterType]);
+  }, [entries, filterAgent, filterMin, filterMax, filterDisposition, dateRange, filterCsat, filterType]);
 
   // Fix 2 — auto-hide columns with no data
   const autoHiddenLogCols = useMemo(() => {
@@ -597,7 +601,8 @@ export default function QualityClient() {
     if (!filteredEntries.some(e => e.closureTime != null)) hidden.add('Closure');
     if (!filteredEntries.some(e => e.conversationType)) hidden.add('Type');
     if (!filteredEntries.some(e => e.csat)) hidden.add('CSAT');
-    if (!filteredEntries.some(e => e.tags)) hidden.add('Tags');
+    if (!filteredEntries.some(e => e.disposition)) hidden.add('Disposition');
+    if (!filteredEntries.some(e => e.subDisposition)) hidden.add('Sub-Disposition');
     return hidden;
   }, [filteredEntries]);
 
@@ -649,7 +654,7 @@ export default function QualityClient() {
     try {
       const params = new URLSearchParams();
       if (filterAgent) params.set('agent', filterAgent);
-      if (filterTag) params.set('tag', filterTag);
+      if (filterDisposition) params.set('tag', filterDisposition);
       const res = await fetch(`/api/quality/export?${params}`);
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -660,7 +665,7 @@ export default function QualityClient() {
       URL.revokeObjectURL(url);
     } catch {}
     setExporting(false);
-  }, [filterAgent, filterTag]);
+  }, [filterAgent, filterDisposition]);
 
   // ── File handlers ────────────────────────────────────────────────────────────
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1082,11 +1087,11 @@ export default function QualityClient() {
                         className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
                     </div>
                   </div>
-                  {/* Tag */}
+                  {/* Disposition */}
                   <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Tag</p>
-                    <input value={filterTag} onChange={e => setFilterTag(e.target.value)} placeholder="e.g. Repayment"
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+                    <input value={filterDisposition} onChange={e => setFilterDisposition(e.target.value)} placeholder="e.g. Referral Program"
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
                   </div>
                   {/* Fix 2 — Columns button */}
                   <div className="relative ml-auto">
@@ -1232,7 +1237,8 @@ export default function QualityClient() {
                                     )}
                                   </td>
                                 );
-                                if (col === 'Tags') return <td key={col} className="px-3 py-2.5 text-gray-600 max-w-[100px] truncate">{e.tags || <span className="text-gray-300">—</span>}</td>;
+                                if (col === 'Disposition') return <td key={col} className="px-3 py-2.5 text-gray-700 text-sm max-w-[130px] truncate" title={e.disposition}>{e.disposition || <span className="text-gray-300">—</span>}</td>;
+                                if (col === 'Sub-Disposition') return <td key={col} className="px-3 py-2.5 text-gray-500 text-xs max-w-[130px] truncate" title={e.subDisposition}>{e.subDisposition || <span className="text-gray-300">—</span>}</td>;
                                 if (col === 'Date') return <td key={col} className="px-3 py-2.5 text-gray-600">{(e.date || e.scoredAt || '').slice(0, 10)}</td>;
                                 return null;
                               })}
