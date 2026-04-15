@@ -52,6 +52,11 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
   const [anthropicKey, setAnthropicKey] = useState('');
   const [savingKey, setSavingKey] = useState(false);
   const [hasAnthropicKey, setHasAnthropicKey] = useState(false);
+  const [iqsGeminiKey, setIqsGeminiKey] = useState('');
+  const [iqsAnthropicKey, setIqsAnthropicKey] = useState('');
+  const [hasIqsGeminiKey, setHasIqsGeminiKey] = useState(false);
+  const [hasIqsAnthropicKey, setHasIqsAnthropicKey] = useState(false);
+  const [savingIqsKey, setSavingIqsKey] = useState(false);
   const [activeGeminiKey, setActiveGeminiKey] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [geminiKeysSet, setGeminiKeysSet] = useState<Record<number, boolean>>({});
   const [newKeyInput, setNewKeyInput] = useState('');
@@ -103,6 +108,8 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           5: !!data.geminiApiKey5,
         });
         setHasAnthropicKey(!!data.anthropicApiKey);
+        setHasIqsGeminiKey(!!data.iqsGeminiApiKey);
+        setHasIqsAnthropicKey(!!data.iqsAnthropicApiKey);
         setSystemPrompt(data.systemPrompt || '');
         setHasSlackToken(!!data.slackUserToken);
       })
@@ -221,6 +228,23 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
       setHasAnthropicKey(true);
       setAnthropicKey('');
     } finally { setSavingKey(false); }
+  };
+
+  const saveIqsKeys = async () => {
+    if (!iqsGeminiKey.trim() && !iqsAnthropicKey.trim()) return;
+    setSavingIqsKey(true);
+    try {
+      const payload: Record<string, string> = {};
+      if (iqsGeminiKey.trim())    payload.iqsGeminiApiKey    = iqsGeminiKey.trim();
+      if (iqsAnthropicKey.trim()) payload.iqsAnthropicApiKey = iqsAnthropicKey.trim();
+      await fetch('/api/config', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (iqsGeminiKey.trim())    { setHasIqsGeminiKey(true);    setIqsGeminiKey(''); }
+      if (iqsAnthropicKey.trim()) { setHasIqsAnthropicKey(true); setIqsAnthropicKey(''); }
+    } finally { setSavingIqsKey(false); }
   };
 
   const saveSystemPrompt = async () => {
@@ -531,6 +555,53 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
               )}
               {llmProvider === 'claude' && hasAnthropicKey && (
                 <p className="text-green-400 text-xs mt-2">✓ Anthropic key configured</p>
+              )}
+            </section>
+
+            <div className="border-t border-white/10" />
+
+            {/* IQS / Quality Scoring Keys */}
+            <section>
+              <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider px-1 mb-2">Quality Scoring Keys</p>
+              <p className="text-gray-500 text-[10px] px-1 mb-3">Dedicated keys for IQS scoring — keeps spend separate from chat usage.</p>
+
+              {/* Gemini IQS key */}
+              <div className="mb-3">
+                <p className="text-gray-400 text-[10px] mb-1">Gemini Key</p>
+                {hasIqsGeminiKey ? (
+                  <div className="flex items-center justify-between">
+                    <p className="text-green-400 text-xs">✓ IQS Gemini key set</p>
+                    <button onClick={() => setHasIqsGeminiKey(false)}
+                      className="text-gray-500 text-[10px] hover:text-gray-300 underline">change</button>
+                  </div>
+                ) : (
+                  <input type="password" value={iqsGeminiKey} onChange={e => setIqsGeminiKey(e.target.value)}
+                    placeholder="AIza..."
+                    className="w-full bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-purple-400 placeholder-gray-600" />
+                )}
+              </div>
+
+              {/* Anthropic IQS key */}
+              <div className="mb-3">
+                <p className="text-gray-400 text-[10px] mb-1">Anthropic Key</p>
+                {hasIqsAnthropicKey ? (
+                  <div className="flex items-center justify-between">
+                    <p className="text-green-400 text-xs">✓ IQS Anthropic key set</p>
+                    <button onClick={() => setHasIqsAnthropicKey(false)}
+                      className="text-gray-500 text-[10px] hover:text-gray-300 underline">change</button>
+                  </div>
+                ) : (
+                  <input type="password" value={iqsAnthropicKey} onChange={e => setIqsAnthropicKey(e.target.value)}
+                    placeholder="sk-ant-..."
+                    className="w-full bg-white/5 border border-white/10 text-white text-xs rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-purple-400 placeholder-gray-600" />
+                )}
+              </div>
+
+              {(!hasIqsGeminiKey || !hasIqsAnthropicKey) && (iqsGeminiKey.trim() || iqsAnthropicKey.trim()) && (
+                <button onClick={saveIqsKeys} disabled={savingIqsKey}
+                  className="w-full bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-40 text-purple-300 text-xs font-medium py-1.5 rounded-lg transition">
+                  {savingIqsKey ? 'Saving…' : 'Save IQS Keys'}
+                </button>
               )}
             </section>
 

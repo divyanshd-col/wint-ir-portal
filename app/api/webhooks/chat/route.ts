@@ -18,7 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
+import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import {
   IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
@@ -139,9 +139,10 @@ function extractQueryFromTranscript(transcript: string): string {
 
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
 export async function executeScoring(state: PendingScoreState): Promise<IQSScoreEntry> {
-  const config     = await readConfig();
-  const provider   = config.llmProvider || 'gemini';
-  const geminiKeys = getOrderedGeminiKeys(config);
+  const config       = await readConfig();
+  const provider     = config.llmProvider || 'gemini';
+  const geminiKeys   = getIQSGeminiKeys(config);
+  const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
   // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
   let kbContext = '';
@@ -168,8 +169,8 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
   const userPrompt = buildScoringPrompt(state.transcript, state.disposition, state.chatId, '', kbContext, state.subDisposition);
 
   let rawResponse: string;
-  if (provider === 'claude' && config.anthropicApiKey) {
-    const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  if (provider === 'claude' && anthropicKey) {
+    const client = new Anthropic({ apiKey: anthropicKey });
     const resp = await client.messages.create({
       model: 'claude-sonnet-4-6', max_tokens: 2000,
       system: IQS_SYSTEM_PROMPT,

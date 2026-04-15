@@ -1,5 +1,15 @@
 import { GoogleGenAI } from '@google/genai';
 
+/**
+ * Returns the dedicated IQS Gemini key if configured, otherwise falls back
+ * to the ordered chat keys. Use this for all quality-scoring LLM calls so
+ * spend can be tracked separately from chat.
+ */
+export function getIQSGeminiKeys(config: any): string[] {
+  if (config.iqsGeminiApiKey) return [config.iqsGeminiApiKey];
+  return getOrderedGeminiKeys(config);
+}
+
 /** Returns all configured Gemini keys, starting with the active one. */
 export function getOrderedGeminiKeys(config: any): string[] {
   const keyMap: Record<number, string | undefined> = {

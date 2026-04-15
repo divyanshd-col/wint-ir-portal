@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
+import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, calculateIQS, IQSScoreEntry } from '@/lib/quality';
 import { storeAppendIQSScore } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
@@ -33,17 +33,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'transcript is required' }, { status: 400 });
   }
 
-  const config = await readConfig();
-  const provider = config.llmProvider || 'gemini';
-  const geminiKeys = getOrderedGeminiKeys(config);
+  const config       = await readConfig();
+  const provider     = config.llmProvider || 'gemini';
+  const geminiKeys   = getIQSGeminiKeys(config);
+  const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
   const userPrompt = buildScoringPrompt(transcript, tags, chatId);
 
   let rawResponse: string;
 
   try {
-    if (provider === 'claude' && config.anthropicApiKey) {
-      const client = new Anthropic({ apiKey: config.anthropicApiKey });
+    if (provider === 'claude' && anthropicKey) {
+      const client = new Anthropic({ apiKey: anthropicKey });
       const resp = await client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
         messages: [{ role: 'user', content: userPrompt }],
       });
       rawResponse = resp.content[0].type === 'text' ? resp.content[0].text : '';
-    } else if (geminiKeys.length) {
+    } else if (geminiKeys.length > 0) {
       rawResponse = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',

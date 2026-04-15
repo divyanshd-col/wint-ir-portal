@@ -26,6 +26,9 @@ export interface PortalConfig {
   conversationHistoryEnabled?: boolean;
   slackUserToken?: string;
   isConfigured: boolean;
+  // ── Dedicated IQS / quality-scoring keys (for spend tracking) ──────────────
+  iqsGeminiApiKey?: string;    // dedicated Gemini key for all IQS scoring
+  iqsAnthropicApiKey?: string; // dedicated Anthropic key for IQS scoring (if provider = claude)
 }
 
 const DEFAULT_CONFIG: PortalConfig = {
@@ -70,18 +73,24 @@ export async function readConfig(): Promise<PortalConfig> {
 }
 
 function readFromEnv(): PortalConfig {
-  const geminiApiKey = process.env.GEMINI_API_KEY || '';
-  const anthropicApiKey = process.env.ANTHROPIC_API_KEY || '';
-  const llmProvider = (process.env.LLM_PROVIDER as 'gemini' | 'claude') || 'gemini';
-  const urlsRaw = process.env.KNOWLEDGE_BASE_URLS || '';
-  const usersRaw = process.env.IR_USERS_JSON || '';
+  const geminiApiKey    = process.env.GEMINI_API_KEY     || '';
+  const anthropicApiKey = process.env.ANTHROPIC_API_KEY  || '';
+  const llmProvider     = (process.env.LLM_PROVIDER as 'gemini' | 'claude') || 'gemini';
+  const urlsRaw         = process.env.KNOWLEDGE_BASE_URLS || '';
+  const usersRaw        = process.env.IR_USERS_JSON       || '';
+  const iqsGeminiApiKey    = process.env.IQS_GEMINI_API_KEY    || '';
+  const iqsAnthropicApiKey = process.env.IQS_ANTHROPIC_API_KEY || '';
 
   if ((!geminiApiKey && !anthropicApiKey) || !usersRaw) return DEFAULT_CONFIG;
 
   try {
     const users = JSON.parse(usersRaw);
     const knowledgeBaseUrls = urlsRaw ? urlsRaw.split('|||').filter(Boolean) : [];
-    return { geminiApiKey, anthropicApiKey, llmProvider, knowledgeBaseUrls, users, isConfigured: true };
+    return {
+      geminiApiKey, anthropicApiKey, llmProvider, knowledgeBaseUrls, users, isConfigured: true,
+      ...(iqsGeminiApiKey    && { iqsGeminiApiKey }),
+      ...(iqsAnthropicApiKey && { iqsAnthropicApiKey }),
+    };
   } catch {
     return DEFAULT_CONFIG;
   }
