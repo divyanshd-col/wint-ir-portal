@@ -106,6 +106,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
+  // Always log the full raw payload so we can inspect what Robylon actually sends
+  console.log('[webhook] Incoming payload:', JSON.stringify(body, null, 2));
+
   const {
     chat_id,
     conversation_id,
@@ -141,10 +144,14 @@ export async function POST(req: NextRequest) {
   }
 
   if (!transcript) {
-    return NextResponse.json(
-      { error: 'Payload must include either "transcript" (string) or "messages" (array)' },
-      { status: 400 }
-    );
+    // Don't reject — return 200 so Robylon stops retrying and we can inspect the payload in logs
+    console.log('[webhook] No transcript extracted. received_keys:', Object.keys(body));
+    return NextResponse.json({
+      ok: true,
+      scored: false,
+      reason: 'No transcript extracted — raw payload logged for inspection',
+      received_keys: Object.keys(body),
+    }, { status: 200 });
   }
 
   const chatId    = String(chat_id || conversation_id || `wh_${Date.now()}`);
