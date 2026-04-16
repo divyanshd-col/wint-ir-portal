@@ -318,7 +318,7 @@ function robustJsonParse(raw: string): any {
   try { return JSON.parse(sanitizeJson(jsonStr)); } catch {}
 
   // 4. Last resort: extract scores block with regex so we at least get pass/fail
-  const scoresMatch = jsonStr.match(/"scores"\s*:\s*(\{[^}]+\})/s);
+  const scoresMatch = jsonStr.match(/"scores"\s*:\s*(\{[^}]+\})/);
   if (scoresMatch) {
     try {
       const scores = JSON.parse(scoresMatch[1]);
