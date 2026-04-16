@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
+import { sendSlackMessage } from '@/lib/slack';
 import {
   IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
@@ -143,7 +144,8 @@ function extractQueryFromTranscript(transcript: string): string {
 }
 
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
-export async function executeScoring(state: PendingScoreState): Promise<IQSScoreEntry> {
+// Returns null (without calling LLM) if the chat was handled entirely by a bot.
+export async function executeScoring(state: PendingScoreState): Promise<IQSScoreEntry | null> {
   // Hard requirement: never score without transcript AND tags
   if (!state.hasTranscript || !state.hasTags) {
     throw new Error(
@@ -152,6 +154,21 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
       `Scoring requires both transcript and classification tags.`
     );
   }
+
+  // ── Bot-only check: determine conversation type BEFORE calling LLM ──────────
+  // Bot-handled chats (Myra only, no human agent) are not quality-scored —
+  // there is no agent performance to evaluate, and scoring them wastes LLM budget.
+  const timedMessages: TimedMessage[] = state.timedMessages as TimedMessage[];
+  const timing = timedMessages.length
+    ? analyzeConversationTiming(timedMessages, state.convEnded, state.transferTimestamp)
+    : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
+
+  if (timing.conversationType === 'bot') {
+    console.log(`[webhook] Skipping IQS scoring for bot-handled chat ${state.chatId} — no human agent involved`);
+    await storeDeletePendingScore(state.chatId);
+    return null;
+  }
+
   const config       = await readConfig();
   const provider     = config.llmProvider || 'gemini';
   const geminiKeys   = getIQSGeminiKeys(config);
@@ -202,11 +219,6 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
 
   const parsed = parseScoringResponse(rawResponse, state.chatId);
 
-  const timedMessages: TimedMessage[] = state.timedMessages as TimedMessage[];
-  const timing = timedMessages.length
-    ? analyzeConversationTiming(timedMessages, state.convEnded, state.transferTimestamp)
-    : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
-
   const model = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
 
   const scoredAt = new Date().toISOString();
@@ -216,15 +228,14 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     updatedAt:  scoredAt,
     provider, model,
     scoredBy:   'webhook:robylon',
-    agentName:  timing.conversationType === 'bot'
-      ? 'Myra'
-      : (state.agentName || (parsed as any).extractedAgentName || ''),
+    agentName:  state.agentName || (parsed as any).extractedAgentName || '',
     date:       state.date,
     tags:       state.disposition,
     disposition:    state.disposition,
     subDisposition: state.subDisposition,
     csat:       state.csat,
     slackUrl:   '',
+    mobileNumber: state.mobileNumber || undefined,
     // transcript intentionally omitted — stored separately to keep list entries small
     conversationType: timing.conversationType,
     frt:              timing.frt,
@@ -243,6 +254,23 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
   await storeDeletePendingScore(state.chatId);
 
   console.log(`[webhook] Scored chat ${state.chatId} → IQS ${entry.iqs}% (${entry.agentName || 'unknown'}) type=${timing.conversationType} csat=${state.csat || 'none'}`);
+
+  // ── Slack alert: fire immediately when chat is technically/legally wrong ─────
+  if (entry.scores?.Technical === 'No') {
+    const slackToken   = process.env.SLACK_BOT_TOKEN || '';
+    const slackChannel = process.env.QUALITY_SLACK_CHANNEL || '#quality-alerts';
+    if (slackToken) {
+      const chatLink  = /^\d+$/.test(entry.chatId.trim())
+        ? `<https://app.robylon.ai/unified-inbox/share/${entry.chatId}|${entry.chatId}>`
+        : entry.chatId;
+      const reasoning = entry.reasoning?.Technical || 'No reasoning provided';
+      const mobile    = entry.mobileNumber ? `📱 *Mobile:* ${entry.mobileNumber}` : '';
+      const text      = `:warning: *Technically / Legally Incorrect Chat*\n*Chat ID:* ${chatLink}\n*Agent:* ${entry.agentName || 'Unknown'}\n*What went wrong:* ${reasoning}${mobile ? '\n' + mobile : ''}`;
+      // Fire-and-forget — don't block the response
+      sendSlackMessage(slackChannel, text, slackToken).catch(() => {});
+    }
+  }
+
   return entry;
 }
 
@@ -267,6 +295,13 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   const year        = convStarted ? new Date(convStarted).getUTCFullYear() : new Date().getUTCFullYear();
   const agentName   = extractAgentName(rawMessages);
   const date        = convStarted ? convStarted.slice(0, 10) : new Date().toISOString().slice(0, 10);
+
+  // Extract mobile/phone number — try all common field names Robylon may send
+  const mobileNumber: string | undefined =
+    body.data?.user_phone      || body.data?.customer_phone ||
+    body.data?.phone_number    || body.data?.mobile         ||
+    body.user_phone            || body.customer_phone       ||
+    body.phone_number          || body.mobile               || undefined;
 
   // Extract assignment timestamp BEFORE the filter loop (the "Assigned by X to Y"
   // system message is filtered from the transcript but its timestamp is the FRT start)
@@ -305,6 +340,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     transcript, timedMessages, agentName, date,
     convStarted, convEnded, hasTranscript: true,
     ...(transferTimestamp && { transferTimestamp }),
+    ...(mobileNumber      && { mobileNumber }),
   });
   await storeSavePendingScore(state);
 

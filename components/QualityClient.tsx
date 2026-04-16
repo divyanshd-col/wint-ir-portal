@@ -6,10 +6,54 @@ import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 
-// Fix 2 — column visibility
-const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
+const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Mobile', 'CSAT', 'FRT', 'Handoff', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+
+interface LogFilters {
+  agent: string;
+  minScore: number;
+  maxScore: number;
+  disposition: string;
+  subDisposition: string;
+  csat: string;
+  type: string;
+  dateRange: 'today' | '7d' | '30d' | 'all' | 'custom';
+  dateFrom: string;
+  dateTo: string;
+}
+
+const DEFAULT_FILTERS: LogFilters = {
+  agent: '', minScore: 0, maxScore: 100,
+  disposition: '', subDisposition: '', csat: '', type: '',
+  dateRange: 'all', dateFrom: '', dateTo: '',
+};
+
+function buildParams(page: number, f: LogFilters): URLSearchParams {
+  const p = new URLSearchParams();
+  p.set('page', String(page));
+  if (f.agent)        p.set('agent', f.agent);
+  if (f.minScore > 0) p.set('minScore', String(f.minScore));
+  if (f.maxScore < 100) p.set('maxScore', String(f.maxScore));
+  if (f.disposition)  p.set('tag', f.disposition);
+  if (f.subDisposition) p.set('subTag', f.subDisposition);
+  if (f.csat)         p.set('csat', f.csat);
+  if (f.type)         p.set('type', f.type);
+  if (f.dateRange === 'today') {
+    const d = new Date(); p.set('dateFrom', d.toISOString().slice(0, 10));
+  } else if (f.dateRange === '7d') {
+    p.set('dateFrom', new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+  } else if (f.dateRange === '30d') {
+    p.set('dateFrom', new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
+  } else if (f.dateRange === 'custom') {
+    if (f.dateFrom) p.set('dateFrom', f.dateFrom);
+    if (f.dateTo)   p.set('dateTo', f.dateTo);
+  }
+  return p;
+}
+
+interface WeeklyParamRow { key: string; label: string; total: number; params: Record<string, number>; }
+
 interface AgentStat {
   agent: string; chats: number; avgIqs: number;
   minIqs: number; maxIqs: number; high: number; atRisk: number;
@@ -44,9 +88,14 @@ interface SummaryMetrics {
 function fmtDuration(secs: number | undefined | null): string {
   if (secs == null || secs < 0) return '—';
   if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  if (secs < 3600) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  }
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
 // ── Conversation type badge ───────────────────────────────────────────────────
@@ -73,7 +122,7 @@ function SummaryBar({ s, onFilter }: { s: SummaryMetrics; onFilter?: (f: { filte
         { key: 'Overall CSAT', value: s.overallCsat != null ? `${s.overallCsat}%` : '—' },
         { key: 'Bot CSAT',     value: s.botCsat    != null ? `${s.botCsat}%`    : '—' },
         { key: 'Agent CSAT',   value: s.agentCsat  != null ? `${s.agentCsat}%`  : '—' },
-        { key: 'Good',         value: String(s.good),    sub: 'CSAT 👍', onClick: () => onFilter?.({ filterCsat: '5' }) },
+        { key: 'Good',         value: String(s.good),    sub: 'CSAT Good', onClick: () => onFilter?.({ filterCsat: '5' }) },
         { key: 'CBB + Bad',    value: String(s.cbbBad),  sub: `${s.cbbBadPct}% of total`,
           valueColor: s.cbbBad > 0 ? '#991b1b' : undefined },
       ],
@@ -81,17 +130,21 @@ function SummaryBar({ s, onFilter }: { s: SummaryMetrics; onFilter?: (f: { filte
     {
       label: 'Volume',
       items: [
-        { key: 'Total Convos', value: String(s.totalConvos) },
-        { key: 'Bot Convos',   value: String(s.botConvos),   onClick: () => onFilter?.({ filterType: 'bot' }) },
-        { key: 'Agent Convos', value: String(s.agentConvos), onClick: () => onFilter?.({ filterType: 'agent' }) },
+        { key: 'Total',  value: String(s.totalConvos) },
+        { key: 'Bot',    value: String(s.botConvos),
+          sub: s.totalConvos > 0 ? `${Math.round(s.botConvos / s.totalConvos * 100)}% of total` : '—',
+          onClick: () => onFilter?.({ filterType: 'bot' }) },
+        { key: 'Human',  value: String(s.agentConvos),
+          sub: s.totalConvos > 0 ? `${Math.round(s.agentConvos / s.totalConvos * 100)}% of total` : '—',
+          onClick: () => onFilter?.({ filterType: 'agent' }) },
       ],
     },
     {
       label: 'Timing',
       items: [
-        { key: 'SLA B→T',    value: s.slaPercent != null ? `${s.slaPercent}%` : '—', valueColor: slaValueColor, sub: `target ≤${Math.round(s.slaThresholdSecs / 60)} min` },
-        { key: 'Avg FRT',    value: fmtDuration(s.avgFrt),        sub: 'issue → team' },
-        { key: 'Avg B→T',    value: fmtDuration(s.avgBotToTeam),  sub: 'bot → team' },
+        { key: 'Handoff SLA', value: s.slaPercent != null ? `${s.slaPercent}%` : '—', valueColor: slaValueColor, sub: `bot→agent, target ≤${Math.round(s.slaThresholdSecs / 60)} min` },
+        { key: 'Avg FRT',     value: fmtDuration(s.avgFrt) },
+        { key: 'Avg Handoff', value: fmtDuration(s.avgBotToTeam), sub: 'bot → agent transfer' },
         { key: 'Resolution', value: fmtDuration(s.avgResolution) },
         { key: 'Closure',    value: fmtDuration(s.avgClosure) },
       ],
@@ -324,42 +377,44 @@ function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; con
         const isCustomer = CUSTOMER_LABELS.has(senderLc);
         const isBot = BOT_NAMES.has(senderLc);
         const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+
+        // Customer messages → LEFT (incoming)
         if (isCustomer) {
+          return (
+            <div key={i} className="flex gap-2">
+              <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-1">
+                <span className="text-[9px] font-bold text-gray-500">U</span>
+              </div>
+              <div className="max-w-[78%]">
+                <p className="text-[9px] font-semibold text-gray-400 mb-0.5">{m.sender}{timeStr && ` · ${timeStr}`}</p>
+                <div className="bg-gray-100 text-gray-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed">
+                  {m.content}
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        // Bot → RIGHT (outgoing)
+        if (isBot) {
           return (
             <div key={i} className="flex justify-end gap-2">
               <div className="max-w-[78%]">
-                {timeStr && <p className="text-[9px] text-gray-400 text-right mb-0.5 pr-1">{timeStr}</p>}
-                <div className="bg-emerald-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-[12.5px] leading-relaxed">
+                <p className="text-[9px] font-semibold text-violet-400 text-right mb-0.5 pr-1">{m.sender}{timeStr && ` · ${timeStr}`}</p>
+                <div className="bg-violet-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-[12.5px] leading-relaxed">
                   {m.content}
                 </div>
               </div>
             </div>
           );
         }
-        if (isBot) {
-          return (
-            <div key={i} className="flex gap-2">
-              <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-1">
-                <span className="text-[9px] font-bold text-violet-600">M</span>
-              </div>
-              <div className="max-w-[78%]">
-                <p className="text-[9px] font-semibold text-violet-500 mb-0.5">{m.sender} {timeStr && `· ${timeStr}`}</p>
-                <div className="bg-violet-50 border border-violet-100 text-violet-900 px-3.5 py-2 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed">
-                  {m.content}
-                </div>
-              </div>
-            </div>
-          );
-        }
-        // Human agent
+
+        // Human agent → RIGHT (outgoing)
         return (
-          <div key={i} className="flex gap-2">
-            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-1">
-              <span className="text-[9px] font-bold text-gray-500">{(m.sender || 'A')[0].toUpperCase()}</span>
-            </div>
+          <div key={i} className="flex justify-end gap-2">
             <div className="max-w-[78%]">
-              <p className="text-[9px] font-semibold text-gray-500 mb-0.5">{m.sender} {timeStr && `· ${timeStr}`}</p>
-              <div className="bg-white border border-gray-200 text-gray-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed shadow-sm">
+              <p className="text-[9px] font-semibold text-emerald-600 text-right mb-0.5 pr-1">{m.sender}{timeStr && ` · ${timeStr}`}</p>
+              <div className="bg-emerald-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-[12.5px] leading-relaxed">
                 {m.content}
               </div>
             </div>
@@ -410,7 +465,7 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
             <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
               <ChatLink chatId={entry.chatId} className="text-xs" />
               <span>·</span><span>{entry.scoredAt?.slice(0, 10)}</span>
-              {entry.csat && <><span>·</span><span>{entry.csat === '5' ? '⭐ Good' : entry.csat === '3' ? '😐 CBB' : '👎 Bad'}</span></>}
+              {entry.csat && <><span>·</span><span className="font-medium">{entry.csat === '5' ? 'Good' : entry.csat === '3' ? 'CBB' : 'Bad'}</span></>}
               {entry.disposition && <><span>·</span><span className="text-gray-600 font-medium">{entry.disposition}</span></>}
               {entry.subDisposition && <><span>/</span><span className="text-gray-500">{entry.subDisposition}</span></>}
             </p>
@@ -637,7 +692,7 @@ function NavItem({ icon, label, active, badge, onClick }: {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function QualityClient({ userRole, userEmail, selfAgentName }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload'>('performance');
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports'>('performance');
 
   // Upload state
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
@@ -672,122 +727,107 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   const [logsLoading, setLogsLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  // Log filters
-  const [filterAgent, setFilterAgent] = useState('');
-  const [filterMin, setFilterMin] = useState(0);
-  const [filterMax, setFilterMax] = useState(100);
-  const [filterDisposition, setFilterDisposition] = useState('');
-  const [dateRange, setDateRange] = useState<'today' | '7d' | '30d' | 'all'>('all');
+  // ── Filter state (pending = UI inputs; applied = what was last fetched) ────────
+  const [pendingFilters, setPendingFilters] = useState<LogFilters>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<LogFilters>(DEFAULT_FILTERS);
+  const [logPage, setLogPage] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalFiltered, setTotalFiltered] = useState(0);
+
+  // ── Reports tab — independent filter state ───────────────────────────────
+  const [reportFilters, setReportFilters] = useState<LogFilters>(DEFAULT_FILTERS);
+  const [reportTotalFiltered, setReportTotalFiltered] = useState<number | null>(null);
+  const [reportCountLoading, setReportCountLoading] = useState(false);
+
+  // Server-provided lookup data
+  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
+  const [availableSubDispositions, setAvailableSubDispositions] = useState<string[]>([]);
+  const [weeklyParamData, setWeeklyParamData] = useState<WeeklyParamRow[]>([]);
+
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
 
-  // Fix 5 — summary card click-to-filter
-  const [filterCsat, setFilterCsat] = useState('');
-  const [filterType, setFilterType] = useState('');
-
-  // Fix 2 — column visibility
+  // Column visibility
   const [showColPicker, setShowColPicker] = useState(false);
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
   const [forcedVisibleCols, setForcedVisibleCols] = useState<Set<string>>(new Set());
 
-  // Fix 3 — sortable columns
+  // Sortable columns
   const [sortCol, setSortCol] = useState<'iqs' | 'fails' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Agent timing analytics pagination
   const [agentPage, setAgentPage] = useState(0);
-
-  // All-agents modal + all-weeks toggle
   const [showAllAgents, setShowAllAgents] = useState(false);
   const [showAllWeeks, setShowAllWeeks] = useState(false);
 
-  // Edit/override modal state
+  // Edit/override modal
   const [editEntry, setEditEntry] = useState<IQSScoreEntry | null>(null);
   const [editForm, setEditForm] = useState<{
-    agentName: string;
-    csat: string;
-    disposition: string;
-    subDisposition: string;
-    summary: string;
-    scores: Record<string, string>;
-    reasoning: Record<string, string>;
-    note: string;
+    agentName: string; csat: string; disposition: string; subDisposition: string;
+    summary: string; scores: Record<string, string>; reasoning: Record<string, string>; note: string;
   } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editSaved, setEditSaved] = useState(false);
 
-  // Toast state
+  // Toast
   const [toast, setToast] = useState<string | null>(null);
 
-  // ── Filtered entries ─────────────────────────────────────────────────────────
-  const filteredEntries = useMemo(() => {
-    const now = new Date();
-    const cutoff = dateRange === 'today'
-      ? new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString()
-      : dateRange === '7d' ? new Date(Date.now() - 7 * 86400000).toISOString()
-      : dateRange === '30d' ? new Date(Date.now() - 30 * 86400000).toISOString()
-      : null;
-    return entries.filter(e => {
-      if (filterAgent && e.agentName !== filterAgent) return false;
-      if (e.iqs < filterMin || e.iqs > filterMax) return false;
-      if (filterDisposition) {
-        const haystack = `${e.disposition || ''} ${e.subDisposition || ''}`.toLowerCase();
-        if (!haystack.includes(filterDisposition.toLowerCase())) return false;
-      }
-      if (cutoff && e.scoredAt < cutoff) return false;
-      // Fix 5 — csat/type filters
-      if (filterCsat && e.csat !== filterCsat) return false;
-      if (filterType && (e.conversationType || 'agent') !== filterType) return false;
-      return true;
-    });
-  }, [entries, filterAgent, filterMin, filterMax, filterDisposition, dateRange, filterCsat, filterType]);
-
-  // Fix 2 — auto-hide columns with no data
+  // ── Column visibility derived ────────────────────────────────────────────────
   const autoHiddenLogCols = useMemo(() => {
     const hidden = new Set<string>();
-    if (!filteredEntries.some(e => e.frt != null)) hidden.add('FRT (I→T)');
-    if (!filteredEntries.some(e => e.botToTeamSecs != null)) hidden.add('B→T');
-    if (!filteredEntries.some(e => e.resolutionTime != null)) hidden.add('Resolution');
-    if (!filteredEntries.some(e => e.closureTime != null)) hidden.add('Closure');
-    if (!filteredEntries.some(e => e.conversationType)) hidden.add('Type');
-    if (!filteredEntries.some(e => e.csat)) hidden.add('CSAT');
-    if (!filteredEntries.some(e => e.disposition)) hidden.add('Disposition');
-    if (!filteredEntries.some(e => e.subDisposition)) hidden.add('Sub-Disposition');
+    if (!entries.some(e => e.frt != null)) hidden.add('FRT');
+    if (!entries.some(e => e.botToTeamSecs != null)) hidden.add('Handoff');
+    if (!entries.some(e => e.resolutionTime != null)) hidden.add('Resolution');
+    if (!entries.some(e => e.closureTime != null)) hidden.add('Closure');
+    if (!entries.some(e => e.csat)) hidden.add('CSAT');
+    if (!entries.some(e => e.disposition)) hidden.add('Disposition');
+    if (!entries.some(e => e.subDisposition)) hidden.add('Sub-Disposition');
+    if (!entries.some(e => (e as any).mobileNumber)) hidden.add('Mobile');
     return hidden;
-  }, [filteredEntries]);
+  }, [entries]);
 
-  // Fix 2 — visible columns
   const visibleLogCols = useMemo(() => {
     return ALL_LOG_COLS.filter(col =>
       !hiddenCols.has(col) && (!autoHiddenLogCols.has(col) || forcedVisibleCols.has(col))
     );
   }, [hiddenCols, autoHiddenLogCols, forcedVisibleCols]);
 
-  // Fix 3 — sorted entries
   const sortedLogEntries = useMemo(() => {
-    if (!sortCol) return filteredEntries;
-    return [...filteredEntries].sort((a, b) => {
+    if (!sortCol) return entries;
+    return [...entries].sort((a, b) => {
       let aVal: number, bVal: number;
-      if (sortCol === 'iqs') {
-        aVal = a.iqs; bVal = b.iqs;
-      } else {
+      if (sortCol === 'iqs') { aVal = a.iqs; bVal = b.iqs; }
+      else {
         aVal = PARAM_ORDER.filter(p => a.scores[p] === 'No').length;
         bVal = PARAM_ORDER.filter(p => b.scores[p] === 'No').length;
       }
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
     });
-  }, [filteredEntries, sortCol, sortDir]);
+  }, [entries, sortCol, sortDir]);
 
-  // ── Load scores ──────────────────────────────────────────────────────────────
-  const loadScores = useCallback(async () => {
+  // ── Load scores (server-side filter + pagination) ────────────────────────────
+  // skipStats=true: page navigation — skip stats recompute, keep existing state values
+  // skipStats=false: filter change / initial load — recompute all stats
+  const loadScores = useCallback(async (page: number, filters: LogFilters, skipStats = false) => {
     setLogsLoading(true);
     try {
-      const data = await fetch('/api/quality/scores').then(r => r.json());
+      const params = buildParams(page, filters);
+      if (skipStats) params.set('skipStats', '1');
+      const data = await fetch(`/api/quality/scores?${params}`).then(r => r.json());
       setEntries(data.entries || []);
-      setAgentStats(data.agentStats || []);
-      setParamFails(data.paramFails || {});
+      // Only overwrite stats when server sent them (skipStats=false)
+      if (!skipStats) {
+        setAgentStats(data.agentStats || []);
+        setParamFails(data.paramFails || {});
+        setWeeklyParamData(data.weeklyParamData || []);
+        if (data.summary) setSummary(data.summary);
+      }
       setAvailableAgents(data.availableAgents || []);
-      setTotalStored(data.totalStored ?? data.total ?? 0);
-      if (data.summary) setSummary(data.summary);
+      setAvailableDispositions(data.availableDispositions || []);
+      setAvailableSubDispositions(data.availableSubDispositions || []);
+      setTotalStored(data.totalStored ?? 0);
+      setTotalFiltered(data.total ?? 0);
+      setHasMore(data.hasMore ?? false);
       setLogsLoaded(true);
     } catch {}
     setLogsLoading(false);
@@ -795,19 +835,58 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
 
   const switchTab = (t: typeof tab) => {
     setTab(t);
-    if ((t === 'performance' || t === 'log') && !logsLoaded) loadScores();
+    if ((t === 'performance' || t === 'log') && !logsLoaded) loadScores(0, appliedFilters);
   };
 
-  // Auto-load on mount
-  useEffect(() => { loadScores(); }, [loadScores]);
+  // Apply filters: copy pending → applied, reset to page 0, fetch
+  const applyFilters = () => {
+    const f = selfAgentName ? { ...pendingFilters, agent: selfAgentName } : pendingFilters;
+    setAppliedFilters(f);
+    setLogPage(0);
+    loadScores(0, f);
+  };
 
-  // Lock agent filter when viewing own chats
+  // Preview how many chats match the report filters
+  const previewReportCount = useCallback(async () => {
+    setReportCountLoading(true);
+    try {
+      const params = buildParams(0, reportFilters);
+      params.set('skipStats', '1');
+      const data = await fetch(`/api/quality/scores?${params}`).then(r => r.json());
+      setReportTotalFiltered(data.total ?? 0);
+    } catch {}
+    setReportCountLoading(false);
+  }, [reportFilters]);
+
+  // Download report CSV from export API using reportFilters (independent of Score Log)
+  const downloadReport = useCallback(async (_format: 'csv' | 'xlsx') => {
+    setExporting(true);
+    try {
+      const params = buildParams(0, reportFilters);
+      params.delete('page');
+      const res = await fetch(`/api/quality/export?${params}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `wint_iqs_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {}
+    setExporting(false);
+  }, [reportFilters]);
+
+  // Auto-load on mount
   useEffect(() => {
-    if (selfAgentName) {
-      setFilterAgent(selfAgentName);
-      setTab('log'); // default to score log for agents
-    }
-  }, [selfAgentName]);
+    const initialFilters = selfAgentName
+      ? { ...DEFAULT_FILTERS, agent: selfAgentName }
+      : DEFAULT_FILTERS;
+    setPendingFilters(initialFilters);
+    setAppliedFilters(initialFilters);
+    if (selfAgentName) setTab('log');
+    loadScores(0, initialFilters);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Reset agent timing page when data changes
   useEffect(() => { setAgentPage(0); }, [agentStats]);
@@ -835,16 +914,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: editEntry.id,
-          chatId: editEntry.chatId,
-          agentName: editForm.agentName,
-          scores: editForm.scores,
-          reasoning: editForm.reasoning,
-          disposition: editForm.disposition,
-          subDisposition: editForm.subDisposition,
-          csat: editForm.csat,
-          summary: editForm.summary,
-          note: editForm.note,
+          id: editEntry.id, chatId: editEntry.chatId,
+          agentName: editForm.agentName, scores: editForm.scores,
+          reasoning: editForm.reasoning, disposition: editForm.disposition,
+          subDisposition: editForm.subDisposition, csat: editForm.csat,
+          summary: editForm.summary, note: editForm.note,
         }),
       });
       if (!res.ok) throw new Error('Save failed');
@@ -854,32 +928,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
       setEditSaved(true);
       setToast('Override saved successfully');
       setTimeout(() => setToast(null), 3000);
-      setEditEntry(null);
-      setEditForm(null);
+      setEditEntry(null); setEditForm(null);
     } catch {
       setToast('Failed to save override');
       setTimeout(() => setToast(null), 3000);
     }
     setSavingEdit(false);
   };
-
-  const exportAll = useCallback(async () => {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterAgent) params.set('agent', filterAgent);
-      if (filterDisposition) params.set('tag', filterDisposition);
-      const res = await fetch(`/api/quality/export?${params}`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `wint_iqs_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {}
-    setExporting(false);
-  }, [filterAgent, filterDisposition]);
 
   // ── File handlers ────────────────────────────────────────────────────────────
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -990,46 +1045,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   const avgIqs = batchResults.length ? Math.round(batchResults.reduce((s, e) => s + e.iqs, 0) / batchResults.length) : 0;
   const maxParamFail = Math.max(...Object.values(paramFails), 1);
 
-  // ── Weekly parameter breakdown ───────────────────────────────────────────────
-  const weeklyParamData = useMemo(() => {
-    function getWeekLabel(iso: string): string {
-      if (!iso) return '';
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return '';
-      const day = d.getUTCDay();
-      const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - day + 1);
-      const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
-      const fmt = (dt: Date) => dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' });
-      return `${fmt(mon)} – ${fmt(sun)}`;
-    }
-    function getWeekKey(iso: string): string {
-      if (!iso) return '';
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return '';
-      const day = d.getUTCDay();
-      const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - day + 1);
-      return mon.toISOString().slice(0, 10);
-    }
-    const weekMap: Record<string, { total: number; fails: Record<string, number> }> = {};
-    for (const e of entries) {
-      const key = getWeekKey(e.scoredAt || e.date || '');
-      if (!key) continue;
-      if (!weekMap[key]) weekMap[key] = { total: 0, fails: {} };
-      weekMap[key].total++;
-      for (const p of PARAM_ORDER) {
-        if ((e.scores || {})[p] === 'No') weekMap[key].fails[p] = (weekMap[key].fails[p] || 0) + 1;
-      }
-    }
-    return Object.entries(weekMap)
-      .sort(([a], [b]) => b.localeCompare(a))
-      .map(([key, d]) => ({
-        key,
-        label: getWeekLabel(key + 'T00:00:00Z'),
-        total: d.total,
-        params: Object.fromEntries(PARAM_ORDER.map(p => [p, d.total ? Math.round((d.fails[p] || 0) / d.total * 100) : 0])),
-      }));
-  }, [entries]);
-
   const wintAgentPreview = useMemo(() => {
     if (!isWint || !parsedRows.length) return [];
     const map: Record<string, { count: number; csat: number[] }> = {};
@@ -1060,6 +1075,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
     upload: (
       <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M8 10V3M5 6l3-3 3 3" /><path d="M2 12h12" />
+      </svg>
+    ),
+    reports: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 10V8M8 10V6M11 10V4" />
       </svg>
     ),
   };
@@ -1186,7 +1206,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
       )}
 
       {/* ── Left Panel ── */}
-      <aside className="w-56 shrink-0 bg-[#111827] flex flex-col h-full">
+      <aside className="w-64 shrink-0 bg-[#111827] flex flex-col h-full">
         {/* Logo */}
         <div className="px-4 py-4 border-b border-white/10">
           <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
@@ -1210,6 +1230,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
             <NavItem icon={icons.upload} label="Upload & Score" active={tab === 'upload'}
               onClick={() => switchTab('upload')} />
           )}
+          <NavItem icon={icons.reports} label="Reports" active={tab === 'reports'}
+            onClick={() => setTab('reports')} />
         </nav>
 
       </aside>
@@ -1218,36 +1240,60 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
       <div className="flex-1 flex flex-col h-full overflow-hidden">
 
         {/* Top bar */}
-        <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-          <div>
+        <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
+          <div className="shrink-0">
             <h1 className="text-base font-bold text-gray-900">
-              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : 'Upload & Score'}
+              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              {tab === 'performance' && `${agentStats.length} agents · ${entries.length} chats`}
-              {tab === 'log' && `${filteredEntries.length} of ${totalStored} total`}
+              {tab === 'performance' && `${agentStats.length} agents · ${totalFiltered} chats`}
+              {tab === 'log' && `${entries.length} of ${totalFiltered} · ${totalStored.toLocaleString()} all-time`}
               {tab === 'upload' && (fileName ? `${totalToScore} chats ready` : 'Drop a Wint CSV export to begin')}
+              {tab === 'reports' && 'Download filtered data as CSV'}
             </p>
           </div>
-          <div className="flex items-center gap-2">
-            {(tab === 'performance' || tab === 'log') && (
-              <>
-                <button onClick={loadScores} disabled={logsLoading}
-                  className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 disabled:opacity-40 transition font-medium">
-                  {logsLoading ? 'Loading…' : '↻ Refresh'}
+
+          {/* Period filter — top-right on Performance and Score Log */}
+          {(tab === 'performance' || tab === 'log') && (
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
+              {(['today', '7d', '30d', 'all', 'custom'] as const).map(r => (
+                <button key={r}
+                  onClick={() => {
+                    const f = { ...pendingFilters, dateRange: r };
+                    setPendingFilters(f);
+                    // Auto-apply on chip click (same as pressing Apply)
+                    const af = selfAgentName ? { ...f, agent: selfAgentName } : f;
+                    setAppliedFilters(af); setLogPage(0); loadScores(0, af);
+                  }}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                    appliedFilters.dateRange === r
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : r === 'all' ? 'All time' : 'Custom'}
                 </button>
-                {tab === 'log' && (
-                  <button onClick={exportAll} disabled={exporting || !logsLoaded}
-                    className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 disabled:opacity-40 transition flex items-center gap-1.5">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                    </svg>
-                    Export {totalStored ? `(${totalStored})` : 'all'}
+              ))}
+              {appliedFilters.dateRange === 'custom' && (
+                <div className="flex items-center gap-1.5">
+                  <input type="date" value={pendingFilters.dateFrom}
+                    onChange={e => setPendingFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                  <span className="text-gray-400 text-xs">→</span>
+                  <input type="date" value={pendingFilters.dateTo}
+                    onChange={e => setPendingFilters(f => ({ ...f, dateTo: e.target.value }))}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                  <button onClick={applyFilters}
+                    className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition">
+                    Apply
                   </button>
-                )}
-              </>
-            )}
-          </div>
+                </div>
+              )}
+              <button onClick={() => loadScores(logPage, appliedFilters)} disabled={logsLoading}
+                className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 disabled:opacity-40 transition font-medium ml-1">
+                {logsLoading ? '…' : '↻'}
+              </button>
+            </div>
+          )}
         </header>
 
         {/* Scrollable content */}
@@ -1279,73 +1325,67 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
               )}
 
               {!logsLoading && agentStats.length > 0 && (
-                <div className="space-y-6 max-w-5xl">
-                  {/* KPI strip */}
+                <div className="space-y-6 max-w-5xl mx-auto">
+                  {/* ── Top 4 KPI cards ── */}
                   {(() => {
-                    const teamAvg = Math.round(entries.reduce((s, e) => s + e.iqs, 0) / (entries.length || 1));
-                    const atRiskCount = entries.filter(e => e.iqs < 70).length;
-                    const atRiskAgents = agentStats.filter(a => a.avgIqs < 70);
-                    // top failing param
-                    const topParam = PARAM_ORDER.map(p => ({ p, pct: paramFails[p] || 0 })).sort((a, b) => b.pct - a.pct)[0];
-                    return (
-                      <>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                          {[
-                            { label: 'All-time Scored', value: totalStored.toLocaleString(), sub: `${entries.length} loaded` },
-                            { label: 'Team Avg IQS',    value: `${teamAvg}%`, color: iqsTheme(teamAvg).text },
-                            { label: 'Agents Tracked',  value: agentStats.length },
-                            { label: 'At Risk (<70%)',   value: atRiskCount, color: atRiskCount > 0 ? '#991b1b' : '#166534' },
-                          ].map(s => (
-                            <div key={s.label} className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
-                              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">{s.label}</p>
-                              <p className="text-3xl font-bold" style={{ color: (s as any).color || '#111827' }}>{s.value}</p>
-                              {(s as any).sub && <p className="text-[11px] text-gray-500 mt-0.5">{(s as any).sub}</p>}
-                            </div>
-                          ))}
-                        </div>
+                    const total     = summary?.totalConvos   ?? totalFiltered;
+                    const botCount  = summary?.botConvos     ?? 0;
+                    const hybridCount = entries.filter(e => e.conversationType === 'hybrid').length;
+                    const botPct    = total > 0 ? Math.round(botCount    / total * 100) : 0;
+                    const hybridPct = total > 0 ? Math.round(hybridCount / total * 100) : 0;
+                    const humanPct  = Math.max(0, 100 - botPct - hybridPct);
 
-                        {/* Attention needed banner */}
-                        {/* Fix 6 — view failing chats link */}
-                        {(atRiskAgents.length > 0 || (topParam && topParam.pct >= 25)) && (
-                          <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">⚠ Needs Attention</p>
-                              <button
-                                className="text-xs text-amber-700 font-semibold hover:underline cursor-pointer"
-                                onClick={() => { setFilterMin(0); setFilterMax(69); switchTab('log'); }}
-                              >
-                                View failing chats →
-                              </button>
-                            </div>
-                            <div className="flex flex-wrap gap-4">
-                              {atRiskAgents.length > 0 && (
-                                <div>
-                                  <p className="text-[11px] text-amber-700 font-semibold mb-1">Agents below 70% IQS</p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {atRiskAgents.map(a => (
-                                      <button
-                                        key={a.agent}
-                                        className="text-[11px] bg-red-100 text-red-700 font-semibold px-2.5 py-1 rounded-lg cursor-pointer hover:bg-red-200 transition"
-                                        onClick={() => { setFilterAgent(a.agent); setFilterMin(0); setFilterMax(69); switchTab('log'); }}
-                                      >
-                                        {a.agent} — {a.avgIqs}%
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
-                              {topParam && topParam.pct >= 25 && (
-                                <div>
-                                  <p className="text-[11px] text-amber-700 font-semibold mb-1">Highest team failure</p>
-                                  <span className="text-[11px] bg-orange-100 text-orange-700 font-semibold px-2.5 py-1 rounded-lg">
-                                    {PARAM_NAMES[topParam.p]} — {topParam.pct}% failure rate
-                                  </span>
-                                </div>
-                              )}
-                            </div>
+                    // FRT for human-only chats
+                    const humanFrts = entries.filter(e => e.conversationType !== 'bot' && e.frt != null).map(e => e.frt as number);
+                    const avgHumanFrt = humanFrts.length ? Math.round(humanFrts.reduce((s, n) => s + n, 0) / humanFrts.length) : null;
+
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {/* Card 1 — No. of chats */}
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Chats</p>
+                          <p className="text-3xl font-bold text-gray-900">{total.toLocaleString()}</p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {botPct > 0 && (
+                              <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
+                                {botPct}% Myra
+                              </span>
+                            )}
+                            {hybridPct > 0 && (
+                              <span className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                                {hybridPct}% Assisted
+                              </span>
+                            )}
+                            {humanPct > 0 && (
+                              <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+                                {humanPct}% Human
+                              </span>
+                            )}
                           </div>
-                        )}
-                      </>
+                        </div>
+                        {/* Card 2 — Resolution Time (all types) */}
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg Resolution</p>
+                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(summary?.avgResolution ?? null)}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">all conversations</p>
+                        </div>
+                        {/* Card 3 — CSAT combined */}
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">CSAT</p>
+                          <p className="text-3xl font-bold text-gray-900">
+                            {summary?.overallCsat != null ? `${summary.overallCsat}%` : '—'}
+                          </p>
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            {summary ? `${summary.good} good · ${summary.cbbBad} bad` : ''}
+                          </p>
+                        </div>
+                        {/* Card 4 — FRT for human-handled chats */}
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg FRT (Human)</p>
+                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(avgHumanFrt)}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">first response time</p>
+                        </div>
+                      </div>
                     );
                   })()}
 
@@ -1368,10 +1408,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                           entries={entries}
                           teamParamFails={paramFails}
                           onFilterLog={({ agent, minScore, maxScore }) => {
-                            setFilterAgent(agent);
-                            if (minScore !== undefined) setFilterMin(minScore);
-                            if (maxScore !== undefined) setFilterMax(maxScore ?? 100);
-                            switchTab('log');
+                            const f = { ...DEFAULT_FILTERS, agent,
+                              minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
+                            setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
+                            loadScores(0, f); switchTab('log');
                           }}
                         />
                       ))}
@@ -1399,11 +1439,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                               entries={entries}
                               teamParamFails={paramFails}
                               onFilterLog={({ agent, minScore, maxScore }) => {
-                                setFilterAgent(agent);
-                                if (minScore !== undefined) setFilterMin(minScore);
-                                if (maxScore !== undefined) setFilterMax(maxScore ?? 100);
-                                setShowAllAgents(false);
-                                switchTab('log');
+                                const f = { ...DEFAULT_FILTERS, agent,
+                                  minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
+                                setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
+                                setShowAllAgents(false); loadScores(0, f); switchTab('log');
                               }}
                             />
                           ))}
@@ -1530,52 +1569,84 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
 
           {/* ── SCORE LOG TAB ── */}
           {tab === 'log' && (
-            <div className="space-y-4 max-w-5xl">
+            <div className="space-y-4 max-w-5xl mx-auto">
               {/* Filters */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
                 <div className="flex flex-wrap items-end gap-4">
-                  {/* Date chips */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Period</p>
-                    <div className="flex items-center gap-1">
-                      {(['today', '7d', '30d', 'all'] as const).map(r => (
-                        <button key={r} onClick={() => setDateRange(r)}
-                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
-                            dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}>
-                          {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : 'All time'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
                   {/* Agent */}
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
-                    <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)}
+                    <select value={pendingFilters.agent}
+                      onChange={e => setPendingFilters(f => ({ ...f, agent: e.target.value }))}
                       disabled={!!selfAgentName}
                       className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px] disabled:opacity-60 disabled:cursor-not-allowed">
                       <option value="">All agents</option>
                       {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
                   </div>
+                  {/* CSAT */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
+                    <select value={pendingFilters.csat}
+                      onChange={e => setPendingFilters(f => ({ ...f, csat: e.target.value }))}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
+                      <option value="">Any</option>
+                      <option value="5">Good</option>
+                      <option value="3">CBB</option>
+                      <option value="1">Bad</option>
+                    </select>
+                  </div>
                   {/* IQS range */}
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
                     <div className="flex items-center gap-2">
-                      <input type="number" min={0} max={100} value={filterMin} onChange={e => setFilterMin(parseInt(e.target.value) || 0)}
+                      <input type="number" min={0} max={100} value={pendingFilters.minScore}
+                        onChange={e => setPendingFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 }))}
                         className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
                       <span className="text-gray-400 text-xs">–</span>
-                      <input type="number" min={0} max={100} value={filterMax} onChange={e => setFilterMax(parseInt(e.target.value) || 100)}
+                      <input type="number" min={0} max={100} value={pendingFilters.maxScore}
+                        onChange={e => setPendingFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 }))}
                         className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
                     </div>
                   </div>
                   {/* Disposition */}
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
-                    <input value={filterDisposition} onChange={e => setFilterDisposition(e.target.value)} placeholder="e.g. Referral Program"
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                    <select value={pendingFilters.disposition}
+                      onChange={e => setPendingFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' }))}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                      <option value="">All</option>
+                      {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
                   </div>
-                  {/* Fix 2 — Columns button */}
+                  {/* Sub-Disposition */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+                    <select value={pendingFilters.subDisposition}
+                      onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                      <option value="">All</option>
+                      {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Apply + Columns row */}
+                <div className="flex items-center gap-3 pt-1 border-t border-gray-50">
+                  <button onClick={applyFilters} disabled={logsLoading}
+                    className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                    {logsLoading ? 'Loading…' : 'Apply Filters'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const reset = selfAgentName ? { ...DEFAULT_FILTERS, agent: selfAgentName } : DEFAULT_FILTERS;
+                      setPendingFilters(reset);
+                      setAppliedFilters(reset);
+                      setLogPage(0);
+                      loadScores(0, reset);
+                    }}
+                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
+                    Reset
+                  </button>
                   <div className="relative ml-auto">
                     <button
                       onClick={() => setShowColPicker(v => !v)}
@@ -1616,22 +1687,22 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                 <div className="flex items-center justify-center h-40 text-gray-400 text-sm animate-pulse">Loading…</div>
               )}
 
-              {!logsLoading && filteredEntries.length === 0 && (
+              {!logsLoading && entries.length === 0 && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
                   <p className="text-gray-400 text-sm">No chats match these filters.</p>
+                  <p className="text-xs text-gray-300 mt-1">Adjust the filters above and click Apply.</p>
                 </div>
               )}
 
-              {!logsLoading && filteredEntries.length > 0 && (
+              {!logsLoading && entries.length > 0 && (
                 <>
-                  {/* ── Summary stats bar ── */}
-                  {/* Fix 5 — summary card click-to-filter */}
+                  {/* Summary stats bar */}
                   {summary && (
                     <SummaryBar
                       s={summary}
                       onFilter={({ filterCsat: fc, filterType: ft, sortByIqs }) => {
-                        if (fc !== undefined) setFilterCsat(fc);
-                        if (ft !== undefined) setFilterType(ft);
+                        if (fc !== undefined) { setPendingFilters(f => ({ ...f, csat: fc })); }
+                        if (ft !== undefined) { setPendingFilters(f => ({ ...f, type: ft })); }
                         if (sortByIqs) { setSortCol('iqs'); setSortDir('asc'); }
                       }}
                     />
@@ -1666,9 +1737,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                       <tbody>
                         {sortedLogEntries.map((e, i) => {
                           const fails = PARAM_ORDER.filter(p => e.scores[p] === 'No');
-                          // Fix 4 — row danger highlight for IQS <50
-                          const rowStyle = e.iqs < 50
-                            ? { background: 'color-mix(in srgb, var(--color-background-danger) 60%, transparent)' }
+                          // Soft red tint for at-risk rows — light enough to keep text readable
+                          const isTechFail = e.scores?.Technical === 'No';
+                          const rowStyle = isTechFail
+                            ? { background: '#fff1f2' }   // rose-50 — very light, text stays dark
+                            : e.iqs < 50
+                            ? { background: '#fef2f2' }   // red-50
                             : undefined;
                           return (
                             <tr
@@ -1681,10 +1755,15 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                               {visibleLogCols.map(col => {
                                 if (col === 'Agent') return <td key={col} className="px-3 py-2.5 font-semibold text-gray-900">{e.agentName || '—'}</td>;
                                 if (col === 'Chat ID') return <td key={col} className="px-3 py-2.5"><ChatLink chatId={e.chatId} className="text-xs" /></td>;
-                                if (col === 'Type') return <td key={col} className="px-3 py-2.5"><TypeBadge type={e.conversationType} /></td>;
-                                if (col === 'CSAT') return <td key={col} className="px-3 py-2.5 text-gray-700 text-sm">{e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : <span className="text-gray-400">—</span>}</td>;
-                                if (col === 'FRT (I→T)') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.frt)}</td>;
-                                if (col === 'B→T') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.botToTeamSecs)}</td>;
+                                if (col === 'Mobile') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{(e as any).mobileNumber || <span className="text-gray-300">—</span>}</td>;
+                                if (col === 'CSAT') return <td key={col} className="px-3 py-2.5">
+                                  {e.csat === '5' ? <span className="text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Good</span>
+                                  : e.csat === '3' ? <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">CBB</span>
+                                  : e.csat === '1' ? <span className="text-[11px] font-semibold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">Bad</span>
+                                  : <span className="text-gray-300">—</span>}
+                                </td>;
+                                if (col === 'FRT') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.frt)}</td>;
+                                if (col === 'Handoff') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.botToTeamSecs)}</td>;
                                 if (col === 'Resolution') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.resolutionTime)}</td>;
                                 if (col === 'Closure') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{fmtDuration(e.closureTime)}</td>;
                                 if (col === 'IQS') return <td key={col} className="px-3 py-2.5"><IQSPill iqs={e.iqs} /></td>;
@@ -1719,8 +1798,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                                     )}
                                   </td>
                                 );
-                                if (col === 'Disposition') return <td key={col} className="px-3 py-2.5 text-gray-700 text-sm max-w-[130px] truncate" title={e.disposition}>{e.disposition || <span className="text-gray-300">—</span>}</td>;
-                                if (col === 'Sub-Disposition') return <td key={col} className="px-3 py-2.5 text-gray-500 text-xs max-w-[130px] truncate" title={e.subDisposition}>{e.subDisposition || <span className="text-gray-300">—</span>}</td>;
+                                if (col === 'Disposition') return <td key={col} className="px-3 py-2.5 text-gray-700 text-xs max-w-[130px] truncate" title={e.disposition}>{e.disposition || <span className="text-gray-300">—</span>}</td>;
+                                if (col === 'Sub-Disposition') return <td key={col} className="px-3 py-2.5 text-gray-700 text-xs max-w-[130px] truncate" title={e.subDisposition}>{e.subDisposition || <span className="text-gray-300">—</span>}</td>;
                                 if (col === 'Last Updated') return (
                                   <td key={col} className="px-4 py-2.5 text-[12px] text-gray-400 whitespace-nowrap">
                                     {e.updatedAt && e.updatedAt !== e.scoredAt
@@ -1736,6 +1815,29 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Pagination */}
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-gray-400">
+                      Showing {logPage * 50 + 1}–{logPage * 50 + entries.length} of {totalFiltered.toLocaleString()}
+                    </p>
+                    <div className="flex gap-2">
+                      {logPage > 0 && (
+                        <button
+                          onClick={() => { const p = logPage - 1; setLogPage(p); loadScores(p, appliedFilters, true); }}
+                          className="text-xs px-4 py-1.5 border border-gray-200 rounded-xl hover:border-gray-400 transition font-medium text-gray-600">
+                          ← Previous
+                        </button>
+                      )}
+                      {hasMore && (
+                        <button
+                          onClick={() => { const p = logPage + 1; setLogPage(p); loadScores(p, appliedFilters, true); }}
+                          className="text-xs px-4 py-1.5 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition font-semibold">
+                          Next 50 →
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -1974,6 +2076,165 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── REPORTS TAB ── */}
+          {tab === 'reports' && (
+            <div className="space-y-6 max-w-3xl mx-auto">
+              {/* Independent filter controls */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <p className="text-sm font-bold text-gray-900 mb-4">Report Filters</p>
+                <div className="flex flex-wrap items-end gap-4">
+                  {/* Period chips */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Period</p>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {(['today', '7d', '30d', 'all', 'custom'] as const).map(r => (
+                        <button key={r}
+                          onClick={() => { setReportFilters(f => ({ ...f, dateRange: r })); setReportTotalFiltered(null); }}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                            reportFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}>
+                          {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : r === 'all' ? 'All time' : 'Custom'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {reportFilters.dateRange === 'custom' && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Date Range</p>
+                      <div className="flex items-center gap-2">
+                        <input type="date" value={reportFilters.dateFrom}
+                          onChange={e => { setReportFilters(f => ({ ...f, dateFrom: e.target.value })); setReportTotalFiltered(null); }}
+                          className="text-xs border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                        <span className="text-gray-400 text-xs">→</span>
+                        <input type="date" value={reportFilters.dateTo}
+                          onChange={e => { setReportFilters(f => ({ ...f, dateTo: e.target.value })); setReportTotalFiltered(null); }}
+                          className="text-xs border border-gray-200 rounded-xl px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                      </div>
+                    </div>
+                  )}
+                  {/* Agent */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
+                    <select value={reportFilters.agent}
+                      onChange={e => { setReportFilters(f => ({ ...f, agent: e.target.value })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px]">
+                      <option value="">All agents</option>
+                      {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  {/* CSAT */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
+                    <select value={reportFilters.csat}
+                      onChange={e => { setReportFilters(f => ({ ...f, csat: e.target.value })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
+                      <option value="">Any</option>
+                      <option value="5">Good</option>
+                      <option value="3">CBB</option>
+                      <option value="1">Bad</option>
+                    </select>
+                  </div>
+                  {/* IQS range */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={100} value={reportFilters.minScore}
+                        onChange={e => { setReportFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 })); setReportTotalFiltered(null); }}
+                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+                      <span className="text-gray-400 text-xs">–</span>
+                      <input type="number" min={0} max={100} value={reportFilters.maxScore}
+                        onChange={e => { setReportFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 })); setReportTotalFiltered(null); }}
+                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+                    </div>
+                  </div>
+                  {/* Disposition */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+                    <select value={reportFilters.disposition}
+                      onChange={e => { setReportFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                      <option value="">All</option>
+                      {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  {/* Sub-Disposition */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+                    <select value={reportFilters.subDisposition}
+                      onChange={e => { setReportFilters(f => ({ ...f, subDisposition: e.target.value })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                      <option value="">All</option>
+                      {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {/* Reset + Preview count row */}
+                <div className="flex items-center gap-3 pt-4 border-t border-gray-50 mt-4">
+                  <button
+                    onClick={previewReportCount}
+                    disabled={reportCountLoading}
+                    className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                    {reportCountLoading ? 'Counting…' : 'Preview count'}
+                  </button>
+                  <button
+                    onClick={() => { setReportFilters(DEFAULT_FILTERS); setReportTotalFiltered(null); }}
+                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
+                    Reset
+                  </button>
+                  {reportTotalFiltered !== null && (
+                    <span className="text-xs text-gray-500 ml-2">
+                      <span className="font-bold text-gray-900">{reportTotalFiltered.toLocaleString()}</span> chats will be exported
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Download buttons */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <p className="text-sm font-bold text-gray-900 mb-1">Download</p>
+                <p className="text-xs text-gray-500 mb-5">Exports all chats matching the filters above — no pagination limit.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <button
+                    onClick={() => downloadReport('csv')}
+                    disabled={exporting}
+                    className="flex items-center gap-3 p-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 transition group">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-emerald-800">Download CSV</p>
+                      <p className="text-xs text-emerald-600">All columns · filtered data</p>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => downloadReport('xlsx')}
+                    disabled={exporting}
+                    className="flex items-center gap-3 p-4 rounded-2xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition group">
+                    <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M8 12l2 2 4-4" />
+                      </svg>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-bold text-blue-800">Download Excel</p>
+                      <p className="text-xs text-blue-600">CSV format · opens in Excel</p>
+                    </div>
+                  </button>
+                </div>
+
+                {exporting && (
+                  <div className="mt-4 flex items-center gap-2 text-sm text-gray-500">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6" /></svg>
+                    Preparing download…
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

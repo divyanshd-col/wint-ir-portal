@@ -1,3 +1,38 @@
+/**
+ * Post a plain-text (or Block Kit) message to a Slack channel via chat.postMessage.
+ * Requires SLACK_BOT_TOKEN with chat:write scope.
+ * Channel can be a name (#quality-alerts) or channel ID.
+ */
+export async function sendSlackMessage(
+  channel: string,
+  text: string,
+  token: string,
+  blocks?: any[],
+): Promise<boolean> {
+  try {
+    const body: any = { channel, text };
+    if (blocks?.length) body.blocks = blocks;
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error(`[slack] chat.postMessage error: ${data.error}`);
+      return false;
+    }
+    console.log(`[slack] Posted alert to ${channel}`);
+    return true;
+  } catch (err) {
+    console.error('[slack] chat.postMessage failed:', err);
+    return false;
+  }
+}
+
 export interface SlackResult {
   text: string;
   channelName: string;

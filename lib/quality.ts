@@ -72,6 +72,8 @@ export interface IQSScoreEntry {
   // ── Robylon classifications ─────────────────────────────────────────────────
   disposition?: string;     // l1 name — main tag / disposition
   subDisposition?: string;  // l2 name — sub tag / sub-disposition
+  // ── Customer contact ────────────────────────────────────────────────────────
+  mobileNumber?: string;    // customer phone number (from webhook)
 }
 
 // ── Bot name used at Wint Wealth ─────────────────────────────────────────────

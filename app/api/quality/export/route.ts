@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { storeGetIQSScores } from '@/lib/store';
+import { storeGetAllIQSScores } from '@/lib/store';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -26,20 +26,26 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const agentFilter = searchParams.get('agent') || '';
-  const tagFilter   = searchParams.get('tag') || '';
-  const dateFrom    = searchParams.get('dateFrom') || '';
-  const dateTo      = searchParams.get('dateTo') || '';
+  const agentFilter  = searchParams.get('agent') || '';
+  const tagFilter    = searchParams.get('tag') || '';
+  const subTagFilter = searchParams.get('subTag') || '';
+  const csatFilter   = searchParams.get('csat') || '';
+  const dateFrom     = searchParams.get('dateFrom') || '';
+  const dateTo       = searchParams.get('dateTo') || '';
+  const typeFilter   = searchParams.get('type') || '';
 
-  const raw = await storeGetIQSScores();
+  const raw = await storeGetAllIQSScores(); // parallel 500-entry batches — all entries, safe under 1 MB each
   let entries: IQSScoreEntry[] = raw.map(r => {
     try { return JSON.parse(r); } catch { return null; }
   }).filter(Boolean);
 
-  if (agentFilter) entries = entries.filter(e => e.agentName === agentFilter);
-  if (tagFilter)   entries = entries.filter(e => (e.tags || '').toLowerCase().includes(tagFilter.toLowerCase()));
-  if (dateFrom)    entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) >= dateFrom);
-  if (dateTo)      entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) <= dateTo);
+  if (agentFilter)  entries = entries.filter(e => e.agentName === agentFilter);
+  if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
+  if (subTagFilter) entries = entries.filter(e => (e.subDisposition || '').toLowerCase() === subTagFilter.toLowerCase());
+  if (csatFilter)   entries = entries.filter(e => e.csat === csatFilter);
+  if (dateFrom)     entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) >= dateFrom || (e.date || '') >= dateFrom);
+  if (dateTo)       entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) <= dateTo   || (e.date || '') <= dateTo);
+  if (typeFilter)   entries = entries.filter(e => (e.conversationType || 'agent') === typeFilter);
 
   // CSV headers
   const paramCols = PARAM_ORDER.map(p => PARAM_NAMES[p]);

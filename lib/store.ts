@@ -159,10 +159,26 @@ export async function storeAppendIQSScore(entry: object): Promise<void> {
   } catch {}
 }
 
-export async function storeGetIQSScores(limit = 1000): Promise<string[]> {
-  // Cap to `limit` most-recent entries to stay within Upstash's 1 MB response limit.
-  // Transcripts are no longer stored inside entries, so 1000 entries ≈ ~200 KB.
-  return kv_lrange(IQS_SCORES_KEY, 0, limit - 1);
+export async function storeGetIQSScores(limit = 0, start = 0): Promise<string[]> {
+  // limit=0 → return ALL entries. Use storeGetAllIQSScores() for safe batched access.
+  if (limit <= 0) return kv_lrange(IQS_SCORES_KEY, 0, -1);
+  return kv_lrange(IQS_SCORES_KEY, start, start + limit - 1);
+}
+
+/**
+ * Fetch ALL IQS score entries safely by issuing parallel 500-entry LRANGE batches.
+ * Each batch response stays well under Upstash's 1 MB limit (~150 KB per batch).
+ * Total latency ≈ one round-trip because all batches fire simultaneously.
+ */
+export async function storeGetAllIQSScores(): Promise<string[]> {
+  const total = await storeGetIQSScoreCount();
+  if (total === 0) return [];
+  const BATCH = 500;
+  const batchCount = Math.ceil(total / BATCH);
+  const results = await Promise.all(
+    Array.from({ length: batchCount }, (_, i) => storeGetIQSScores(BATCH, i * BATCH))
+  );
+  return results.flat();
 }
 
 export async function storeGetIQSScoreCount(): Promise<number> {
@@ -179,25 +195,44 @@ export async function storeGetIQSScoreCount(): Promise<number> {
   }
 }
 
-/** Update the csat field on an existing IQS score by chatId. Returns true if found & updated. */
-export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Promise<boolean> {
+/**
+ * Scan the IQS score list in 500-entry batches and call `match(entry)` on each.
+ * When match returns a non-null update object, LSET that index and return true.
+ * Avoids the Upstash 1 MB single-response limit that silently breaks lrange(0,-1).
+ */
+async function kv_scanAndUpdate(
+  match: (entry: any) => Record<string, any> | null,
+): Promise<boolean> {
   if (!ready()) return false;
-  const raw = await kv_lrange(IQS_SCORES_KEY, 0, -1);
-  for (let i = 0; i < raw.length; i++) {
-    try {
-      const entry = JSON.parse(raw[i]);
-      if (String(entry.chatId) === String(chatId)) {
-        entry.csat = csat;
-        await fetch(`${UPSTASH_URL}/pipeline`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(i), JSON.stringify(entry)]]),
-        });
-        return true;
-      }
-    } catch {}
+  const total = await storeGetIQSScoreCount();
+  if (total === 0) return false;
+  const BATCH = 500;
+  for (let start = 0; start < total; start += BATCH) {
+    const batch = await kv_lrange(IQS_SCORES_KEY, start, start + BATCH - 1);
+    for (let j = 0; j < batch.length; j++) {
+      try {
+        const entry = JSON.parse(batch[j]);
+        const updates = match(entry);
+        if (updates !== null) {
+          const updated = { ...entry, ...updates };
+          await fetch(`${UPSTASH_URL}/pipeline`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(start + j), JSON.stringify(updated)]]),
+          });
+          return true;
+        }
+      } catch {}
+    }
   }
   return false;
+}
+
+/** Update the csat field on an existing IQS score by chatId. Returns true if found & updated. */
+export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Promise<boolean> {
+  return kv_scanAndUpdate(entry =>
+    String(entry.chatId) === String(chatId) ? { csat } : null
+  );
 }
 
 // --- Pending Score State (accumulates TICKET_CLOSED + CLASSIFICATION + CSAT before scoring) ---
@@ -217,6 +252,7 @@ export interface PendingScoreState {
   convEnded: string;
   hasTranscript: boolean;
   transferTimestamp?: string; // ISO — when chat was assigned to a human agent
+  mobileNumber?: string;      // customer phone number (from TICKET_CLOSED webhook)
   // From CLASSIFICATION_UPDATED
   disposition: string;
   subDisposition: string;
@@ -280,25 +316,11 @@ export async function storeUpdateIQSScoreTags(
   disposition: string,
   subDisposition: string,
 ): Promise<boolean> {
-  if (!ready()) return false;
-  const raw = await kv_lrange(IQS_SCORES_KEY, 0, -1);
-  for (let i = 0; i < raw.length; i++) {
-    try {
-      const entry = JSON.parse(raw[i]);
-      if (String(entry.chatId) === String(chatId)) {
-        entry.disposition    = disposition;
-        entry.subDisposition = subDisposition;
-        entry.tags           = disposition; // keep tags field in sync for dashboard filters
-        await fetch(`${UPSTASH_URL}/pipeline`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(i), JSON.stringify(entry)]]),
-        });
-        return true;
-      }
-    } catch {}
-  }
-  return false;
+  return kv_scanAndUpdate(entry =>
+    String(entry.chatId) === String(chatId)
+      ? { disposition, subDisposition, tags: disposition }
+      : null
+  );
 }
 
 /** Update any fields on an existing IQS score entry by id+chatId. Returns true if found & updated. */
@@ -307,23 +329,11 @@ export async function storeUpdateIQSScoreEntry(
   chatId: string,
   updates: Record<string, any>,
 ): Promise<boolean> {
-  if (!ready()) return false;
-  const raw = await kv_lrange(IQS_SCORES_KEY, 0, -1);
-  for (let i = 0; i < raw.length; i++) {
-    try {
-      const entry = JSON.parse(raw[i]);
-      if (String(entry.id) === String(id) && String(entry.chatId) === String(chatId)) {
-        const updated = { ...entry, ...updates };
-        await fetch(`${UPSTASH_URL}/pipeline`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(i), JSON.stringify(updated)]]),
-        });
-        return true;
-      }
-    } catch {}
-  }
-  return false;
+  return kv_scanAndUpdate(entry =>
+    String(entry.id) === String(id) && String(entry.chatId) === String(chatId)
+      ? updates
+      : null
+  );
 }
 
 // --- Pending Classifications (store until TICKET_CLOSED is scored) ---

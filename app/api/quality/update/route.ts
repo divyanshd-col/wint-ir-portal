@@ -47,7 +47,8 @@ export async function PATCH(req: NextRequest) {
   if (note !== undefined) updates.note = note;
 
   const ok = await storeUpdateIQSScoreEntry(id, chatId, updates);
-  if (!ok) return NextResponse.json({ error: 'Entry not found' }, { status: 404 });
+  if (!ok) return NextResponse.json({ error: 'Entry not found — it may still be pending or the ID is mismatched.' }, { status: 404 });
 
-  return NextResponse.json({ ok: true });
+  // Return the merged entry so the client can update its local state without a refetch
+  return NextResponse.json({ ok: true, entry: { id, chatId, ...updates } });
 }
