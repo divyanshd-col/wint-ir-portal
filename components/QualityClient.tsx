@@ -470,45 +470,32 @@ function AgentCard({
         </div>
       </div>
 
-      {/* Failure breakdown — always visible */}
-      <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4">
+      {/* Coaching focus — clean percentage pills, no bars */}
+      <div className="border-t border-gray-100 bg-gray-50/40 px-5 py-3.5">
         {topFails.length === 0 ? (
           <p className="text-xs text-emerald-600 font-semibold text-center py-1">✓ No consistent failure areas</p>
         ) : (
-          <div className="space-y-2.5">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Coaching Focus</p>
-            {topFails.map(({ p, failPct }) => {
-              // Fix 7 — two-layer coaching bars
-              const teamPct = teamParamFails ? (teamParamFails[p] || 0) : 0;
-              const agentColor = failPct >= 40
-                ? 'var(--color-border-danger)'
-                : failPct > teamPct
-                  ? 'var(--color-border-warning)'
-                  : 'var(--color-border-success)';
-              return (
-                <div key={p} className="flex items-center gap-3">
-                  <span className="text-[11px] text-gray-700 w-36 shrink-0 truncate font-medium">{PARAM_NAMES[p]}</span>
-                  {/* Fix 7 — two-layer bar */}
-                  <div className="bg-gray-200 rounded-full h-2 relative flex-1">
-                    <div style={{ width: `${failPct}%`, background: agentColor }} className="h-full rounded-full transition-all absolute inset-0" />
-                    {teamPct > 0 && <div style={{ left: `${teamPct}%` }} className="absolute top-0 h-full w-0.5 bg-gray-400 opacity-60" />}
+          <>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2.5">Coaching Focus</p>
+            <div className="space-y-1.5">
+              {topFails.map(({ p, failPct }) => {
+                const teamPct = teamParamFails ? (teamParamFails[p] || 0) : 0;
+                const isHigh = failPct >= 40;
+                const isAboveTeam = failPct > teamPct && !isHigh;
+                return (
+                  <div key={p} className="flex items-center justify-between gap-2">
+                    <span className="text-[11.5px] text-gray-600 truncate">{PARAM_NAMES[p]}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isAboveTeam && <span className="text-[9px] text-amber-500 font-semibold">↑ team</span>}
+                      <span className={`text-[12px] font-bold tabular-nums ${isHigh ? 'text-red-500' : isAboveTeam ? 'text-amber-500' : 'text-gray-500'}`}>
+                        {failPct}%
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[11px] font-bold w-9 text-right tabular-nums" style={{ color: agentColor }}>{failPct}%</span>
-                </div>
-              );
-            })}
-            {/* Fix 7 — legend */}
-            <div className="flex items-center gap-3 mt-2 pt-2 border-t border-gray-100">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-2 rounded-sm" style={{ background: 'var(--color-border-success)' }} />
-                <span className="text-[9px]" style={{ color: 'var(--color-text-secondary)' }}>Agent</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-0.5 h-3" style={{ background: 'var(--color-text-tertiary)' }} />
-                <span className="text-[9px]" style={{ color: 'var(--color-text-secondary)' }}>Team avg</span>
-              </div>
+                );
+              })}
             </div>
-          </div>
+          </>
         )}
       </div>
     </div>
@@ -597,6 +584,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
 
   // Agent timing analytics pagination
   const [agentPage, setAgentPage] = useState(0);
+
+  // All-agents modal + all-weeks toggle
+  const [showAllAgents, setShowAllAgents] = useState(false);
+  const [showAllWeeks, setShowAllWeeks] = useState(false);
 
   // Edit/override modal state
   const [editEntry, setEditEntry] = useState<IQSScoreEntry | null>(null);
@@ -887,6 +878,46 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   const totalToScore = rowLimit > 0 ? Math.min(rowLimit, isWint ? parsedRows.length : rawRows.length) : (isWint ? parsedRows.length : rawRows.length);
   const avgIqs = batchResults.length ? Math.round(batchResults.reduce((s, e) => s + e.iqs, 0) / batchResults.length) : 0;
   const maxParamFail = Math.max(...Object.values(paramFails), 1);
+
+  // ── Weekly parameter breakdown ───────────────────────────────────────────────
+  const weeklyParamData = useMemo(() => {
+    function getWeekLabel(iso: string): string {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      const day = d.getUTCDay();
+      const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - day + 1);
+      const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+      const fmt = (dt: Date) => dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' });
+      return `${fmt(mon)} – ${fmt(sun)}`;
+    }
+    function getWeekKey(iso: string): string {
+      if (!iso) return '';
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      const day = d.getUTCDay();
+      const mon = new Date(d); mon.setUTCDate(d.getUTCDate() - day + 1);
+      return mon.toISOString().slice(0, 10);
+    }
+    const weekMap: Record<string, { total: number; fails: Record<string, number> }> = {};
+    for (const e of entries) {
+      const key = getWeekKey(e.scoredAt || e.date || '');
+      if (!key) continue;
+      if (!weekMap[key]) weekMap[key] = { total: 0, fails: {} };
+      weekMap[key].total++;
+      for (const p of PARAM_ORDER) {
+        if ((e.scores || {})[p] === 'No') weekMap[key].fails[p] = (weekMap[key].fails[p] || 0) + 1;
+      }
+    }
+    return Object.entries(weekMap)
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([key, d]) => ({
+        key,
+        label: getWeekLabel(key + 'T00:00:00Z'),
+        total: d.total,
+        params: Object.fromEntries(PARAM_ORDER.map(p => [p, d.total ? Math.round((d.fails[p] || 0) / d.total * 100) : 0])),
+      }));
+  }, [entries]);
 
   const wintAgentPreview = useMemo(() => {
     if (!isWint || !parsedRows.length) return [];
@@ -1207,11 +1238,19 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                     );
                   })()}
 
-                  {/* Agent grid */}
+                  {/* Agent Scorecards — top 3 only */}
                   <div>
-                    <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">Agent Scorecards</p>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {agentStats.map(a => (
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Top Agent Scorecards</p>
+                      {agentStats.length > 3 && (
+                        <button onClick={() => setShowAllAgents(true)}
+                          className="text-xs text-emerald-600 font-semibold hover:underline">
+                          View all {agentStats.length} agents →
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {agentStats.slice(0, 3).map(a => (
                         <AgentCard
                           key={a.agent}
                           stat={a}
@@ -1227,6 +1266,40 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                       ))}
                     </div>
                   </div>
+
+                  {/* All Agents Modal */}
+                  {showAllAgents && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-6" onClick={() => setShowAllAgents(false)}>
+                      <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[88vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+                        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+                          <div>
+                            <h2 className="font-bold text-gray-900">All Agent Scorecards</h2>
+                            <p className="text-xs text-gray-500 mt-0.5">{agentStats.length} agents · sorted by avg IQS</p>
+                          </div>
+                          <button onClick={() => setShowAllAgents(false)} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
+                          </button>
+                        </div>
+                        <div className="p-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {agentStats.map(a => (
+                            <AgentCard
+                              key={a.agent}
+                              stat={a}
+                              entries={entries}
+                              teamParamFails={paramFails}
+                              onFilterLog={({ agent, minScore, maxScore }) => {
+                                setFilterAgent(agent);
+                                if (minScore !== undefined) setFilterMin(minScore);
+                                if (maxScore !== undefined) setFilterMax(maxScore ?? 100);
+                                setShowAllAgents(false);
+                                switchTab('log');
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Agent Timing Analytics Table */}
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -1285,41 +1358,59 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                     )}
                   </div>
 
-                  {/* Team params */}
-                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                    <p className="text-sm font-bold text-gray-900 mb-0.5">Team Parameter Breakdown</p>
-                    <p className="text-xs text-gray-500 mb-4">Failure rate across all {entries.length} scored chats — click any row to view in Score Log</p>
-                    <div className="space-y-3">
-                      {[...PARAM_ORDER].sort((a, b) => (paramFails[b] || 0) - (paramFails[a] || 0)).map(p => {
-                        const pct = paramFails[p] || 0;
-                        // Fix 8 — denominator annotation
-                        const failCount = Math.round(pct / 100 * entries.length);
-                        return (
-                          // Fix 9 — clickable param rows
-                          <div
-                            key={p}
-                            className="group flex items-center gap-3 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2 transition-colors"
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => { setSortCol('fails'); setSortDir('desc'); switchTab('log'); }}
-                          >
-                            <span className="text-xs text-gray-700 w-44 shrink-0 truncate font-medium">{PARAM_NAMES[p]}</span>
-                            <div className="flex-1 bg-gray-100 rounded-full h-2.5">
-                              <div className="rounded-full h-2.5 transition-all" style={{
-                                width: `${pct}%`,
-                                background: pct >= 40 ? 'var(--color-border-danger)' : pct >= 20 ? 'var(--color-border-warning)' : 'var(--color-border-success)'
-                              }} />
-                            </div>
-                            <span className="text-xs font-bold w-10 text-right tabular-nums" style={{ color: pct >= 40 ? 'var(--color-text-danger)' : pct >= 20 ? 'var(--color-text-warning)' : 'var(--color-text-success)' }}>{pct}%</span>
-                            {/* Fix 8 — denominator annotation */}
-                            <span className="text-[10px] text-gray-400 w-16 text-right">
-                              {failCount} / {entries.length}
-                            </span>
-                            {/* Fix 9 — right-arrow indicator */}
-                            <span className="text-gray-300 text-xs ml-auto opacity-0 group-hover:opacity-100">→</span>
-                          </div>
-                        );
-                      })}
+                  {/* Weekly Parameter Breakdown Table */}
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">Parameter Failure by Week</p>
+                        <p className="text-xs text-gray-500 mt-0.5">% of chats failing each parameter per week · click a row to filter Score Log</p>
+                      </div>
+                      {weeklyParamData.length > 5 && (
+                        <button onClick={() => setShowAllWeeks(v => !v)} className="text-xs text-emerald-600 font-semibold hover:underline shrink-0">
+                          {showAllWeeks ? 'Show less ↑' : `View all ${weeklyParamData.length} weeks →`}
+                        </button>
+                      )}
                     </div>
+                    {weeklyParamData.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">No data yet</p>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs min-w-[900px]">
+                          <thead>
+                            <tr className="bg-gray-50/80 border-b border-gray-100">
+                              <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap sticky left-0 bg-gray-50/80">Week</th>
+                              <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Chats</th>
+                              {PARAM_ORDER.map(p => (
+                                <th key={p} className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap" title={PARAM_NAMES[p]}>
+                                  {p === 'AllQuestions' ? 'All Q' : p === 'Expectation' ? 'Expect' : p === 'Contextual' ? 'Context' : p === 'FollowUp' ? 'Follow' : p === 'Sentences' ? 'Tone' : p === 'Technical' ? 'Tech' : p === 'Grammar' ? 'Grammar' : p}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(showAllWeeks ? weeklyParamData : weeklyParamData.slice(0, 5)).map((row, i) => (
+                              <tr key={row.key}
+                                className={`border-b border-gray-50 hover:bg-emerald-50/20 cursor-pointer transition ${i % 2 === 1 ? 'bg-gray-50/20' : ''}`}
+                                onClick={() => { setSortCol('fails'); setSortDir('desc'); switchTab('log'); }}>
+                                <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap sticky left-0 bg-white">
+                                  {row.label}
+                                </td>
+                                <td className="px-3 py-3 text-right text-gray-500 tabular-nums">{row.total}</td>
+                                {PARAM_ORDER.map(p => {
+                                  const pct = row.params[p];
+                                  const color = pct >= 40 ? 'text-red-600 font-bold' : pct >= 20 ? 'text-amber-600 font-semibold' : pct > 0 ? 'text-gray-600' : 'text-gray-300';
+                                  return (
+                                    <td key={p} className={`px-3 py-3 text-right tabular-nums ${color}`}>
+                                      {pct > 0 ? `${pct}%` : '—'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
