@@ -4,7 +4,7 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, calculateIQS, IQSScoreEntry } from '@/lib/quality';
-import { storeAppendIQSScore } from '@/lib/store';
+import { storeAppendIQSScore, storeSetTranscript } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 
 function qualityAccess(session: any): boolean {
@@ -91,6 +91,9 @@ export async function POST(req: NextRequest) {
     };
 
     await storeAppendIQSScore(entry);
+    if (transcript && chatId) {
+      await storeSetTranscript(chatId, { rawTranscript: transcript });
+    }
 
     return NextResponse.json({ ok: true, entry });
   } catch (err: any) {

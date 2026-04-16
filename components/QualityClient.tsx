@@ -312,18 +312,95 @@ async function parseMetaFile(file: File): Promise<{ map: MetaMap; headers: strin
   return toMap(parseRawCSV(await file.text()));
 }
 
+// ── Transcript bubble renderer ────────────────────────────────────────────────
+const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
+const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
+
+function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; content: string; timestamp?: string }> }) {
+  return (
+    <div className="space-y-2 py-1">
+      {messages.map((m, i) => {
+        const senderLc = (m.sender || '').toLowerCase().trim();
+        const isCustomer = CUSTOMER_LABELS.has(senderLc);
+        const isBot = BOT_NAMES.has(senderLc);
+        const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+        if (isCustomer) {
+          return (
+            <div key={i} className="flex justify-end gap-2">
+              <div className="max-w-[78%]">
+                {timeStr && <p className="text-[9px] text-gray-400 text-right mb-0.5 pr-1">{timeStr}</p>}
+                <div className="bg-emerald-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-[12.5px] leading-relaxed">
+                  {m.content}
+                </div>
+              </div>
+            </div>
+          );
+        }
+        if (isBot) {
+          return (
+            <div key={i} className="flex gap-2">
+              <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center shrink-0 mt-1">
+                <span className="text-[9px] font-bold text-violet-600">M</span>
+              </div>
+              <div className="max-w-[78%]">
+                <p className="text-[9px] font-semibold text-violet-500 mb-0.5">{m.sender} {timeStr && `· ${timeStr}`}</p>
+                <div className="bg-violet-50 border border-violet-100 text-violet-900 px-3.5 py-2 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed">
+                  {m.content}
+                </div>
+              </div>
+            </div>
+          );
+        }
+        // Human agent
+        return (
+          <div key={i} className="flex gap-2">
+            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-1">
+              <span className="text-[9px] font-bold text-gray-500">{(m.sender || 'A')[0].toUpperCase()}</span>
+            </div>
+            <div className="max-w-[78%]">
+              <p className="text-[9px] font-semibold text-gray-500 mb-0.5">{m.sender} {timeStr && `· ${timeStr}`}</p>
+              <div className="bg-white border border-gray-200 text-gray-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed shadow-sm">
+                {m.content}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Score Detail Modal ────────────────────────────────────────────────────────
 function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntry; onClose: () => void; onEdit?: (e: IQSScoreEntry) => void; userRole?: string }) {
-  const t = iqsTheme(entry.iqs);
   const fails = PARAM_ORDER.filter(p => entry.scores[p] === 'No');
   const canEdit = userRole === 'quality' || userRole === 'admin';
+  const [activeTab, setActiveTab] = useState<'scores' | 'transcript'>('scores');
+  const [transcript, setTranscript] = useState<{ timedMessages?: any[]; rawTranscript?: string } | null>(null);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [transcriptError, setTranscriptError] = useState('');
+
+  useEffect(() => {
+    if (activeTab !== 'transcript') return;
+    if (transcript !== null) return; // already loaded
+    setTranscriptLoading(true);
+    setTranscriptError('');
+    fetch(`/api/quality/transcript?chatId=${encodeURIComponent(entry.chatId)}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.found) setTranscript({ timedMessages: d.timedMessages, rawTranscript: d.rawTranscript });
+        else setTranscript({});
+      })
+      .catch(() => setTranscriptError('Failed to load transcript'))
+      .finally(() => setTranscriptLoading(false));
+  }, [activeTab, entry.chatId, transcript]);
+
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4">
+        <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 rounded-t-2xl">
           <IQSRing iqs={entry.iqs} size={52} />
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-bold text-gray-900">{entry.agentName || 'Unknown Agent'}</p>
               {fails.length === 0
@@ -332,22 +409,21 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
             </div>
             <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
               <ChatLink chatId={entry.chatId} className="text-xs" />
-              <span>·</span><span>{entry.scoredAt.slice(0, 10)}</span>
+              <span>·</span><span>{entry.scoredAt?.slice(0, 10)}</span>
+              {entry.csat && <><span>·</span><span>{entry.csat === '5' ? '⭐ Good' : entry.csat === '3' ? '😐 CBB' : '👎 Bad'}</span></>}
               {entry.disposition && <><span>·</span><span className="text-gray-600 font-medium">{entry.disposition}</span></>}
               {entry.subDisposition && <><span>/</span><span className="text-gray-500">{entry.subDisposition}</span></>}
             </p>
             {entry.updatedBy && (
               <p className="text-[10px] text-amber-600 mt-0.5">
-                Last edited by {entry.updatedBy.split('@')[0]} at {new Date(entry.updatedAt || '').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                Last edited by {entry.updatedBy.split('@')[0]} · {new Date(entry.updatedAt || '').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
               </p>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {canEdit && onEdit && (
-              <button
-                onClick={() => { onClose(); onEdit(entry); }}
-                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition"
-              >
+              <button onClick={() => { onClose(); onEdit(entry); }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">
                 Override
               </button>
             )}
@@ -357,50 +433,85 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
           </div>
         </div>
 
-        <div className="px-6 py-5 grid md:grid-cols-2 gap-6">
-          {/* Parameters */}
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Parameter Scores</p>
-            <div className="space-y-2">
-              {PARAM_ORDER.map(p => {
-                const val = entry.scores[p];
-                return (
-                  <div key={p} className={`rounded-xl p-3 ${val === 'No' ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
-                    <div className="flex items-center gap-2">
-                      <ParamBadge val={val} />
-                      <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
-                      <span className="text-[10px] text-gray-400">{Math.round(WEIGHTS[p] * 100)}%</span>
-                    </div>
-                    {entry.reasoning[p] && <p className="text-[11px] text-gray-500 leading-relaxed mt-1.5 ml-5">{entry.reasoning[p]}</p>}
+        {/* Tab bar */}
+        <div className="shrink-0 flex border-b border-gray-100 px-6">
+          {(['scores', 'transcript'] as const).map(t => (
+            <button key={t} onClick={() => setActiveTab(t)}
+              className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition -mb-px ${activeTab === t ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+              {t === 'scores' ? 'IQS Scores' : 'Transcript'}
+            </button>
+          ))}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === 'scores' && (
+            <div className="px-6 py-5 grid md:grid-cols-2 gap-6">
+              {/* Parameters */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Parameter Scores</p>
+                <div className="space-y-2">
+                  {PARAM_ORDER.map(p => {
+                    const val = entry.scores[p];
+                    return (
+                      <div key={p} className={`rounded-xl p-3 ${val === 'No' ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
+                        <div className="flex items-center gap-2">
+                          <ParamBadge val={val} />
+                          <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
+                          <span className="text-[10px] text-gray-400">{Math.round(WEIGHTS[p] * 100)}%</span>
+                        </div>
+                        {entry.reasoning[p] && <p className="text-[11px] text-gray-500 leading-relaxed mt-1.5 ml-5">{entry.reasoning[p]}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Right col */}
+              <div className="space-y-4">
+                {entry.summary && (
+                  <div>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Summary</p>
+                    <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 leading-relaxed">{entry.summary}</p>
                   </div>
-                );
-              })}
+                )}
+                <p className="text-[10px] text-gray-300">Scored by {(entry.scoredBy || '').split('@')[0]} · {entry.provider}/{entry.model}</p>
+              </div>
             </div>
-          </div>
-          {/* Right */}
-          <div className="space-y-4">
-            {entry.summary && (
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Summary</p>
-                <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 leading-relaxed">{entry.summary}</p>
-              </div>
-            )}
-            {entry.csat && (
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">CSAT</p>
-                <p className="text-sm font-semibold text-gray-700">
-                  {entry.csat === '5' ? '⭐ Good' : entry.csat === '3' ? '😐 Could be better' : entry.csat === '1' ? '👎 Bad' : entry.csat}
-                </p>
-              </div>
-            )}
-            {entry.transcript && (
-              <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Transcript</p>
-                <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap max-h-72 overflow-y-auto leading-relaxed font-sans">{entry.transcript}</pre>
-              </div>
-            )}
-            <p className="text-[10px] text-gray-300">Scored by {(entry.scoredBy || '').split('@')[0]} · {entry.provider}/{entry.model}</p>
-          </div>
+          )}
+
+          {activeTab === 'transcript' && (
+            <div className="px-6 py-5">
+              {transcriptLoading && (
+                <div className="flex items-center justify-center py-12 text-gray-400 gap-2 text-sm">
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6" /></svg>
+                  Loading transcript…
+                </div>
+              )}
+              {transcriptError && <p className="text-sm text-red-500 text-center py-8">{transcriptError}</p>}
+              {!transcriptLoading && !transcriptError && transcript !== null && (
+                <>
+                  {transcript.timedMessages && transcript.timedMessages.length > 0 ? (
+                    <>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+                        {transcript.timedMessages.length} messages
+                      </p>
+                      <TranscriptBubbles messages={transcript.timedMessages} />
+                    </>
+                  ) : transcript.rawTranscript ? (
+                    <>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Raw Transcript</p>
+                      <pre className="text-[12px] text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{transcript.rawTranscript}</pre>
+                    </>
+                  ) : (
+                    <div className="text-center py-12">
+                      <p className="text-sm text-gray-400">No transcript saved for this chat.</p>
+                      <p className="text-xs text-gray-300 mt-1">Transcripts are saved for new chats scored after this update.</p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

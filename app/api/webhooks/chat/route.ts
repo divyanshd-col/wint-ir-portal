@@ -30,6 +30,7 @@ import {
   storeSavePendingScore,
   storeGetPendingScore,
   storeDeletePendingScore,
+  storeSetTranscript,
   type PendingScoreState,
 } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
@@ -234,6 +235,8 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
   };
 
   await storeAppendIQSScore(entry);
+  // Save transcript permanently (separate key — doesn't bloat the score list)
+  await storeSetTranscript(state.chatId, { timedMessages: state.timedMessages });
   await storeDeletePendingScore(state.chatId);
 
   console.log(`[webhook] Scored chat ${state.chatId} → IQS ${entry.iqs}% (${entry.agentName || 'unknown'}) type=${timing.conversationType} csat=${state.csat || 'none'}`);
