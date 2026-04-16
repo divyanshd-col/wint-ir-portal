@@ -287,18 +287,51 @@ Score this chat across all 12 parameters. Output ONLY the JSON.`;
 }
 
 // ── Parse LLM response ───────────────────────────────────────────────────────
-export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> & { extractedAgentName?: string } {
-  // Extract JSON from potential markdown code blocks
+/** Sanitize a JSON string: fix unescaped newlines/tabs/quotes inside string values. */
+function sanitizeJson(s: string): string {
+  // Replace literal newlines/tabs inside JSON string values (between quotes) with escaped versions
+  return s.replace(/("(?:[^"\\]|\\.)*")/gs, (match) =>
+    match
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t'),
+  );
+}
+
+/** Try multiple strategies to parse LLM JSON response. */
+function robustJsonParse(raw: string): any {
   let jsonStr = raw.trim();
-  const match = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (match) jsonStr = match[1].trim();
+
+  // 1. Extract from markdown code block if present
+  const block = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (block) jsonStr = block[1].trim();
   else {
     const start = jsonStr.indexOf('{');
     const end = jsonStr.lastIndexOf('}');
     if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1);
   }
 
-  const data = JSON.parse(jsonStr);
+  // 2. Try direct parse
+  try { return JSON.parse(jsonStr); } catch {}
+
+  // 3. Sanitize unescaped control chars and retry
+  try { return JSON.parse(sanitizeJson(jsonStr)); } catch {}
+
+  // 4. Last resort: extract scores block with regex so we at least get pass/fail
+  const scoresMatch = jsonStr.match(/"scores"\s*:\s*(\{[^}]+\})/s);
+  if (scoresMatch) {
+    try {
+      const scores = JSON.parse(scoresMatch[1]);
+      const summaryMatch = jsonStr.match(/"summary"\s*:\s*"([^"]+)"/);
+      return { scores, summary: summaryMatch?.[1] || '', reasoning: {}, agentName: '' };
+    } catch {}
+  }
+
+  throw new Error(`Cannot parse LLM scoring response: ${jsonStr.slice(0, 200)}`);
+}
+
+export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> & { extractedAgentName?: string } {
+  const data = robustJsonParse(raw);
   const scores: Record<string, ParamScore> = data.scores || {};
   const iqs = calculateIQS(scores); // always recalculate, never trust LLM's calculation
 
