@@ -86,10 +86,11 @@ function parseRobyTimestamp(ts: string, year: number): string {
   } catch { return ''; }
 }
 
-// ── Extract first human agent name ───────────────────────────────────────────
+// ── Extract last human agent name ────────────────────────────────────────────
 function extractAgentName(messages: any[]): string {
   const nonAgents = new Set(['user', 'bot', 'myra', 'system', '']);
-  for (const m of messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
     const sender  = (m.sender || m.role || '').trim();
     if (nonAgents.has(sender.toLowerCase())) continue;
     const content = (m.content || m.text || '').toLowerCase();
@@ -204,9 +205,11 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
 
   const model = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
 
+  const scoredAt = new Date().toISOString();
   const entry: IQSScoreEntry = {
     id:         `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    scoredAt:   new Date().toISOString(),
+    scoredAt,
+    updatedAt:  scoredAt,
     provider, model,
     scoredBy:   'webhook:robylon',
     agentName:  timing.conversationType === 'bot'

@@ -59,6 +59,8 @@ export interface IQSScoreEntry {
   summary: string;
   transcript?: string;
   scoredBy?: string; // email of the quality/admin who scored it
+  updatedAt?: string;   // ISO — set on create and on every quality override
+  updatedBy?: string;   // email of last editor
   // ── Conversation metrics ────────────────────────────────────────────────────
   conversationType?: 'bot' | 'agent' | 'hybrid'; // 'bot' = only Myra responded
   frt?: number;              // seconds: chat assignment → first human agent message

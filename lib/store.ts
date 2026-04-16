@@ -301,6 +301,31 @@ export async function storeUpdateIQSScoreTags(
   return false;
 }
 
+/** Update any fields on an existing IQS score entry by id+chatId. Returns true if found & updated. */
+export async function storeUpdateIQSScoreEntry(
+  id: string,
+  chatId: string,
+  updates: Record<string, any>,
+): Promise<boolean> {
+  if (!ready()) return false;
+  const raw = await kv_lrange(IQS_SCORES_KEY, 0, -1);
+  for (let i = 0; i < raw.length; i++) {
+    try {
+      const entry = JSON.parse(raw[i]);
+      if (String(entry.id) === String(id) && String(entry.chatId) === String(chatId)) {
+        const updated = { ...entry, ...updates };
+        await fetch(`${UPSTASH_URL}/pipeline`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(i), JSON.stringify(updated)]]),
+        });
+        return true;
+      }
+    } catch {}
+  }
+  return false;
+}
+
 // --- Pending Classifications (store until TICKET_CLOSED is scored) ---
 
 const PENDING_TAGS_PREFIX = 'wint_tags_pending:';

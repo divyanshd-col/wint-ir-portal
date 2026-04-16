@@ -72,9 +72,11 @@ export async function POST(req: NextRequest) {
   try {
     const parsed = parseScoringResponse(rawResponse, chatId || `chat_${Date.now()}`);
 
+    const now = new Date().toISOString();
     const entry: IQSScoreEntry = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      scoredAt: new Date().toISOString(),
+      scoredAt: now,
+      updatedAt: now,
       provider,
       model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash',
       scoredBy: session.user?.email || session.user?.name || 'unknown',

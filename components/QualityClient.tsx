@@ -7,12 +7,22 @@ import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 
 // Fix 2 — column visibility
-const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Date'];
+const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Type', 'CSAT', 'FRT (I→T)', 'B→T', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AgentStat {
   agent: string; chats: number; avgIqs: number;
   minIqs: number; maxIqs: number; high: number; atRisk: number;
+  avgFrt?: number | null;
+  avgResolution?: number | null;
+  avgClosure?: number | null;
+  avgBotToTeam?: number | null;
+}
+
+interface QualityClientProps {
+  userRole?: string;
+  userEmail?: string;
+  selfAgentName?: string;
 }
 interface ParsedRow {
   chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string;
@@ -303,9 +313,10 @@ async function parseMetaFile(file: File): Promise<{ map: MetaMap; headers: strin
 }
 
 // ── Score Detail Modal ────────────────────────────────────────────────────────
-function ScoreDetail({ entry, onClose }: { entry: IQSScoreEntry; onClose: () => void }) {
+function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntry; onClose: () => void; onEdit?: (e: IQSScoreEntry) => void; userRole?: string }) {
   const t = iqsTheme(entry.iqs);
   const fails = PARAM_ORDER.filter(p => entry.scores[p] === 'No');
+  const canEdit = userRole === 'quality' || userRole === 'admin';
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
       <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -325,10 +336,25 @@ function ScoreDetail({ entry, onClose }: { entry: IQSScoreEntry; onClose: () => 
               {entry.disposition && <><span>·</span><span className="text-gray-600 font-medium">{entry.disposition}</span></>}
               {entry.subDisposition && <><span>/</span><span className="text-gray-500">{entry.subDisposition}</span></>}
             </p>
+            {entry.updatedBy && (
+              <p className="text-[10px] text-amber-600 mt-0.5">
+                Last edited by {entry.updatedBy.split('@')[0]} at {new Date(entry.updatedAt || '').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition shrink-0">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {canEdit && onEdit && (
+              <button
+                onClick={() => { onClose(); onEdit(entry); }}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition"
+              >
+                Override
+              </button>
+            )}
+            <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
+            </button>
+          </div>
         </div>
 
         <div className="px-6 py-5 grid md:grid-cols-2 gap-6">
@@ -512,7 +538,7 @@ function NavItem({ icon, label, active, badge, onClick }: {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function QualityClient() {
+export default function QualityClient({ userRole, userEmail, selfAgentName }: QualityClientProps = {}) {
   const [tab, setTab] = useState<'performance' | 'log' | 'upload'>('performance');
 
   // Upload state
@@ -568,6 +594,27 @@ export default function QualityClient() {
   // Fix 3 — sortable columns
   const [sortCol, setSortCol] = useState<'iqs' | 'fails' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  // Agent timing analytics pagination
+  const [agentPage, setAgentPage] = useState(0);
+
+  // Edit/override modal state
+  const [editEntry, setEditEntry] = useState<IQSScoreEntry | null>(null);
+  const [editForm, setEditForm] = useState<{
+    agentName: string;
+    csat: string;
+    disposition: string;
+    subDisposition: string;
+    summary: string;
+    scores: Record<string, string>;
+    reasoning: Record<string, string>;
+    note: string;
+  } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editSaved, setEditSaved] = useState(false);
+
+  // Toast state
+  const [toast, setToast] = useState<string | null>(null);
 
   // ── Filtered entries ─────────────────────────────────────────────────────────
   const filteredEntries = useMemo(() => {
@@ -651,6 +698,68 @@ export default function QualityClient() {
 
   // Auto-load on mount
   useEffect(() => { loadScores(); }, [loadScores]);
+
+  // Lock agent filter when viewing own chats
+  useEffect(() => {
+    if (selfAgentName) {
+      setFilterAgent(selfAgentName);
+      setTab('log'); // default to score log for agents
+    }
+  }, [selfAgentName]);
+
+  // Reset agent timing page when data changes
+  useEffect(() => { setAgentPage(0); }, [agentStats]);
+
+  const openEditModal = (entry: IQSScoreEntry) => {
+    setEditEntry(entry);
+    setEditForm({
+      agentName: entry.agentName || '',
+      csat: entry.csat || '',
+      disposition: entry.disposition || '',
+      subDisposition: entry.subDisposition || '',
+      summary: entry.summary || '',
+      scores: { ...entry.scores },
+      reasoning: { ...entry.reasoning },
+      note: '',
+    });
+    setEditSaved(false);
+  };
+
+  const saveEdit = async () => {
+    if (!editEntry || !editForm) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch('/api/quality/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editEntry.id,
+          chatId: editEntry.chatId,
+          agentName: editForm.agentName,
+          scores: editForm.scores,
+          reasoning: editForm.reasoning,
+          disposition: editForm.disposition,
+          subDisposition: editForm.subDisposition,
+          csat: editForm.csat,
+          summary: editForm.summary,
+          note: editForm.note,
+        }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      const data = await res.json();
+      const updated: IQSScoreEntry = data.entry || { ...editEntry, ...editForm, updatedAt: new Date().toISOString(), updatedBy: userEmail };
+      setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
+      setEditSaved(true);
+      setToast('Override saved successfully');
+      setTimeout(() => setToast(null), 3000);
+      setEditEntry(null);
+      setEditForm(null);
+    } catch {
+      setToast('Failed to save override');
+      setTimeout(() => setToast(null), 3000);
+    }
+    setSavingEdit(false);
+  };
 
   const exportAll = useCallback(async () => {
     setExporting(true);
@@ -816,7 +925,123 @@ export default function QualityClient() {
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
     <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: '#f5f3ee' }}>
-      {detailEntry && <ScoreDetail entry={detailEntry} onClose={() => setDetailEntry(null)} />}
+      {detailEntry && (
+        <ScoreDetail
+          entry={detailEntry}
+          onClose={() => setDetailEntry(null)}
+          onEdit={openEditModal}
+          userRole={userRole}
+        />
+      )}
+
+      {/* ── Edit/Override Modal ── */}
+      {editEntry && editForm && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setEditEntry(null); setEditForm(null); }}>
+          <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-gray-900">Override Score</h2>
+                <p className="text-xs text-gray-400">Chat {editEntry.chatId}</p>
+              </div>
+              <button onClick={() => { setEditEntry(null); setEditForm(null); }} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-5">
+              {/* Basic fields */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Agent Name</label>
+                  <input type="text" value={editForm.agentName} onChange={e => setEditForm(f => f ? { ...f, agentName: e.target.value } : f)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">CSAT</label>
+                  <select value={editForm.csat} onChange={e => setEditForm(f => f ? { ...f, csat: e.target.value } : f)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white">
+                    <option value="">None</option>
+                    <option value="5">Good</option>
+                    <option value="3">Could be better</option>
+                    <option value="1">Bad</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Disposition</label>
+                  <input type="text" value={editForm.disposition} onChange={e => setEditForm(f => f ? { ...f, disposition: e.target.value } : f)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Sub-Disposition</label>
+                  <input type="text" value={editForm.subDisposition} onChange={e => setEditForm(f => f ? { ...f, subDisposition: e.target.value } : f)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Summary</label>
+                <textarea value={editForm.summary} onChange={e => setEditForm(f => f ? { ...f, summary: e.target.value } : f)} rows={3}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-y" />
+              </div>
+
+              {/* Parameter scores */}
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">Parameter Scores</p>
+                <div className="space-y-3">
+                  {PARAM_ORDER.map(p => (
+                    <div key={p} className="rounded-xl border border-gray-100 p-3 bg-gray-50/60">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
+                        <div className="flex gap-1">
+                          {(['Yes', 'No', 'NA'] as const).map(v => (
+                            <button key={v} onClick={() => setEditForm(f => f ? { ...f, scores: { ...f.scores, [p]: v } } : f)}
+                              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                                editForm.scores[p] === v
+                                  ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-gray-400 text-white'
+                                  : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-400'
+                              }`}>{v}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <textarea
+                        value={editForm.reasoning[p] || ''}
+                        onChange={e => setEditForm(f => f ? { ...f, reasoning: { ...f.reasoning, [p]: e.target.value } } : f)}
+                        placeholder="Reasoning…"
+                        rows={2}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-y bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reviewer note */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Quality Reviewer Note</label>
+                <textarea value={editForm.note} onChange={e => setEditForm(f => f ? { ...f, note: e.target.value } : f)} rows={3}
+                  placeholder="Internal note for this override…"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 resize-y" />
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={saveEdit} disabled={savingEdit}
+                  className="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition text-sm">
+                  {savingEdit ? 'Saving…' : 'Save Override'}
+                </button>
+                <button onClick={() => { setEditEntry(null); setEditForm(null); }}
+                  className="px-5 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl hover:bg-gray-50 transition text-sm">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl">
+          {toast}
+        </div>
+      )}
 
       {/* ── Left Panel ── */}
       <aside className="w-56 shrink-0 bg-[#111827] flex flex-col h-full">
@@ -839,8 +1064,10 @@ export default function QualityClient() {
             onClick={() => switchTab('performance')} />
           <NavItem icon={icons.log} label="Score Log" active={tab === 'log'}
             onClick={() => switchTab('log')} />
-          <NavItem icon={icons.upload} label="Upload & Score" active={tab === 'upload'}
-            onClick={() => switchTab('upload')} />
+          {!selfAgentName && (
+            <NavItem icon={icons.upload} label="Upload & Score" active={tab === 'upload'}
+              onClick={() => switchTab('upload')} />
+          )}
         </nav>
 
       </aside>
@@ -1001,6 +1228,63 @@ export default function QualityClient() {
                     </div>
                   </div>
 
+                  {/* Agent Timing Analytics Table */}
+                  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-bold text-gray-900">Agent Timing Analytics</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Average response and resolution times per agent</p>
+                      </div>
+                      <div className="flex gap-2 text-xs text-gray-500">
+                        {agentPage > 0 && (
+                          <button onClick={() => setAgentPage(p => p - 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg hover:border-gray-400 transition font-medium">← Prev</button>
+                        )}
+                        {agentPage < Math.ceil(agentStats.length / 5) - 1 && (
+                          <button onClick={() => setAgentPage(p => p + 1)} className="px-3 py-1.5 border border-gray-200 rounded-lg hover:border-gray-400 transition font-medium">Next →</button>
+                        )}
+                      </div>
+                    </div>
+                    {agentStats.length === 0 ? (
+                      <p className="text-sm text-gray-400 text-center py-8">No timing data yet</p>
+                    ) : (
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-gray-50/60 border-b border-gray-100">
+                            <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent</th>
+                            <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Chats</th>
+                            <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg IQS</th>
+                            <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg FRT</th>
+                            <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg Resolution</th>
+                            <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg Closure</th>
+                            <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">At Risk %</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {agentStats.slice(agentPage * 5, agentPage * 5 + 5).map((a, i) => {
+                            const atRiskPct = a.chats > 0 ? Math.round(a.atRisk / a.chats * 100) : 0;
+                            return (
+                              <tr key={a.agent} className={`border-b border-gray-50 hover:bg-emerald-50/30 transition ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
+                                <td className="px-5 py-3 font-semibold text-gray-900">{a.agent}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-gray-700">{a.chats}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  <IQSPill iqs={a.avgIqs} />
+                                </td>
+                                <td className="px-4 py-3 text-right tabular-nums text-gray-600">{fmtDuration(a.avgFrt ?? null)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-gray-600">{fmtDuration(a.avgResolution ?? null)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums text-gray-600">{fmtDuration(a.avgClosure ?? null)}</td>
+                                <td className="px-5 py-3 text-right tabular-nums">
+                                  <span className={`font-semibold ${atRiskPct >= 30 ? 'text-red-600' : atRiskPct >= 15 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                                    {atRiskPct}%
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+
                   {/* Team params */}
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                     <p className="text-sm font-bold text-gray-900 mb-0.5">Team Parameter Breakdown</p>
@@ -1066,7 +1350,8 @@ export default function QualityClient() {
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
                     <select value={filterAgent} onChange={e => setFilterAgent(e.target.value)}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px]">
+                      disabled={!!selfAgentName}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px] disabled:opacity-60 disabled:cursor-not-allowed">
                       <option value="">All agents</option>
                       {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
                     </select>
@@ -1234,6 +1519,13 @@ export default function QualityClient() {
                                 );
                                 if (col === 'Disposition') return <td key={col} className="px-3 py-2.5 text-gray-700 text-sm max-w-[130px] truncate" title={e.disposition}>{e.disposition || <span className="text-gray-300">—</span>}</td>;
                                 if (col === 'Sub-Disposition') return <td key={col} className="px-3 py-2.5 text-gray-500 text-xs max-w-[130px] truncate" title={e.subDisposition}>{e.subDisposition || <span className="text-gray-300">—</span>}</td>;
+                                if (col === 'Last Updated') return (
+                                  <td key={col} className="px-4 py-2.5 text-[12px] text-gray-400 whitespace-nowrap">
+                                    {e.updatedAt && e.updatedAt !== e.scoredAt
+                                      ? new Date(e.updatedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                                      : '—'}
+                                  </td>
+                                );
                                 if (col === 'Date') return <td key={col} className="px-3 py-2.5 text-gray-600">{(e.date || e.scoredAt || '').slice(0, 10)}</td>;
                                 return null;
                               })}

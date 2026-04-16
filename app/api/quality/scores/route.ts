@@ -8,7 +8,7 @@ const SLA_THRESHOLD_SECS = 180; // 3 minutes B→T SLA
 
 function qualityAccess(session: any): boolean {
   const role = session?.user?.role;
-  return !!role && ['admin', 'quality', 'tl'].includes(role);
+  return !!role && ['admin', 'quality', 'tl', 'agent'].includes(role);
 }
 
 /** Compute CSAT score 0-100 (Good=100, CBB=50, Bad=0) */
@@ -45,6 +45,18 @@ export async function GET(req: NextRequest) {
   const typeFilter  = searchParams.get('type') || ''; // 'bot' | 'agent' | 'hybrid'
   const limit       = searchParams.get('limit') ? parseInt(searchParams.get('limit')!) : 0;
 
+  // Auto-filter for agent role — they can only see their own chats
+  let selfAgentName = '';
+  if (session.user?.role === 'agent') {
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig();
+    const email = session.user?.email || '';
+    const configUser = config.users.find(u => (u.email || u.username) === email);
+    selfAgentName = configUser?.agentName || '';
+    // Force agent filter regardless of query params
+    // If no agentName is configured, they see nothing
+  }
+
   const [raw, totalStored] = await Promise.all([
     storeGetIQSScores(),
     storeGetIQSScoreCount(),
@@ -64,6 +76,10 @@ export async function GET(req: NextRequest) {
 
   // Apply filters
   if (agentFilter) entries = entries.filter(e => e.agentName === agentFilter);
+  // Agent role: force filter to their own name only
+  if (session.user?.role === 'agent') {
+    entries = selfAgentName ? entries.filter(e => e.agentName === selfAgentName) : [];
+  }
   if (tagFilter)   entries = entries.filter(e => (e.tags || '').toLowerCase().includes(tagFilter.toLowerCase()));
   if (dateFrom)    entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) >= dateFrom);
   if (dateTo)      entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10)) <= dateTo);
@@ -79,13 +95,17 @@ export async function GET(req: NextRequest) {
   const filteredForStats = entries; // already filtered above
 
   // Agent stats
-  const agentMap: Record<string, { total: number; sum: number; scores: number[] }> = {};
+  const agentMap: Record<string, { total: number; sum: number; scores: number[]; frts: number[]; resolutions: number[]; closures: number[]; b2ts: number[] }> = {};
   for (const e of filteredForStats) {
     const a = e.agentName || 'Unknown';
-    if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [] };
+    if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [], frts: [], resolutions: [], closures: [], b2ts: [] };
     agentMap[a].total++;
     agentMap[a].sum += e.iqs;
     agentMap[a].scores.push(e.iqs);
+    if (typeof e.frt === 'number') agentMap[a].frts.push(e.frt);
+    if (typeof e.resolutionTime === 'number') agentMap[a].resolutions.push(e.resolutionTime);
+    if (typeof e.closureTime === 'number') agentMap[a].closures.push(e.closureTime);
+    if (typeof e.botToTeamSecs === 'number') agentMap[a].b2ts.push(e.botToTeamSecs);
   }
   const agentStats = Object.entries(agentMap).map(([agent, d]) => ({
     agent,
@@ -95,6 +115,10 @@ export async function GET(req: NextRequest) {
     maxIqs: Math.max(...d.scores),
     high: d.scores.filter(s => s >= 90).length,
     atRisk: d.scores.filter(s => s < 70).length,
+    avgFrt: d.frts.length ? Math.round(d.frts.reduce((s,n) => s+n, 0) / d.frts.length) : null,
+    avgResolution: d.resolutions.length ? Math.round(d.resolutions.reduce((s,n) => s+n, 0) / d.resolutions.length) : null,
+    avgClosure: d.closures.length ? Math.round(d.closures.reduce((s,n) => s+n, 0) / d.closures.length) : null,
+    avgBotToTeam: d.b2ts.length ? Math.round(d.b2ts.reduce((s,n) => s+n, 0) / d.b2ts.length) : null,
   })).sort((a, b) => b.avgIqs - a.avgIqs);
 
   // Param failure rates
@@ -163,5 +187,6 @@ export async function GET(req: NextRequest) {
     total: totalFiltered,
     totalStored,
     summary,
+    selfAgentName: selfAgentName || null,
   });
 }

@@ -18,13 +18,14 @@ export async function GET() {
     email: u.email || u.username,
     role: u.role || (u.isAdmin ? 'admin' : 'agent'),
     isAdmin: u.role === 'admin' || !!u.isAdmin,
+    agentName: u.agentName || '',
   })));
 }
 
 // POST — add/invite a user by email with a role
 export async function POST(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const { email, role } = await req.json();
+  const { email, role, agentName } = await req.json();
   if (!email?.trim()) return NextResponse.json({ error: 'Email required' }, { status: 400 });
   if (!email.endsWith('@wintwealth.com')) return NextResponse.json({ error: 'Only @wintwealth.com emails allowed' }, { status: 400 });
 
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     // Update role if user already exists
     existing.role = assignedRole;
     existing.isAdmin = assignedRole === 'admin';
+    if (agentName !== undefined) existing.agentName = agentName;
     await writeConfig(config);
     return NextResponse.json({ success: true, updated: true });
   }
@@ -46,26 +48,30 @@ export async function POST(req: NextRequest) {
     email,
     role: assignedRole,
     isAdmin: assignedRole === 'admin',
+    agentName: agentName || undefined,
   });
   await writeConfig(config);
   return NextResponse.json({ success: true });
 }
 
-// PATCH — update a user's role
+// PATCH — update a user's role and/or agentName
 export async function PATCH(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const { email, role } = await req.json();
-  if (!email || !role) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+  const { email, role, agentName } = await req.json();
+  if (!email) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
 
   const validRoles: UserRole[] = ['agent', 'admin', 'quality', 'tl'];
-  if (!validRoles.includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
+  if (role && !validRoles.includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
 
   const config = await readConfig();
   const user = config.users.find(u => u.email === email || u.username === email);
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-  user.role = role as UserRole;
-  user.isAdmin = role === 'admin';
+  if (role) {
+    user.role = role as UserRole;
+    user.isAdmin = role === 'admin';
+  }
+  if (agentName !== undefined) user.agentName = agentName;
   await writeConfig(config);
   return NextResponse.json({ success: true });
 }

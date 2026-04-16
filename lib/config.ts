@@ -8,6 +8,7 @@ export interface PortalUser {
   isAdmin?: boolean;  // legacy — derived from role === 'admin'
   role?: UserRole;    // new role field
   email?: string;     // Google email (primary identifier for OAuth users)
+  agentName?: string;
 }
 
 export interface PortalConfig {
