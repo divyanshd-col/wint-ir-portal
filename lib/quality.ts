@@ -290,7 +290,7 @@ Score this chat across all 12 parameters. Output ONLY the JSON.`;
 /** Sanitize a JSON string: fix unescaped newlines/tabs/quotes inside string values. */
 function sanitizeJson(s: string): string {
   // Replace literal newlines/tabs inside JSON string values (between quotes) with escaped versions
-  return s.replace(/("(?:[^"\\]|\\.)*")/gs, (match) =>
+  return s.replace(/("(?:[^"\\]|\\.)*")/g, (match) =>
     match
       .replace(/\n/g, '\\n')
       .replace(/\r/g, '\\r')

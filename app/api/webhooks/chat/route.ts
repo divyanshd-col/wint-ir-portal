@@ -209,7 +209,9 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     scoredAt:   new Date().toISOString(),
     provider, model,
     scoredBy:   'webhook:robylon',
-    agentName:  state.agentName || (parsed as any).extractedAgentName || '',
+    agentName:  timing.conversationType === 'bot'
+      ? 'Myra'
+      : (state.agentName || (parsed as any).extractedAgentName || ''),
     date:       state.date,
     tags:       state.disposition,
     disposition:    state.disposition,
