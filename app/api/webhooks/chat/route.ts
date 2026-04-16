@@ -31,6 +31,9 @@ import {
   storeGetPendingScore,
   storeDeletePendingScore,
   storeSetTranscript,
+  storeGetTranscript,
+  storeGetAndClearPendingCsat,
+  storePendingCsat,
   type PendingScoreState,
 } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
@@ -243,9 +246,9 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
   return entry;
 }
 
-// ── Try to score if all conditions met (all-three path) ───────────────────────
+// ── Score as soon as transcript + tags arrive — CSAT is not a gate ───────────
 async function tryScoreIfReady(state: PendingScoreState): Promise<IQSScoreEntry | null> {
-  if (!state.hasTranscript || !state.hasTags || !state.hasCsat) return null;
+  if (!state.hasTranscript || !state.hasTags) return null;
   return executeScoring(state);
 }
 
@@ -316,9 +319,8 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     });
   }
 
-  const waiting = !state.hasTags ? 'waiting for tags' : 'waiting for CSAT (max 12 h)';
-  console.log(`[webhook] Transcript stored for chat ${chatId} — ${waiting}`);
-  return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting });
+  console.log(`[webhook] Transcript stored for chat ${chatId} — waiting for classification`);
+  return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'classification' });
 }
 
 // ── Handler: CLASSIFICATION_UPDATED ──────────────────────────────────────────
@@ -335,47 +337,60 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const subDisposition = primary.names?.l2 || '';
 
   const state = await getOrCreate(chatId);
+
+  // Check if we already have a pending CSAT for this chat — carry it in
+  const pendingCsat = await storeGetAndClearPendingCsat(chatId);
+  if (pendingCsat) {
+    Object.assign(state, { csat: pendingCsat, hasCsat: true });
+  }
+
   Object.assign(state, { disposition, subDisposition, hasTags: true });
   await storeSavePendingScore(state);
 
+  // Persist classification alongside the transcript (so it's stored permanently)
+  if (state.chatId) {
+    const existing = await storeGetTranscript(chatId);
+    if (existing) {
+      await storeSetTranscript(chatId, { ...existing, disposition, subDisposition });
+    }
+  }
+
+  // Score immediately — CSAT is no longer a gate
   const scored = await tryScoreIfReady(state);
   if (scored) {
     return NextResponse.json({
       ok: true, chat_id: chatId, iqs: scored.iqs,
-      disposition, subDisposition, scored_at: scored.scoredAt,
+      disposition, subDisposition, csat: scored.csat || undefined,
+      scored_at: scored.scoredAt,
     });
   }
 
-  const waiting = !state.hasTranscript ? 'waiting for transcript' : 'waiting for CSAT (max 12 h)';
-  console.log(`[webhook] Tags stored for chat ${chatId}: ${disposition} > ${subDisposition} — ${waiting}`);
-  return NextResponse.json({ ok: true, event: 'tags_stored', chat_id: chatId, disposition, subDisposition, waiting });
+  console.log(`[webhook] Tags stored for chat ${chatId}: ${disposition} > ${subDisposition} — waiting for transcript`);
+  return NextResponse.json({ ok: true, event: 'tags_stored', chat_id: chatId, disposition, subDisposition, waiting: 'transcript' });
 }
 
-// ── Handler: CSAT_SUBMITTED ───────────────────────────────────────────────────
+// ── Handler: CSAT_SUBMITTED — only updates existing score, never triggers scoring ──
 async function handleCsatEvent(body: any): Promise<NextResponse> {
   const chatId = String(body.chat_id || '');
   const rating  = body.data?.rating;
   if (!rating) {
-    return NextResponse.json({ ok: true, scored: false, reason: 'No rating in CSAT event' });
+    return NextResponse.json({ ok: true, reason: 'No rating in CSAT event' });
   }
 
-  const csat  = normaliseCsat(String(rating));
-  const state = await getOrCreate(chatId);
-  Object.assign(state, { csat, hasCsat: true });
-  await storeSavePendingScore(state);
+  const csat = normaliseCsat(String(rating));
 
-  const scored = await tryScoreIfReady(state);
-  if (scored) {
-    return NextResponse.json({
-      ok: true, chat_id: chatId, iqs: scored.iqs, csat, scored_at: scored.scoredAt,
-    });
+  // Try to update an already-scored entry in the IQS list
+  const { storeUpdateIQSScoreCsat } = await import('@/lib/store');
+  const updated = await storeUpdateIQSScoreCsat(chatId, csat);
+  if (updated) {
+    console.log(`[webhook] CSAT updated on scored entry for chat ${chatId}: ${csat}`);
+    return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat });
   }
 
-  const waiting = !state.hasTranscript ? 'waiting for transcript'
-                : !state.hasTags       ? 'waiting for tags'
-                : 'unexpected state';
-  console.log(`[webhook] CSAT stored for chat ${chatId}: ${csat} — ${waiting}`);
-  return NextResponse.json({ ok: true, event: 'csat_stored', chat_id: chatId, csat, waiting });
+  // Score not found yet — store as pending so classification handler can pick it up
+  await storePendingCsat(chatId, csat);
+  console.log(`[webhook] CSAT stored pending for chat ${chatId}: ${csat} — no scored entry found yet`);
+  return NextResponse.json({ ok: true, event: 'csat_pending', chat_id: chatId, csat });
 }
 
 // ── Handler: legacy flat payload (backward compat) ────────────────────────────

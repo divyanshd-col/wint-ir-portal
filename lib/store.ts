@@ -384,14 +384,14 @@ const TRANSCRIPT_PREFIX = 'wint_t:';
 
 export async function storeSetTranscript(
   chatId: string,
-  data: { timedMessages?: any[]; rawTranscript?: string },
+  data: { timedMessages?: any[]; rawTranscript?: string; disposition?: string; subDisposition?: string },
 ): Promise<void> {
   await kv_set(`${TRANSCRIPT_PREFIX}${chatId}`, JSON.stringify(data));
 }
 
 export async function storeGetTranscript(
   chatId: string,
-): Promise<{ timedMessages?: any[]; rawTranscript?: string } | null> {
+): Promise<{ timedMessages?: any[]; rawTranscript?: string; disposition?: string; subDisposition?: string } | null> {
   const raw = await kv_get(`${TRANSCRIPT_PREFIX}${chatId}`);
   if (!raw) return null;
   try { return JSON.parse(raw); } catch { return null; }
