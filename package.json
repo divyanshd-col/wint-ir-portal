@@ -11,6 +11,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.44.0",
+    "@types/pg": "^8.20.0",
     "@vercel/kv": "^3.0.0",
     "autoprefixer": "^10.4.27",
     "bcryptjs": "^3.0.3",
@@ -19,6 +20,7 @@
     "next": "16.1.6",
     "next-auth": "^4.24.13",
     "pdf-parse": "^2.4.5",
+    "pg": "^8.20.0",
     "postcss": "^8.5.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",

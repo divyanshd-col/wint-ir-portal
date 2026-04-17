@@ -18,6 +18,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
+  // CX dashboard: all authenticated roles
+  // (role enforcement is done per-page and per-API-route)
+  // No restriction needed here — just let authenticated users through
+
   // Quality section: admin, quality, tl — plus agent (sees own-only dashboard)
   if (pathname.startsWith('/quality')) {
     const role = token.role as string | undefined;

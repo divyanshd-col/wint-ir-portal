@@ -118,6 +118,19 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
               </Link>
             </div>
           )}
+          <div>
+            <Link
+              href="/cx"
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="9" width="3" height="6" rx="0.5"/>
+                <rect x="6" y="5" width="3" height="10" rx="0.5"/>
+                <rect x="11" y="1" width="3" height="14" rx="0.5"/>
+              </svg>
+              CX Dashboard
+            </Link>
+          </div>
         </nav>
 
         {/* Footer */}
