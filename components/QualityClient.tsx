@@ -725,6 +725,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   const [summary, setSummary] = useState<SummaryMetrics | null>(null);
   const [logsLoaded, setLogsLoaded] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [logsError, setLogsError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   // ── Filter state (pending = UI inputs; applied = what was last fetched) ────────
@@ -810,10 +811,17 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   // skipStats=false: filter change / initial load — recompute all stats
   const loadScores = useCallback(async (page: number, filters: LogFilters, skipStats = false) => {
     setLogsLoading(true);
+    setLogsError(null);
     try {
       const params = buildParams(page, filters);
       if (skipStats) params.set('skipStats', '1');
-      const data = await fetch(`/api/quality/scores?${params}`).then(r => r.json());
+      const resp = await fetch(`/api/quality/scores?${params}`);
+      const data = await resp.json();
+      if (!resp.ok) {
+        setLogsError(`API error ${resp.status}: ${data?.error || data?.detail || resp.statusText}`);
+        setLogsLoading(false);
+        return;
+      }
       setEntries(data.entries || []);
       // Only overwrite stats when server sent them (skipStats=false)
       if (!skipStats) {
@@ -829,7 +837,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
       setTotalFiltered(data.total ?? 0);
       setHasMore(data.hasMore ?? false);
       setLogsLoaded(true);
-    } catch {}
+    } catch (e: any) {
+      setLogsError(`Failed to load: ${e?.message || String(e)}`);
+    }
     setLogsLoading(false);
   }, []);
 
@@ -1302,6 +1312,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
           {/* ── PERFORMANCE TAB ── */}
           {tab === 'performance' && (
             <>
+              {logsError && (
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm font-medium">
+                  {logsError}
+                </div>
+              )}
               {logsLoading && (
                 <div className="flex items-center justify-center h-48">
                   <div className="flex items-center gap-3 text-gray-400">
