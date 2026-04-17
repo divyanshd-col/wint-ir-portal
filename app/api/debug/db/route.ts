@@ -125,5 +125,48 @@ export async function GET() {
     result.errors.push(err?.message ?? String(err));
   }
 
+  // Full quality pipeline simulation
+  try {
+    const { getAllScoredConversations } = await import('@/lib/robylon/db');
+    const allRows = await getAllScoredConversations(2000);
+
+    let parsed = 0, failed = 0, nullIqs = 0, passFilter = 0;
+    const agentNames = new Set<string>();
+
+    for (const row of allRows) {
+      try {
+        const params = row.parameters || {};
+        const scores: Record<string, string> = {};
+        for (const [key, val] of Object.entries(params) as [string, any][]) {
+          scores[key] = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
+        }
+        const entry = {
+          iqs: row.iqs,
+          agentName: row.agentName || '',
+          scoredAt: row.scoredAt,
+          scores,
+        };
+        parsed++;
+        if (entry.iqs == null) { nullIqs++; continue; }
+        if (entry.iqs >= 0 && entry.iqs <= 100) {
+          passFilter++;
+          agentNames.add(entry.agentName || 'Unknown');
+        }
+      } catch { failed++; }
+    }
+
+    result.full_pipeline_sim = {
+      total_rows: allRows.length,
+      parsed_ok: parsed,
+      parse_failed: failed,
+      null_iqs: nullIqs,
+      pass_0_100_filter: passFilter,
+      distinct_agents: agentNames.size,
+      agent_names: [...agentNames].slice(0, 10),
+    };
+  } catch (e: any) {
+    result.full_pipeline_sim = { error: e?.message };
+  }
+
   return NextResponse.json(result);
 }
