@@ -42,11 +42,11 @@ export async function GET(req: NextRequest) {
       COALESCE(${groupCol}, '__unassigned__')                     AS group_name,
       COALESCE(${counterCol}, '—')                                AS counterpart,
       COUNT(c.id)::int                                            AS volume,
-      ROUND(AVG(${CSAT})::numeric,1)                              AS csat_pct,
-      ROUND(AVG(s.iqs_score)::numeric,1)                          AS avg_iqs,
-      ROUND(AVG(c.resolution_seconds)::numeric,0)                 AS avg_resolution,
-      ROUND(AVG(c.frt_seconds)::numeric,0)                        AS avg_frt,
-      ROUND(AVG(c.bot_to_team_seconds)::numeric,0)                AS avg_handoff
+      ROUND(AVG(${CSAT})::numeric,1)::float                       AS csat_pct,
+      ROUND(AVG(s.iqs_score)::numeric,1)::float                   AS avg_iqs,
+      ROUND(AVG(c.resolution_seconds)::numeric,0)::int            AS avg_resolution,
+      ROUND(AVG(c.frt_seconds)::numeric,0)::int                   AS avg_frt,
+      ROUND(AVG(c.bot_to_team_seconds)::numeric,0)::int           AS avg_handoff
     FROM agents a
     JOIN conversations c ON c.agent_id = a.id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -65,9 +65,9 @@ export async function GET(req: NextRequest) {
       COALESCE(${groupCol}, '__unassigned__')                     AS entity_name,
       COUNT(DISTINCT a.id)::int                                   AS agent_count,
       COUNT(c.id)::int                                            AS volume,
-      ROUND(AVG(${CSAT})::numeric,1)                              AS csat_pct,
-      ROUND(AVG(s.iqs_score)::numeric,1)                          AS avg_iqs,
-      ROUND(AVG(c.resolution_seconds)::numeric,0)                 AS avg_resolution
+      ROUND(AVG(${CSAT})::numeric,1)::float                       AS csat_pct,
+      ROUND(AVG(s.iqs_score)::numeric,1)::float                   AS avg_iqs,
+      ROUND(AVG(c.resolution_seconds)::numeric,0)::int            AS avg_resolution
     FROM agents a
     JOIN conversations c ON c.agent_id = a.id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id

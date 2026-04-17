@@ -15,11 +15,11 @@ export async function GET(req: NextRequest) {
   const [row] = await query(`
     SELECT
       COUNT(c.id)::int AS volume,
-      ROUND(AVG(CASE WHEN c.csat_score=5 THEN 100 WHEN c.csat_score=3 THEN 50 WHEN c.csat_score=1 THEN 0 END)::numeric,1) AS csat_pct,
-      ROUND(AVG(s.iqs_score)::numeric,1)          AS avg_iqs,
-      ROUND(AVG(c.resolution_seconds)::numeric,0) AS avg_resolution,
-      ROUND(AVG(c.frt_seconds)::numeric,0)        AS avg_frt,
-      ROUND(AVG(c.bot_to_team_seconds)::numeric,0) AS avg_handoff,
+      ROUND(AVG(CASE WHEN c.csat_score=5 THEN 100 WHEN c.csat_score=3 THEN 50 WHEN c.csat_score=1 THEN 0 END)::numeric,1)::float AS csat_pct,
+      ROUND(AVG(s.iqs_score)::numeric,1)::float   AS avg_iqs,
+      ROUND(AVG(c.resolution_seconds)::numeric,0)::int AS avg_resolution,
+      ROUND(AVG(c.frt_seconds)::numeric,0)::int   AS avg_frt,
+      ROUND(AVG(c.bot_to_team_seconds)::numeric,0)::int AS avg_handoff,
       COUNT(CASE WHEN c.csat_score=5 THEN 1 END)::int  AS csat_good,
       COUNT(CASE WHEN c.csat_score IN(1,3) THEN 1 END)::int AS csat_bad,
       COUNT(CASE WHEN c.csat_score IS NOT NULL THEN 1 END)::int AS with_csat
