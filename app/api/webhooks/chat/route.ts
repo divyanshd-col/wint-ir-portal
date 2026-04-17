@@ -144,7 +144,6 @@ function extractQueryFromTranscript(transcript: string): string {
 }
 
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
-// Returns null (without calling LLM) if the chat was handled entirely by a bot.
 export async function executeScoring(state: PendingScoreState): Promise<IQSScoreEntry | null> {
   // Hard requirement: never score without transcript AND tags
   if (!state.hasTranscript || !state.hasTags) {
@@ -155,19 +154,18 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     );
   }
 
-  // ── Bot-only check: determine conversation type BEFORE calling LLM ──────────
-  // Bot-handled chats (Myra only, no human agent) are not quality-scored —
-  // there is no agent performance to evaluate, and scoring them wastes LLM budget.
+  // ── Determine conversation type BEFORE calling LLM ──────────────────────────
   const timedMessages: TimedMessage[] = state.timedMessages as TimedMessage[];
   const timing = timedMessages.length
     ? analyzeConversationTiming(timedMessages, state.convEnded, state.transferTimestamp)
     : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
-  if (timing.conversationType === 'bot') {
-    console.log(`[webhook] Skipping IQS scoring for bot-handled chat ${state.chatId} — no human agent involved`);
-    await storeDeletePendingScore(state.chatId);
-    return null;
-  }
+  // For bot-only chats, use 'Myra' as the agent name so they appear correctly in the dashboard.
+  // A [BOT-HANDLED] prefix is added to the transcript so the LLM scores Opening/Call/Empathy as NA.
+  const effectiveAgentName = state.agentName || (timing.conversationType === 'bot' ? 'Myra' : '');
+  const effectiveTranscript = timing.conversationType === 'bot'
+    ? `[BOT-HANDLED CHAT — No human agent involved. Score Opening, Call, Empathy as NA unless the bot explicitly performed them.]\n\n${state.transcript}`
+    : state.transcript;
 
   const config       = await readConfig();
   const provider     = config.llmProvider || 'gemini';
@@ -196,7 +194,7 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     console.warn('[webhook] KB fetch failed, scoring without context:', err.message);
   }
 
-  const userPrompt = buildScoringPrompt(state.transcript, state.disposition, state.chatId, '', kbContext, state.subDisposition);
+  const userPrompt = buildScoringPrompt(effectiveTranscript, state.disposition, state.chatId, '', kbContext, state.subDisposition);
 
   let rawResponse: string;
   if (provider === 'claude' && anthropicKey) {
@@ -228,7 +226,7 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     updatedAt:  scoredAt,
     provider, model,
     scoredBy:   'webhook:robylon',
-    agentName:  state.agentName || (parsed as any).extractedAgentName || '',
+    agentName:  effectiveAgentName || (parsed as any).extractedAgentName || '',
     date:       state.date,
     tags:       state.disposition,
     disposition:    state.disposition,
@@ -253,7 +251,7 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
   await storeSetTranscript(state.chatId, { timedMessages: state.timedMessages });
   await storeDeletePendingScore(state.chatId);
 
-  console.log(`[webhook] Scored chat ${state.chatId} → IQS ${entry.iqs}% (${entry.agentName || 'unknown'}) type=${timing.conversationType} csat=${state.csat || 'none'}`);
+  console.log(`[webhook] Scored chat ${state.chatId} → IQS ${entry.iqs}% (${entry.agentName || 'unknown'}) type=${timing.conversationType} csat=${state.csat || 'none'}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
 
   // ── Slack alert: fire immediately when chat is technically/legally wrong ─────
   if (entry.scores?.Technical === 'No') {

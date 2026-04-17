@@ -40,8 +40,8 @@ export async function GET(req: NextRequest) {
     try {
       const scored = await executeScoring(state);
       if (!scored) {
-        // null = bot-only chat, skipped intentionally (no LLM call made)
-        results.push({ chatId, reason: 'skipped — bot-handled chat' });
+        // executeScoring returns null only on unexpected edge cases
+        results.push({ chatId, reason: 'skipped — no entry returned' });
         continue;
       }
       console.log(`[cron] Scored chat ${chatId} → IQS ${scored.iqs}%`);

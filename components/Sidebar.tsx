@@ -25,7 +25,7 @@ function formatTimeAgo(ts: number): string {
 }
 
 export default function Sidebar({ username, isAdmin, role, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
-  const canSeeQuality = isAdmin || role === 'quality' || role === 'tl';
+  const canSeeQuality = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
   const [open, setOpen] = useState(true);
   const [conversations, setConversations] = useState<SavedConversation[]>([]);
 
@@ -114,7 +114,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
                 </svg>
-                Quality
+                {role === 'agent' ? 'My Quality' : 'Quality'}
               </Link>
             </div>
           )}

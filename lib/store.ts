@@ -235,6 +235,58 @@ export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Pro
   );
 }
 
+// --- IQS Score Flags (agent disputes a score, sent to quality for review) ---
+
+const IQS_FLAGS_KEY = 'wint_iqs_flags';
+
+export interface IQSFlag {
+  id: string;
+  scoreId: string;
+  chatId: string;
+  agentName: string;
+  agentEmail: string;
+  agentNote: string;           // why the agent thinks the score is wrong
+  flaggedAt: string;           // ISO
+  status: 'pending' | 'reviewed';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+}
+
+export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LPUSH', IQS_FLAGS_KEY, JSON.stringify(entry)], ['LTRIM', IQS_FLAGS_KEY, '0', '999']]),
+    });
+  } catch {}
+}
+
+export async function storeGetIQSFlags(): Promise<string[]> {
+  return kv_lrange(IQS_FLAGS_KEY, 0, -1);
+}
+
+export async function storeUpdateIQSFlag(
+  id: string,
+  updates: Partial<Pick<IQSFlag, 'status' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
+): Promise<boolean> {
+  if (!ready()) return false;
+  const all = await storeGetIQSFlags();
+  const idx = all.findIndex(raw => { try { return JSON.parse(raw).id === id; } catch { return false; } });
+  if (idx < 0) return false;
+  try {
+    const entry = { ...JSON.parse(all[idx]), ...updates };
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LSET', IQS_FLAGS_KEY, String(idx), JSON.stringify(entry)]]),
+    });
+    return true;
+  } catch { return false; }
+}
+
 // --- Pending Score State (accumulates TICKET_CLOSED + CLASSIFICATION + CSAT before scoring) ---
 
 const PENDING_SCORE_PREFIX  = 'wint_ps:';
