@@ -296,5 +296,14 @@ export async function GET(req: NextRequest) {
     page,
     pageSize: PAGE_SIZE,
     hasMore,
+    _debug: {
+      rawRows: totalStored,
+      allParsed: allParsed.length,
+      afterFilters: totalFiltered,
+      agentStatsCount: agentStats.length,
+      role: session.user?.role,
+      agentFilter,
+      selfAgentName: selfAgentName || null,
+    },
   });
 }
