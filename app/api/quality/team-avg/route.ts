@@ -6,8 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { storeGetAllIQSScores } from '@/lib/store';
-import type { IQSScoreEntry } from '@/lib/quality';
+import { getAllScoredConversations } from '@/lib/robylon/db';
 
 const SLA_SECS = 180;
 
@@ -28,22 +27,28 @@ export async function GET(req: NextRequest) {
   const dateFrom = searchParams.get('dateFrom') || '';
   const dateTo   = searchParams.get('dateTo') || '';
 
-  const raw = await storeGetAllIQSScores();
-  let entries: IQSScoreEntry[] = raw.map(r => {
-    try { return JSON.parse(r); } catch { return null; }
-  }).filter(Boolean);
+  const rawRows = await getAllScoredConversations(2000);
+
+  // Apply date filters and map to typed fields
+  let entries = rawRows.map(row => ({
+    scoredAt:       row.scoredAt as string | undefined,
+    iqs:            row.iqs as number,
+    frt:            row.frt as number | undefined,
+    resolutionTime: row.resolutionTime as number | undefined,
+    botToTeamSecs:  row.botToTeamSecs as number | undefined,
+    csatScore:      row.csat_score as number | null,
+  }));
 
   if (dateFrom) entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) >= dateFrom);
   if (dateTo)   entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) <= dateTo);
 
   const resValues  = entries.map(e => e.resolutionTime).filter((v): v is number => typeof v === 'number');
   const frtValues  = entries.map(e => e.frt).filter((v): v is number => typeof v === 'number');
-  const closeVals  = entries.map(e => e.closureTime).filter((v): v is number => typeof v === 'number');
   const iqsVals    = entries.map(e => e.iqs).filter((v): v is number => typeof v === 'number');
   const csatScores: number[] = entries.reduce<number[]>((acc, e) => {
-    if (e.csat === '5') acc.push(100);
-    else if (e.csat === '3') acc.push(50);
-    else if (e.csat === '1') acc.push(0);
+    if (e.csatScore === 5) acc.push(100);
+    else if (e.csatScore === 3) acc.push(50);
+    else if (e.csatScore === 1) acc.push(0);
     return acc;
   }, []);
 
@@ -55,7 +60,7 @@ export async function GET(req: NextRequest) {
     avgIqs:        avg(iqsVals),
     avgFrt:        avg(frtValues),
     avgResolution: avg(resValues),
-    avgClosure:    avg(closeVals),
+    avgClosure:    null, // closureTime not stored separately in pg schema
     avgCsat:       avg(csatScores),
     slaPercent:    b2tValues.length > 0 ? Math.round((slaOk / b2tValues.length) * 100) : null,
   });

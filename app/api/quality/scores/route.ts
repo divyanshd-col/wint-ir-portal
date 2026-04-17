@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { storeGetAllIQSScores, storeGetIQSScoreCount } from '@/lib/store';
+import { getAllScoredConversations } from '@/lib/robylon/db';
 import { PARAM_ORDER } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -48,6 +48,40 @@ function getWeekLabel(key: string): string {
   return `${fmt(mon)} – ${fmt(sun)}`;
 }
 
+// ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
+function toIQSScoreEntry(row: any): IQSScoreEntry {
+  const params = row.parameters || {};
+  const scores: Record<string, string> = {};
+  const reasoning: Record<string, string> = {};
+  for (const [key, val] of Object.entries(params) as [string, any][]) {
+    const k = key.charAt(0).toUpperCase() + key.slice(1); // 'technical' → 'Technical'
+    scores[k]    = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
+    reasoning[k] = val.reasoning || '';
+  }
+  const csatStr = row.csat_score ? String(row.csat_score) : '';
+  const tags = row.tags || {};
+  return {
+    id:              `${row.scoredAt}-${row.chatId}`,
+    chatId:          row.chatId,
+    scoredAt:        row.scoredAt,
+    agentName:       row.agentName || '',
+    date:            row.date ? String(row.date).slice(0, 10) : '',
+    iqs:             row.iqs,
+    csat:            csatStr,
+    scores:          scores as Record<string, any>,
+    reasoning,
+    summary:         '',
+    provider:        row.modelVersion?.includes('gemini') ? 'gemini' : 'claude',
+    model:           row.modelVersion || '',
+    conversationType: row.conversationType || 'agent',
+    frt:             row.frt ?? undefined,
+    botToTeamSecs:   row.botToTeamSecs ?? undefined,
+    resolutionTime:  row.resolutionTime ?? undefined,
+    disposition:     tags.disposition || '',
+    subDisposition:  tags.sub_disposition || '',
+  } as IQSScoreEntry;
+}
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || !qualityAccess(session)) {
@@ -60,8 +94,8 @@ export async function GET(req: NextRequest) {
   const agentFilter   = searchParams.get('agent') || '';
   const minScore      = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) : 0;
   const maxScore      = searchParams.get('maxScore') ? parseInt(searchParams.get('maxScore')!) : 100;
-  const tagFilter     = searchParams.get('tag') || '';       // disposition exact match
-  const subTagFilter  = searchParams.get('subTag') || '';    // subDisposition exact match
+  const tagFilter     = searchParams.get('tag') || '';
+  const subTagFilter  = searchParams.get('subTag') || '';
   const csatFilter    = searchParams.get('csat') || '';
   const dateFrom      = searchParams.get('dateFrom') || '';
   const dateTo        = searchParams.get('dateTo') || '';
@@ -77,25 +111,17 @@ export async function GET(req: NextRequest) {
     selfAgentName = configUser?.agentName || '';
   }
 
-  // Parallel 500-entry batches — each response stays well under Upstash's 1 MB limit.
-  // storeGetAllIQSScores() fires all batches simultaneously → one effective round-trip.
-  const [raw, totalStored] = await Promise.all([
-    storeGetAllIQSScores(),
-    storeGetIQSScoreCount(),
-  ]);
+  const rawRows = await getAllScoredConversations(2000);
+  const totalStored = rawRows.length;
 
-  const allParsed: IQSScoreEntry[] = raw.map(r => {
-    try {
-      const e = JSON.parse(r);
-      if (e && e.transcript) delete e.transcript;
-      return e;
-    } catch { return null; }
-  }).filter(Boolean);
+  const allParsed: IQSScoreEntry[] = rawRows.map(row => {
+    try { return toIQSScoreEntry(row); } catch { return null; }
+  }).filter(Boolean) as IQSScoreEntry[];
 
   // Derive available filter values from ALL entries (unfiltered)
-  const availableAgents        = [...new Set(allParsed.map(e => e.agentName).filter(Boolean))].sort() as string[];
-  const availableDispositions  = [...new Set(allParsed.map(e => e.disposition).filter(Boolean))].sort() as string[];
-  const availableSubDispositions = [...new Set(allParsed.map(e => e.subDisposition).filter(Boolean))].sort() as string[];
+  const availableAgents           = [...new Set(allParsed.map(e => e.agentName).filter(Boolean))].sort() as string[];
+  const availableDispositions     = [...new Set(allParsed.map(e => e.disposition).filter(Boolean))].sort() as string[];
+  const availableSubDispositions  = [...new Set(allParsed.map(e => e.subDisposition).filter(Boolean))].sort() as string[];
 
   // Apply filters
   let entries = [...allParsed];
@@ -138,7 +164,7 @@ export async function GET(req: NextRequest) {
       agentMap[a].scores.push(e.iqs);
       if (typeof e.frt === 'number') agentMap[a].frts.push(e.frt);
       if (typeof e.resolutionTime === 'number') agentMap[a].resolutions.push(e.resolutionTime);
-      if (typeof e.closureTime === 'number') agentMap[a].closures.push(e.closureTime);
+      if (typeof (e as any).closureTime === 'number') agentMap[a].closures.push((e as any).closureTime);
       if (typeof e.botToTeamSecs === 'number') agentMap[a].b2ts.push(e.botToTeamSecs);
     }
     agentStats = Object.entries(agentMap).map(([agent, d]) => ({
@@ -202,7 +228,7 @@ export async function GET(req: NextRequest) {
     const frtValues   = filteredForStats.map(e => e.frt).filter((v): v is number => typeof v === 'number');
     const b2tValues   = filteredForStats.map(e => e.botToTeamSecs).filter((v): v is number => typeof v === 'number');
     const resValues   = filteredForStats.map(e => e.resolutionTime).filter((v): v is number => typeof v === 'number');
-    const closeValues = filteredForStats.map(e => e.closureTime).filter((v): v is number => typeof v === 'number');
+    const closeValues = filteredForStats.map(e => (e as any).closureTime).filter((v): v is number => typeof v === 'number');
     const slaOk       = b2tValues.filter(v => v <= SLA_THRESHOLD_SECS).length;
 
     const iqsEntries    = filteredForStats.filter(e => e.iqs !== undefined);

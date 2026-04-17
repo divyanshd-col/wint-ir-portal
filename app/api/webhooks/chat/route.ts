@@ -1,15 +1,16 @@
 /**
  * POST /api/webhooks/chat
  *
- * Robylon webhook. Three events feed a per-chat pending state:
+ * Robylon webhook. Three events drive PostgreSQL-backed conversation state:
  *
- *   TICKET_CLOSED          — transcript + agent name + timing
- *   CLASSIFICATION_UPDATED — disposition (l1) + sub-disposition (l2)
- *   CSAT_SUBMITTED         — customer rating
+ *   TICKET_CLOSED          — transcript + agent name + timing → upsert conversation
+ *   CLASSIFICATION_UPDATED — disposition (l1) + sub-disposition (l2) → update tags
+ *   CSAT_SUBMITTED         — customer rating → update csat_score on conversations
  *
  * Scoring is triggered when:
- *   1. All three signals are present  → score immediately
- *   2. Transcript + tags present, no CSAT for ≥ 12 h → scored by hourly cron
+ *   1. TICKET_CLOSED fires and tags already exist  → score immediately
+ *   2. CLASSIFICATION_UPDATED fires and transcript already exists → score immediately
+ *   3. Transcript + tags present, no score for ≥ 12 h → scored by hourly cron
  *      (/api/cron/process-pending-scores)
  *
  * Authentication: Authorization: Bearer <WEBHOOK_SECRET>
@@ -25,28 +26,30 @@ import {
   IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
 } from '@/lib/quality';
-import type { IQSScoreEntry, TimedMessage } from '@/lib/quality';
+import type { TimedMessage } from '@/lib/quality';
 import {
-  storeAppendIQSScore,
-  storeSavePendingScore,
-  storeGetPendingScore,
-  storeDeletePendingScore,
-  storeSetTranscript,
-  storeGetTranscript,
-  storeGetAndClearPendingCsat,
-  storePendingCsat,
-  type PendingScoreState,
-} from '@/lib/store';
+  upsertAgent,
+  upsertContact,
+  upsertConversation,
+  updateConversationCsat,
+  updateConversationTags,
+  getConversation,
+  isScored,
+  insertIQSScore,
+  type ConversationRow,
+  type IQSParameterResult,
+} from '@/lib/robylon/db';
 import Anthropic from '@anthropic-ai/sdk';
+import type { ParamScore } from '@/lib/quality';
 
 // ── CSAT normalisation ────────────────────────────────────────────────────────
-function normaliseCsat(raw: string | undefined): string {
-  if (!raw) return '';
+function normaliseCsat(raw: string | undefined): { score: number; label: string } | null {
+  if (!raw) return null;
   const v = String(raw).trim().toLowerCase();
-  if (v === 'good'              || v === '5') return '5';
-  if (v === 'could be better'  || v === 'ok' || v === 'okay' || v === '3') return '3';
-  if (v === 'bad'              || v === '1') return '1';
-  return raw;
+  if (v === 'good'             || v === '5') return { score: 5, label: 'good' };
+  if (v === 'could be better'  || v === 'ok' || v === 'okay' || v === '3') return { score: 3, label: 'could_be_better' };
+  if (v === 'bad'              || v === '1') return { score: 1, label: 'bad' };
+  return null;
 }
 
 // ── Messages → transcript text ────────────────────────────────────────────────
@@ -66,6 +69,20 @@ function messagesToTranscript(messages: RobyMessage[]): string {
                : sender === 'Bot'  || sender === 'bot'                           ? 'Bot'
                : 'Agent';
     lines.push(`${role}: ${content}`);
+  }
+  return lines.join('\n');
+}
+
+// ── Build transcript text from JSONB array stored in conversations.transcript ──
+function transcriptFromJsonb(messages: any[]): string {
+  if (!Array.isArray(messages)) return '';
+  const lines: string[] = [];
+  for (const m of messages) {
+    const role = m.sender_type === 'customer' ? 'Customer'
+               : m.sender_type === 'bot'      ? 'Bot'
+               : 'Agent';
+    const content = (m.content || '').trim();
+    if (content) lines.push(`${role}: ${content}`);
   }
   return lines.join('\n');
 }
@@ -116,24 +133,6 @@ function isAuthorised(req: NextRequest): boolean {
   return false;
 }
 
-// ── Get or create a blank pending state for a chat ───────────────────────────
-function blankPendingState(chatId: string): PendingScoreState {
-  return {
-    chatId,
-    createdAt: new Date().toISOString(),
-    transcript: '', timedMessages: [], agentName: '',
-    date: new Date().toISOString().slice(0, 10),
-    convStarted: '', convEnded: '',
-    hasTranscript: false,
-    disposition: '', subDisposition: '', hasTags: false,
-    csat: '', hasCsat: false,
-  };
-}
-
-async function getOrCreate(chatId: string): Promise<PendingScoreState> {
-  return (await storeGetPendingScore(chatId)) ?? blankPendingState(chatId);
-}
-
 // ── Extract a search query from the transcript (fallback when no disposition) ──
 function extractQueryFromTranscript(transcript: string): string {
   return transcript.split('\n')
@@ -143,29 +142,54 @@ function extractQueryFromTranscript(transcript: string): string {
     .join(' ');
 }
 
+// ── Convert ParamScore → IQSParameterResult ───────────────────────────────────
+function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult {
+  return {
+    score: score === 'Yes' ? true : score === 'No' ? false : null,
+    reasoning,
+  };
+}
+
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
-export async function executeScoring(state: PendingScoreState): Promise<IQSScoreEntry | null> {
-  // Hard requirement: never score without transcript AND tags
-  if (!state.hasTranscript || !state.hasTags) {
-    throw new Error(
-      `Scoring blocked for chat ${state.chatId} — missing required signals ` +
-      `(hasTranscript=${state.hasTranscript}, hasTags=${state.hasTags}). ` +
-      `Scoring requires both transcript and classification tags.`
-    );
+export async function executeScoring(
+  conv: ConversationRow,
+  agentName: string,
+  disposition: string,
+  subDisposition: string,
+): Promise<{ chatId: string; iqs: number } | null> {
+  const chatId = conv.id;
+
+  // Build transcript from JSONB array or fall back to plain text if stored differently
+  let transcriptMessages: any[] = [];
+  if (Array.isArray(conv.transcript)) {
+    transcriptMessages = conv.transcript;
+  } else if (conv.transcript && typeof conv.transcript === 'object' && Array.isArray((conv.transcript as any).messages)) {
+    transcriptMessages = (conv.transcript as any).messages;
   }
 
-  // ── Determine conversation type BEFORE calling LLM ──────────────────────────
-  const timedMessages: TimedMessage[] = state.timedMessages as TimedMessage[];
+  let transcriptText = transcriptFromJsonb(transcriptMessages);
+  if (!transcriptText) {
+    console.warn(`[webhook] executeScoring: empty transcript for chat ${chatId}`);
+    return null;
+  }
+
+  // Determine conversation type from stored timed messages
+  const timedMessages: TimedMessage[] = transcriptMessages.map((m: any) => ({
+    sender: m.sender_type === 'customer' ? 'user'
+          : m.sender_type === 'bot'      ? 'bot'
+          : (m.sender_name || 'Agent'),
+    content: m.content || '',
+    timestamp: m.timestamp,
+  }));
+
   const timing = timedMessages.length
-    ? analyzeConversationTiming(timedMessages, state.convEnded, state.transferTimestamp)
+    ? analyzeConversationTiming(timedMessages, conv.closed_at ?? undefined)
     : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
-  // For bot-only chats, use 'Myra' as the agent name so they appear correctly in the dashboard.
-  // A [BOT-HANDLED] prefix is added to the transcript so the LLM scores Opening/Call/Empathy as NA.
-  const effectiveAgentName = state.agentName || (timing.conversationType === 'bot' ? 'Myra' : '');
+  const effectiveAgentName = agentName || (timing.conversationType === 'bot' ? 'Myra' : '');
   const effectiveTranscript = timing.conversationType === 'bot'
-    ? `[BOT-HANDLED CHAT — No human agent involved. Score Opening, Call, Empathy as NA unless the bot explicitly performed them.]\n\n${state.transcript}`
-    : state.transcript;
+    ? `[BOT-HANDLED CHAT — No human agent involved. Score Opening, Call, Empathy as NA unless the bot explicitly performed them.]\n\n${transcriptText}`
+    : transcriptText;
 
   const config       = await readConfig();
   const provider     = config.llmProvider || 'gemini';
@@ -175,9 +199,9 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
   // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
   let kbContext = '';
   try {
-    const searchQuery = state.disposition
-      ? `${state.disposition} ${state.subDisposition}`.trim()
-      : extractQueryFromTranscript(state.transcript);
+    const searchQuery = disposition
+      ? `${disposition} ${subDisposition}`.trim()
+      : extractQueryFromTranscript(transcriptText);
 
     if (searchQuery) {
       const allChunks = await fetchKnowledgeChunks();
@@ -190,11 +214,10 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
       }
     }
   } catch (err: any) {
-    // KB fetch failure should not block scoring — proceed without context
     console.warn('[webhook] KB fetch failed, scoring without context:', err.message);
   }
 
-  const userPrompt = buildScoringPrompt(effectiveTranscript, state.disposition, state.chatId, '', kbContext, state.subDisposition);
+  const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition);
 
   let rawResponse: string;
   if (provider === 'claude' && anthropicKey) {
@@ -215,67 +238,49 @@ export async function executeScoring(state: PendingScoreState): Promise<IQSScore
     throw new Error('No LLM API key configured');
   }
 
-  const parsed = parseScoringResponse(rawResponse, state.chatId);
+  const parsed = parseScoringResponse(rawResponse, chatId);
+  const modelVersion = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
 
-  const model = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
+  // Convert ParamScore → IQSParameterResult for PostgreSQL storage
+  const parameters: Record<string, IQSParameterResult> = {};
+  for (const [key, val] of Object.entries(parsed.scores || {})) {
+    parameters[key] = toParamResult(val as ParamScore, (parsed.reasoning || {})[key] || '');
+  }
 
-  const scoredAt = new Date().toISOString();
-  const entry: IQSScoreEntry = {
-    id:         `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    scoredAt,
-    updatedAt:  scoredAt,
-    provider, model,
-    scoredBy:   'webhook:robylon',
-    agentName:  effectiveAgentName || (parsed as any).extractedAgentName || '',
-    date:       state.date,
-    tags:       state.disposition,
-    disposition:    state.disposition,
-    subDisposition: state.subDisposition,
-    csat:       state.csat,
-    slackUrl:   '',
-    mobileNumber: state.mobileNumber || undefined,
-    // transcript intentionally omitted — stored separately to keep list entries small
+  await insertIQSScore({
+    chatId,
+    iqsScore: parsed.iqs,
+    parameters,
+    modelVersion,
+  });
+
+  // Update timing on conversation row
+  await upsertConversation({
+    id: chatId,
     conversationType: timing.conversationType,
-    frt:              timing.frt,
-    botToTeamSecs:    timing.botToTeamSecs,
-    resolutionTime:   timing.resolutionTime,
-    closureTime:      timing.closureTime,
-    conversationStarted: state.convStarted,
-    conversationEnded:   state.convEnded,
-    ...parsed,
-    chatId: state.chatId, // ensure our chatId wins
-  };
+    frtSeconds: timing.frt ?? null,
+    botToTeamSeconds: timing.botToTeamSecs ?? null,
+    resolutionSeconds: timing.resolutionTime ?? null,
+  });
 
-  await storeAppendIQSScore(entry);
-  // Save transcript permanently (separate key — doesn't bloat the score list)
-  await storeSetTranscript(state.chatId, { timedMessages: state.timedMessages });
-  await storeDeletePendingScore(state.chatId);
-
-  console.log(`[webhook] Scored chat ${state.chatId} → IQS ${entry.iqs}% (${entry.agentName || 'unknown'}) type=${timing.conversationType} csat=${state.csat || 'none'}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
+  const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
+  console.log(`[webhook] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
 
   // ── Slack alert: fire immediately when chat is technically/legally wrong ─────
-  if (entry.scores?.Technical === 'No') {
+  if (parsed.scores?.Technical === 'No') {
     const slackToken   = process.env.SLACK_BOT_TOKEN || '';
     const slackChannel = process.env.QUALITY_SLACK_CHANNEL || '#quality-alerts';
     if (slackToken) {
-      const chatLink  = /^\d+$/.test(entry.chatId.trim())
-        ? `<https://app.robylon.ai/unified-inbox/share/${entry.chatId}|${entry.chatId}>`
-        : entry.chatId;
-      const reasoning = entry.reasoning?.Technical || 'No reasoning provided';
-      const mobile    = entry.mobileNumber ? `📱 *Mobile:* ${entry.mobileNumber}` : '';
-      const text      = `:warning: *Technically / Legally Incorrect Chat*\n*Chat ID:* ${chatLink}\n*Agent:* ${entry.agentName || 'Unknown'}\n*What went wrong:* ${reasoning}${mobile ? '\n' + mobile : ''}`;
-      // Fire-and-forget — don't block the response
+      const chatLink  = /^\d+$/.test(chatId.trim())
+        ? `<https://app.robylon.ai/unified-inbox/share/${chatId}|${chatId}>`
+        : chatId;
+      const reasoning = parsed.reasoning?.Technical || 'No reasoning provided';
+      const text      = `:warning: *Technically / Legally Incorrect Chat*\n*Chat ID:* ${chatLink}\n*Agent:* ${finalAgentName || 'Unknown'}\n*What went wrong:* ${reasoning}`;
       sendSlackMessage(slackChannel, text, slackToken).catch(() => {});
     }
   }
 
-  return entry;
-}
-
-// ── Score as soon as transcript + tags arrive — CSAT is not a gate ───────────
-async function tryScoreIfReady(state: PendingScoreState): Promise<IQSScoreEntry | null> {
-  if (!state.hasTranscript || !state.hasTags) return null;
-  return executeScoring(state);
+  return { chatId, iqs: parsed.iqs };
 }
 
 // ── Handler: TICKET_CLOSED ────────────────────────────────────────────────────
@@ -292,28 +297,27 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   const chatId      = String(body.chat_id || transcriptObj.chat_id || `wh_${Date.now()}`);
   const year        = convStarted ? new Date(convStarted).getUTCFullYear() : new Date().getUTCFullYear();
   const agentName   = extractAgentName(rawMessages);
-  const date        = convStarted ? convStarted.slice(0, 10) : new Date().toISOString().slice(0, 10);
 
-  // Extract mobile/phone number — try all common field names Robylon may send
+  // Extract mobile/phone number
   const mobileNumber: string | undefined =
     body.data?.user_phone      || body.data?.customer_phone ||
     body.data?.phone_number    || body.data?.mobile         ||
     body.user_phone            || body.customer_phone       ||
     body.phone_number          || body.mobile               || undefined;
 
-  // Extract assignment timestamp BEFORE the filter loop (the "Assigned by X to Y"
-  // system message is filtered from the transcript but its timestamp is the FRT start)
+  // Extract assignment timestamp (FRT start)
   let transferTimestamp: string | undefined;
   for (const m of rawMessages) {
     const content = (m.content || m.text || '').trim().toLowerCase();
     if (content.includes('assigned by') && m.timestamp) {
       transferTimestamp = parseRobyTimestamp(m.timestamp, year) || undefined;
-      break; // first assignment wins
+      break;
     }
   }
 
+  // Build timedMessages and filtered transcript array for storage
   const timedMessages: TimedMessage[] = [];
-  const robyMessages: RobyMessage[]   = [];
+  const transcriptForStorage: any[] = [];
 
   for (const m of rawMessages) {
     const sender  = (m.sender || m.role || '').trim();
@@ -323,34 +327,74 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     if (low.includes('auto-assigned') || low.includes('assigned by') ||
         low.includes('waiting to assign') || low.includes('please rate your experience') ||
         m.buttons) continue;
+
     const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+    const senderLow = sender.toLowerCase();
+    const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
+                     : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
+                     : 'agent';
+
     timedMessages.push({ sender, content, timestamp: isoTs });
-    robyMessages.push({ sender, content, timestamp: m.timestamp });
+    transcriptForStorage.push({
+      sender_type: senderType,
+      sender_name: sender,
+      content,
+      timestamp: isoTs,
+    });
   }
 
-  const transcript = messagesToTranscript(robyMessages);
-  if (!transcript) {
+  const transcriptText = messagesToTranscript(rawMessages);
+  if (!transcriptText) {
     return NextResponse.json({ ok: true, scored: false, reason: 'Transcript empty after filtering' });
   }
 
-  const state = await getOrCreate(chatId);
-  Object.assign(state, {
-    transcript, timedMessages, agentName, date,
-    convStarted, convEnded, hasTranscript: true,
-    ...(transferTimestamp && { transferTimestamp }),
-    ...(mobileNumber      && { mobileNumber }),
-  });
-  await storeSavePendingScore(state);
+  // Compute timing now for immediate storage
+  const timing = timedMessages.length
+    ? analyzeConversationTiming(timedMessages, convEnded, transferTimestamp)
+    : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
-  const scored = await tryScoreIfReady(state);
-  if (scored) {
-    return NextResponse.json({
-      ok: true, chat_id: chatId, iqs: scored.iqs, agent: scored.agentName,
-      conversation_type: scored.conversationType,
-      frt_secs: scored.frt, b_to_t_secs: scored.botToTeamSecs,
-      resolution_secs: scored.resolutionTime, closure_secs: scored.closureTime,
-      csat: scored.csat || undefined, scored_at: scored.scoredAt,
-    });
+  // Upsert contact + agent
+  const [contactId, agentId] = await Promise.all([
+    upsertContact(mobileNumber),
+    upsertAgent(agentName),
+  ]);
+
+  // Persist conversation to PostgreSQL
+  await upsertConversation({
+    id: chatId,
+    contactId,
+    agentId,
+    conversationType: timing.conversationType,
+    startedAt: convStarted || undefined,
+    closedAt: convEnded || undefined,
+    transcript: transcriptForStorage,
+    frtSeconds: timing.frt ?? null,
+    botToTeamSeconds: timing.botToTeamSecs ?? null,
+    resolutionSeconds: timing.resolutionTime ?? null,
+    rawPayload: body,
+    webhookTrigger: 'TICKET_CLOSED',
+  });
+
+  // Check if tags already stored (from a prior CLASSIFICATION_UPDATED)
+  const existingConv = await getConversation(chatId);
+  const hasTags = !!(existingConv?.tags);
+
+  if (hasTags && existingConv) {
+    const tags = existingConv.tags as any;
+    const scored = await executeScoring(
+      existingConv,
+      agentName,
+      tags?.disposition || '',
+      tags?.sub_disposition || '',
+    );
+    if (scored) {
+      return NextResponse.json({
+        ok: true, chat_id: chatId, iqs: scored.iqs, agent: agentName,
+        conversation_type: timing.conversationType,
+        frt_secs: timing.frt, b_to_t_secs: timing.botToTeamSecs,
+        resolution_secs: timing.resolutionTime,
+      });
+    }
   }
 
   console.log(`[webhook] Transcript stored for chat ${chatId} — waiting for classification`);
@@ -370,40 +414,40 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const disposition    = primary.names?.l1 || '';
   const subDisposition = primary.names?.l2 || '';
 
-  const state = await getOrCreate(chatId);
+  // Upsert conversation with tags (will create row if not yet present)
+  await upsertConversation({
+    id: chatId,
+    tags: { disposition, sub_disposition: subDisposition },
+    webhookTrigger: 'CLASSIFICATION_UPDATED',
+  });
 
-  // Check if we already have a pending CSAT for this chat — carry it in
-  const pendingCsat = await storeGetAndClearPendingCsat(chatId);
-  if (pendingCsat) {
-    Object.assign(state, { csat: pendingCsat, hasCsat: true });
-  }
+  // Also call updateConversationTags for clarity
+  await updateConversationTags(chatId, { disposition, sub_disposition: subDisposition });
 
-  Object.assign(state, { disposition, subDisposition, hasTags: true });
-  await storeSavePendingScore(state);
+  // Check if transcript already stored and not yet scored
+  const conv = await getConversation(chatId);
+  const alreadyScored = await isScored(chatId);
 
-  // Persist classification alongside the transcript (so it's stored permanently)
-  if (state.chatId) {
-    const existing = await storeGetTranscript(chatId);
-    if (existing) {
-      await storeSetTranscript(chatId, { ...existing, disposition, subDisposition });
+  if (conv?.transcript && !alreadyScored) {
+    const agentId = conv.agent_id;
+    const agentName = agentId
+      ? (await import('@/lib/robylon/db').then(m => m.getAgentName(agentId)))
+      : '';
+
+    const scored = await executeScoring(conv, agentName, disposition, subDisposition);
+    if (scored) {
+      return NextResponse.json({
+        ok: true, chat_id: chatId, iqs: scored.iqs,
+        disposition, subDisposition,
+      });
     }
   }
 
-  // Score immediately — CSAT is no longer a gate
-  const scored = await tryScoreIfReady(state);
-  if (scored) {
-    return NextResponse.json({
-      ok: true, chat_id: chatId, iqs: scored.iqs,
-      disposition, subDisposition, csat: scored.csat || undefined,
-      scored_at: scored.scoredAt,
-    });
-  }
-
-  console.log(`[webhook] Tags stored for chat ${chatId}: ${disposition} > ${subDisposition} — waiting for transcript`);
-  return NextResponse.json({ ok: true, event: 'tags_stored', chat_id: chatId, disposition, subDisposition, waiting: 'transcript' });
+  console.log(`[webhook] Tags stored for chat ${chatId}: ${disposition} > ${subDisposition}${conv?.transcript ? ' — waiting for scoring' : ' — waiting for transcript'}`);
+  return NextResponse.json({ ok: true, event: 'tags_stored', chat_id: chatId, disposition, subDisposition, waiting: conv?.transcript ? 'scoring' : 'transcript' });
 }
 
-// ── Handler: CSAT_SUBMITTED — only updates existing score, never triggers scoring ──
+// ── Handler: CSAT_SUBMITTED — only updates conversation row, never triggers scoring ──
 async function handleCsatEvent(body: any): Promise<NextResponse> {
   const chatId = String(body.chat_id || '');
   const rating  = body.data?.rating;
@@ -411,20 +455,14 @@ async function handleCsatEvent(body: any): Promise<NextResponse> {
     return NextResponse.json({ ok: true, reason: 'No rating in CSAT event' });
   }
 
-  const csat = normaliseCsat(String(rating));
-
-  // Try to update an already-scored entry in the IQS list
-  const { storeUpdateIQSScoreCsat } = await import('@/lib/store');
-  const updated = await storeUpdateIQSScoreCsat(chatId, csat);
-  if (updated) {
-    console.log(`[webhook] CSAT updated on scored entry for chat ${chatId}: ${csat}`);
-    return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat });
+  const normalised = normaliseCsat(String(rating));
+  if (!normalised) {
+    return NextResponse.json({ ok: true, reason: `Unrecognised rating value: ${rating}` });
   }
 
-  // Score not found yet — store as pending so classification handler can pick it up
-  await storePendingCsat(chatId, csat);
-  console.log(`[webhook] CSAT stored pending for chat ${chatId}: ${csat} — no scored entry found yet`);
-  return NextResponse.json({ ok: true, event: 'csat_pending', chat_id: chatId, csat });
+  await updateConversationCsat(chatId, normalised.score, normalised.label);
+  console.log(`[webhook] CSAT updated for chat ${chatId}: ${normalised.score} (${normalised.label})`);
+  return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat: normalised.score });
 }
 
 // ── Handler: legacy flat payload (backward compat) ────────────────────────────
@@ -435,13 +473,14 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
     channel = 'chat', messages, transcript: rawTranscript,
   } = body;
 
-  let transcript = '';
+  let transcriptText = '';
   const timedMessages: TimedMessage[] = [];
+  const transcriptForStorage: any[] = [];
 
   if (rawTranscript) {
-    transcript = String(rawTranscript).trim();
+    transcriptText = String(rawTranscript).trim();
   } else if (Array.isArray(messages) && messages.length) {
-    transcript = messagesToTranscript(messages);
+    transcriptText = messagesToTranscript(messages);
     for (const m of messages as RobyMessage[]) {
       const sender  = m.sender || m.role || '';
       const content = (m.content || m.text || '').trim();
@@ -450,11 +489,16 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
       if (low.includes('auto-assigned') || low.includes('assigned by') ||
           low.includes('waiting to assign') || low.includes('please rate your experience') ||
           (m as any).buttons) continue;
+      const senderLow = sender.toLowerCase();
+      const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
+                       : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
+                       : 'agent';
       timedMessages.push({ sender, content, timestamp: m.timestamp });
+      transcriptForStorage.push({ sender_type: senderType, sender_name: sender, content, timestamp: m.timestamp });
     }
   }
 
-  if (!transcript) {
+  if (!transcriptText) {
     console.log('[webhook] No transcript extracted. received_keys:', Object.keys(body));
     return NextResponse.json({
       ok: true, scored: false,
@@ -463,43 +507,55 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
     });
   }
 
-  // Legacy path: go through the same pending-state gate — tags still required
   const chatId = String(chat_id || conversation_id || `wh_${Date.now()}`);
-
-  const state: PendingScoreState = {
-    chatId,
-    createdAt: new Date().toISOString(),
-    transcript,
-    timedMessages,
-    agentName: String(agent_name || ''),
-    date: conversation_started
-      ? String(conversation_started).slice(0, 10)
-      : new Date().toISOString().slice(0, 10),
-    convStarted: conversation_started || '',
-    convEnded:   conversation_ended   || '',
-    hasTranscript: true,
-    disposition: tags, subDisposition: '', hasTags: !!tags,
-    csat: normaliseCsat(csat), hasCsat: !!csat,
-  };
-
   const channelPrefix = channel === 'call' ? '[CHANNEL: PHONE CALL]\n' : '';
-  state.transcript = channelPrefix + transcript;
+  const finalTranscriptText = channelPrefix + transcriptText;
 
-  await storeSavePendingScore(state);
+  const timing = timedMessages.length
+    ? analyzeConversationTiming(timedMessages, conversation_ended)
+    : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
-  const scored = await tryScoreIfReady(state);
-  if (scored) {
-    return NextResponse.json({
-      ok: true, chat_id: chatId, iqs: scored.iqs, agent: scored.agentName,
-      conversation_type: scored.conversationType,
-      frt_secs: scored.frt, b_to_t_secs: scored.botToTeamSecs,
-      resolution_secs: scored.resolutionTime, closure_secs: scored.closureTime,
-      scored_at: scored.scoredAt,
-    });
+  const csatNorm = normaliseCsat(csat);
+  const agentId = await upsertAgent(String(agent_name || ''));
+
+  await upsertConversation({
+    id: chatId,
+    agentId,
+    conversationType: timing.conversationType,
+    startedAt: conversation_started || undefined,
+    closedAt: conversation_ended || undefined,
+    transcript: transcriptForStorage.length ? transcriptForStorage : [{ sender_type: 'agent', content: finalTranscriptText }],
+    tags: tags ? { disposition: tags, sub_disposition: '' } : undefined,
+    frtSeconds: timing.frt ?? null,
+    botToTeamSeconds: timing.botToTeamSecs ?? null,
+    resolutionSeconds: timing.resolutionTime ?? null,
+    rawPayload: body,
+    webhookTrigger: 'LEGACY',
+  });
+
+  if (csatNorm) {
+    await updateConversationCsat(chatId, csatNorm.score, csatNorm.label);
   }
 
-  console.log(`[webhook] Legacy payload for chat ${chatId} parked — waiting for tags`);
-  return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'waiting for tags' });
+  if (!tags) {
+    console.log(`[webhook] Legacy payload for chat ${chatId} parked — waiting for tags`);
+    return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'waiting for tags' });
+  }
+
+  const conv = await getConversation(chatId);
+  if (conv) {
+    const scored = await executeScoring(conv, String(agent_name || ''), tags, '');
+    if (scored) {
+      return NextResponse.json({
+        ok: true, chat_id: chatId, iqs: scored.iqs, agent: String(agent_name || ''),
+        conversation_type: timing.conversationType,
+        frt_secs: timing.frt, b_to_t_secs: timing.botToTeamSecs,
+        resolution_secs: timing.resolutionTime,
+      });
+    }
+  }
+
+  return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'scoring' });
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────

@@ -2,12 +2,13 @@
  * GET /api/cron/process-pending-scores
  *
  * Runs daily (vercel.json). Safety net for chats that have transcript + tags
- * but were never scored (e.g. classification arrived before transcript edge case).
- * CSAT is no longer a gate — it is updated passively via CSAT_SUBMITTED events.
+ * but were never scored (e.g. classification arrived before transcript edge case,
+ * or scoring failed transiently). Picks up conversations closed > 12h ago with
+ * no iqs_scores row.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { storeGetAllPendingScoreIds, storeGetPendingScore } from '@/lib/store';
+import { getUnscoredConversations, getAgentName } from '@/lib/robylon/db';
 import { executeScoring } from '@/app/api/webhooks/chat/route';
 
 export async function GET(req: NextRequest) {
@@ -20,39 +21,34 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const ids = await storeGetAllPendingScoreIds();
-  if (!ids.length) {
+  const convs = await getUnscoredConversations();
+  if (!convs.length) {
     return NextResponse.json({ ok: true, processed: 0, message: 'No pending scores' });
   }
 
   const results: { chatId: string; iqs?: number; reason?: string }[] = [];
 
-  for (const chatId of ids) {
-    const state = await storeGetPendingScore(chatId);
-    if (!state) continue;
-
-    // Both transcript and tags are required — CSAT is not
-    if (!state.hasTranscript || !state.hasTags) {
-      results.push({ chatId, reason: `skipped — missing ${!state.hasTranscript ? 'transcript' : 'tags'}` });
-      continue;
-    }
+  for (const conv of convs) {
+    const tags = conv.tags as any;
+    const disposition    = tags?.disposition    || '';
+    const subDisposition = tags?.sub_disposition || '';
 
     try {
-      const scored = await executeScoring(state);
+      const agentName = conv.agent_id ? await getAgentName(conv.agent_id) : '';
+      const scored = await executeScoring(conv, agentName, disposition, subDisposition);
       if (!scored) {
-        // executeScoring returns null only on unexpected edge cases
-        results.push({ chatId, reason: 'skipped — no entry returned' });
+        results.push({ chatId: conv.id, reason: 'skipped — no entry returned' });
         continue;
       }
-      console.log(`[cron] Scored chat ${chatId} → IQS ${scored.iqs}%`);
-      results.push({ chatId, iqs: scored.iqs });
+      console.log(`[cron] Scored chat ${conv.id} → IQS ${scored.iqs}%`);
+      results.push({ chatId: conv.id, iqs: scored.iqs });
     } catch (err: any) {
-      console.error(`[cron] Error scoring chat ${chatId}:`, err.message);
-      results.push({ chatId, reason: `error: ${err.message}` });
+      console.error(`[cron] Error scoring chat ${conv.id}:`, err.message);
+      results.push({ chatId: conv.id, reason: `error: ${err.message}` });
     }
   }
 
   const processed = results.filter(r => r.iqs !== undefined).length;
-  console.log(`[cron] process-pending-scores: ${processed}/${ids.length} scored`);
-  return NextResponse.json({ ok: true, processed, total: ids.length, results });
+  console.log(`[cron] process-pending-scores: ${processed}/${convs.length} scored`);
+  return NextResponse.json({ ok: true, processed, total: convs.length, results });
 }

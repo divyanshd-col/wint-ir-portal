@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { storeGetAllIQSScores } from '@/lib/store';
+import { getAllScoredConversations } from '@/lib/robylon/db';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -17,6 +17,40 @@ function qualityAccess(session: any) {
 
 function escapeCSV(v: unknown): string {
   return `"${String(v ?? '').replace(/"/g, '""')}"`;
+}
+
+// ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
+function toIQSScoreEntry(row: any): IQSScoreEntry {
+  const params = row.parameters || {};
+  const scores: Record<string, string> = {};
+  const reasoning: Record<string, string> = {};
+  for (const [key, val] of Object.entries(params) as [string, any][]) {
+    const k = key.charAt(0).toUpperCase() + key.slice(1);
+    scores[k]    = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
+    reasoning[k] = val.reasoning || '';
+  }
+  const csatStr = row.csat_score ? String(row.csat_score) : '';
+  const tags = row.tags || {};
+  return {
+    id:              `${row.scoredAt}-${row.chatId}`,
+    chatId:          row.chatId,
+    scoredAt:        row.scoredAt,
+    agentName:       row.agentName || '',
+    date:            row.date ? String(row.date).slice(0, 10) : '',
+    iqs:             row.iqs,
+    csat:            csatStr,
+    scores:          scores as Record<string, any>,
+    reasoning,
+    summary:         '',
+    provider:        row.modelVersion?.includes('gemini') ? 'gemini' : 'claude',
+    model:           row.modelVersion || '',
+    conversationType: row.conversationType || 'agent',
+    frt:             row.frt ?? undefined,
+    botToTeamSecs:   row.botToTeamSecs ?? undefined,
+    resolutionTime:  row.resolutionTime ?? undefined,
+    disposition:     tags.disposition || '',
+    subDisposition:  tags.sub_disposition || '',
+  } as IQSScoreEntry;
 }
 
 export async function GET(req: NextRequest) {
@@ -34,10 +68,10 @@ export async function GET(req: NextRequest) {
   const dateTo       = searchParams.get('dateTo') || '';
   const typeFilter   = searchParams.get('type') || '';
 
-  const raw = await storeGetAllIQSScores(); // parallel 500-entry batches — all entries, safe under 1 MB each
-  let entries: IQSScoreEntry[] = raw.map(r => {
-    try { return JSON.parse(r); } catch { return null; }
-  }).filter(Boolean);
+  const rawRows = await getAllScoredConversations(10000); // higher limit for full export
+  let entries: IQSScoreEntry[] = rawRows.map(row => {
+    try { return toIQSScoreEntry(row); } catch { return null; }
+  }).filter(Boolean) as IQSScoreEntry[];
 
   if (agentFilter)  entries = entries.filter(e => e.agentName === agentFilter);
   if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
@@ -52,28 +86,25 @@ export async function GET(req: NextRequest) {
   const headers = [
     'Chat ID', 'Agent', 'Date', 'Tags', 'CSAT', 'IQS',
     ...paramCols,
-    'Summary', 'Scored At', 'Scored By', 'Model', 'Channel',
-    'Conversation Type', 'FRT secs (I→T)', 'B→T secs', 'Resolution secs', 'Closure secs',
+    'Summary', 'Scored At', 'Model',
+    'Conversation Type', 'FRT secs (I→T)', 'B→T secs', 'Resolution secs',
   ];
 
   const rows = entries.map(e => [
     e.chatId,
     e.agentName || '',
     e.date || e.scoredAt?.slice(0, 10) || '',
-    e.tags || '',
+    e.disposition || '',
     e.csat || '',
     e.iqs,
     ...PARAM_ORDER.map(p => e.scores?.[p] || ''),
     (e.summary || '').replace(/\n/g, ' '),
     e.scoredAt || '',
-    (e.scoredBy || '').replace('webhook:', 'auto:'),
     e.model || '',
-    (e.scoredBy || '').startsWith('webhook:') ? (e.scoredBy || '').replace('webhook:', '') : 'manual',
     e.conversationType || '',
     e.frt != null ? e.frt : '',
     e.botToTeamSecs != null ? e.botToTeamSecs : '',
     e.resolutionTime != null ? e.resolutionTime : '',
-    e.closureTime != null ? e.closureTime : '',
   ]);
 
   const csv = [headers, ...rows]
