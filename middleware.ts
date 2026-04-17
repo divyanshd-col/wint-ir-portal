@@ -18,10 +18,10 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
 
-  // Quality section: only admin, quality, tl
+  // Quality section: admin, quality, tl — plus agent (sees own-only dashboard)
   if (pathname.startsWith('/quality')) {
     const role = token.role as string | undefined;
-    if (!role || !['admin', 'quality', 'tl'].includes(role)) {
+    if (!role || !['admin', 'quality', 'tl', 'agent'].includes(role)) {
       return NextResponse.redirect(new URL('/', req.url));
     }
   }
