@@ -23,10 +23,13 @@ export default async function QualityPage() {
   }
 
   // Admin / Quality / TL get the full team quality view
+  // Only TL users get auto-filtered to their own data; admin/quality see everything
   let selfAgentName: string | undefined;
-  const config = await readConfig();
-  const configUser = config.users.find(u => (u.email || u.username) === email);
-  selfAgentName = configUser?.agentName || undefined;
+  if (role === 'tl') {
+    const config = await readConfig();
+    const configUser = config.users.find(u => (u.email || u.username) === email);
+    selfAgentName = configUser?.agentName || undefined;
+  }
 
   return (
     <QualityClient
