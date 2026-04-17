@@ -1319,14 +1319,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                   {logsError}
                 </div>
               )}
-              {logsDebug && (
-                <div className="mb-4 bg-gray-800 border border-white/10 rounded-xl px-4 py-3 text-xs text-gray-300 font-mono space-y-0.5">
-                  <p className="text-gray-500 text-[10px] uppercase tracking-wider mb-1">API debug</p>
-                  {Object.entries(logsDebug).map(([k, v]) => (
-                    <p key={k}><span className="text-gray-500">{k}:</span> <span className="text-white">{String(v ?? 'null')}</span></p>
-                  ))}
-                </div>
-              )}
               {logsLoading && (
                 <div className="flex items-center justify-center h-48">
                   <div className="flex items-center gap-3 text-gray-400">
