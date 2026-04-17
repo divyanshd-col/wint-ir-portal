@@ -48,13 +48,32 @@ function getWeekLabel(key: string): string {
   return `${fmt(mon)} – ${fmt(sun)}`;
 }
 
+// ── DB snake_case key → legacy PascalCase key used by the frontend ────────────
+// DB stores: technical, all_questions, follow_up, sentences, ...
+// Frontend expects: Technical, AllQuestions, FollowUp, Sentences, ...
+const DB_KEY_TO_LEGACY: Record<string, string> = {
+  technical:    'Technical',
+  all_questions:'AllQuestions',
+  expectation:  'Expectation',
+  contextual:   'Contextual',
+  follow_up:    'FollowUp',
+  sentences:    'Sentences',
+  process:      'Process',
+  opening:      'Opening',
+  call:         'Call',
+  tags:         'Tags',
+  grammar:      'Grammar',
+  empathy:      'Empathy',
+};
+
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
 function toIQSScoreEntry(row: any): IQSScoreEntry {
   const params = row.parameters || {};
   const scores: Record<string, string> = {};
   const reasoning: Record<string, string> = {};
   for (const [key, val] of Object.entries(params) as [string, any][]) {
-    const k = key.charAt(0).toUpperCase() + key.slice(1); // 'technical' → 'Technical'
+    // Map DB snake_case key → legacy PascalCase; fall back to first-letter capitalize
+    const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
     scores[k]    = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
     reasoning[k] = val.reasoning || '';
   }
@@ -111,11 +130,21 @@ export async function GET(req: NextRequest) {
     selfAgentName = configUser?.agentName || '';
   }
 
-  const rawRows = await getAllScoredConversations(2000);
+  let rawRows: any[] = [];
+  try {
+    rawRows = await getAllScoredConversations(2000);
+  } catch (dbErr: any) {
+    console.error('[quality/scores] DB fetch failed:', dbErr?.message ?? dbErr);
+    return NextResponse.json({ error: 'Database error', detail: dbErr?.message }, { status: 500 });
+  }
   const totalStored = rawRows.length;
+  console.log(`[quality/scores] DB returned ${totalStored} rows`);
 
   const allParsed: IQSScoreEntry[] = rawRows.map(row => {
-    try { return toIQSScoreEntry(row); } catch { return null; }
+    try { return toIQSScoreEntry(row); } catch (e: any) {
+      console.error('[quality/scores] toIQSScoreEntry failed:', e?.message, JSON.stringify(row).slice(0, 200));
+      return null;
+    }
   }).filter(Boolean) as IQSScoreEntry[];
 
   // Derive available filter values from ALL entries (unfiltered)
