@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, Fragment } from 'react';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type DatePreset = 'today' | '7d' | '30d' | 'all' | 'custom';
@@ -404,7 +404,7 @@ export default function AdminDashboard() {
                       const expanded = expandedRows.has(group.entity_name);
                       const counterpartLabel = viewTab === 'tl' ? 'QA' : 'TL';
                       return (
-                        <>
+                        <Fragment key={group.entity_name}>
                           <tr
                             key={group.entity_name}
                             onClick={() => toggleRow(group.entity_name)}
@@ -456,7 +456,7 @@ export default function AdminDashboard() {
                               </td>
                             </tr>
                           ))}
-                        </>
+                        </Fragment>
                       );
                     })
                   )}
