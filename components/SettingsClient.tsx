@@ -33,6 +33,7 @@ const SECTIONS = [
   { id: 'kb', label: 'Knowledge Base' },
   { id: 'prompt', label: 'System Prompt' },
   { id: 'users', label: 'Users' },
+  { id: 'tl', label: 'Team Leads' },
   { id: 'integrations', label: 'Integrations' },
 ];
 
@@ -88,6 +89,9 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   const [addingUser, setAddingUser] = useState(false);
   const [userError, setUserError] = useState('');
   const [editingAgentName, setEditingAgentName] = useState<Record<string, string>>({});
+  const [userPage, setUserPage] = useState(0);
+  const [userSearch, setUserSearch] = useState('');
+  const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
 
   // ── Integrations state ─────────────────────────────────────────────────────
   const [hasSlackToken, setHasSlackToken] = useState(!!config.hasSlackToken);
@@ -105,6 +109,12 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
     try {
       const data = await fetch('/api/users').then(r => r.json());
       setUsers(Array.isArray(data) ? data : []);
+      const agentData = await fetch('/api/cx/admin/agents').then(r => r.ok ? r.json() : []).catch(() => []);
+      const assignMap: Record<string, { tl_name: string | null; qa_name: string | null }> = {};
+      for (const a of (agentData as { name: string; tl_name: string | null; qa_name: string | null }[])) {
+        assignMap[a.name] = { tl_name: a.tl_name, qa_name: a.qa_name };
+      }
+      setAgentAssignments(assignMap);
     } catch {} finally { setLoadingUsers(false); }
   };
 
@@ -568,7 +578,16 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
         )}
 
         {/* ── USERS ── */}
-        {activeSection === 'users' && (
+        {activeSection === 'users' && (() => {
+          const PAGE = 5;
+          const filteredUsers = users.filter(u =>
+            !userSearch ||
+            u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+            (u.agentName || '').toLowerCase().includes(userSearch.toLowerCase())
+          );
+          const pagedUsers = filteredUsers.slice(userPage * PAGE, (userPage + 1) * PAGE);
+          const totalPages = Math.ceil(filteredUsers.length / PAGE);
+          return (
           <div className="space-y-8">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-900">Users</h2>
@@ -581,6 +600,15 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
               </button>
             </div>
 
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={userSearch}
+              onChange={e => { setUserSearch(e.target.value); setUserPage(0); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+            />
+
             {/* User table */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
               <table className="w-full text-sm">
@@ -589,11 +617,13 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                     <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Role</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">TL</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">QA</th>
                     <th className="px-4 py-3 w-12" />
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map(u => (
+                  {pagedUsers.map(u => (
                     <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
                       <td className="px-5 py-3 text-gray-700 text-sm truncate max-w-[220px]">{u.email}</td>
                       <td className="px-4 py-3">
@@ -621,6 +651,54 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                           <option value="admin">Admin</option>
                         </select>
                       </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={agentAssignments[u.agentName || '']?.tl_name || ''}
+                          onChange={async e => {
+                            const val = e.target.value;
+                            if (!u.agentName) return;
+                            await fetch('/api/cx/admin/agents', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ agent_name: u.agentName, tl_name: val || null }),
+                            });
+                            setAgentAssignments(prev => ({
+                              ...prev,
+                              [u.agentName!]: { ...prev[u.agentName!], tl_name: val || null },
+                            }));
+                          }}
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-28"
+                        >
+                          <option value="">—</option>
+                          {users.filter(uu => uu.role === 'tl').map(uu => (
+                            <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={agentAssignments[u.agentName || '']?.qa_name || ''}
+                          onChange={async e => {
+                            const val = e.target.value;
+                            if (!u.agentName) return;
+                            await fetch('/api/cx/admin/agents', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ agent_name: u.agentName, qa_name: val || null }),
+                            });
+                            setAgentAssignments(prev => ({
+                              ...prev,
+                              [u.agentName!]: { ...prev[u.agentName!], qa_name: val || null },
+                            }));
+                          }}
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-28"
+                        >
+                          <option value="">—</option>
+                          {users.filter(uu => uu.role === 'quality').map(uu => (
+                            <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="px-4 py-3 text-center">
                         <button onClick={() => deleteUser(u.email)} className="text-gray-300 hover:text-red-500 transition" title="Remove user">
                           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -632,10 +710,33 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                   ))}
                 </tbody>
               </table>
-              {users.length === 0 && !loadingUsers && (
+              {filteredUsers.length === 0 && !loadingUsers && (
                 <p className="text-sm text-gray-400 text-center py-8">No users found</p>
               )}
             </div>
+
+            {/* Pagination */}
+            {filteredUsers.length > PAGE && (
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <span>Page {userPage + 1} of {totalPages}</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setUserPage(p => Math.max(0, p - 1))}
+                    disabled={userPage === 0}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => setUserPage(p => Math.min(totalPages - 1, p + 1))}
+                    disabled={userPage >= totalPages - 1}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Add user */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
@@ -671,6 +772,49 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                 <span className="text-xs text-gray-400">User signs in via Google — no password needed</span>
               </div>
             </div>
+          </div>
+          );
+        })()}
+
+        {/* ── TEAM LEADS ── */}
+        {activeSection === 'tl' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Team Leads</h2>
+                <p className="text-sm text-gray-500 mt-1">Users with the TL role and their agent assignments</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agents Managed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.filter(u => u.role === 'tl').map(u => {
+                    const count = Object.values(agentAssignments).filter(a => a.tl_name === u.agentName).length;
+                    return (
+                      <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
+                        <td className="px-5 py-3 text-gray-700">{u.email}</td>
+                        <td className="px-4 py-3 text-gray-600">{u.agentName || <span className="text-gray-400 italic">No agent name set</span>}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-medium text-gray-700">{count}</span>
+                          <span className="text-gray-400 text-xs ml-1">agent{count !== 1 ? 's' : ''}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {users.filter(u => u.role === 'tl').length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No Team Leads yet. Add a user with role &quot;TL&quot; in the Users section.</p>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">To add a new Team Lead, go to the Users section and set their role to &quot;TL&quot;. Then assign agents to them using the TL column in the users table.</p>
           </div>
         )}
 

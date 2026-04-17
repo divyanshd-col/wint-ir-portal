@@ -13,10 +13,16 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const weekStart = searchParams.get('week_start');
+
+  // If no week_start, return simple agent list with tl/qa assignment columns
+  if (!weekStart) {
+    const agents = await query(`SELECT id, name, tl_name, qa_name, status FROM agents ORDER BY name`);
+    return NextResponse.json(agents);
+  }
+
   const teamId    = searchParams.get('team_id');
   const tlId      = searchParams.get('tl_id');
   const qaId      = searchParams.get('qa_id');
-  if (!weekStart) return NextResponse.json({ error: 'week_start required' }, { status: 400 });
 
   let agentQuery = `
     SELECT a.agent_id, u.name,
@@ -28,7 +34,7 @@ export async function GET(req: NextRequest) {
     JOIN cx_users qau ON qau.user_id = a.qa_id
     WHERE a.status = 'active'
   `;
-  const params: any[] = [];
+  const params: unknown[] = [];
   if (teamId) { params.push(teamId); agentQuery += ` AND a.team_id = $${params.length}`; }
   if (tlId)   { params.push(tlId);   agentQuery += ` AND t.tl_id = $${params.length}`; }
   if (qaId)   { params.push(qaId);   agentQuery += ` AND a.qa_id = $${params.length}`; }
@@ -90,5 +96,27 @@ export async function GET(req: NextRequest) {
     };
   }));
 
+  // suppress unused variable warning
+  void agentIds;
+
   return NextResponse.json(rows);
+}
+
+// PATCH — update tl_name and/or qa_name by agent name
+export async function PATCH(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session?.user || session.user.role !== 'admin')
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const { agent_name, tl_name, qa_name } = await req.json();
+  if (!agent_name) return NextResponse.json({ error: 'agent_name required' }, { status: 400 });
+
+  // Only update columns that were passed
+  if (tl_name !== undefined) {
+    await query(`UPDATE agents SET tl_name = $1 WHERE name = $2`, [tl_name || null, agent_name]);
+  }
+  if (qa_name !== undefined) {
+    await query(`UPDATE agents SET qa_name = $1 WHERE name = $2`, [qa_name || null, agent_name]);
+  }
+  return NextResponse.json({ ok: true });
 }
