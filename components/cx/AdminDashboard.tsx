@@ -211,11 +211,109 @@ function ReassignModal({ agent, onClose, onSuccess }: ReassignModalProps) {
   );
 }
 
+// ---- Teams View ----
+
+interface TeamStructure {
+  team_id: number;
+  team_name: string;
+  team_type: string;
+  tl_name: string | null;
+  agents: { agent_id: number; agent_name: string; status: string; qa_name: string | null }[];
+}
+
+function TeamsView() {
+  const [teams, setTeams] = useState<TeamStructure[]>([]);
+  const [unassigned, setUnassigned] = useState<{ agent_id: number; agent_name: string; status: string; qa_name: string | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/cx/admin/team-structure')
+      .then(r => r.ok ? r.json() : { teams: [], unassigned: [] })
+      .then(d => { setTeams(d.teams || []); setUnassigned(d.unassigned || []); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return (
+    <div className="space-y-3 p-4">
+      {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-white/5 rounded-xl animate-pulse" />)}
+    </div>
+  );
+
+  return (
+    <div className="p-4 space-y-4">
+      {teams.map(team => (
+        <div key={team.team_id} className="bg-[#1a1a1a] border border-white/8 rounded-xl overflow-hidden">
+          {/* Team header */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-white/8 bg-white/2">
+            <div className="flex items-center gap-3">
+              <span className="text-white font-semibold">{team.team_name}</span>
+              <span className="text-xs text-gray-600 bg-white/5 px-2 py-0.5 rounded-full capitalize">{team.team_type}</span>
+            </div>
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              {team.tl_name && <span>TL: <span className="text-gray-300">{team.tl_name}</span></span>}
+              <span>{team.agents.length} agent{team.agents.length !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+
+          {/* Agents */}
+          {team.agents.length === 0 ? (
+            <p className="px-5 py-4 text-gray-600 text-sm italic">No agents assigned to this team.</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-white/5">
+                  <th className="px-5 py-2 text-left text-xs text-gray-600 font-medium uppercase tracking-wider">Agent</th>
+                  <th className="px-5 py-2 text-left text-xs text-gray-600 font-medium uppercase tracking-wider">QA</th>
+                  <th className="px-5 py-2 text-left text-xs text-gray-600 font-medium uppercase tracking-wider">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {team.agents.map(a => (
+                  <tr key={a.agent_id} className="border-b border-white/4 last:border-0 hover:bg-white/2 transition">
+                    <td className="px-5 py-2.5 text-gray-200">{a.agent_name}</td>
+                    <td className="px-5 py-2.5 text-gray-500">{a.qa_name || <span className="italic text-gray-700">Unassigned</span>}</td>
+                    <td className="px-5 py-2.5">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${a.status === 'active' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-gray-800 text-gray-500'}`}>
+                        {a.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
+
+      {/* Unassigned agents */}
+      {unassigned.length > 0 && (
+        <div className="bg-[#1a1a1a] border border-amber-500/20 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-white/8 bg-amber-900/10">
+            <span className="text-amber-400 text-sm font-medium">⚠ Unassigned agents ({unassigned.length})</span>
+          </div>
+          <table className="w-full text-sm">
+            <tbody>
+              {unassigned.map(a => (
+                <tr key={a.agent_id} className="border-b border-white/4 last:border-0">
+                  <td className="px-5 py-2.5 text-gray-400">{a.agent_name}</td>
+                  <td className="px-5 py-2.5 text-gray-600">{a.qa_name || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---- Main Component ----
 
 export default function AdminDashboard() {
   const currentWeek = getWeekStart();
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
+  const [mainTab, setMainTab] = useState<'metrics' | 'teams'>('metrics');
   const [tab, setTab] = useState<'tl' | 'qa'>('tl');
   const [summary, setSummary] = useState<SummaryRow[]>([]);
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -287,22 +385,53 @@ export default function AdminDashboard() {
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-semibold text-white">CX Performance — Admin</h1>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setSelectedWeek(addWeeks(selectedWeek, -1))}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 12L6 8l4-4"/></svg>
-          </button>
-          <span className="text-sm text-gray-300 min-w-[160px] text-center">{formatWeekLabel(selectedWeek, isCurrentWeek)}</span>
-          <button onClick={() => canGoNext && setSelectedWeek(addWeeks(selectedWeek, 1))}
-            disabled={!canGoNext}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition disabled:opacity-30 disabled:cursor-not-allowed">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 4l4 4-4 4"/></svg>
-          </button>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold text-white">CX Performance — Admin</h1>
+          {/* Main tab switcher */}
+          <div className="flex bg-white/5 rounded-lg p-0.5 gap-0.5">
+            {(['metrics', 'teams'] as const).map(t => (
+              <button
+                key={t}
+                onClick={() => setMainTab(t)}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition ${mainTab === t ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                {t === 'metrics' ? '📊 Metrics' : '🏢 Teams'}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {mainTab === 'metrics' && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => setSelectedWeek(addWeeks(selectedWeek, -1))}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10 12L6 8l4-4"/></svg>
+            </button>
+            <span className="text-sm text-gray-300 min-w-[160px] text-center">{formatWeekLabel(selectedWeek, isCurrentWeek)}</span>
+            <button onClick={() => canGoNext && setSelectedWeek(addWeeks(selectedWeek, 1))}
+              disabled={!canGoNext}
+              className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition disabled:opacity-30 disabled:cursor-not-allowed">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M6 4l4 4-4 4"/></svg>
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm">{error}</div>}
+
+      {/* Teams view */}
+      {mainTab === 'teams' && (
+        <div className="bg-[#1e1e1e] border border-white/10 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/10">
+            <h2 className="text-white font-medium">Team Structure</h2>
+            <p className="text-gray-600 text-xs mt-0.5">Teams, their TLs, assigned agents and QA reviewers</p>
+          </div>
+          <TeamsView />
+        </div>
+      )}
+
+      {/* Metrics view */}
+      {mainTab === 'metrics' && <>
 
       {/* Summary table tabs */}
       <div className="bg-[#1e1e1e] border border-white/10 rounded-xl overflow-hidden">
@@ -461,6 +590,7 @@ export default function AdminDashboard() {
           }}
         />
       )}
+      </> /* end metrics view */}
     </div>
   );
 }
