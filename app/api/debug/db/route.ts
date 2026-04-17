@@ -75,6 +75,23 @@ export async function GET() {
       first_param_val: r.parameters ? JSON.stringify(Object.values(r.parameters)[0]).slice(0, 80) : null,
     }));
 
+    // Test getAllScoredConversations (the actual quality pipeline function)
+    const { getAllScoredConversations } = await import('@/lib/robylon/db');
+    let qualityRows: any[] = [];
+    let qualityError: string | null = null;
+    try {
+      qualityRows = await getAllScoredConversations(5);
+    } catch (e: any) {
+      qualityError = e?.message;
+    }
+    result.quality_pipeline = {
+      getAllScoredConversations_count: qualityRows.length,
+      getAllScoredConversations_error: qualityError,
+      first_row_keys: qualityRows[0] ? Object.keys(qualityRows[0]) : null,
+      first_row_iqs: qualityRows[0]?.iqs,
+      first_row_iqs_type: qualityRows[0] ? typeof qualityRows[0].iqs : null,
+    };
+
     // Test toIQSScoreEntry on those rows
     const DB_KEY_TO_LEGACY: Record<string, string> = {
       technical: 'Technical', all_questions: 'AllQuestions', expectation: 'Expectation',

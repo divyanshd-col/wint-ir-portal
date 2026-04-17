@@ -18,6 +18,18 @@ export async function GET(req: NextRequest) {
   const groupCol     = view === 'tl' ? 'a.tl_name' : 'a.qa_name';
   const counterCol   = view === 'tl' ? 'a.qa_name' : 'a.tl_name';
 
+  // Check if tl_name/qa_name columns exist (added by migration)
+  const colCheck = await query<{column_name: string}>(`
+    SELECT column_name FROM information_schema.columns
+    WHERE table_name = 'agents' AND column_name IN ('tl_name','qa_name')
+  `);
+  if (colCheck.length < 2) {
+    return NextResponse.json(
+      { error: 'migration_required', detail: 'POST /api/admin/migrate to add tl_name/qa_name columns' },
+      { status: 503 }
+    );
+  }
+
   // Agent-level metrics
   const agentRows = await query<{
     agent_id: string; agent_name: string; group_name: string; counterpart: string;
