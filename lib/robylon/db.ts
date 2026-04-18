@@ -165,7 +165,28 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 // ── Fetch all scored conversations (for quality dashboard) ────────────────────
 
-export async function getAllScoredConversations(limit = 2000): Promise<any[]> {
+export async function getAllScoredConversations(
+  limit = 2000,
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string } = {},
+): Promise<any[]> {
+  const conditions: string[] = [];
+  const params: any[] = [limit];
+
+  if (opts.dateFrom) {
+    params.push(opts.dateFrom);
+    conditions.push(`(s.scored_at::date >= $${params.length} OR c.started_at::date >= $${params.length})`);
+  }
+  if (opts.dateTo) {
+    params.push(opts.dateTo);
+    conditions.push(`(s.scored_at::date <= $${params.length} OR c.started_at::date <= $${params.length})`);
+  }
+  if (opts.agentName) {
+    params.push(opts.agentName);
+    conditions.push(`a.name = $${params.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
   return query(`
     SELECT
       c.id                  AS "chatId",
@@ -185,9 +206,10 @@ export async function getAllScoredConversations(limit = 2000): Promise<any[]> {
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
+    ${where}
     ORDER BY s.scored_at DESC
     LIMIT $1
-  `, [limit]);
+  `, params);
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */

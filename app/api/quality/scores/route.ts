@@ -130,9 +130,16 @@ export async function GET(req: NextRequest) {
     selfAgentName = configUser?.agentName || '';
   }
 
+  // Push date + agent filters to DB to reduce data transferred and processed
+  const dbOpts: { dateFrom?: string; dateTo?: string; agentName?: string } = {};
+  if (dateFrom) dbOpts.dateFrom = dateFrom;
+  if (dateTo)   dbOpts.dateTo   = dateTo;
+  if (session.user?.role === 'agent' && selfAgentName) dbOpts.agentName = selfAgentName;
+  else if (agentFilter) dbOpts.agentName = agentFilter;
+
   let rawRows: any[] = [];
   try {
-    rawRows = await getAllScoredConversations(2000);
+    rawRows = await getAllScoredConversations(2000, dbOpts);
   } catch (dbErr: any) {
     console.error('[quality/scores] DB fetch failed:', dbErr?.message ?? dbErr);
     return NextResponse.json({ error: 'Database error', detail: dbErr?.message }, { status: 500 });
@@ -147,12 +154,12 @@ export async function GET(req: NextRequest) {
     }
   }).filter(Boolean) as IQSScoreEntry[];
 
-  // Derive available filter values from ALL entries (unfiltered)
+  // Derive available filter values from the fetched set
   const availableAgents           = [...new Set(allParsed.map(e => e.agentName).filter(Boolean))].sort() as string[];
   const availableDispositions     = [...new Set(allParsed.map(e => e.disposition).filter(Boolean))].sort() as string[];
   const availableSubDispositions  = [...new Set(allParsed.map(e => e.subDisposition).filter(Boolean))].sort() as string[];
 
-  // Apply filters
+  // Apply remaining in-memory filters (tag, csat, score range, type)
   let entries = [...allParsed];
   if (session.user?.role === 'agent') {
     entries = selfAgentName ? entries.filter(e => e.agentName === selfAgentName) : [];
@@ -162,8 +169,6 @@ export async function GET(req: NextRequest) {
   if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
   if (subTagFilter) entries = entries.filter(e => (e.subDisposition || '').toLowerCase() === subTagFilter.toLowerCase());
   if (csatFilter)   entries = entries.filter(e => e.csat === csatFilter);
-  if (dateFrom)     entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) >= dateFrom || (e.date || '') >= dateFrom);
-  if (dateTo)       entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) <= dateTo   || (e.date || '') <= dateTo);
   if (typeFilter)   entries = entries.filter(e => (e.conversationType || 'agent') === typeFilter);
   entries = entries.filter(e => e.iqs >= minScore && e.iqs <= maxScore);
 

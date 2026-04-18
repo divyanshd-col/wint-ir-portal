@@ -810,14 +810,28 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   // ── Load scores (server-side filter + pagination) ────────────────────────────
   // skipStats=true: page navigation — skip stats recompute, keep existing state values
   // skipStats=false: filter change / initial load — recompute all stats
+  const abortRef = useRef<AbortController | null>(null);
+
   const loadScores = useCallback(async (page: number, filters: LogFilters, skipStats = false) => {
+    // Cancel any previous in-flight request
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLogsLoading(true);
     setLogsError(null);
     try {
       const params = buildParams(page, filters);
       if (skipStats) params.set('skipStats', '1');
-      const resp = await fetch(`/api/quality/scores?${params}`);
-      const data = await resp.json();
+      const resp = await fetch(`/api/quality/scores?${params}`, { signal: controller.signal });
+      let data: any;
+      try { data = await resp.json(); } catch {
+        if (controller.signal.aborted) return;
+        setLogsError(`Server error ${resp.status}: non-JSON response`);
+        setLogsLoading(false);
+        return;
+      }
+      if (controller.signal.aborted) return;
       if (!resp.ok) {
         setLogsError(`API error ${resp.status}: ${data?.error || data?.detail || resp.statusText}`);
         setLogsLoading(false);
@@ -837,9 +851,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
       setTotalStored(data.totalStored ?? 0);
       setTotalFiltered(data.total ?? 0);
       setHasMore(data.hasMore ?? false);
-      if (data._debug) setLogsDebug(data._debug);
       setLogsLoaded(true);
     } catch (e: any) {
+      if (controller.signal.aborted) return;
       setLogsError(`Failed to load: ${e?.message || String(e)}`);
     }
     setLogsLoading(false);
