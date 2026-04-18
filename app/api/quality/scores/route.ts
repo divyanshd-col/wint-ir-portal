@@ -189,10 +189,10 @@ export async function GET(req: NextRequest) {
     const filteredForStats = entries;
 
     // Agent stats
-    const agentMap: Record<string, { total: number; sum: number; scores: number[]; frts: number[]; resolutions: number[]; closures: number[]; b2ts: number[] }> = {};
+    const agentMap: Record<string, { total: number; sum: number; scores: number[]; frts: number[]; resolutions: number[]; closures: number[]; b2ts: number[]; csatGood: number; csatTotal: number }> = {};
     for (const e of filteredForStats) {
       const a = e.agentName || 'Unknown';
-      if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [], frts: [], resolutions: [], closures: [], b2ts: [] };
+      if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [], frts: [], resolutions: [], closures: [], b2ts: [], csatGood: 0, csatTotal: 0 };
       agentMap[a].total++;
       agentMap[a].sum += e.iqs;
       agentMap[a].scores.push(e.iqs);
@@ -200,6 +200,10 @@ export async function GET(req: NextRequest) {
       if (typeof e.resolutionTime === 'number') agentMap[a].resolutions.push(e.resolutionTime);
       if (typeof (e as any).closureTime === 'number') agentMap[a].closures.push((e as any).closureTime);
       if (typeof e.botToTeamSecs === 'number') agentMap[a].b2ts.push(e.botToTeamSecs);
+      if (e.csat === '5' || e.csat === '3' || e.csat === '1') {
+        agentMap[a].csatTotal++;
+        if (e.csat === '5') agentMap[a].csatGood++;
+      }
     }
     agentStats = Object.entries(agentMap).map(([agent, d]) => ({
       agent,
@@ -213,6 +217,7 @@ export async function GET(req: NextRequest) {
       avgResolution: d.resolutions.length ? Math.round(d.resolutions.reduce((s,n) => s+n, 0) / d.resolutions.length) : null,
       avgClosure: d.closures.length ? Math.round(d.closures.reduce((s,n) => s+n, 0) / d.closures.length) : null,
       avgBotToTeam: d.b2ts.length ? Math.round(d.b2ts.reduce((s,n) => s+n, 0) / d.b2ts.length) : null,
+      csatPct: d.csatTotal > 0 ? Math.round(d.csatGood / d.csatTotal * 100) : null,
     })).sort((a, b) => b.avgIqs - a.avgIqs);
 
     // Param failure rates

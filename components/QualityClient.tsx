@@ -61,6 +61,7 @@ interface AgentStat {
   avgResolution?: number | null;
   avgClosure?: number | null;
   avgBotToTeam?: number | null;
+  csatPct?: number | null;
 }
 
 interface QualityClientProps {
@@ -573,19 +574,178 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
   );
 }
 
+// ── Agent Report Modal ────────────────────────────────────────────────────────
+function AgentReportModal({ stat, entries, paramFails, onClose, onFilterLog }: {
+  stat: AgentStat;
+  entries: IQSScoreEntry[];
+  paramFails: Record<string, number>;
+  onClose: () => void;
+  onFilterLog: (f: { agent: string; minScore?: number; maxScore?: number }) => void;
+}) {
+  const agentEntries = entries.filter(e => (e.agentName || 'Unknown') === stat.agent);
+  const t = iqsTheme(stat.avgIqs);
+
+  const csatGood  = agentEntries.filter(e => e.csat === '5').length;
+  const csatCbb   = agentEntries.filter(e => e.csat === '3').length;
+  const csatBad   = agentEntries.filter(e => e.csat === '1').length;
+  const csatTotal = csatGood + csatCbb + csatBad;
+
+  const dispMap: Record<string, number> = {};
+  for (const e of agentEntries) if (e.disposition) dispMap[e.disposition] = (dispMap[e.disposition] || 0) + 1;
+  const topDisp = Object.entries(dispMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const subDispMap: Record<string, number> = {};
+  for (const e of agentEntries) if (e.subDisposition) subDispMap[e.subDisposition] = (subDispMap[e.subDisposition] || 0) + 1;
+  const topSubDisp = Object.entries(subDispMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const paramData = PARAM_ORDER.map(p => {
+    const fails = agentEntries.filter(e => e.scores[p] === 'No').length;
+    return { p, failPct: agentEntries.length ? Math.round(fails / agentEntries.length * 100) : 0 };
+  }).sort((a, b) => b.failPct - a.failPct);
+  const worstParams = paramData.filter(d => d.failPct > 0).slice(0, 4);
+  const bestParams  = [...paramData].sort((a, b) => a.failPct - b.failPct).slice(0, 3);
+
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 rounded-t-2xl">
+          <IQSRing iqs={stat.avgIqs} size={52} />
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-gray-900 text-lg">{stat.agent}</h2>
+            <p className="text-xs text-gray-400 mt-0.5">{stat.chats} chats · IQS range {stat.minIqs}–{stat.maxIqs}%</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-6">
+          {/* KPI row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: 'Avg IQS', value: `${stat.avgIqs}%`, color: t.text },
+              { label: 'CSAT Good', value: stat.csatPct != null ? `${stat.csatPct}%` : '—', color: (stat.csatPct ?? 0) >= 80 ? 'text-emerald-600' : (stat.csatPct ?? 0) >= 60 ? 'text-amber-600' : 'text-red-500' },
+              { label: 'Avg FRT', value: fmtDuration(stat.avgFrt ?? null), color: 'text-gray-800' },
+              { label: 'Avg Resolution', value: fmtDuration(stat.avgResolution ?? null), color: 'text-gray-800' },
+            ].map(k => (
+              <div key={k.label} className="bg-gray-50 rounded-xl px-4 py-3 text-center">
+                <p className={`text-xl font-bold ${k.color}`}>{k.value}</p>
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-0.5">{k.label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* CSAT breakdown */}
+          {csatTotal > 0 && (
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">CSAT Breakdown</p>
+              <div className="flex gap-3">
+                {[['Good', csatGood, 'bg-emerald-100 text-emerald-700'], ['CBB', csatCbb, 'bg-amber-100 text-amber-700'], ['Bad', csatBad, 'bg-red-100 text-red-700']].map(([label, count, cls]) => (
+                  <div key={String(label)} className={`flex-1 rounded-xl px-3 py-2 text-center ${cls}`}>
+                    <p className="text-lg font-bold">{count}</p>
+                    <p className="text-[10px] font-semibold uppercase">{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Worst parameters */}
+          {worstParams.length > 0 && (
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Worst Parameters</p>
+              <div className="space-y-1.5">
+                {worstParams.map(d => (
+                  <div key={d.p} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-700 w-32 shrink-0">{PARAM_NAMES[d.p] || d.p}</span>
+                    <div className="flex-1 bg-gray-100 rounded-full h-1.5">
+                      <div className="h-1.5 rounded-full bg-red-400" style={{ width: `${d.failPct}%` }} />
+                    </div>
+                    <span className="text-xs font-bold text-red-600 w-10 text-right">{d.failPct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Best parameters */}
+          {bestParams.length > 0 && (
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Best Parameters</p>
+              <div className="flex gap-2 flex-wrap">
+                {bestParams.map(d => (
+                  <span key={d.p} className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full">
+                    {PARAM_NAMES[d.p] || d.p} {d.failPct === 0 ? '✓' : `${100 - d.failPct}%`}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Disposition breakdown */}
+          {topDisp.length > 0 && (
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Top Dispositions</p>
+              <div className="space-y-1">
+                {topDisp.map(([d, n]) => (
+                  <div key={d} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-700 flex-1 truncate">{d}</span>
+                    <div className="w-24 bg-gray-100 rounded-full h-1.5">
+                      <div className="h-1.5 rounded-full bg-emerald-400" style={{ width: `${Math.round(n / agentEntries.length * 100)}%` }} />
+                    </div>
+                    <span className="text-xs text-gray-500 w-6 text-right">{n}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sub-disposition breakdown */}
+          {topSubDisp.length > 0 && (
+            <div>
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Struggled With (Sub-Disposition)</p>
+              <div className="space-y-1">
+                {topSubDisp.map(([d, n]) => (
+                  <div key={d} className="flex items-center gap-3">
+                    <span className="text-xs text-gray-700 flex-1 truncate">{d}</span>
+                    <span className="text-xs text-gray-500 ml-auto">{n} chats</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-2 border-t border-gray-100">
+            <button onClick={() => { onFilterLog({ agent: stat.agent }); onClose(); }}
+              className="flex-1 text-xs px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition">
+              View All Chats →
+            </button>
+            <button onClick={() => { onFilterLog({ agent: stat.agent, maxScore: 69 }); onClose(); }}
+              className="flex-1 text-xs px-4 py-2.5 border border-red-200 text-red-600 bg-red-50 rounded-xl font-bold hover:bg-red-100 transition">
+              At-Risk Chats Only
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Agent Card ────────────────────────────────────────────────────────────────
-// Fix 7 — two-layer coaching bars
-// Fix 10 — clickable stat badges
 function AgentCard({
   stat,
   entries,
   teamParamFails,
   onFilterLog,
+  onViewReport,
 }: {
   stat: AgentStat;
   entries: IQSScoreEntry[];
   teamParamFails?: Record<string, number>;
   onFilterLog?: (f: { agent: string; minScore?: number; maxScore?: number }) => void;
+  onViewReport?: (stat: AgentStat) => void;
 }) {
   const t = iqsTheme(stat.avgIqs);
   // normalise empty agentName → 'Unknown' so it matches stat.agent
@@ -601,8 +761,11 @@ function AgentCard({
 
   return (
     <div className={`bg-white rounded-2xl shadow-sm overflow-hidden border ${isAtRisk ? 'border-red-200' : 'border-gray-100'}`}>
-      {/* Card header */}
-      <div className={`px-5 pt-5 pb-4 ${isAtRisk ? 'bg-red-50/40' : ''}`}>
+      {/* Card header — click to open full report */}
+      <div
+        className={`px-5 pt-5 pb-4 ${isAtRisk ? 'bg-red-50/40' : ''} ${onViewReport ? 'cursor-pointer hover:bg-gray-50/60 transition' : ''}`}
+        onClick={() => onViewReport?.(stat)}
+      >
         <div className="flex items-start gap-3">
           <div className="shrink-0"><IQSRing iqs={stat.avgIqs} size={56} /></div>
           <div className="flex-1 min-w-0 pt-0.5">
@@ -770,6 +933,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editSaved, setEditSaved] = useState(false);
+
+  // Agent report modal
+  const [agentReportStat, setAgentReportStat] = useState<AgentStat | null>(null);
 
   // Toast
   const [toast, setToast] = useState<string | null>(null);
@@ -1224,6 +1390,21 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
         </div>
       )}
 
+      {/* Agent Report Modal */}
+      {agentReportStat && (
+        <AgentReportModal
+          stat={agentReportStat}
+          entries={entries}
+          paramFails={paramFails}
+          onClose={() => setAgentReportStat(null)}
+          onFilterLog={({ agent, minScore, maxScore }) => {
+            const f = { ...DEFAULT_FILTERS, agent, minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
+            setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
+            loadScores(0, f); switchTab('log');
+          }}
+        />
+      )}
+
       {/* Toast */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl">
@@ -1282,12 +1463,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
           {/* Period filter — top-right on Performance and Score Log */}
           {(tab === 'performance' || tab === 'log') && (
             <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
-              {(['today', '7d', '30d', 'all', 'custom'] as const).map(r => (
+              {(['today', '7d', '30d', 'all'] as const).map(r => (
                 <button key={r}
                   onClick={() => {
                     const f = { ...pendingFilters, dateRange: r };
                     setPendingFilters(f);
-                    // Auto-apply on chip click (same as pressing Apply)
                     const af = selfAgentName ? { ...f, agent: selfAgentName } : f;
                     setAppliedFilters(af); setLogPage(0); loadScores(0, af);
                   }}
@@ -1296,24 +1476,56 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                       ? 'bg-emerald-600 text-white'
                       : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}>
-                  {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : r === 'all' ? 'All time' : 'Custom'}
+                  {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : 'All time'}
                 </button>
               ))}
-              {appliedFilters.dateRange === 'custom' && (
-                <div className="flex items-center gap-1.5">
-                  <input type="date" value={pendingFilters.dateFrom}
-                    onChange={e => setPendingFilters(f => ({ ...f, dateFrom: e.target.value }))}
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
-                  <span className="text-gray-400 text-xs">→</span>
-                  <input type="date" value={pendingFilters.dateTo}
-                    onChange={e => setPendingFilters(f => ({ ...f, dateTo: e.target.value }))}
-                    className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
-                  <button onClick={applyFilters}
-                    className="text-xs px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition">
-                    Apply
-                  </button>
-                </div>
-              )}
+              {/* Custom date range — calendar popover */}
+              <div className="relative">
+                <button
+                  onClick={() => setPendingFilters(f => ({ ...f, dateRange: 'custom' }))}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                    appliedFilters.dateRange === 'custom'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {appliedFilters.dateRange === 'custom' && appliedFilters.dateFrom
+                    ? `${appliedFilters.dateFrom.slice(5)} → ${appliedFilters.dateTo?.slice(5) || '…'}`
+                    : 'Custom'}
+                </button>
+                {pendingFilters.dateRange === 'custom' && (
+                  <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 p-4 min-w-[260px]">
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">Select date range</p>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">From</label>
+                        <input type="date" value={pendingFilters.dateFrom}
+                          onChange={e => setPendingFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                          className="mt-1 w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">To</label>
+                        <input type="date" value={pendingFilters.dateTo}
+                          onChange={e => setPendingFilters(f => ({ ...f, dateTo: e.target.value }))}
+                          className="mt-1 w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700" />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 mt-3">
+                      <button onClick={() => {
+                        const f = { ...pendingFilters, dateRange: 'custom' as const };
+                        const af = selfAgentName ? { ...f, agent: selfAgentName } : f;
+                        setAppliedFilters(af); setLogPage(0); loadScores(0, af);
+                        setPendingFilters(af);
+                      }} className="flex-1 text-xs px-3 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition">
+                        Apply
+                      </button>
+                      <button onClick={() => setPendingFilters(f => ({ ...f, dateRange: 'all' }))}
+                        className="text-xs px-3 py-2 text-gray-500 hover:text-gray-700 font-medium transition">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
               <button onClick={() => loadScores(logPage, appliedFilters)} disabled={logsLoading}
                 className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 disabled:opacity-40 transition font-medium ml-1">
                 {logsLoading ? '…' : '↻'}
@@ -1438,6 +1650,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                           stat={a}
                           entries={entries}
                           teamParamFails={paramFails}
+                          onViewReport={s => setAgentReportStat(s)}
                           onFilterLog={({ agent, minScore, maxScore }) => {
                             const f = { ...DEFAULT_FILTERS, agent,
                               minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
@@ -1469,6 +1682,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                               stat={a}
                               entries={entries}
                               teamParamFails={paramFails}
+                              onViewReport={s => { setShowAllAgents(false); setAgentReportStat(s); }}
                               onFilterLog={({ agent, minScore, maxScore }) => {
                                 const f = { ...DEFAULT_FILTERS, agent,
                                   minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
@@ -1486,8 +1700,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-bold text-gray-900">Agent Timing Analytics</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Average response and resolution times per agent</p>
+                        <p className="text-sm font-bold text-gray-900">Agent Wise Analytics</p>
+                        <p className="text-xs text-gray-500 mt-0.5">IQS, CSAT, and response times per agent</p>
                       </div>
                       <div className="flex gap-2 text-xs text-gray-500">
                         {agentPage > 0 && (
@@ -1509,7 +1723,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                             <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg IQS</th>
                             <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg FRT</th>
                             <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg Resolution</th>
-                            <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg Closure</th>
+                            <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">CSAT Good</th>
                             <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">At Risk %</th>
                           </tr>
                         </thead>
@@ -1517,15 +1731,20 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                           {agentStats.slice(agentPage * 5, agentPage * 5 + 5).map((a, i) => {
                             const atRiskPct = a.chats > 0 ? Math.round(a.atRisk / a.chats * 100) : 0;
                             return (
-                              <tr key={a.agent} className={`border-b border-gray-50 hover:bg-emerald-50/30 transition ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}>
-                                <td className="px-5 py-3 font-semibold text-gray-900">{a.agent}</td>
+                              <tr key={a.agent} className={`border-b border-gray-50 hover:bg-emerald-50/30 cursor-pointer transition ${i % 2 === 1 ? 'bg-gray-50/30' : ''}`}
+                                onClick={() => setAgentReportStat(a)}>
+                                <td className="px-5 py-3 font-semibold text-gray-900 text-emerald-700 hover:underline">{a.agent}</td>
                                 <td className="px-4 py-3 text-right tabular-nums text-gray-700">{a.chats}</td>
                                 <td className="px-4 py-3 text-right tabular-nums">
                                   <IQSPill iqs={a.avgIqs} />
                                 </td>
                                 <td className="px-4 py-3 text-right tabular-nums text-gray-600">{fmtDuration(a.avgFrt ?? null)}</td>
                                 <td className="px-4 py-3 text-right tabular-nums text-gray-600">{fmtDuration(a.avgResolution ?? null)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums text-gray-600">{fmtDuration(a.avgClosure ?? null)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums">
+                                  {a.csatPct != null
+                                    ? <span className={`font-semibold ${a.csatPct >= 80 ? 'text-emerald-600' : a.csatPct >= 60 ? 'text-amber-600' : 'text-red-600'}`}>{a.csatPct}%</span>
+                                    : <span className="text-gray-300">—</span>}
+                                </td>
                                 <td className="px-5 py-3 text-right tabular-nums">
                                   <span className={`font-semibold ${atRiskPct >= 30 ? 'text-red-600' : atRiskPct >= 15 ? 'text-amber-600' : 'text-emerald-600'}`}>
                                     {atRiskPct}%
@@ -1572,7 +1791,15 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                             {(showAllWeeks ? weeklyParamData : weeklyParamData.slice(0, 5)).map((row, i) => (
                               <tr key={row.key}
                                 className={`border-b border-gray-50 hover:bg-emerald-50/20 cursor-pointer transition ${i % 2 === 1 ? 'bg-gray-50/20' : ''}`}
-                                onClick={() => { setSortCol('fails'); setSortDir('desc'); switchTab('log'); }}>
+                                title="Click to filter Score Log to this week"
+                                onClick={() => {
+                                  const weekEnd = new Date(row.key + 'T00:00:00Z');
+                                  weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+                                  const dateTo = weekEnd.toISOString().slice(0, 10);
+                                  const f = { ...DEFAULT_FILTERS, dateRange: 'custom' as const, dateFrom: row.key, dateTo };
+                                  setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
+                                  loadScores(0, f); switchTab('log');
+                                }}>
                                 <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap sticky left-0 bg-white">
                                   {row.label}
                                 </td>

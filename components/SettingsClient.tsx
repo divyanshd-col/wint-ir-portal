@@ -610,8 +610,8 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
             />
 
             {/* User table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full text-sm min-w-[760px]">
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
                     <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
@@ -656,18 +656,21 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                           value={agentAssignments[u.agentName || '']?.tl_name || ''}
                           onChange={async e => {
                             const val = e.target.value;
-                            if (!u.agentName) return;
-                            await fetch('/api/cx/admin/agents', {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ agent_name: u.agentName, tl_name: val || null }),
-                            });
+                            if (!u.agentName) { showToast('Set an Agent Name first'); return; }
+                            // Optimistic update
                             setAgentAssignments(prev => ({
                               ...prev,
                               [u.agentName!]: { ...prev[u.agentName!], tl_name: val || null },
                             }));
+                            const res = await fetch('/api/cx/admin/agents', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ agent_name: u.agentName, tl_name: val || null }),
+                            });
+                            if (res.ok) showToast('TL updated');
+                            else showToast('Failed to save TL — check agent name matches DB');
                           }}
-                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-28"
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
                         >
                           <option value="">—</option>
                           {users.filter(uu => uu.role === 'tl').map(uu => (
@@ -680,18 +683,21 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                           value={agentAssignments[u.agentName || '']?.qa_name || ''}
                           onChange={async e => {
                             const val = e.target.value;
-                            if (!u.agentName) return;
-                            await fetch('/api/cx/admin/agents', {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ agent_name: u.agentName, qa_name: val || null }),
-                            });
+                            if (!u.agentName) { showToast('Set an Agent Name first'); return; }
+                            // Optimistic update
                             setAgentAssignments(prev => ({
                               ...prev,
                               [u.agentName!]: { ...prev[u.agentName!], qa_name: val || null },
                             }));
+                            const res = await fetch('/api/cx/admin/agents', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ agent_name: u.agentName, qa_name: val || null }),
+                            });
+                            if (res.ok) showToast('QA updated');
+                            else showToast('Failed to save QA — check agent name matches DB');
                           }}
-                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-28"
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
                         >
                           <option value="">—</option>
                           {users.filter(uu => uu.role === 'quality').map(uu => (
