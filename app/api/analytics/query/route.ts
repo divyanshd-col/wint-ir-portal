@@ -1,13 +1,10 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { getDispositions } from '@/lib/analytics/dispositions';
-import { generateSQL } from '@/lib/analytics/text-to-sql';
-import { executeRawSQL, writeAuditLog } from '@/lib/analytics/executor';
-import { formatFilterHeader, formatDynamicResult } from '@/lib/analytics/formatter';
+import { runAnalyticsAgent } from '@/lib/analytics/agent';
+import { formatFilterHeader, formatAgentResult } from '@/lib/analytics/formatter';
 import { appendHistory } from '@/lib/analytics/sessions';
-import { extractThemes } from '@/lib/analytics/themes';
-import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
-import { readConfig } from '@/lib/config';
+import { writeAuditLog } from '@/lib/analytics/executor';
 import type { AnalyticsFilters, StreamChunk, InsightBlock, HistoryEntry } from '@/lib/analytics/types';
 
 export const runtime = 'nodejs';
@@ -15,31 +12,6 @@ export const maxDuration = 60;
 
 function send(controller: ReadableStreamDefaultController, chunk: StreamChunk, encoder: TextEncoder) {
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
-}
-
-async function generateNarrative(
-  sql: string,
-  rows: any[],
-  message: string,
-  keys: string[],
-): Promise<string> {
-  if (!rows.length || !keys.length) return '';
-  const sample = JSON.stringify(rows.slice(0, 15));
-  const prompt = `In 1-2 sentences, summarise the key insight from this data for a product team member.
-Data: ${sample}
-User asked: "${message}"
-Be specific, use numbers from the data.`;
-  try {
-    return await geminiGenerate(
-      keys,
-      'gemini-2.5-flash',
-      [{ role: 'user', parts: [{ text: prompt }] }],
-      {},
-      8_000,
-    );
-  } catch {
-    return '';
-  }
 }
 
 export async function POST(req: Request) {
@@ -72,72 +44,64 @@ export async function POST(req: Request) {
     async start(controller) {
       const t0 = Date.now();
       try {
-        // 1. Filter header — always shown first
+        // Filter header — always first
         send(controller, { event: 'blocks', blocks: [formatFilterHeader(barFilters)] }, encoder);
 
-        // 2. Generate SQL (or classify as theme_extraction / cannot_answer)
-        const result = await generateSQL(message, barFilters, priorContext);
+        // Disposition list for agent context
+        const dispositionPayload = await getDispositions();
+        const dispositionNames = dispositionPayload.dispositions.map(d => d.disposition);
 
-        const config = await readConfig();
-        const keys = getOrderedGeminiKeys(config);
+        // Run agent loop — stream progress as text deltas
+        const result = await runAnalyticsAgent(
+          message,
+          barFilters,
+          dispositionNames,
+          priorContext,
+          (update) => send(controller, { event: 'text', delta: update }, encoder),
+        );
 
         let resultBlocks: InsightBlock[] = [];
-        let rowCount = 0;
-        let templateId: string | null = null;
 
-        if (result.kind === 'cannot_answer') {
-          send(controller, { event: 'text', delta: result.message }, encoder);
-
-        } else if (result.kind === 'theme_extraction') {
-          send(controller, { event: 'text', delta: 'Analysing conversations for themes…\n' }, encoder);
-          resultBlocks = await extractThemes(barFilters);
-          send(controller, { event: 'blocks', blocks: resultBlocks }, encoder);
-          templateId = 'theme_extraction';
+        if (result.kind === 'clarify') {
+          // LLM needs clarification before it can answer
+          send(controller, { event: 'text', delta: result.question }, encoder);
 
         } else {
-          // SQL path
-          templateId = 'text_to_sql';
-          let execResult: Awaited<ReturnType<typeof executeRawSQL>>;
-          try {
-            execResult = await executeRawSQL(result.sql);
-          } catch (err: any) {
-            send(controller, { event: 'text', delta: `Query error: ${err.message}` }, encoder);
-            send(controller, { event: 'done' }, encoder);
-            controller.close();
-            return;
+          const { answer } = result;
+
+          // Narrative (shown as prose above the blocks)
+          if (answer.answer_text) {
+            send(controller, { event: 'text', delta: answer.answer_text }, encoder);
           }
 
-          rowCount = execResult.rowCount;
+          // Visual blocks
+          resultBlocks = formatAgentResult(answer);
+          if (resultBlocks.length) {
+            send(controller, { event: 'blocks', blocks: resultBlocks }, encoder);
+          }
 
-          // Narrative
-          const narrative = await generateNarrative(result.sql, execResult.rows, message, keys);
-          if (narrative) send(controller, { event: 'text', delta: narrative }, encoder);
+          // Audit log (non-blocking)
+          writeAuditLog({
+            userEmail:  email,
+            queryText:  message,
+            queryType:  1,
+            templateId: answer.output_shape,
+            rowCount:   answer.data_rows?.length ?? 0,
+            latencyMs:  Date.now() - t0,
+          }).catch(() => {});
 
-          resultBlocks = formatDynamicResult(execResult.rows, result.chartHint, result.title);
-          send(controller, { event: 'blocks', blocks: resultBlocks }, encoder);
+          // Session history (non-blocking)
+          const entry: HistoryEntry = {
+            id:        crypto.randomUUID(),
+            message,
+            response:  answer.answer_text ?? '',
+            blocks:    [formatFilterHeader(barFilters), ...resultBlocks],
+            type:      1,
+            filters:   barFilters,
+            timestamp: new Date().toISOString(),
+          };
+          appendHistory(email, entry).catch(() => {});
         }
-
-        // Audit log (non-blocking)
-        writeAuditLog({
-          userEmail:  email,
-          queryText:  message,
-          queryType:  result.kind === 'theme_extraction' ? 2 : 1,
-          templateId,
-          rowCount,
-          latencyMs:  Date.now() - t0,
-        }).catch(() => {});
-
-        // Session history (non-blocking)
-        const entry: HistoryEntry = {
-          id:        crypto.randomUUID(),
-          message,
-          response:  '',
-          blocks:    [formatFilterHeader(barFilters), ...resultBlocks],
-          type:      result.kind === 'theme_extraction' ? 2 : 1,
-          filters:   barFilters,
-          timestamp: new Date().toISOString(),
-        };
-        appendHistory(email, entry).catch(() => {});
 
         send(controller, { event: 'done' }, encoder);
       } catch (err: any) {

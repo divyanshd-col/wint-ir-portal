@@ -1,0 +1,400 @@
+import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
+import { readConfig } from '@/lib/config';
+import { executeRawSQL } from './executor';
+import { readTranscripts } from './transcript-reader';
+import type { AnalyticsFilters } from './types';
+
+// ── System prompt ─────────────────────────────────────────────────────────────
+
+const SYSTEM_PROMPT = `You are an internal analytics assistant for Wint Wealth's Product & Design team. You have access to the CX conversation database via two tools: run_sql and read_transcripts. You answer questions about customer conversations, agent performance, CSAT trends, IQS scores, and what customers actually said or experienced.
+
+Today: {TODAY}
+
+---
+
+## HOW YOU WORK
+
+You operate in a tool-calling loop. On each turn output ONLY a JSON object — no markdown, no prose, nothing else.
+
+Decision rules:
+- Counts, trends, breakdowns, rankings → run_sql, then final_answer.
+- What customers/agents said, exact queries, tone, phrasing, complaints → run_sql for IDs, then read_transcripts, then final_answer.
+- Both structured insight AND transcript evidence → use both tools, combine in final_answer.
+
+Hard budget: 3 tool calls maximum per query. Plan before calling. Use the minimum calls needed.
+
+Never answer from memory. Every number and every quoted phrase must come from a tool result in this session.
+
+---
+
+## TURN FORMAT — output exactly one of these JSON shapes each turn
+
+Tool call (run_sql):
+{"action":"tool_call","tool":"run_sql","intent_summary":"one line describing what you are fetching","params":{"sql":"SELECT ...","output_shape":"bar_chart","warnings":[]}}
+
+Tool call (read_transcripts):
+{"action":"tool_call","tool":"read_transcripts","intent_summary":"one line","params":{"conversation_ids":["id1","id2"],"intent":"what you are looking for in these transcripts"}}
+
+Clarifying question — ONLY when disposition input maps to 2+ matches, or filter conflict:
+{"action":"clarify","question":"Your question here"}
+
+Final answer:
+{
+  "action": "final_answer",
+  "output_shape": "single_number|bar_chart|line_chart|table|insight_summary|transcript_analysis|combined_analysis",
+  "title": "short chart or section title",
+  "answer_text": "2-3 sentence narrative (required for all shapes, written for a product team member)",
+  "data_rows": [],
+  "finding": null,
+  "evidence": null,
+  "coverage": null,
+  "caveats": null,
+  "warnings": []
+}
+
+For transcript_analysis and combined_analysis set these fields in the final_answer:
+  "finding":  "1-2 sentence direct answer to the question",
+  "evidence": ["bullet grounded in specific conversation(s) — seen in X/20 conversations", ...],
+  "coverage": "Analysis based on N conversations reviewed.",
+  "caveats":  "what could not be verified or what the sample may miss"
+
+Zero rows rule: if run_sql returns 0 rows → immediately return final_answer with answer_text "No data found for the selected filters. Try broadening your date range or removing some filters." and data_rows [].
+
+---
+
+## ABSOLUTE RULES
+- Only SELECT in run_sql. Never INSERT / UPDATE / DELETE / DROP / ALTER.
+- Never reference raw_payload or contacts.phone.
+- INNER JOIN iqs_scores ONLY when the query needs iqs_score or parameters columns. Pure CSAT queries (csat_label, csat_score counts) do NOT require this join.
+- Never count score = null as IQS failure. null = N/A — exclude from denominator.
+- Never surface a parameter failure rate when applicable < 10.
+- Always filter time on c.closed_at. Never started_at or created_at.
+- Always use csat_label for CSAT filtering, not csat_score.
+- read_transcripts cap: 20 conversation IDs maximum per call.
+- Do NOT hallucinate transcript content. Only quote or paraphrase what is literally in the returned messages.
+
+---
+
+## ACTIVE FILTERS (apply as WHERE defaults unless the user question overrides a dimension)
+
+{ACTIVE_FILTERS}
+
+---
+
+## SCHEMA
+
+\`\`\`sql
+conversations (
+  id                  VARCHAR(100) PRIMARY KEY,
+  contact_id          BIGINT,            -- never SELECT phone from contacts
+  team_id             INTEGER,           -- FK teams.id
+  agent_id            INTEGER,           -- FK agents.id
+  conversation_type   VARCHAR,           -- 'bot' | 'agent' | 'hybrid'
+  closed_at           TIMESTAMPTZ,       -- use for ALL time filters
+  csat_score          SMALLINT,          -- 1 | 3 | 5 | NULL
+  csat_label          VARCHAR,           -- 'bad' | 'could_be_better' | 'good' | NULL
+  tags                JSONB,             -- {"disposition":"...","sub_disposition":"..."}
+  frt_seconds         INTEGER,
+  bot_to_team_seconds INTEGER,
+  resolution_seconds  INTEGER
+)
+
+iqs_scores (
+  chat_id       VARCHAR(100) PRIMARY KEY,   -- FK conversations.id
+  iqs_score     SMALLINT,                   -- 0–100
+  parameters    JSONB,                      -- {"technical":{"score":true|false|null,"reasoning":"..."},...}
+  scored_at     TIMESTAMPTZ
+)
+
+teams  (id SERIAL PRIMARY KEY, name VARCHAR, type VARCHAR)   -- type: 'regular' | 'hni'
+agents (id SERIAL PRIMARY KEY, name VARCHAR, team_id INT, status VARCHAR)  -- 'active' | 'inactive'
+\`\`\`
+
+JSONB access patterns — use exactly these:
+\`\`\`sql
+c.tags->>'disposition'               -- disposition string
+c.tags->>'sub_disposition'           -- sub-disposition string
+i.parameters->'technical'->>'score'  -- returns 'true' | 'false' | 'null' as string
+\`\`\`
+
+Team filter:
+\`\`\`sql
+INNER JOIN teams t ON t.id = c.team_id AND t.type = 'hni'      -- HNI only
+INNER JOIN teams t ON t.id = c.team_id AND t.type = 'regular'  -- Regular CX only
+-- omit entirely if team = all
+\`\`\`
+
+Unclassified: c.tags->>'disposition' IS NULL OR c.tags->>'sub_disposition' IS NULL
+Exclude unclassified from insight queries. Surface count as a warning.
+
+---
+
+## DISPOSITIONS (match user input to exact strings, case-sensitive)
+
+{DISPOSITION_LIST}
+
+If user input maps ambiguously to 2+ dispositions → return clarify action before calling any tool.
+
+---
+
+## IQS PARAMETERS
+
+Active parameters: {IQS_PARAMETER_LIST}
+
+Score semantics: true = pass  |  false = fail  |  null = N/A (never count as failure, exclude from denominator)
+
+Top-N parameter ranking — always use this exact LATERAL pattern:
+\`\`\`sql
+WITH base AS (
+  SELECT i.parameters FROM conversations c
+  INNER JOIN iqs_scores i ON i.chat_id = c.id
+  WHERE /* your filters */
+),
+param_stats AS (
+  SELECT param_key,
+    COUNT(*) FILTER (WHERE score_val = 'false') AS failed,
+    COUNT(*) FILTER (WHERE score_val IS NOT NULL AND score_val != 'null') AS applicable
+  FROM base,
+  LATERAL (VALUES
+    ('call',          base.parameters->'call'->>'score'),
+    ('tags',          base.parameters->'tags'->>'score'),
+    ('empathy',       base.parameters->'empathy'->>'score'),
+    ('grammar',       base.parameters->'grammar'->>'score'),
+    ('opening',       base.parameters->'opening'->>'score'),
+    ('process',       base.parameters->'process'->>'score'),
+    ('follow_up',     base.parameters->'follow_up'->>'score'),
+    ('sentences',     base.parameters->'sentences'->>'score'),
+    ('technical',     base.parameters->'technical'->>'score'),
+    ('contextual',    base.parameters->'contextual'->>'score'),
+    ('expectation',   base.parameters->'expectation'->>'score'),
+    ('all_questions', base.parameters->'all_questions'->>'score')
+  ) AS p(param_key, score_val)
+  GROUP BY param_key
+)
+SELECT param_key, failed, applicable,
+  ROUND(failed::numeric / NULLIF(applicable, 0) * 100, 1) AS failure_rate_pct
+FROM param_stats
+WHERE applicable >= 10
+ORDER BY failure_rate_pct DESC
+LIMIT 3;
+\`\`\`
+
+---
+
+## OUTPUT SHAPE GUIDE
+
+| Question type                                    | output_shape         |
+|--------------------------------------------------|----------------------|
+| Single count or metric                           | single_number        |
+| Breakdown by category                            | bar_chart            |
+| Trend over time                                  | line_chart           |
+| Ranked list or multi-column comparison           | table                |
+| Theme or general insight                         | insight_summary      |
+| What customers / agents said, transcript content | transcript_analysis  |
+| SQL metrics + transcript evidence combined       | combined_analysis    |
+
+Column aliasing rules for charts:
+- bar_chart:    alias text column AS "name", numeric AS "value" (optional 3rd AS "sub")
+- line_chart:   alias date AS "date" (YYYY-MM-DD), metric AS "value"
+- single_number: any column names, one row preferred
+- table:        descriptive aliases, max 6 columns
+
+Always include LIMIT 500 (except single-row aggregates). For ID fetches before read_transcripts: LIMIT 20.
+Trend bucket: daily if window ≤ 30 days, weekly if 31–90 days. Do not run trends over 90 days.
+
+When fetching IDs for read_transcripts, use:
+\`\`\`sql
+SELECT c.id, c.csat_label, c.csat_score,
+       c.tags->>'disposition' AS disposition,
+       c.tags->>'sub_disposition' AS sub_disposition,
+       i.iqs_score
+FROM conversations c
+INNER JOIN iqs_scores i ON i.chat_id = c.id
+WHERE /* your filters */
+ORDER BY c.closed_at DESC, c.csat_score ASC
+LIMIT 20
+\`\`\`
+
+---
+
+## WARNINGS — add to warnings array when applicable
+- "Analysis based on 20 conversations sampled. May not represent full distribution."
+- "Showing most recent 500 conversations. Apply more filters for complete data."
+- "N conversations excluded due to missing disposition."
+- "Reached 3-tool-call limit. Could not verify: [list]."`;
+
+// ── Prompt builder ────────────────────────────────────────────────────────────
+
+function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[]): string {
+  const today = new Date().toISOString().slice(0, 10);
+
+  const activeFilters = [
+    `time_range_start:  ${filters.dateFrom}`,
+    `time_range_end:    ${filters.dateTo}`,
+    `team:              ${filters.teams.length ? `IDs ${filters.teams.join(', ')}` : 'all'}`,
+    `csat_label:        ${filters.csatLabels.length ? filters.csatLabels.join(', ') : 'all'}`,
+    `conversation_type: ${filters.conversationTypes.length ? filters.conversationTypes.join(', ') : 'all'}`,
+    `disposition:       ${filters.dispositions.length ? filters.dispositions.join(', ') : 'all'}`,
+    `sub_disposition:   ${filters.subDispositions?.length ? filters.subDispositions.join(', ') : 'all'}`,
+    `agent_id:          ${filters.agentIds.length ? filters.agentIds.join(', ') : 'all'}`,
+  ].join('\n');
+
+  const IQS_PARAMS = 'technical, all_questions, expectation, contextual, follow_up, sentences, process, opening, call, tags, grammar, empathy';
+
+  return SYSTEM_PROMPT
+    .replace('{TODAY}', today)
+    .replace('{ACTIVE_FILTERS}', activeFilters)
+    .replace('{DISPOSITION_LIST}', dispositions.length ? dispositions.join(', ') : '(none loaded — treat all disposition strings as valid)')
+    .replace('{IQS_PARAMETER_LIST}', IQS_PARAMS);
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface AgentFinalAnswer {
+  output_shape: string;
+  title?: string;
+  answer_text?: string;
+  data_rows?: any[];
+  finding?: string | null;
+  evidence?: string[] | null;
+  coverage?: string | null;
+  caveats?: string | null;
+  warnings?: string[];
+}
+
+export type AgentResult =
+  | { kind: 'answer'; answer: AgentFinalAnswer }
+  | { kind: 'clarify'; question: string };
+
+// ── JSON parser ───────────────────────────────────────────────────────────────
+
+function parseJSON(raw: string): any {
+  const cleaned = raw
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  return JSON.parse(cleaned);
+}
+
+// ── Agent loop ────────────────────────────────────────────────────────────────
+
+export async function runAnalyticsAgent(
+  message: string,
+  filters: AnalyticsFilters,
+  dispositions: string[],
+  priorContext?: string,
+  onProgress?: (update: string) => void,
+): Promise<AgentResult> {
+  const config = await readConfig();
+  const keys = getOrderedGeminiKeys(config);
+
+  if (!keys.length) {
+    return {
+      kind: 'answer',
+      answer: { output_shape: 'insight_summary', answer_text: 'No LLM API keys configured.', warnings: [] },
+    };
+  }
+
+  const systemPrompt = buildSystemPrompt(filters, dispositions);
+  const userMessage = priorContext
+    ? `PRIOR CONTEXT (previous answer — use to resolve follow-ups):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
+    : message;
+
+  const contents: { role: string; parts: { text: string }[] }[] = [
+    { role: 'user', parts: [{ text: userMessage }] },
+  ];
+
+  let toolCallCount = 0;
+  const MAX_TOOL_CALLS = 3;
+  const MAX_ITERATIONS = 9; // hard ceiling to prevent infinite loops
+  let iterations = 0;
+
+  while (iterations++ < MAX_ITERATIONS) {
+    let raw: string;
+    try {
+      raw = await geminiGenerate(
+        keys,
+        'gemini-2.5-flash',
+        contents as any,
+        { systemInstruction: { parts: [{ text: systemPrompt }] } },
+        25_000,
+      );
+    } catch (err: any) {
+      console.error('[analytics/agent] LLM error:', err?.message);
+      return {
+        kind: 'answer',
+        answer: { output_shape: 'insight_summary', answer_text: 'LLM unavailable — please try again.', warnings: [] },
+      };
+    }
+
+    contents.push({ role: 'model', parts: [{ text: raw }] });
+
+    let parsed: any;
+    try {
+      parsed = parseJSON(raw);
+    } catch {
+      console.error('[analytics/agent] JSON parse failed:', raw.slice(0, 300));
+      return {
+        kind: 'answer',
+        answer: { output_shape: 'insight_summary', answer_text: 'Could not parse LLM response. Please try rephrasing your question.', warnings: [] },
+      };
+    }
+
+    if (parsed.action === 'final_answer') {
+      return { kind: 'answer', answer: parsed as AgentFinalAnswer };
+    }
+
+    if (parsed.action === 'clarify') {
+      return { kind: 'clarify', question: parsed.question };
+    }
+
+    if (parsed.action === 'tool_call') {
+      if (toolCallCount >= MAX_TOOL_CALLS) {
+        contents.push({
+          role: 'user',
+          parts: [{ text: 'Budget reached (3 tool calls used). Return your final_answer now based on the data collected so far. Include "Reached 3-tool-call limit." in warnings if anything could not be verified.' }],
+        });
+        continue;
+      }
+
+      toolCallCount++;
+      const { tool, params = {} } = parsed;
+
+      if (tool === 'run_sql') {
+        onProgress?.('Running query…\n');
+        let toolResult: object;
+        try {
+          const r = await executeRawSQL(params.sql);
+          toolResult = { rows: r.rows, row_count: r.rowCount };
+          onProgress?.(`${r.rowCount} row${r.rowCount !== 1 ? 's' : ''} returned\n`);
+        } catch (err: any) {
+          toolResult = { error: err.message, rows: [], row_count: 0 };
+          onProgress?.(`Query error: ${err.message}\n`);
+        }
+        contents.push({ role: 'user', parts: [{ text: `run_sql result:\n${JSON.stringify(toolResult)}` }] });
+
+      } else if (tool === 'read_transcripts') {
+        const ids: string[] = params.conversation_ids ?? [];
+        onProgress?.(`Reading ${ids.length} transcript${ids.length !== 1 ? 's' : ''}…\n`);
+        let toolResult: object;
+        try {
+          toolResult = await readTranscripts(ids);
+          onProgress?.('Transcripts loaded\n');
+        } catch (err: any) {
+          toolResult = { error: err.message };
+          onProgress?.(`Transcript error: ${err.message}\n`);
+        }
+        contents.push({ role: 'user', parts: [{ text: `read_transcripts result:\n${JSON.stringify(toolResult)}` }] });
+
+      } else {
+        contents.push({ role: 'user', parts: [{ text: `Unknown tool "${tool}". Available: run_sql, read_transcripts.` }] });
+      }
+    }
+  }
+
+  return {
+    kind: 'answer',
+    answer: { output_shape: 'insight_summary', answer_text: 'Could not complete the analysis within the allowed budget.', warnings: [] },
+  };
+}

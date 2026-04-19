@@ -16,7 +16,8 @@ export type InsightBlock =
   | { type: 'bar_chart'; title: string; data: { name: string; value: number; sub?: string }[]; unit?: string }
   | { type: 'line_chart'; title: string; data: { date: string; value: number }[]; unit?: string }
   | { type: 'insight'; text: string; severity?: 'info' | 'warning' | 'danger' }
-  | { type: 'theme_card'; name: string; description: string; count: number; pct: number; topParams: string[]; examplesAvailable: boolean };
+  | { type: 'theme_card'; name: string; description: string; count: number; pct: number; topParams: string[]; examplesAvailable: boolean }
+  | { type: 'analysis_card'; finding: string; evidence: string[]; coverage?: string; caveats?: string };
 
 export type QueryShape =
   | 'aggregate'

@@ -170,6 +170,38 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
     );
   }
 
+  if (block.type === 'analysis_card') {
+    return (
+      <div className="bg-white border border-gray-100 rounded-xl p-4 my-2 shadow-sm space-y-3">
+        {block.finding && (
+          <div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Finding</div>
+            <p className="text-sm text-gray-800 leading-relaxed">{block.finding}</p>
+          </div>
+        )}
+        {block.evidence && block.evidence.length > 0 && (
+          <div>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Evidence</div>
+            <ul className="space-y-1">
+              {block.evidence.map((e, i) => (
+                <li key={i} className="text-xs text-gray-700 flex gap-2">
+                  <span className="text-emerald-600 shrink-0">•</span>
+                  <span>{e}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(block.coverage || block.caveats) && (
+          <div className="pt-2 border-t border-gray-50 text-[11px] text-gray-400 space-y-0.5">
+            {block.coverage && <p>{block.coverage}</p>}
+            {block.caveats  && <p>{block.caveats}</p>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (block.type === 'theme_card') {
     return (
       <div className="bg-white border border-gray-100 rounded-xl p-4 my-2 shadow-sm">

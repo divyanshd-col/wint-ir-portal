@@ -1,4 +1,5 @@
 import type { AnalyticsFilters, InsightBlock, QueryShape } from './types';
+import type { AgentFinalAnswer } from './agent';
 import { IQS_PARAMS } from './templates';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -69,6 +70,100 @@ export function formatFilterHeader(filters: AnalyticsFilters): InsightBlock {
   }
 
   return { type: 'filter_header', summary: parts.join(' · ') };
+}
+
+// ── Agent result formatter ────────────────────────────────────────────────────
+
+export function formatAgentResult(answer: AgentFinalAnswer): InsightBlock[] {
+  const blocks: InsightBlock[] = [];
+  const rows = answer.data_rows ?? [];
+
+  // Warnings first
+  for (const w of answer.warnings ?? []) {
+    blocks.push({ type: 'insight', severity: 'warning', text: w });
+  }
+
+  switch (answer.output_shape) {
+    case 'single_number': {
+      if (!rows.length) break;
+      const stats = Object.entries(rows[0]).map(([k, v]) => ({
+        label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        value: v != null ? String(v) : '—',
+      }));
+      blocks.push({ type: 'stat_row', stats });
+      return blocks;
+    }
+
+    case 'bar_chart':
+    case 'grouped_bar':
+    case 'stacked_bar': {
+      if (!rows.length) break;
+      const data = rows.map(r => ({
+        name:  String(r.name  ?? Object.values(r)[0] ?? ''),
+        value: Number(r.value ?? Object.values(r)[1] ?? 0),
+        ...(r.sub != null ? { sub: String(r.sub) } : {}),
+      }));
+      blocks.push({ type: 'bar_chart', title: answer.title ?? '', data });
+      return blocks;
+    }
+
+    case 'line_chart': {
+      if (!rows.length) break;
+      const data = rows.map(r => ({
+        date:  String(r.date  ?? r.day ?? r.week_start ?? Object.values(r)[0] ?? ''),
+        value: Number(r.value ?? r.count ?? Object.values(r)[1] ?? 0),
+      }));
+      blocks.push({ type: 'line_chart', title: answer.title ?? '', data });
+      return blocks;
+    }
+
+    case 'table': {
+      if (!rows.length) break;
+      const columns = Object.keys(rows[0]).map(k =>
+        k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+      );
+      const tableRows = rows.map(r => Object.values(r).map(v => (v != null ? String(v) : '—')));
+      blocks.push({ type: 'table', title: answer.title ?? '', columns, rows: tableRows });
+      return blocks;
+    }
+
+    case 'transcript_analysis':
+    case 'combined_analysis': {
+      // For combined_analysis, show SQL data table first
+      if (answer.output_shape === 'combined_analysis' && rows.length) {
+        const columns = Object.keys(rows[0]).map(k =>
+          k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        );
+        const tableRows = rows.map(r => Object.values(r).map(v => (v != null ? String(v) : '—')));
+        blocks.push({ type: 'table', title: answer.title ?? 'Data', columns, rows: tableRows });
+      }
+      if (answer.finding || answer.evidence?.length) {
+        blocks.push({
+          type:     'analysis_card',
+          finding:  answer.finding  ?? '',
+          evidence: answer.evidence ?? [],
+          coverage: answer.coverage ?? undefined,
+          caveats:  answer.caveats  ?? undefined,
+        });
+      }
+      return blocks;
+    }
+
+    case 'insight_summary':
+    default:
+      break;
+  }
+
+  // Fallback: if rows present but shape unmatched, show as table
+  if (rows.length) {
+    const columns = Object.keys(rows[0]).map(k =>
+      k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+    );
+    const tableRows = rows.map(r => Object.values(r).map(v => (v != null ? String(v) : '—')));
+    blocks.push({ type: 'table', title: answer.title ?? 'Results', columns, rows: tableRows });
+  }
+
+  return blocks;
 }
 
 // ── Dynamic result formatter (text-to-sql mode) ───────────────────────────────
