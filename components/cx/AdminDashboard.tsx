@@ -169,14 +169,17 @@ function TeamsView() {
 }
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="bg-white border border-stone-200 rounded-xl p-5">
+function KpiCard({ label, value, sub, href }: { label: string; value: string; sub?: string; href?: string }) {
+  const cls = `bg-white border border-stone-200 rounded-xl p-5 text-left w-full${href ? ' hover:border-emerald-400 hover:shadow-sm cursor-pointer transition' : ''}`;
+  const inner = (
+    <>
       <p className="text-xs text-stone-500 uppercase tracking-wider font-medium mb-1">{label}</p>
       <p className="text-2xl font-bold text-stone-800 tabular-nums">{value}</p>
       {sub && <p className="text-xs text-stone-500 mt-1">{sub}</p>}
-    </div>
+    </>
   );
+  if (href) return <a href={href} className={cls}>{inner}</a>;
+  return <div className={cls}>{inner}</div>;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -340,15 +343,18 @@ export default function AdminDashboard() {
                 <KpiCard
                   label="Volume"
                   value={overview?.volume != null ? overview.volume.toLocaleString() : '—'}
+                  href="/quality"
                 />
                 <KpiCard
                   label="CSAT %"
                   value={overview?.csat_pct != null ? `${overview.csat_pct}%` : '—'}
                   sub={overview?.csat_good != null ? `Good: ${overview.csat_good}` : undefined}
+                  href="/quality"
                 />
                 <KpiCard
                   label="Avg IQS %"
                   value={overview?.avg_iqs != null ? `${overview.avg_iqs}%` : '—'}
+                  href="/quality"
                 />
                 <KpiCard
                   label="Avg Resolution"

@@ -920,6 +920,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   const [sortCol, setSortCol] = useState<'iqs' | 'fails' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  // Performance tab — independent period state (decoupled from Score Log)
+  const [perfPeriod, setPerfPeriod] = useState<'today'|'7d'|'30d'|'all'>('30d');
+  const [perfTotal, setPerfTotal] = useState(0);
+  const perfAbortRef = useRef<AbortController | null>(null);
+
   // Agent timing analytics pagination
   const [agentPage, setAgentPage] = useState(0);
   const [showAllAgents, setShowAllAgents] = useState(false);
@@ -973,12 +978,41 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
     });
   }, [entries, sortCol, sortDir]);
 
-  // ── Load scores (server-side filter + pagination) ────────────────────────────
-  // skipStats=true: page navigation — skip stats recompute, keep existing state values
-  // skipStats=false: filter change / initial load — recompute all stats
+  // ── Performance data — independent of Score Log filters ────────────────────
+  const loadPerfData = useCallback(async (period: 'today'|'7d'|'30d'|'all') => {
+    perfAbortRef.current?.abort();
+    const controller = new AbortController();
+    perfAbortRef.current = controller;
+    const today = new Date().toISOString().slice(0, 10);
+    const dateFrom =
+      period === 'today' ? today :
+      period === '7d'    ? new Date(Date.now() - 6*86400_000).toISOString().slice(0, 10) :
+      period === '30d'   ? new Date(Date.now() - 29*86400_000).toISOString().slice(0, 10) : '';
+    const params = new URLSearchParams({ page: '0' });
+    if (dateFrom) params.set('dateFrom', dateFrom);
+    if (dateFrom) params.set('dateTo', today);
+    try {
+      const resp = await fetch(`/api/quality/scores?${params}`, { signal: controller.signal });
+      if (controller.signal.aborted) return;
+      const data = await resp.json();
+      if (controller.signal.aborted || !resp.ok) return;
+      setAgentStats(data.agentStats || []);
+      setParamFails(data.paramFails || {});
+      setWeeklyParamData(data.weeklyParamData || []);
+      if (data.summary) setSummary(data.summary);
+      setPerfTotal(data.total ?? 0);
+      setTotalStored(data.totalStored ?? 0);
+      setAvailableAgents(data.availableAgents || []);
+      setAvailableDispositions(data.availableDispositions || []);
+      setAvailableSubDispositions(data.availableSubDispositions || []);
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Load scores (Score Log only — never updates Performance stats) ──────────
   const abortRef = useRef<AbortController | null>(null);
 
-  const loadScores = useCallback(async (page: number, filters: LogFilters, skipStats = false) => {
+  const loadScores = useCallback(async (page: number, filters: LogFilters, skipStats = true) => {
     // Cancel any previous in-flight request
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -1027,7 +1061,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
 
   const switchTab = (t: typeof tab) => {
     setTab(t);
-    if ((t === 'performance' || t === 'log') && !logsLoaded) loadScores(0, appliedFilters);
+    if (t === 'log' && !logsLoaded) loadScores(0, appliedFilters);
   };
 
   // Apply filters: copy pending → applied, reset to page 0, fetch
@@ -1068,15 +1102,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
     setExporting(false);
   }, [reportFilters]);
 
-  // Auto-load on mount
+  // Auto-load on mount — Performance and Score Log load independently
   useEffect(() => {
-    const initialFilters = selfAgentName
-      ? { ...DEFAULT_FILTERS, agent: selfAgentName }
-      : DEFAULT_FILTERS;
-    setPendingFilters(initialFilters);
-    setAppliedFilters(initialFilters);
-    if (selfAgentName) setTab('log');
-    loadScores(0, initialFilters);
+    loadPerfData('30d');
+    loadScores(0, DEFAULT_FILTERS);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1456,23 +1485,37 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
               {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              {tab === 'performance' && `${agentStats.length} agents · ${totalFiltered} chats`}
+              {tab === 'performance' && `${agentStats.length} agents · ${perfTotal} chats`}
               {tab === 'log' && `${entries.length} of ${totalFiltered} · ${totalStored.toLocaleString()} all-time`}
               {tab === 'upload' && (fileName ? `${totalToScore} chats ready` : 'Drop a Wint CSV export to begin')}
               {tab === 'reports' && 'Download filtered data as CSV'}
             </p>
           </div>
 
-          {/* Period filter — top-right on Performance and Score Log */}
-          {(tab === 'performance' || tab === 'log') && (
+          {/* Performance tab — independent period picker */}
+          {tab === 'performance' && (
+            <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
+              {(['today', '7d', '30d', 'all'] as const).map(r => (
+                <button key={r}
+                  onClick={() => { setPerfPeriod(r); loadPerfData(r); }}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                    perfPeriod === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : 'All time'}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Score Log tab — independent period + custom date picker */}
+          {tab === 'log' && (
             <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
               {(['today', '7d', '30d', 'all'] as const).map(r => (
                 <button key={r}
                   onClick={() => {
                     const f = { ...pendingFilters, dateRange: r };
                     setPendingFilters(f);
-                    const af = selfAgentName ? { ...f, agent: selfAgentName } : f;
-                    setAppliedFilters(af); setLogPage(0); loadScores(0, af);
+                    setAppliedFilters(f); setLogPage(0); loadScores(0, f);
                   }}
                   className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
                     appliedFilters.dateRange === r
@@ -1515,9 +1558,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
                     <div className="flex gap-2 mt-3">
                       <button onClick={() => {
                         const f = { ...pendingFilters, dateRange: 'custom' as const };
-                        const af = selfAgentName ? { ...f, agent: selfAgentName } : f;
-                        setAppliedFilters(af); setLogPage(0); loadScores(0, af);
-                        setPendingFilters(af);
+                        setAppliedFilters(f); setLogPage(0); loadScores(0, f);
+                        setPendingFilters(f);
                       }} className="flex-1 text-xs px-3 py-2 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition">
                         Apply
                       </button>
