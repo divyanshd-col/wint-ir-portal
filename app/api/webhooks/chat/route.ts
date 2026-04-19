@@ -269,13 +269,13 @@ export async function executeScoring(
   // ── Slack alert: fire immediately when chat is technically/legally wrong ─────
   if (parsed.scores?.Technical === 'No') {
     const slackToken   = process.env.SLACK_BOT_TOKEN || '';
-    const slackChannel = process.env.QUALITY_SLACK_CHANNEL || '#quality-alerts';
+    const slackChannel = process.env.CX_ESCALATIONS_CHANNEL || '#cx-escalations';
     if (slackToken) {
       const chatLink  = /^\d+$/.test(chatId.trim())
         ? `<https://app.robylon.ai/unified-inbox/share/${chatId}|${chatId}>`
         : chatId;
       const reasoning = parsed.reasoning?.Technical || 'No reasoning provided';
-      const text      = `:warning: *Technically / Legally Incorrect Chat*\n*Chat ID:* ${chatLink}\n*Agent:* ${finalAgentName || 'Unknown'}\n*What went wrong:* ${reasoning}`;
+      const text      = `🚨 *Technical/Legal Error Detected*\n*Chat ID:* ${chatLink}\n*Agent:* ${finalAgentName || 'Unknown'}\n*Reason:* ${reasoning}\n@cx-escalations-group`;
       sendSlackMessage(slackChannel, text, slackToken).catch(() => {});
     }
   }
