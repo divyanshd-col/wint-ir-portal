@@ -106,7 +106,7 @@ For questions answerable by SQL:
 For questions about what customers are SAYING, THEMES, WHY things happen, summarising issues:
 {"kind":"theme_extraction"}
 
-For questions asking for raw chat IDs, phone numbers, transcripts, or truly impossible requests:
+For questions that are truly impossible to answer from this database schema:
 {"kind":"cannot_answer","message":"One sentence saying what you CAN answer instead"}
 
 ═══════════════════════════════════════════════
