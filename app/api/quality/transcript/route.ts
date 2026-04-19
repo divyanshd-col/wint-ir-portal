@@ -41,7 +41,11 @@ export async function GET(req: NextRequest) {
   let messages: any[] = [];
 
   // 1. conversations.transcript (stored by webhook handler)
-  const rawTranscript = rows[0].transcript;
+  let rawTranscript = rows[0].transcript;
+  // If column is text/varchar, pg returns a JSON string — parse it
+  if (typeof rawTranscript === 'string') {
+    try { rawTranscript = JSON.parse(rawTranscript); } catch { rawTranscript = null; }
+  }
   if (Array.isArray(rawTranscript) && rawTranscript.length) {
     messages = rawTranscript;
   } else if (rawTranscript && Array.isArray(rawTranscript.messages) && rawTranscript.messages.length) {
