@@ -269,12 +269,23 @@ export type AgentResult =
 // ── JSON parser ───────────────────────────────────────────────────────────────
 
 function parseJSON(raw: string): any {
+  // 1. Strip markdown fences
   const cleaned = raw
     .replace(/^```json\s*/i, '')
     .replace(/^```\s*/i, '')
     .replace(/\s*```$/i, '')
     .trim();
-  return JSON.parse(cleaned);
+
+  try { return JSON.parse(cleaned); } catch {}
+
+  // 2. Find the outermost { ... } in case LLM added surrounding prose
+  const start = cleaned.indexOf('{');
+  const end   = cleaned.lastIndexOf('}');
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
+  }
+
+  throw new Error(`No valid JSON in LLM response: ${cleaned.slice(0, 200)}`);
 }
 
 // ── Agent loop ────────────────────────────────────────────────────────────────
