@@ -32,14 +32,38 @@ export async function GET(req: NextRequest) {
   const kvData = await storeGetTranscript(chatId);
   if (kvData) return NextResponse.json({ ok: true, found: true, ...kvData });
 
-  // Fall back to DB transcript column
-  const rows = await query<{ transcript: any }>(`SELECT transcript FROM conversations WHERE id = $1`, [chatId]);
-  if (!rows.length || !rows[0].transcript) return NextResponse.json({ ok: true, found: false });
+  // Fall back to DB: check transcript column, then raw_payload
+  const rows = await query<{ transcript: any; raw_payload: any }>(
+    `SELECT transcript, raw_payload FROM conversations WHERE id = $1`, [chatId]
+  );
+  if (!rows.length) return NextResponse.json({ ok: true, found: false });
 
   let messages: any[] = [];
-  const raw = rows[0].transcript;
-  if (Array.isArray(raw)) messages = raw;
-  else if (raw && Array.isArray(raw.messages)) messages = raw.messages;
+
+  // 1. conversations.transcript (stored by webhook handler)
+  const rawTranscript = rows[0].transcript;
+  if (Array.isArray(rawTranscript) && rawTranscript.length) {
+    messages = rawTranscript;
+  } else if (rawTranscript && Array.isArray(rawTranscript.messages) && rawTranscript.messages.length) {
+    messages = rawTranscript.messages;
+  }
+
+  // 2. raw_payload.data.transcript.messages (full webhook body stored at TICKET_CLOSED)
+  if (!messages.length && rows[0].raw_payload) {
+    const payload = rows[0].raw_payload;
+    const payloadMsgs = payload?.data?.transcript?.messages;
+    if (Array.isArray(payloadMsgs) && payloadMsgs.length) {
+      // raw_payload messages use a different schema — map them
+      messages = payloadMsgs.map((m: any) => ({
+        sender_type: m.sender === 'User' || m.sender === 'user' ? 'customer'
+                   : m.sender === 'Bot'  || m.sender === 'bot'  ? 'bot'
+                   : 'agent',
+        sender_name: m.sender,
+        content: m.content || m.text || '',
+        timestamp: m.timestamp,
+      })).filter((m: any) => m.content);
+    }
+  }
 
   if (!messages.length) return NextResponse.json({ ok: true, found: false });
 
