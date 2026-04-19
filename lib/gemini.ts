@@ -54,8 +54,19 @@ export async function geminiGenerate(
         const timeoutPromise = new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('geminiGenerate timeout')), timeoutMs)
         );
+        // systemInstruction must live inside config, not at the top level
+        const { systemInstruction, config: extraConfig, ...rest } = (extra ?? {}) as any;
+        const resolvedConfig = {
+          ...(systemInstruction ? { systemInstruction } : {}),
+          ...(extraConfig ?? {}),
+        };
         const response = await Promise.race([
-          ai.models.generateContent({ model: currentModel, contents, ...extra }),
+          ai.models.generateContent({
+            model: currentModel,
+            contents,
+            ...(Object.keys(resolvedConfig).length ? { config: resolvedConfig } : {}),
+            ...rest,
+          }),
           timeoutPromise,
         ]);
         if (currentModel !== model) console.warn(`[gemini] Pro quota exhausted — using ${currentModel} fallback`);

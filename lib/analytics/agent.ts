@@ -268,6 +268,35 @@ export type AgentResult =
 
 // ── JSON parser ───────────────────────────────────────────────────────────────
 
+function extractJsonObjects(text: string): string[] {
+  // Bracket-matching scan — collects every top-level { } block
+  const results: string[] = [];
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escape = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+
+    if (ch === '{') {
+      if (depth === 0) start = i;
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0 && start !== -1) {
+        results.push(text.slice(start, i + 1));
+        start = -1;
+      }
+    }
+  }
+  return results;
+}
+
 function parseJSON(raw: string): any {
   // 1. Strip markdown fences
   const cleaned = raw
@@ -276,16 +305,23 @@ function parseJSON(raw: string): any {
     .replace(/\s*```$/i, '')
     .trim();
 
+  // 2. Direct parse (clean response)
   try { return JSON.parse(cleaned); } catch {}
 
-  // 2. Find the outermost { ... } in case LLM added surrounding prose
-  const start = cleaned.indexOf('{');
-  const end   = cleaned.lastIndexOf('}');
-  if (start !== -1 && end > start) {
-    try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
+  // 3. Bracket-matching — find all top-level JSON objects, try last-to-first
+  //    (model's actual response is typically last; thinking prose comes first)
+  const candidates = extractJsonObjects(cleaned).reverse();
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      // Must have an "action" field to be a valid agent turn
+      if (parsed && typeof parsed.action === 'string') return parsed;
+    } catch {}
   }
 
-  throw new Error(`No valid JSON in LLM response: ${cleaned.slice(0, 200)}`);
+  // 4. Log full response so Vercel logs show what went wrong
+  console.error('[analytics/agent] Could not extract JSON. Full raw response:\n', raw);
+  throw new Error('No valid JSON found in LLM response');
 }
 
 // ── Agent loop ────────────────────────────────────────────────────────────────
@@ -328,7 +364,10 @@ export async function runAnalyticsAgent(
         keys,
         'gemini-2.5-flash',
         contents as any,
-        { systemInstruction: { parts: [{ text: systemPrompt }] } },
+        {
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          config: { thinkingConfig: { thinkingBudget: 0 } },
+        },
         25_000,
       );
     } catch (err: any) {
