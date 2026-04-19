@@ -60,6 +60,22 @@ export async function executeTemplate(
   };
 }
 
+// ── Raw SQL execution (for text-to-sql mode) ──────────────────────────────────
+
+export async function executeRawSQL(sql: string): Promise<{ rows: any[]; rowCount: number; latencyMs: number }> {
+  const start = Date.now();
+  const rows = await Promise.race([
+    query<any>(sql, []),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Query timed out after 30 seconds. Try narrowing the time range.')),
+        QUERY_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+  return { rows, rowCount: rows.length, latencyMs: Date.now() - start };
+}
+
 // ── Audit log ─────────────────────────────────────────────────────────────────
 
 export async function writeAuditLog(data: {

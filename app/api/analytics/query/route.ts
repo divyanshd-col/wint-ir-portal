@@ -1,10 +1,9 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { query } from '@/lib/cx/db';
 import { getDispositions } from '@/lib/analytics/dispositions';
-import { classifyQuery, mergeFilters } from '@/lib/analytics/classifier';
-import { executeTemplate, writeAuditLog } from '@/lib/analytics/executor';
-import { formatFilterHeader, formatResult } from '@/lib/analytics/formatter';
+import { generateSQL } from '@/lib/analytics/text-to-sql';
+import { executeRawSQL, writeAuditLog } from '@/lib/analytics/executor';
+import { formatFilterHeader, formatDynamicResult } from '@/lib/analytics/formatter';
 import { appendHistory } from '@/lib/analytics/sessions';
 import { extractThemes } from '@/lib/analytics/themes';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
@@ -12,14 +11,14 @@ import { readConfig } from '@/lib/config';
 import type { AnalyticsFilters, StreamChunk, InsightBlock, HistoryEntry } from '@/lib/analytics/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 45;
+export const maxDuration = 60;
 
 function send(controller: ReadableStreamDefaultController, chunk: StreamChunk, encoder: TextEncoder) {
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
 }
 
 async function generateNarrative(
-  templateId: string,
+  sql: string,
   rows: any[],
   message: string,
   keys: string[],
@@ -27,9 +26,9 @@ async function generateNarrative(
   if (!rows.length || !keys.length) return '';
   const sample = JSON.stringify(rows.slice(0, 15));
   const prompt = `In 1-2 sentences, summarise the key insight from this data for a product team member.
-Data (template: ${templateId}): ${sample}
+Data: ${sample}
 User asked: "${message}"
-Be specific, use numbers from the data. Do NOT mention the template name.`;
+Be specific, use numbers from the data.`;
   try {
     return await geminiGenerate(
       keys,
@@ -52,6 +51,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const message: string = (body.message ?? '').trim();
+  const priorContext: string | undefined = body.priorContext || undefined;
   const barFilters: AnalyticsFilters = body.filters ?? {
     dateFrom: new Date(Date.now() - 6 * 86400_000).toISOString().slice(0, 10),
     dateTo: new Date().toISOString().slice(0, 10),
@@ -72,62 +72,48 @@ export async function POST(req: Request) {
     async start(controller) {
       const t0 = Date.now();
       try {
-        // 1. Disposition list (for classifier context)
-        const dispositionPayload = await getDispositions();
-        const dispositionNames = dispositionPayload.dispositions.map(d => d.disposition);
+        // 1. Filter header — always shown first
+        send(controller, { event: 'blocks', blocks: [formatFilterHeader(barFilters)] }, encoder);
 
-        // 2. Classify
-        const classification = await classifyQuery(message, barFilters, dispositionNames);
-
-        // 3. Merge filters (Rule B)
-        const effectiveFilters = mergeFilters(classification.entities, barFilters);
-
-        // 4. Resolve agent names → IDs
-        if (classification.entities.agentNames?.length) {
-          try {
-            const agentRows = await query<{ id: number }>(
-              `SELECT id FROM agents WHERE name = ANY($1)`,
-              [classification.entities.agentNames],
-            );
-            effectiveFilters.agentIds = agentRows.map(r => r.id);
-          } catch {}
-        }
-
-        // 5. Filter header — always first
-        const filterHeader = formatFilterHeader(effectiveFilters);
-        send(controller, { event: 'blocks', blocks: [filterHeader] }, encoder);
+        // 2. Generate SQL (or classify as theme_extraction / cannot_answer)
+        const result = await generateSQL(message, barFilters, priorContext);
 
         const config = await readConfig();
         const keys = getOrderedGeminiKeys(config);
 
         let resultBlocks: InsightBlock[] = [];
         let rowCount = 0;
+        let templateId: string | null = null;
 
-        if (classification.type === 2) {
-          // Phase 2: theme extraction
+        if (result.kind === 'cannot_answer') {
+          send(controller, { event: 'text', delta: result.message }, encoder);
+
+        } else if (result.kind === 'theme_extraction') {
           send(controller, { event: 'text', delta: 'Analysing conversations for themes…\n' }, encoder);
-          resultBlocks = await extractThemes(effectiveFilters);
+          resultBlocks = await extractThemes(barFilters);
           send(controller, { event: 'blocks', blocks: resultBlocks }, encoder);
+          templateId = 'theme_extraction';
 
         } else {
-          // Phase 1: SQL template
-          const templateId = classification.templateId ?? 'count_by_disposition';
-          const extras = {
-            metricName: classification.entities.metricName ?? undefined,
-            topN:       classification.entities.topN       ?? undefined,
-            teamId:     classification.entities.teams?.[0] ?? undefined,
-            windowA:    classification.entities.windowA    ?? undefined,
-            windowB:    classification.entities.windowB    ?? undefined,
-          };
+          // SQL path
+          templateId = 'text_to_sql';
+          let execResult: Awaited<ReturnType<typeof executeRawSQL>>;
+          try {
+            execResult = await executeRawSQL(result.sql);
+          } catch (err: any) {
+            send(controller, { event: 'text', delta: `Query error: ${err.message}` }, encoder);
+            send(controller, { event: 'done' }, encoder);
+            controller.close();
+            return;
+          }
 
-          const result = await executeTemplate(templateId, effectiveFilters, extras);
-          rowCount = result.rowCount;
+          rowCount = execResult.rowCount;
 
-          // Narrative summary
-          const narrative = await generateNarrative(templateId, result.rows, message, keys);
+          // Narrative
+          const narrative = await generateNarrative(result.sql, execResult.rows, message, keys);
           if (narrative) send(controller, { event: 'text', delta: narrative }, encoder);
 
-          resultBlocks = formatResult(templateId, classification.shape, result.rows);
+          resultBlocks = formatDynamicResult(execResult.rows, result.chartHint, result.title);
           send(controller, { event: 'blocks', blocks: resultBlocks }, encoder);
         }
 
@@ -135,8 +121,8 @@ export async function POST(req: Request) {
         writeAuditLog({
           userEmail:  email,
           queryText:  message,
-          queryType:  classification.type,
-          templateId: classification.templateId,
+          queryType:  result.kind === 'theme_extraction' ? 2 : 1,
+          templateId,
           rowCount,
           latencyMs:  Date.now() - t0,
         }).catch(() => {});
@@ -146,9 +132,9 @@ export async function POST(req: Request) {
           id:        crypto.randomUUID(),
           message,
           response:  '',
-          blocks:    [filterHeader, ...resultBlocks],
-          type:      classification.type,
-          filters:   effectiveFilters,
+          blocks:    [formatFilterHeader(barFilters), ...resultBlocks],
+          type:      result.kind === 'theme_extraction' ? 2 : 1,
+          filters:   barFilters,
           timestamp: new Date().toISOString(),
         };
         appendHistory(email, entry).catch(() => {});

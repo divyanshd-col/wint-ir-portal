@@ -425,11 +425,17 @@ export default function InsightsChatClient() {
     let accText = '';
     const accBlocks: InsightBlock[] = [];
 
+    // Last assistant message text for follow-up resolution
+    const priorContext = (() => {
+      const assistantMsgs = messages.filter(m => m.role === 'assistant' && m.content);
+      return assistantMsgs.length ? assistantMsgs[assistantMsgs.length - 1].content : undefined;
+    })();
+
     try {
       const res = await fetch('/api/analytics/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, filters: buildFilters() }),
+        body: JSON.stringify({ message: text, filters: buildFilters(), priorContext }),
       });
 
       if (!res.ok || !res.body) {

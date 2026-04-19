@@ -71,6 +71,61 @@ export function formatFilterHeader(filters: AnalyticsFilters): InsightBlock {
   return { type: 'filter_header', summary: parts.join(' · ') };
 }
 
+// ── Dynamic result formatter (text-to-sql mode) ───────────────────────────────
+
+export function formatDynamicResult(
+  rows: any[],
+  chartHint: 'bar' | 'line' | 'table' | 'stat',
+  title: string,
+): InsightBlock[] {
+  if (!rows.length) {
+    return [{ type: 'insight', severity: 'info', text: 'No data found for the selected filters.' }];
+  }
+
+  if (chartHint === 'stat') {
+    // Single row with multiple columns → one stat per column
+    if (rows.length === 1) {
+      const stats = Object.entries(rows[0]).map(([k, v]) => ({
+        label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        value: v != null ? String(v) : '—',
+      }));
+      return [{ type: 'stat_row', stats }];
+    }
+    // Multiple rows with label/value columns
+    const stats = rows.map(r => ({
+      label: String(r.label ?? r.name ?? Object.values(r)[0] ?? ''),
+      value: String(r.value ?? Object.values(r)[1] ?? ''),
+    }));
+    return [{ type: 'stat_row', stats }];
+  }
+
+  if (chartHint === 'bar') {
+    const data = rows.map(r => ({
+      name:  String(r.name  ?? ''),
+      value: Number(r.value ?? 0),
+      ...(r.sub != null ? { sub: String(r.sub) } : {}),
+    }));
+    return [{ type: 'bar_chart', title, data }];
+  }
+
+  if (chartHint === 'line') {
+    const data = rows.map(r => ({
+      date:  String(r.date  ?? ''),
+      value: Number(r.value ?? 0),
+    }));
+    return [{ type: 'line_chart', title, data }];
+  }
+
+  // Default: table
+  const columns = Object.keys(rows[0]).map(k =>
+    k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+  );
+  const tableRows = rows.map(r =>
+    Object.values(r).map(v => (v != null ? String(v) : '—')),
+  );
+  return [{ type: 'table', title, columns, rows: tableRows }];
+}
+
 // ── Main formatter ────────────────────────────────────────────────────────────
 
 export function formatResult(
