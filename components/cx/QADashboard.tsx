@@ -2,79 +2,99 @@
 
 import { useEffect, useState, useCallback } from 'react';
 
+interface Summary {
+  total_convs: number;
+  scored_count: number;
+  avg_iqs: number | null;
+  low_iqs_count: number;
+  bad_csat_count: number;
+  bad_csat_pct: number | null;
+}
+
 interface AgentRow {
-  agent_id: string;
-  display_name: string;
-  week_start: string;
-  qa_score: number | null;
-  qa_audit_count: number;
-  csat_avg: number | null;
-  csat_response_count: number;
-  volume: number;
-  cx_benchmark: {
-    qa: number | null;
-    csat: number | null;
-    volume: number | null;
-  };
+  agent_id: number;
+  agent_name: string;
+  conv_count: number;
+  scored_count: number;
+  avg_iqs: number | null;
+  low_iqs_count: number;
+  bad_csat_pct: number | null;
 }
 
-function getWeekStart(date: Date = new Date()): string {
-  const d = new Date(date);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
+interface ParamRow {
+  param_name: string;
+  fail_count: number;
+  pass_count: number;
+  scored_count: number;
+  fail_rate: number | null;
 }
 
-function addWeeks(weekStart: string, n: number): string {
-  const d = new Date(weekStart);
-  d.setUTCDate(d.getUTCDate() + 7 * n);
-  return d.toISOString().slice(0, 10);
+interface AttentionRow {
+  chat_id: string;
+  agent_name: string | null;
+  csat_label: string | null;
+  iqs_score: number | null;
+  disposition: string;
+  closed_at: string;
 }
 
-function formatWeekLabel(weekStart: string, inProgress: boolean): string {
-  const d = new Date(weekStart);
-  const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  return inProgress ? `${label} (In progress)` : label;
+interface OverviewData {
+  summary: Summary;
+  agents: AgentRow[];
+  iqs_params: ParamRow[];
+  attention: AttentionRow[];
 }
 
-function DeltaCell({ value, benchmark, format }: { value: number | null; benchmark: number | null; format: 'score' | 'csat' | 'count' }) {
-  const formatVal = (v: number | null) => {
-    if (v === null) return '—';
-    if (format === 'score') return `${v.toFixed(1)}%`;
-    if (format === 'csat') return v.toFixed(2);
-    return Math.round(v).toString();
-  };
+function fmt(v: number | null | undefined, decimals = 1, suffix = '') {
+  if (v == null) return '—';
+  return `${v.toFixed(decimals)}${suffix}`;
+}
 
-  const isAbove = value !== null && benchmark !== null && value > benchmark;
-  const isBelow = value !== null && benchmark !== null && value < benchmark;
+function CsatBadge({ pct }: { pct: number | null }) {
+  if (pct == null) return <span className="text-stone-400">—</span>;
+  const color = pct >= 30 ? 'text-red-600 bg-red-50' : pct >= 15 ? 'text-amber-700 bg-amber-50' : 'text-emerald-700 bg-emerald-50';
+  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>{pct.toFixed(1)}%</span>;
+}
 
+function IqsBadge({ iqs }: { iqs: number | null }) {
+  if (iqs == null) return <span className="text-stone-400">—</span>;
+  const color = iqs < 60 ? 'text-red-600' : iqs < 75 ? 'text-amber-600' : 'text-emerald-600';
+  return <span className={`font-semibold ${color}`}>{iqs.toFixed(1)}</span>;
+}
+
+function CsatLabelPill({ label }: { label: string | null }) {
+  if (!label) return <span className="text-stone-400">—</span>;
+  const color = label === 'bad' ? 'bg-red-50 text-red-600' : label === 'could_be_better' ? 'bg-amber-50 text-amber-700' : label === 'good' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500';
+  return <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${color}`}>{label.replace(/_/g, ' ')}</span>;
+}
+
+function SummaryCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <td className="px-4 py-3 tabular-nums">
-      <span className={`font-medium ${isAbove ? 'text-emerald-400' : isBelow ? 'text-red-400' : 'text-gray-300'}`}>
-        {formatVal(value)}
-      </span>
-      {benchmark !== null && (
-        <span className="text-gray-600 text-xs ml-1">/ {formatVal(benchmark)}</span>
-      )}
-    </td>
+    <div className="bg-white border border-stone-200 rounded-xl p-4">
+      <p className="text-xs text-stone-500 font-medium uppercase tracking-wider mb-1">{label}</p>
+      <p className="text-2xl font-bold text-stone-800">{value}</p>
+      {sub && <p className="text-xs text-stone-400 mt-1">{sub}</p>}
+    </div>
   );
 }
 
 export default function QADashboard() {
-  const currentWeek = getWeekStart();
-  const [selectedWeek, setSelectedWeek] = useState(currentWeek);
-  const [agents, setAgents] = useState<AgentRow[]>([]);
+  const today = new Date().toISOString().slice(0, 10);
+  const thirtyAgo = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+
+  const [dateFrom, setDateFrom] = useState(thirtyAgo);
+  const [dateTo, setDateTo] = useState(today);
+  const [data, setData] = useState<OverviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (week: string) => {
+  const fetchData = useCallback(async (from: string, to: string) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/cx/qa/agents-vs-benchmark?week_start=${week}`);
+      const res = await fetch(`/api/cx/quality/overview?dateFrom=${from}&dateTo=${to}`);
       if (!res.ok) throw new Error(await res.text());
-      setAgents(await res.json());
+      setData(await res.json());
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -82,93 +102,174 @@ export default function QADashboard() {
     }
   }, []);
 
-  useEffect(() => { fetchData(selectedWeek); }, [selectedWeek, fetchData]);
+  useEffect(() => { fetchData(dateFrom, dateTo); }, [dateFrom, dateTo, fetchData]);
 
-  const isCurrentWeek = selectedWeek === currentWeek;
-  const canGoNext = selectedWeek < currentWeek;
-
-  const benchmark = agents[0]?.cx_benchmark ?? { qa: null, csat: null, volume: null };
+  const s = data?.summary;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header + date range */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold text-white">My Agents — QA View</h1>
-          <p className="text-gray-500 text-sm mt-0.5">{agents.length} agent{agents.length !== 1 ? 's' : ''} assigned</p>
+          <h1 className="text-xl font-bold text-stone-800">Quality Overview</h1>
+          <p className="text-sm text-stone-500 mt-0.5">IQS scores &amp; conversation quality analysis</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSelectedWeek(addWeeks(selectedWeek, -1))}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M10 12L6 8l4-4"/>
-            </svg>
-          </button>
-          <span className="text-sm text-gray-300 min-w-[160px] text-center">
-            {formatWeekLabel(selectedWeek, isCurrentWeek)}
-          </span>
-          <button
-            onClick={() => canGoNext && setSelectedWeek(addWeeks(selectedWeek, 1))}
-            disabled={!canGoNext}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition disabled:opacity-30 disabled:cursor-not-allowed"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M6 4l4 4-4 4"/>
-            </svg>
-          </button>
+        <div className="flex items-center gap-2 text-sm">
+          <label className="text-stone-500">From</label>
+          <input type="date" value={dateFrom} max={dateTo}
+            onChange={e => setDateFrom(e.target.value)}
+            className="border border-stone-200 rounded-lg px-2 py-1.5 text-stone-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+          />
+          <label className="text-stone-500">To</label>
+          <input type="date" value={dateTo} min={dateFrom} max={today}
+            onChange={e => setDateTo(e.target.value)}
+            className="border border-stone-200 rounded-lg px-2 py-1.5 text-stone-700 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+          />
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm">{error}</div>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-red-600 text-sm">{error}</div>
       )}
 
-      <div className="bg-[#1e1e1e] border border-white/10 rounded-xl overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-white/10">
-              <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">Agent</th>
-              <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">
-                QA Score
-                {benchmark.qa !== null && <span className="text-gray-600 normal-case ml-1">(CX avg: {benchmark.qa.toFixed(1)}%)</span>}
-              </th>
-              <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">
-                CSAT
-                {benchmark.csat !== null && <span className="text-gray-600 normal-case ml-1">(CX avg: {benchmark.csat.toFixed(2)})</span>}
-              </th>
-              <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">
-                Volume
-                {benchmark.volume !== null && <span className="text-gray-600 normal-case ml-1">(CX avg: {benchmark.volume.toFixed(0)})</span>}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              [...Array(3)].map((_, i) => (
-                <tr key={i} className="border-b border-white/5">
-                  <td className="px-4 py-3" colSpan={4}>
-                    <div className="h-4 bg-white/5 rounded animate-pulse w-3/4" />
-                  </td>
-                </tr>
-              ))
-            ) : agents.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-gray-600">No agents found</td>
-              </tr>
-            ) : (
-              agents.map(agent => (
-                <tr key={agent.agent_id} className="border-b border-white/5 hover:bg-white/3 transition">
-                  <td className="px-4 py-3 text-gray-200 font-medium">{agent.display_name}</td>
-                  <DeltaCell value={agent.qa_score} benchmark={agent.cx_benchmark.qa} format="score" />
-                  <DeltaCell value={agent.csat_avg} benchmark={agent.cx_benchmark.csat} format="csat" />
-                  <DeltaCell value={agent.volume} benchmark={agent.cx_benchmark.volume} format="count" />
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Summary cards */}
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[0,1,2,3].map(i => (
+            <div key={i} className="bg-white border border-stone-200 rounded-xl p-4 h-20 animate-pulse" />
+          ))}
+        </div>
+      ) : s ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <SummaryCard label="Scored Conversations" value={s.scored_count?.toLocaleString() ?? '0'} sub={`of ${s.total_convs?.toLocaleString()} total`} />
+          <SummaryCard label="Avg IQS Score" value={fmt(s.avg_iqs, 1)} sub={`${s.low_iqs_count} below 60`} />
+          <SummaryCard label="Bad CSAT" value={fmt(s.bad_csat_pct, 1, '%')} sub={`${s.bad_csat_count} conversations`} />
+          <SummaryCard label="Low IQS (&lt;60)" value={s.low_iqs_count?.toLocaleString() ?? '0'} sub="needs attention" />
+        </div>
+      ) : null}
+
+      {/* IQS Parameter Failures — full width with progress bars */}
+      <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-100">
+          <h2 className="text-sm font-semibold text-stone-700">IQS Parameter Failure Rates</h2>
+          <p className="text-xs text-stone-400 mt-0.5">Sorted by highest failure rate — identify coaching priorities</p>
+        </div>
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+          {loading ? (
+            [...Array(8)].map((_, i) => (
+              <div key={i} className="h-6 bg-stone-100 rounded animate-pulse" />
+            ))
+          ) : !data?.iqs_params.length ? (
+            <p className="text-stone-400 text-sm py-4 col-span-2 text-center">No parameter data for this period</p>
+          ) : (
+            data.iqs_params.map(p => (
+              <div key={p.param_name}>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-stone-700 font-medium capitalize">{p.param_name.replace(/_/g, ' ')}</span>
+                  <span className="text-stone-500 tabular-nums">
+                    {p.fail_count} fail / {p.scored_count} scored
+                    <span className={`ml-1.5 font-semibold ${(p.fail_rate ?? 0) >= 30 ? 'text-red-600' : (p.fail_rate ?? 0) >= 15 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {fmt(p.fail_rate, 1, '%')}
+                    </span>
+                  </span>
+                </div>
+                <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${(p.fail_rate ?? 0) >= 30 ? 'bg-red-400' : (p.fail_rate ?? 0) >= 15 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                    style={{ width: `${Math.min(p.fail_rate ?? 0, 100)}%` }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
+
+      {/* Agent IQS breakdown */}
+      <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-stone-100">
+          <h2 className="text-sm font-semibold text-stone-700">Agent IQS Breakdown</h2>
+          <p className="text-xs text-stone-400 mt-0.5">Sorted by lowest average IQS score first</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-stone-50 border-b border-stone-100">
+                <th className="px-4 py-2.5 text-left text-xs text-stone-500 font-semibold uppercase tracking-wider">Agent</th>
+                <th className="px-4 py-2.5 text-right text-xs text-stone-500 font-semibold uppercase tracking-wider">Convs</th>
+                <th className="px-4 py-2.5 text-right text-xs text-stone-500 font-semibold uppercase tracking-wider">Scored</th>
+                <th className="px-4 py-2.5 text-center text-xs text-stone-500 font-semibold uppercase tracking-wider">Avg IQS</th>
+                <th className="px-4 py-2.5 text-right text-xs text-stone-500 font-semibold uppercase tracking-wider">Low IQS</th>
+                <th className="px-4 py-2.5 text-center text-xs text-stone-500 font-semibold uppercase tracking-wider">Bad CSAT %</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                [...Array(4)].map((_, i) => (
+                  <tr key={i} className="border-b border-stone-50">
+                    <td className="px-4 py-3" colSpan={6}>
+                      <div className="h-4 bg-stone-100 rounded animate-pulse w-3/4" />
+                    </td>
+                  </tr>
+                ))
+              ) : !data?.agents.length ? (
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-stone-400">No agent data for this period</td></tr>
+              ) : (
+                data.agents.map(a => (
+                  <tr key={a.agent_id} className="border-b border-stone-50 hover:bg-stone-50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-stone-700">{a.agent_name}</td>
+                    <td className="px-4 py-3 text-right text-stone-500 tabular-nums">{a.conv_count}</td>
+                    <td className="px-4 py-3 text-right text-stone-500 tabular-nums">{a.scored_count}</td>
+                    <td className="px-4 py-3 text-center tabular-nums"><IqsBadge iqs={a.avg_iqs} /></td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <span className={`font-medium ${a.low_iqs_count > 0 ? 'text-red-500' : 'text-stone-400'}`}>{a.low_iqs_count}</span>
+                    </td>
+                    <td className="px-4 py-3 text-center"><CsatBadge pct={a.bad_csat_pct} /></td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Conversations needing attention */}
+      {(data?.attention.length ?? 0) > 0 && (
+        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-stone-100">
+            <h2 className="text-sm font-semibold text-stone-700">Conversations Needing Attention</h2>
+            <p className="text-xs text-stone-400 mt-0.5">Low IQS (&lt;60) or bad CSAT — up to 20 most recent</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-stone-50 border-b border-stone-100">
+                  <th className="px-4 py-2 text-left text-xs text-stone-500 font-semibold uppercase tracking-wider">Chat ID</th>
+                  <th className="px-4 py-2 text-left text-xs text-stone-500 font-semibold uppercase tracking-wider">Agent</th>
+                  <th className="px-4 py-2 text-center text-xs text-stone-500 font-semibold uppercase tracking-wider">IQS</th>
+                  <th className="px-4 py-2 text-center text-xs text-stone-500 font-semibold uppercase tracking-wider">CSAT</th>
+                  <th className="px-4 py-2 text-left text-xs text-stone-500 font-semibold uppercase tracking-wider">Disposition</th>
+                  <th className="px-4 py-2 text-right text-xs text-stone-500 font-semibold uppercase tracking-wider">Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data!.attention.map(r => (
+                  <tr key={r.chat_id} className="border-b border-stone-50 hover:bg-stone-50 transition-colors">
+                    <td className="px-4 py-2.5 font-mono text-xs text-stone-500 max-w-[120px] truncate" title={r.chat_id}>{r.chat_id}</td>
+                    <td className="px-4 py-2.5 text-stone-700">{r.agent_name ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-center tabular-nums"><IqsBadge iqs={r.iqs_score} /></td>
+                    <td className="px-4 py-2.5 text-center"><CsatLabelPill label={r.csat_label} /></td>
+                    <td className="px-4 py-2.5 text-stone-500 max-w-[160px] truncate" title={r.disposition}>{r.disposition}</td>
+                    <td className="px-4 py-2.5 text-right text-stone-400 text-xs tabular-nums">
+                      {new Date(r.closed_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -105,19 +105,19 @@ export default function AgentDashboard() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setSelectedWeek(addWeeks(selectedWeek, -1))}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-stone-100 text-stone-400 hover:text-white transition"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M10 12L6 8l4-4"/>
             </svg>
           </button>
-          <span className="text-sm text-gray-300 min-w-[160px] text-center">
+          <span className="text-sm text-stone-600 min-w-[160px] text-center">
             {formatWeekLabel(selectedWeek, isCurrentWeek)}
           </span>
           <button
             onClick={() => canGoNext && setSelectedWeek(addWeeks(selectedWeek, 1))}
             disabled={!canGoNext}
-            className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition disabled:opacity-30 disabled:cursor-not-allowed"
+            className="p-1.5 rounded-lg bg-white/5 hover:bg-stone-100 text-stone-400 hover:text-white transition disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M6 4l4 4-4 4"/>
@@ -134,7 +134,7 @@ export default function AgentDashboard() {
       {loading ? (
         <div className="grid grid-cols-3 gap-4">
           {[0, 1, 2].map(i => (
-            <div key={i} className="bg-[#1e1e1e] border border-white/10 rounded-xl p-4 h-24 animate-pulse" />
+            <div key={i} className="bg-white border border-stone-200 rounded-xl p-4 h-24 animate-pulse" />
           ))}
         </div>
       ) : currentPoint ? (
@@ -165,18 +165,18 @@ export default function AgentDashboard() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Chart */}
-        <div className="lg:col-span-2 bg-[#1e1e1e] border border-white/10 rounded-xl p-4">
-          <h2 className="text-sm font-medium text-gray-400 mb-4">Week-over-Week Trend</h2>
+        <div className="lg:col-span-2 bg-white border border-stone-200 rounded-xl p-4">
+          <h2 className="text-sm font-medium text-stone-400 mb-4">Week-over-Week Trend</h2>
           {chartData.length > 0 ? (
             <WoWChart data={chartData} metrics={['qa', 'csat', 'volume']} />
           ) : (
-            <p className="text-gray-600 text-sm text-center py-8">No trend data available</p>
+            <p className="text-stone-400 text-sm text-center py-8">No trend data available</p>
           )}
         </div>
 
         {/* Leaderboard */}
-        <div className="bg-[#1e1e1e] border border-white/10 rounded-xl p-4">
-          <h2 className="text-sm font-medium text-gray-400 mb-4">Top Performers</h2>
+        <div className="bg-white border border-stone-200 rounded-xl p-4">
+          <h2 className="text-sm font-medium text-stone-400 mb-4">Top Performers</h2>
           {loading ? (
             <div className="space-y-2">
               {[0, 1, 2].map(i => <div key={i} className="h-8 bg-white/5 rounded animate-pulse" />)}
@@ -185,7 +185,7 @@ export default function AgentDashboard() {
             <div className="space-y-2">
               {top3.top3.map(entry => (
                 <div key={entry.rank} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5">
-                  <span className="text-gray-400 text-sm font-medium">
+                  <span className="text-stone-400 text-sm font-medium">
                     {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : '🥉'} #{entry.rank}
                   </span>
                   <span className="text-white text-sm tabular-nums font-semibold">
@@ -194,19 +194,19 @@ export default function AgentDashboard() {
                 </div>
               ))}
 
-              <div className="mt-3 pt-3 border-t border-white/10">
+              <div className="mt-3 pt-3 border-t border-stone-200">
                 {top3.my_rank !== null ? (
                   <div className="flex items-center justify-between">
-                    <span className="text-gray-400 text-sm">Your rank</span>
+                    <span className="text-stone-400 text-sm">Your rank</span>
                     <span className="text-white text-sm font-semibold tabular-nums">
                       #{top3.my_rank} — {top3.my_composite_score?.toFixed(2) ?? '—'}
                     </span>
                   </div>
                 ) : (
-                  <p className="text-gray-600 text-sm text-center">Not ranked this week</p>
+                  <p className="text-stone-400 text-sm text-center">Not ranked this week</p>
                 )}
                 {missingMetrics.length > 0 && (
-                  <p className="text-gray-600 text-xs mt-1.5">
+                  <p className="text-stone-400 text-xs mt-1.5">
                     Score based on: {top3.my_metrics_used.join(', ') || 'none'}
                     {' '}(missing: {missingMetrics.join(', ')})
                   </p>
@@ -214,7 +214,7 @@ export default function AgentDashboard() {
               </div>
             </div>
           ) : (
-            <p className="text-gray-600 text-sm text-center py-4">No rankings available</p>
+            <p className="text-stone-400 text-sm text-center py-4">No rankings available</p>
           )}
         </div>
       </div>

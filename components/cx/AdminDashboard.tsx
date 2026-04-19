@@ -62,7 +62,7 @@ function fmtDuration(secs: number | null | undefined): string {
 }
 
 function IqsPill({ val }: { val: number | null | undefined }) {
-  if (val == null) return <span className="text-gray-600 text-xs">—</span>;
+  if (val == null) return <span className="text-stone-400 text-xs">—</span>;
   const color =
     val >= 85 ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-500/30' :
     val >= 70 ? 'bg-amber-900/40 text-amber-400 border border-amber-500/30' :
@@ -107,35 +107,35 @@ function TeamsView() {
   return (
     <div className="p-4 space-y-4">
       {teams.map(team => (
-        <div key={team.team_id} className="bg-[#1a1a1a] border border-white/8 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-white/8 bg-white/2">
+        <div key={team.team_id} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-stone-200 bg-white/2">
             <div className="flex items-center gap-3">
-              <span className="text-white font-semibold">{team.team_name}</span>
-              <span className="text-xs text-gray-600 bg-white/5 px-2 py-0.5 rounded-full capitalize">{team.team_type}</span>
+              <span className="text-stone-800 font-semibold">{team.team_name}</span>
+              <span className="text-xs text-stone-400 bg-white/5 px-2 py-0.5 rounded-full capitalize">{team.team_type}</span>
             </div>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              {team.tl_name && <span>TL: <span className="text-gray-300">{team.tl_name}</span></span>}
+            <div className="flex items-center gap-4 text-xs text-stone-500">
+              {team.tl_name && <span>TL: <span className="text-stone-600">{team.tl_name}</span></span>}
               <span>{team.agents.length} agent{team.agents.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
           {team.agents.length === 0 ? (
-            <p className="px-5 py-4 text-gray-600 text-sm italic">No agents assigned to this team.</p>
+            <p className="px-5 py-4 text-stone-400 text-sm italic">No agents assigned to this team.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/5">
-                  <th className="px-5 py-2 text-left text-xs text-gray-600 font-medium uppercase tracking-wider">Agent</th>
-                  <th className="px-5 py-2 text-left text-xs text-gray-600 font-medium uppercase tracking-wider">QA</th>
-                  <th className="px-5 py-2 text-left text-xs text-gray-600 font-medium uppercase tracking-wider">Status</th>
+                <tr className="border-b border-stone-100">
+                  <th className="px-5 py-2 text-left text-xs text-stone-400 font-medium uppercase tracking-wider">Agent</th>
+                  <th className="px-5 py-2 text-left text-xs text-stone-400 font-medium uppercase tracking-wider">QA</th>
+                  <th className="px-5 py-2 text-left text-xs text-stone-400 font-medium uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {team.agents.map(a => (
                   <tr key={a.agent_id} className="border-b border-white/4 last:border-0 hover:bg-white/2 transition">
-                    <td className="px-5 py-2.5 text-gray-200">{a.agent_name}</td>
-                    <td className="px-5 py-2.5 text-gray-500">{a.qa_name || <span className="italic text-gray-700">Unassigned</span>}</td>
+                    <td className="px-5 py-2.5 text-stone-700">{a.agent_name}</td>
+                    <td className="px-5 py-2.5 text-stone-500">{a.qa_name || <span className="italic text-stone-600">Unassigned</span>}</td>
                     <td className="px-5 py-2.5">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${a.status === 'active' ? 'bg-emerald-900/30 text-emerald-400' : 'bg-gray-800 text-gray-500'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${a.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
                         {a.status}
                       </span>
                     </td>
@@ -148,16 +148,16 @@ function TeamsView() {
       ))}
 
       {unassigned.length > 0 && (
-        <div className="bg-[#1a1a1a] border border-amber-500/20 rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-white/8 bg-amber-900/10">
+        <div className="bg-white border border-amber-500/20 rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-stone-200 bg-amber-900/10">
             <span className="text-amber-400 text-sm font-medium">Unassigned agents ({unassigned.length})</span>
           </div>
           <table className="w-full text-sm">
             <tbody>
               {unassigned.map(a => (
                 <tr key={a.agent_id} className="border-b border-white/4 last:border-0">
-                  <td className="px-5 py-2.5 text-gray-400">{a.agent_name}</td>
-                  <td className="px-5 py-2.5 text-gray-600">{a.qa_name || '—'}</td>
+                  <td className="px-5 py-2.5 text-stone-400">{a.agent_name}</td>
+                  <td className="px-5 py-2.5 text-stone-400">{a.qa_name || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -171,10 +171,10 @@ function TeamsView() {
 // ── KPI Card ──────────────────────────────────────────────────────────────────
 function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-[#1e1e1e] border border-white/10 rounded-xl p-5">
-      <p className="text-xs text-gray-500 uppercase tracking-wider font-medium mb-1">{label}</p>
-      <p className="text-2xl font-bold text-white tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+    <div className="bg-white border border-stone-200 rounded-xl p-5">
+      <p className="text-xs text-stone-500 uppercase tracking-wider font-medium mb-1">{label}</p>
+      <p className="text-2xl font-bold text-stone-800 tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-stone-500 mt-1">{sub}</p>}
     </div>
   );
 }
@@ -261,7 +261,7 @@ export default function AdminDashboard() {
               <button
                 key={t}
                 onClick={() => setMainTab(t)}
-                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition ${mainTab === t ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition ${mainTab === t ? 'bg-emerald-600 text-white' : 'text-stone-500 hover:text-stone-600'}`}
               >
                 {t === 'metrics' ? '📊 Metrics' : '🏢 Teams'}
               </button>
@@ -279,8 +279,8 @@ export default function AdminDashboard() {
                   onClick={() => setPreset(p.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
                     preset === p.id
-                      ? 'bg-[#2d9e4f] text-white'
-                      : 'bg-white/5 text-gray-400 hover:text-white hover:bg-white/10'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-stone-100 text-stone-500 hover:text-stone-700'
                   }`}
                 >
                   {p.label}
@@ -293,14 +293,14 @@ export default function AdminDashboard() {
                   type="date"
                   value={customFrom}
                   onChange={e => setCustomFrom(e.target.value)}
-                  className="bg-[#2a2a2a] border border-white/10 rounded-lg px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-white/30"
+                  className="bg-stone-100 border border-stone-200 rounded-lg px-2 py-1 text-xs text-stone-600 focus:outline-none focus:border-stone-300"
                 />
-                <span className="text-gray-600 text-xs">to</span>
+                <span className="text-stone-400 text-xs">to</span>
                 <input
                   type="date"
                   value={customTo}
                   onChange={e => setCustomTo(e.target.value)}
-                  className="bg-[#2a2a2a] border border-white/10 rounded-lg px-2 py-1 text-xs text-gray-300 focus:outline-none focus:border-white/30"
+                  className="bg-stone-100 border border-stone-200 rounded-lg px-2 py-1 text-xs text-stone-600 focus:outline-none focus:border-stone-300"
                 />
               </div>
             )}
@@ -314,10 +314,10 @@ export default function AdminDashboard() {
 
       {/* Teams view */}
       {mainTab === 'teams' && (
-        <div className="bg-[#1e1e1e] border border-white/10 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-white/10">
-            <h2 className="text-white font-medium">Team Structure</h2>
-            <p className="text-gray-600 text-xs mt-0.5">Teams, their TLs, assigned agents and QA reviewers</p>
+        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-stone-200">
+            <h2 className="text-stone-800 font-medium">Team Structure</h2>
+            <p className="text-stone-400 text-xs mt-0.5">Teams, their TLs, assigned agents and QA reviewers</p>
           </div>
           <TeamsView />
         </div>
@@ -330,7 +330,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {loadingOverview ? (
               [...Array(4)].map((_, i) => (
-                <div key={i} className="bg-[#1e1e1e] border border-white/10 rounded-xl p-5 animate-pulse">
+                <div key={i} className="bg-white border border-stone-200 rounded-xl p-5 animate-pulse">
                   <div className="h-3 bg-white/10 rounded w-2/3 mb-3" />
                   <div className="h-7 bg-white/10 rounded w-1/2" />
                 </div>
@@ -359,14 +359,14 @@ export default function AdminDashboard() {
           </div>
 
           {/* Breakdown */}
-          <div className="bg-[#1e1e1e] border border-white/10 rounded-xl overflow-hidden">
+          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
             {/* Sub-tabs */}
-            <div className="flex border-b border-white/10">
+            <div className="flex border-b border-stone-200">
               {(['tl', 'qa'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setViewTab(t)}
-                  className={`px-5 py-3 text-sm font-medium transition ${viewTab === t ? 'text-white border-b-2 border-[#2d9e4f]' : 'text-gray-500 hover:text-gray-300'}`}
+                  className={`px-5 py-3 text-sm font-medium transition ${viewTab === t ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-stone-500 hover:text-stone-600'}`}
                 >
                   {t === 'tl' ? 'By TL' : 'By QA'}
                 </button>
@@ -376,20 +376,20 @@ export default function AdminDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider w-8"></th>
-                    <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">Agents</th>
-                    <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">Volume</th>
-                    <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">CSAT %</th>
-                    <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">IQS %</th>
-                    <th className="px-4 py-3 text-left text-gray-500 font-medium text-xs uppercase tracking-wider">Avg Resolution</th>
+                  <tr className="border-b border-stone-200">
+                    <th className="px-4 py-3 text-left text-stone-500 font-medium text-xs uppercase tracking-wider w-8"></th>
+                    <th className="px-4 py-3 text-left text-stone-500 font-medium text-xs uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-stone-500 font-medium text-xs uppercase tracking-wider">Agents</th>
+                    <th className="px-4 py-3 text-left text-stone-500 font-medium text-xs uppercase tracking-wider">Volume</th>
+                    <th className="px-4 py-3 text-left text-stone-500 font-medium text-xs uppercase tracking-wider">CSAT %</th>
+                    <th className="px-4 py-3 text-left text-stone-500 font-medium text-xs uppercase tracking-wider">IQS %</th>
+                    <th className="px-4 py-3 text-left text-stone-500 font-medium text-xs uppercase tracking-wider">Avg Resolution</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loadingGroups ? (
                     [...Array(4)].map((_, i) => (
-                      <tr key={i} className="border-b border-white/5">
+                      <tr key={i} className="border-b border-stone-100">
                         <td colSpan={7} className="px-4 py-3">
                           <div className="h-4 bg-white/5 rounded animate-pulse w-3/4" />
                         </td>
@@ -397,7 +397,7 @@ export default function AdminDashboard() {
                     ))
                   ) : groups.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-gray-600">No data for selected range</td>
+                      <td colSpan={7} className="px-4 py-8 text-center text-stone-400">No data for selected range</td>
                     </tr>
                   ) : (
                     groups.map(group => {
@@ -408,21 +408,21 @@ export default function AdminDashboard() {
                           <tr
                             key={group.entity_name}
                             onClick={() => toggleRow(group.entity_name)}
-                            className="border-b border-white/5 hover:bg-white/3 transition cursor-pointer"
+                            className="border-b border-stone-100 hover:bg-stone-50 transition cursor-pointer"
                           >
-                            <td className="px-4 py-3 text-gray-500 text-xs">
+                            <td className="px-4 py-3 text-stone-500 text-xs">
                               {expanded ? '▼' : '▶'}
                             </td>
-                            <td className="px-4 py-3 text-gray-200 font-medium">{group.entity_name}</td>
-                            <td className="px-4 py-3 text-gray-400 tabular-nums">{group.agent_count}</td>
-                            <td className="px-4 py-3 text-gray-400 tabular-nums">{group.volume}</td>
-                            <td className="px-4 py-3 text-gray-300 tabular-nums">
+                            <td className="px-4 py-3 text-stone-700 font-medium">{group.entity_name}</td>
+                            <td className="px-4 py-3 text-stone-400 tabular-nums">{group.agent_count}</td>
+                            <td className="px-4 py-3 text-stone-400 tabular-nums">{group.volume}</td>
+                            <td className="px-4 py-3 text-stone-600 tabular-nums">
                               {group.csat_pct != null ? `${group.csat_pct}%` : '—'}
                             </td>
                             <td className="px-4 py-3">
                               <IqsPill val={group.avg_iqs} />
                             </td>
-                            <td className="px-4 py-3 text-gray-400 tabular-nums">
+                            <td className="px-4 py-3 text-stone-400 tabular-nums">
                               {fmtDuration(group.avg_resolution)}
                             </td>
                           </tr>
@@ -430,25 +430,25 @@ export default function AdminDashboard() {
                           {expanded && group.agents.map(agent => (
                             <tr
                               key={`${group.entity_name}-${agent.agent_id}`}
-                              className="border-b border-white/5 bg-white/[0.03]"
+                              className="border-b border-stone-100 bg-white/[0.03]"
                             >
                               <td className="px-4 py-2.5"></td>
-                              <td className="px-4 py-2.5 pl-8 text-gray-300 text-xs">
+                              <td className="px-4 py-2.5 pl-8 text-stone-600 text-xs">
                                 <span className="font-medium">{agent.name}</span>
                               </td>
-                              <td className="px-4 py-2.5 text-gray-500 text-xs">
-                                <span className="text-gray-600 mr-1">{counterpartLabel}:</span>
+                              <td className="px-4 py-2.5 text-stone-500 text-xs">
+                                <span className="text-stone-400 mr-1">{counterpartLabel}:</span>
                                 {agent.counterpart}
                               </td>
-                              <td className="px-4 py-2.5 text-gray-500 text-xs tabular-nums">{agent.volume}</td>
-                              <td className="px-4 py-2.5 text-gray-500 text-xs tabular-nums">
+                              <td className="px-4 py-2.5 text-stone-500 text-xs tabular-nums">{agent.volume}</td>
+                              <td className="px-4 py-2.5 text-stone-500 text-xs tabular-nums">
                                 {agent.csat_pct != null ? `${agent.csat_pct}%` : '—'}
                               </td>
                               <td className="px-4 py-2.5">
                                 <IqsPill val={agent.avg_iqs} />
                               </td>
                               <td className="px-4 py-2.5">
-                                <div className="flex flex-col gap-0.5 text-xs text-gray-500">
+                                <div className="flex flex-col gap-0.5 text-xs text-stone-500">
                                   <span>Res: {fmtDuration(agent.avg_resolution)}</span>
                                   <span>FRT: {fmtDuration(agent.avg_frt)}</span>
                                   <span>Hnd: {fmtDuration(agent.avg_handoff)}</span>

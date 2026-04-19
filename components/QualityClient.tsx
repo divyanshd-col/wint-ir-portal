@@ -1113,7 +1113,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
           summary: editForm.summary, note: editForm.note,
         }),
       });
-      if (!res.ok) throw new Error('Save failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || `Server error ${res.status}`);
+      }
       const data = await res.json();
       const updated: IQSScoreEntry = data.entry || { ...editEntry, ...editForm, updatedAt: new Date().toISOString(), updatedBy: userEmail };
       setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
@@ -1121,9 +1124,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
       setToast('Override saved successfully');
       setTimeout(() => setToast(null), 3000);
       setEditEntry(null); setEditForm(null);
-    } catch {
-      setToast('Failed to save override');
-      setTimeout(() => setToast(null), 3000);
+    } catch (err: any) {
+      setToast(err?.message || 'Failed to save override');
+      setTimeout(() => setToast(null), 5000);
     }
     setSavingEdit(false);
   };
