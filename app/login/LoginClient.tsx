@@ -1,27 +1,36 @@
 'use client';
 
-import { useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
 
-export default function LoginClient() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const error = searchParams.get('error');
+  const callbackUrl = searchParams.get('callbackUrl') || '/';
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [loginError, setLoginError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginError('');
+    if (!email.toLowerCase().endsWith('@wintwealth.com')) {
+      setLoginError('Only @wintwealth.com email addresses are permitted.');
+      return;
+    }
     setLoading(true);
-    setError('');
-    const result = await signIn('credentials', { username, password, redirect: false });
-    setLoading(false);
-    if (result?.error) {
-      setError('Invalid credentials. Please try again.');
-    } else {
-      router.push('/');
+    try {
+      const result = await signIn('credentials', { email, callbackUrl, redirect: false });
+      if (result?.error) {
+        setLoginError('Access denied. Please use a @wintwealth.com email.');
+      } else if (result?.url) {
+        window.location.href = result.url;
+      }
+    } catch {
+      setLoginError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -40,53 +49,42 @@ export default function LoginClient() {
             </div>
             <p className="text-gray-400 text-sm tracking-widest uppercase">Investor Relations Portal</p>
           </div>
+
           <div className="px-8 py-8">
-            <h2 className="text-[#1a1a1a] text-xl font-semibold mb-1">Welcome back</h2>
-            <p className="text-gray-500 text-sm mb-6">Sign in to access your IR dashboard</p>
+            <h2 className="text-[#1a1a1a] text-xl font-semibold mb-1">Sign in to continue</h2>
+            <p className="text-gray-500 text-sm mb-6">Enter your <span className="font-medium text-gray-600">@wintwealth.com</span> email</p>
+
+            {(error || loginError) && (
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg mb-4">
+                {loginError || 'Sign-in failed. Please try again.'}
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <input
-                  type="text"
-                  value={username}
-                  onChange={e => setUsername(e.target.value)}
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
                   className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
-                  placeholder="Enter your username"
+                  placeholder="you@wintwealth.com"
                   required
+                  autoComplete="email"
+                  autoFocus
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
-                  placeholder="Enter your password"
-                  required
-                />
-              </div>
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-lg">
-                  {error}
-                </div>
-              )}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#2d9e4f] hover:bg-[#27883f] text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-60 text-sm mt-2"
+                className="w-full bg-[#2d9e4f] hover:bg-[#27883f] text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-60 text-sm"
               >
-                {loading ? 'Signing in...' : 'Sign In'}
+                {loading ? 'Signing in…' : 'Sign In'}
               </button>
             </form>
-            <p className="mt-4 text-center text-sm text-gray-500">
-              New user?{' '}
-              <Link href="/register" className="text-[#2d9e4f] hover:underline font-medium">
-                Create an account
-              </Link>
-            </p>
-            <p className="mt-3 text-center text-xs text-gray-400">
-              Having trouble? Contact{' '}
+
+            <p className="mt-6 text-center text-xs text-gray-400">
+              Need help?{' '}
               <a href="mailto:ir@wintwealth.com" className="text-[#2d9e4f] hover:underline">
                 ir@wintwealth.com
               </a>
@@ -98,5 +96,13 @@ export default function LoginClient() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginClient() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
   );
 }

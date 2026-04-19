@@ -11,13 +11,14 @@ export default async function Home() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
-  const username = (session.user?.name as string) || 'Investor';
+  const username = (session.user?.name || session.user?.email || 'Investor') as string;
   const isAdmin = (session.user as any)?.isAdmin ?? false;
+  const role = (session.user as any)?.role ?? 'agent';
   const historyEnabled = config.conversationHistoryEnabled ?? false;
 
   return (
     <div className="flex h-screen bg-[#f5f5f0] overflow-hidden">
-      <HomeClient username={username} isAdmin={isAdmin} historyEnabled={historyEnabled} />
+      <HomeClient username={username} isAdmin={isAdmin} role={role} historyEnabled={historyEnabled} />
     </div>
   );
 }

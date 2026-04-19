@@ -1,0 +1,868 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+
+interface SafeConfig {
+  llmProvider?: string;
+  geminiModel?: string;
+  hasGeminiKey?: boolean;
+  hasGeminiKey2?: boolean;
+  hasGeminiKey3?: boolean;
+  hasGeminiKey4?: boolean;
+  hasGeminiKey5?: boolean;
+  activeGeminiKey?: number;
+  hasAnthropicKey?: boolean;
+  hasIqsGeminiKey?: boolean;
+  hasIqsAnthropicKey?: boolean;
+  knowledgeBaseUrls?: string[];
+  systemPrompt?: string;
+  conversationHistoryEnabled?: boolean;
+  hasSlackToken?: boolean;
+}
+
+interface User {
+  email: string;
+  username?: string;
+  agentName?: string;
+  role: string;
+  isAdmin?: boolean;
+}
+
+const SECTIONS = [
+  { id: 'general', label: 'General' },
+  { id: 'kb', label: 'Knowledge Base' },
+  { id: 'prompt', label: 'System Prompt' },
+  { id: 'users', label: 'Users' },
+  { id: 'tl', label: 'Team Leads' },
+  { id: 'integrations', label: 'Integrations' },
+];
+
+export default function SettingsClient({ config }: { config: SafeConfig }) {
+  const [activeSection, setActiveSection] = useState('general');
+
+  // ── General state ──────────────────────────────────────────────────────────
+  const [llmProvider, setLlmProvider] = useState<'gemini' | 'claude'>((config.llmProvider as any) || 'gemini');
+  const [geminiModel, setGeminiModel] = useState(config.geminiModel || 'gemini-2.5-flash');
+  const [activeGeminiKey, setActiveGeminiKey] = useState<1 | 2 | 3 | 4 | 5>((config.activeGeminiKey as any) || 1);
+  const [geminiKeysSet, setGeminiKeysSet] = useState<Record<number, boolean>>({
+    1: !!config.hasGeminiKey,
+    2: !!config.hasGeminiKey2,
+    3: !!config.hasGeminiKey3,
+    4: !!config.hasGeminiKey4,
+    5: !!config.hasGeminiKey5,
+  });
+  const [editingKeySlot, setEditingKeySlot] = useState<number | null>(null);
+  const [newKeyInput, setNewKeyInput] = useState('');
+  const [savingNewKey, setSavingNewKey] = useState(false);
+
+  const [hasAnthropicKey, setHasAnthropicKey] = useState(!!config.hasAnthropicKey);
+  const [anthropicKey, setAnthropicKey] = useState('');
+  const [savingAnthropicKey, setSavingAnthropicKey] = useState(false);
+
+  const [hasIqsGeminiKey, setHasIqsGeminiKey] = useState(!!config.hasIqsGeminiKey);
+  const [hasIqsAnthropicKey, setHasIqsAnthropicKey] = useState(!!config.hasIqsAnthropicKey);
+  const [iqsGeminiKey, setIqsGeminiKey] = useState('');
+  const [iqsAnthropicKey, setIqsAnthropicKey] = useState('');
+  const [savingIqsKeys, setSavingIqsKeys] = useState(false);
+
+  const [historyEnabled, setHistoryEnabled] = useState(!!config.conversationHistoryEnabled);
+
+  // ── KB state ───────────────────────────────────────────────────────────────
+  const [docs, setDocs] = useState<string[]>(config.knowledgeBaseUrls || []);
+  const [newUrl, setNewUrl] = useState('');
+  const [addingDoc, setAddingDoc] = useState(false);
+  const [docError, setDocError] = useState('');
+  const [refreshingKB, setRefreshingKB] = useState(false);
+  const [kbRefreshed, setKbRefreshed] = useState(false);
+
+  // ── System prompt state ────────────────────────────────────────────────────
+  const [systemPrompt, setSystemPrompt] = useState(config.systemPrompt || '');
+  const [savingPrompt, setSavingPrompt] = useState(false);
+  const [promptSaved, setPromptSaved] = useState(false);
+
+  // ── Users state ────────────────────────────────────────────────────────────
+  const [users, setUsers] = useState<User[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [newEmail, setNewEmail] = useState('');
+  const [newRole, setNewRole] = useState<'agent' | 'tl' | 'quality' | 'admin'>('agent');
+  const [newAgentName, setNewAgentName] = useState('');
+  const [addingUser, setAddingUser] = useState(false);
+  const [userError, setUserError] = useState('');
+  const [editingAgentName, setEditingAgentName] = useState<Record<string, string>>({});
+  const [userPage, setUserPage] = useState(0);
+  const [userSearch, setUserSearch] = useState('');
+  const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
+
+  // ── Integrations state ─────────────────────────────────────────────────────
+  const [hasSlackToken, setHasSlackToken] = useState(!!config.hasSlackToken);
+  const [slackToken, setSlackToken] = useState('');
+  const [savingSlack, setSavingSlack] = useState(false);
+  const [slackSaved, setSlackSaved] = useState(false);
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
+  // ── Load users ─────────────────────────────────────────────────────────────
+  const loadUsers = async () => {
+    setLoadingUsers(true);
+    try {
+      const data = await fetch('/api/users').then(r => r.json());
+      setUsers(Array.isArray(data) ? data : []);
+      const agentData = await fetch('/api/cx/admin/agents').then(r => r.ok ? r.json() : []).catch(() => []);
+      const assignMap: Record<string, { tl_name: string | null; qa_name: string | null }> = {};
+      for (const a of (agentData as { name: string; tl_name: string | null; qa_name: string | null }[])) {
+        assignMap[a.name] = { tl_name: a.tl_name, qa_name: a.qa_name };
+      }
+      setAgentAssignments(assignMap);
+    } catch {} finally { setLoadingUsers(false); }
+  };
+
+  useEffect(() => { loadUsers(); }, []);
+
+  // ── API helpers ────────────────────────────────────────────────────────────
+  const patchConfig = async (payload: Record<string, unknown>) => {
+    await fetch('/api/config', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  };
+
+  const switchProvider = async (provider: 'gemini' | 'claude') => {
+    setLlmProvider(provider);
+    await patchConfig({ llmProvider: provider });
+  };
+
+  const switchGeminiModel = async (model: string) => {
+    setGeminiModel(model);
+    await patchConfig({ geminiModel: model });
+  };
+
+  const switchGeminiKey = async (key: 1 | 2 | 3 | 4 | 5) => {
+    setActiveGeminiKey(key);
+    await patchConfig({ activeGeminiKey: key });
+  };
+
+  const saveNewKey = async (slot: number) => {
+    if (!newKeyInput.trim()) return;
+    setSavingNewKey(true);
+    try {
+      await patchConfig({ [`geminiApiKey${slot > 1 ? slot : ''}`]: newKeyInput.trim() });
+      setGeminiKeysSet(prev => ({ ...prev, [slot]: true }));
+      setNewKeyInput('');
+      setEditingKeySlot(null);
+      showToast(`Key ${slot} saved`);
+    } finally { setSavingNewKey(false); }
+  };
+
+  const saveAnthropicKey = async () => {
+    if (!anthropicKey.trim()) return;
+    setSavingAnthropicKey(true);
+    try {
+      await patchConfig({ anthropicApiKey: anthropicKey.trim() });
+      setHasAnthropicKey(true);
+      setAnthropicKey('');
+      showToast('Anthropic key saved');
+    } finally { setSavingAnthropicKey(false); }
+  };
+
+  const saveIqsKeys = async () => {
+    if (!iqsGeminiKey.trim() && !iqsAnthropicKey.trim()) return;
+    setSavingIqsKeys(true);
+    try {
+      const payload: Record<string, string> = {};
+      if (iqsGeminiKey.trim()) payload.iqsGeminiApiKey = iqsGeminiKey.trim();
+      if (iqsAnthropicKey.trim()) payload.iqsAnthropicApiKey = iqsAnthropicKey.trim();
+      await patchConfig(payload);
+      if (iqsGeminiKey.trim()) { setHasIqsGeminiKey(true); setIqsGeminiKey(''); }
+      if (iqsAnthropicKey.trim()) { setHasIqsAnthropicKey(true); setIqsAnthropicKey(''); }
+      showToast('IQS keys saved');
+    } finally { setSavingIqsKeys(false); }
+  };
+
+  const toggleHistory = async () => {
+    const next = !historyEnabled;
+    setHistoryEnabled(next);
+    await patchConfig({ conversationHistoryEnabled: next });
+  };
+
+  const addDoc = async () => {
+    if (!newUrl.trim()) return;
+    setAddingDoc(true);
+    setDocError('');
+    try {
+      const res = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: newUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setDocError(data.error || 'Failed to add'); return; }
+      setDocs(data.knowledgeBaseUrls);
+      setNewUrl('');
+      showToast('Document added');
+    } catch { setDocError('Network error'); }
+    finally { setAddingDoc(false); }
+  };
+
+  const removeDoc = async (url: string) => {
+    try {
+      const res = await fetch('/api/documents', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json();
+      if (res.ok) { setDocs(data.knowledgeBaseUrls); showToast('Document removed'); }
+    } catch {}
+  };
+
+  const refreshKB = async () => {
+    setRefreshingKB(true);
+    setKbRefreshed(false);
+    try {
+      await fetch('/api/kb-refresh', { method: 'POST' });
+      setKbRefreshed(true);
+      showToast('KB cache refreshed');
+      setTimeout(() => setKbRefreshed(false), 3000);
+    } finally { setRefreshingKB(false); }
+  };
+
+  const saveSystemPrompt = async () => {
+    setSavingPrompt(true);
+    setPromptSaved(false);
+    try {
+      await patchConfig({ systemPrompt });
+      setPromptSaved(true);
+      showToast('System prompt saved');
+      setTimeout(() => setPromptSaved(false), 2000);
+    } finally { setSavingPrompt(false); }
+  };
+
+  const addUser = async () => {
+    if (!newEmail.trim()) return;
+    setAddingUser(true);
+    setUserError('');
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: newEmail.trim(), role: newRole, agentName: newAgentName.trim() || undefined }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setUserError(data.error || 'Failed'); return; }
+      await loadUsers();
+      setNewEmail('');
+      setNewAgentName('');
+      setNewRole('agent');
+      showToast('User added');
+    } finally { setAddingUser(false); }
+  };
+
+  const updateUserRole = async (email: string, role: string) => {
+    await fetch('/api/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, role }),
+    });
+    await loadUsers();
+  };
+
+  const updateAgentName = async (email: string, agentName: string) => {
+    await fetch('/api/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, agentName }),
+    });
+    await loadUsers();
+    showToast('Agent name updated');
+  };
+
+  const deleteUser = async (email: string) => {
+    const res = await fetch('/api/users', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (res.ok) { setUsers(prev => prev.filter(u => u.email !== email)); showToast('User removed'); }
+  };
+
+  const saveSlackToken = async () => {
+    if (!slackToken.trim()) return;
+    setSavingSlack(true);
+    setSlackSaved(false);
+    try {
+      await patchConfig({ slackUserToken: slackToken.trim() });
+      setHasSlackToken(true);
+      setSlackToken('');
+      setSlackSaved(true);
+      showToast('Slack token saved');
+      setTimeout(() => setSlackSaved(false), 2000);
+    } finally { setSavingSlack(false); }
+  };
+
+  function shortLabel(url: string): string {
+    try {
+      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+      if (match) return match[1].slice(0, 20) + '…';
+      return url.slice(0, 40) + '…';
+    } catch { return url; }
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f5f3ee] flex font-sans antialiased">
+      {/* Left nav */}
+      <aside className="w-56 shrink-0 bg-white border-r border-gray-100 flex flex-col sticky top-0 h-screen">
+        <div className="px-5 py-5 border-b border-gray-100">
+          <a href="/" className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition text-xs font-medium mb-4">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
+            Back to chat
+          </a>
+          <h1 className="text-base font-bold text-gray-900">Settings</h1>
+          <p className="text-xs text-gray-400 mt-0.5">Admin only</p>
+        </div>
+        <nav className="flex-1 px-3 py-4 space-y-0.5">
+          {SECTIONS.map(s => (
+            <button
+              key={s.id}
+              onClick={() => setActiveSection(s.id)}
+              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                activeSection === s.id
+                  ? 'bg-[#2d9e4f] text-white'
+                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      {/* Main content */}
+      <main className="flex-1 max-w-3xl mx-auto px-8 py-10 space-y-10">
+
+        {/* ── GENERAL ── */}
+        {activeSection === 'general' && (
+          <div className="space-y-8">
+            <h2 className="text-xl font-bold text-gray-900">General</h2>
+
+            {/* LLM Provider */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+              <h3 className="text-sm font-bold text-gray-900">LLM Provider</h3>
+              <div className="flex rounded-xl overflow-hidden border border-gray-200 w-fit">
+                {(['gemini', 'claude'] as const).map(p => (
+                  <button key={p} onClick={() => switchProvider(p)}
+                    className={`px-6 py-2 text-sm font-semibold transition ${llmProvider === p ? 'bg-[#2d9e4f] text-white' : 'bg-white text-gray-500 hover:text-gray-800'}`}>
+                    {p === 'gemini' ? 'Gemini' : 'Claude'}
+                  </button>
+                ))}
+              </div>
+
+              {llmProvider === 'gemini' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Routing Model</label>
+                    <select value={geminiModel} onChange={e => switchGeminiModel(e.target.value)}
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 min-w-[240px]">
+                      <optgroup label="Gemini 3">
+                        <option value="gemini-3-flash-preview">3 Flash (default)</option>
+                      </optgroup>
+                      <optgroup label="Gemini 2.5">
+                        <option value="gemini-2.5-pro">2.5 Pro</option>
+                        <option value="gemini-2.5-flash">2.5 Flash</option>
+                        <option value="gemini-2.5-flash-lite">2.5 Flash Lite</option>
+                      </optgroup>
+                      <optgroup label="Gemini 2.0">
+                        <option value="gemini-2.0-flash">2.0 Flash</option>
+                        <option value="gemini-2.0-flash-lite">2.0 Flash Lite</option>
+                      </optgroup>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">API Key Slot</label>
+                    <div className="flex rounded-xl overflow-hidden border border-gray-200 w-fit">
+                      {([1, 2, 3, 4, 5] as const).map(k => (
+                        <button key={k} onClick={() => switchGeminiKey(k)}
+                          className={`w-10 py-2 text-sm font-semibold transition ${activeGeminiKey === k ? 'bg-[#2d9e4f] text-white' : geminiKeysSet[k] ? 'bg-white text-gray-700 hover:bg-gray-50' : 'bg-white text-gray-300 hover:bg-gray-50'}`}
+                          title={geminiKeysSet[k] ? `Key ${k} (set)` : `Key ${k} (not set)`}>
+                          {k}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">{geminiKeysSet[activeGeminiKey] ? `✓ Key ${activeGeminiKey} configured` : `Key ${activeGeminiKey} not set`}</p>
+                    {editingKeySlot !== activeGeminiKey ? (
+                      <button onClick={() => setEditingKeySlot(activeGeminiKey)}
+                        className="mt-2 text-xs text-[#2d9e4f] font-semibold hover:underline">
+                        {geminiKeysSet[activeGeminiKey] ? `Replace Key ${activeGeminiKey}` : `+ Set Key ${activeGeminiKey}`}
+                      </button>
+                    ) : (
+                      <div className="mt-2 flex gap-2 max-w-sm">
+                        <input type="password" value={newKeyInput} onChange={e => setNewKeyInput(e.target.value)} placeholder="AIza..."
+                          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                        <button onClick={() => saveNewKey(activeGeminiKey)} disabled={savingNewKey || !newKeyInput.trim()}
+                          className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                          {savingNewKey ? 'Saving…' : 'Save'}
+                        </button>
+                        <button onClick={() => { setEditingKeySlot(null); setNewKeyInput(''); }}
+                          className="px-3 py-2 border border-gray-200 text-gray-500 rounded-xl text-sm hover:bg-gray-50 transition">
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {llmProvider === 'claude' && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Anthropic API Key</label>
+                  {hasAnthropicKey ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-emerald-600 font-semibold">✓ Key configured</span>
+                      <button onClick={() => setHasAnthropicKey(false)} className="text-xs text-gray-400 hover:text-gray-600 underline">Replace</button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 max-w-sm">
+                      <input type="password" value={anthropicKey} onChange={e => setAnthropicKey(e.target.value)} placeholder="sk-ant-..."
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                      <button onClick={saveAnthropicKey} disabled={savingAnthropicKey || !anthropicKey.trim()}
+                        className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                        {savingAnthropicKey ? 'Saving…' : 'Save'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* IQS Keys */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Quality Scoring Keys</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Dedicated keys for IQS scoring — keeps spend separate from chat usage</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Gemini Key</label>
+                  {hasIqsGeminiKey ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-emerald-600 font-semibold">✓ Set</span>
+                      <button onClick={() => setHasIqsGeminiKey(false)} className="text-xs text-gray-400 hover:text-gray-600 underline">Replace</button>
+                    </div>
+                  ) : (
+                    <input type="password" value={iqsGeminiKey} onChange={e => setIqsGeminiKey(e.target.value)} placeholder="AIza..."
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Anthropic Key</label>
+                  {hasIqsAnthropicKey ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-emerald-600 font-semibold">✓ Set</span>
+                      <button onClick={() => setHasIqsAnthropicKey(false)} className="text-xs text-gray-400 hover:text-gray-600 underline">Replace</button>
+                    </div>
+                  ) : (
+                    <input type="password" value={iqsAnthropicKey} onChange={e => setIqsAnthropicKey(e.target.value)} placeholder="sk-ant-..."
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                  )}
+                </div>
+              </div>
+              {(iqsGeminiKey.trim() || iqsAnthropicKey.trim()) && (
+                <button onClick={saveIqsKeys} disabled={savingIqsKeys}
+                  className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                  {savingIqsKeys ? 'Saving…' : 'Save IQS Keys'}
+                </button>
+              )}
+            </div>
+
+            {/* Conversation History */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Conversation History</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Save last 5 conversations per user</p>
+                </div>
+                <button
+                  onClick={toggleHistory}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${historyEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${historyEnabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── KNOWLEDGE BASE ── */}
+        {activeSection === 'kb' && (
+          <div className="space-y-8">
+            <h2 className="text-xl font-bold text-gray-900">Knowledge Base</h2>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-gray-900">Documents ({docs.length})</h3>
+                <button onClick={refreshKB} disabled={refreshingKB}
+                  className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:border-gray-400 disabled:opacity-50 transition">
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className={refreshingKB ? 'animate-spin' : ''}>
+                    <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.4.87 4.4 2.2M14 2v3h-3"/>
+                  </svg>
+                  {refreshingKB ? 'Refreshing…' : kbRefreshed ? '✓ Refreshed' : 'Refresh KB Cache'}
+                </button>
+              </div>
+
+              {docs.length === 0 && (
+                <p className="text-sm text-gray-400">No documents added yet. Add a Google Doc URL below.</p>
+              )}
+
+              <div className="space-y-2">
+                {docs.map(url => (
+                  <div key={url} className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl group">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0">
+                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    <span className="text-sm text-gray-700 flex-1 truncate" title={url}>{shortLabel(url)}</span>
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2d9e4f] hover:underline shrink-0 opacity-0 group-hover:opacity-100 transition">Open</a>
+                    <button onClick={() => removeDoc(url)} className="text-gray-400 hover:text-red-500 transition shrink-0 opacity-0 group-hover:opacity-100" title="Remove">
+                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 4h12M5 4V2h6v2M6 7v6M10 7v6M3 4l1 10h8l1-10" /></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-gray-100 pt-4">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Add Google Doc URL</label>
+                <div className="flex gap-2">
+                  <input type="url" value={newUrl} onChange={e => setNewUrl(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addDoc()}
+                    placeholder="https://docs.google.com/document/d/..."
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                  <button onClick={addDoc} disabled={addingDoc || !newUrl.trim()}
+                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {addingDoc ? 'Adding…' : '+ Add'}
+                  </button>
+                </div>
+                {docError && <p className="text-xs text-red-500 mt-1.5">{docError}</p>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SYSTEM PROMPT ── */}
+        {activeSection === 'prompt' && (
+          <div className="space-y-8">
+            <h2 className="text-xl font-bold text-gray-900">System Prompt</h2>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Custom System Prompt</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Overrides the default prompt. Leave blank to use the built-in default.</p>
+              </div>
+              <textarea
+                value={systemPrompt}
+                onChange={e => setSystemPrompt(e.target.value)}
+                rows={16}
+                placeholder="Leave blank to use the default prompt…"
+                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+              />
+              <div className="flex items-center gap-3">
+                <button onClick={saveSystemPrompt} disabled={savingPrompt}
+                  className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                  {savingPrompt ? 'Saving…' : promptSaved ? '✓ Saved' : 'Save Prompt'}
+                </button>
+                {promptSaved && <span className="text-sm text-emerald-600 font-medium">Saved successfully</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── USERS ── */}
+        {activeSection === 'users' && (() => {
+          const PAGE = 5;
+          const filteredUsers = users.filter(u =>
+            !userSearch ||
+            u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+            (u.agentName || '').toLowerCase().includes(userSearch.toLowerCase())
+          );
+          const pagedUsers = filteredUsers.slice(userPage * PAGE, (userPage + 1) * PAGE);
+          const totalPages = Math.ceil(filteredUsers.length / PAGE);
+          return (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Users</h2>
+              <button onClick={loadUsers} disabled={loadingUsers}
+                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:border-gray-400 disabled:opacity-50 transition">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className={loadingUsers ? 'animate-spin' : ''}>
+                  <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.4.87 4.4 2.2M14 2v3h-3"/>
+                </svg>
+                Refresh
+              </button>
+            </div>
+
+            {/* Search */}
+            <input
+              type="text"
+              placeholder="Search users..."
+              value={userSearch}
+              onChange={e => { setUserSearch(e.target.value); setUserPage(0); }}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+            />
+
+            {/* User table */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+              <table className="w-full text-sm min-w-[760px]">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Role</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">TL</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">QA</th>
+                    <th className="px-4 py-3 w-12" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pagedUsers.map(u => (
+                    <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
+                      <td className="px-5 py-3 text-gray-700 text-sm truncate max-w-[220px]">{u.email}</td>
+                      <td className="px-4 py-3">
+                        <input
+                          type="text"
+                          value={editingAgentName[u.email] ?? (u.agentName || '')}
+                          onChange={e => setEditingAgentName(prev => ({ ...prev, [u.email]: e.target.value }))}
+                          onBlur={e => {
+                            const val = e.target.value;
+                            if (val !== (u.agentName || '')) updateAgentName(u.email, val);
+                          }}
+                          placeholder="Agent name…"
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
+                        />
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={u.role}
+                          onChange={e => updateUserRole(u.email, e.target.value)}
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                        >
+                          <option value="agent">Agent</option>
+                          <option value="tl">TL</option>
+                          <option value="quality">Quality</option>
+                          <option value="admin">Admin</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={agentAssignments[u.agentName || '']?.tl_name || ''}
+                          onChange={async e => {
+                            const val = e.target.value;
+                            if (!u.agentName) { showToast('Set an Agent Name first'); return; }
+                            // Optimistic update
+                            setAgentAssignments(prev => ({
+                              ...prev,
+                              [u.agentName!]: { ...prev[u.agentName!], tl_name: val || null },
+                            }));
+                            const res = await fetch('/api/cx/admin/agents', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ agent_name: u.agentName, tl_name: val || null }),
+                            });
+                            if (res.ok) showToast('TL updated');
+                            else showToast('Failed to save TL — check agent name matches DB');
+                          }}
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
+                        >
+                          <option value="">—</option>
+                          {users.filter(uu => uu.role === 'tl').map(uu => (
+                            <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={agentAssignments[u.agentName || '']?.qa_name || ''}
+                          onChange={async e => {
+                            const val = e.target.value;
+                            if (!u.agentName) { showToast('Set an Agent Name first'); return; }
+                            // Optimistic update
+                            setAgentAssignments(prev => ({
+                              ...prev,
+                              [u.agentName!]: { ...prev[u.agentName!], qa_name: val || null },
+                            }));
+                            const res = await fetch('/api/cx/admin/agents', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ agent_name: u.agentName, qa_name: val || null }),
+                            });
+                            if (res.ok) showToast('QA updated');
+                            else showToast('Failed to save QA — check agent name matches DB');
+                          }}
+                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
+                        >
+                          <option value="">—</option>
+                          {users.filter(uu => uu.role === 'quality').map(uu => (
+                            <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button onClick={() => deleteUser(u.email)} className="text-gray-300 hover:text-red-500 transition" title="Remove user">
+                          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                            <path d="M2 4h12M5 4V2h6v2M6 7v6M10 7v6M3 4l1 10h8l1-10" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredUsers.length === 0 && !loadingUsers && (
+                <p className="text-sm text-gray-400 text-center py-8">No users found</p>
+              )}
+            </div>
+
+            {/* Pagination */}
+            {filteredUsers.length > PAGE && (
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <span>Page {userPage + 1} of {totalPages}</span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setUserPage(p => Math.max(0, p - 1))}
+                    disabled={userPage === 0}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => setUserPage(p => Math.min(totalPages - 1, p + 1))}
+                    disabled={userPage >= totalPages - 1}
+                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Add user */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <h3 className="text-sm font-bold text-gray-900">Add / Update User</h3>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
+                  <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="name@wintwealth.com"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role</label>
+                  <select value={newRole} onChange={e => setNewRole(e.target.value as any)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30">
+                    <option value="agent">Agent</option>
+                    <option value="tl">TL</option>
+                    <option value="quality">Quality</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Name (optional)</label>
+                <input type="text" value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Display name for quality reports…"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+              </div>
+              {userError && <p className="text-xs text-red-500">{userError}</p>}
+              <div className="flex items-center gap-3">
+                <button onClick={addUser} disabled={addingUser || !newEmail.trim()}
+                  className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                  {addingUser ? 'Adding…' : '+ Add / Update User'}
+                </button>
+                <span className="text-xs text-gray-400">User signs in via Google — no password needed</span>
+              </div>
+            </div>
+          </div>
+          );
+        })()}
+
+        {/* ── TEAM LEADS ── */}
+        {activeSection === 'tl' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Team Leads</h2>
+                <p className="text-sm text-gray-500 mt-1">Users with the TL role and their agent assignments</p>
+              </div>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/60">
+                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agents Managed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.filter(u => u.role === 'tl').map(u => {
+                    const count = Object.values(agentAssignments).filter(a => a.tl_name === u.agentName).length;
+                    return (
+                      <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
+                        <td className="px-5 py-3 text-gray-700">{u.email}</td>
+                        <td className="px-4 py-3 text-gray-600">{u.agentName || <span className="text-gray-400 italic">No agent name set</span>}</td>
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-medium text-gray-700">{count}</span>
+                          <span className="text-gray-400 text-xs ml-1">agent{count !== 1 ? 's' : ''}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {users.filter(u => u.role === 'tl').length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No Team Leads yet. Add a user with role &quot;TL&quot; in the Users section.</p>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">To add a new Team Lead, go to the Users section and set their role to &quot;TL&quot;. Then assign agents to them using the TL column in the users table.</p>
+          </div>
+        )}
+
+        {/* ── INTEGRATIONS ── */}
+        {activeSection === 'integrations' && (
+          <div className="space-y-8">
+            <h2 className="text-xl font-bold text-gray-900">Integrations</h2>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Slack Fallback</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  When configured, Slack is searched when the knowledge base has no match.
+                </p>
+              </div>
+              {hasSlackToken ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-emerald-600 font-semibold">✓ Slack token configured</span>
+                  <button onClick={() => setHasSlackToken(false)} className="text-xs text-gray-400 hover:text-gray-600 underline">Replace</button>
+                </div>
+              ) : (
+                <div className="flex gap-2 max-w-sm">
+                  <input type="password" value={slackToken} onChange={e => setSlackToken(e.target.value)} placeholder="xoxp-... user token"
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                  <button onClick={saveSlackToken} disabled={savingSlack || !slackToken.trim()}
+                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {savingSlack ? 'Saving…' : slackSaved ? '✓' : 'Save'}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl">
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}

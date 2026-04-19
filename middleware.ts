@@ -8,8 +8,7 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname === '/setup' ||
-    pathname === '/login' ||
-    pathname === '/register'
+    pathname === '/login'
   ) {
     return NextResponse.next();
   }
@@ -18,6 +17,26 @@ export async function middleware(req: NextRequest) {
   if (!token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
+
+  // CX dashboard: all authenticated roles
+  // (role enforcement is done per-page and per-API-route)
+  // No restriction needed here — just let authenticated users through
+
+  // Quality section: admin, quality, tl — plus agent (sees own-only dashboard)
+  if (pathname.startsWith('/quality')) {
+    const role = token.role as string | undefined;
+    if (!role || !['admin', 'quality', 'tl', 'agent'].includes(role)) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
+  // Analytics: admin only
+  if (pathname.startsWith('/analytics')) {
+    if (!token.isAdmin) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
   return NextResponse.next();
 }
 
