@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 
 interface Summary {
   total_convs: number;
@@ -56,14 +57,17 @@ function fmt(v: number | null | undefined, decimals = 1, suffix = '') {
 
 function CsatBadge({ pct }: { pct: number | null }) {
   if (pct == null) return <span className="text-stone-400">—</span>;
-  const color = pct >= 30 ? 'text-red-600 bg-red-50' : pct >= 15 ? 'text-amber-700 bg-amber-50' : 'text-emerald-700 bg-emerald-50';
-  return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${color}`}>{pct.toFixed(1)}%</span>;
+  const color = pct >= 30 ? 'text-red-700 bg-red-50 border border-red-200' : pct >= 15 ? 'text-amber-700 bg-amber-50 border border-amber-200' : 'text-emerald-700 bg-emerald-50 border border-emerald-200';
+  return <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full tabular-nums ${color}`}>{pct.toFixed(1)}%</span>;
 }
 
 function IqsBadge({ iqs }: { iqs: number | null }) {
   if (iqs == null) return <span className="text-stone-400">—</span>;
-  const color = iqs < 60 ? 'text-red-600' : iqs < 75 ? 'text-amber-600' : 'text-emerald-600';
-  return <span className={`font-semibold ${color}`}>{iqs.toFixed(1)}</span>;
+  const color =
+    iqs >= 85 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+    iqs >= 70 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                'bg-red-50 text-red-700 border border-red-200';
+  return <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>{iqs.toFixed(1)}%</span>;
 }
 
 function SummaryCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -181,8 +185,19 @@ export default function TLDashboard() {
                 <tr><td colSpan={4} className="px-4 py-8 text-center text-stone-400">No agent data for this period</td></tr>
               ) : (
                 data.agents.map(a => (
-                  <tr key={a.agent_id} className="border-b border-stone-50 hover:bg-stone-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-stone-700">{a.agent_name}</td>
+                  <tr key={a.agent_id} className="border-b border-stone-50 hover:bg-emerald-50/40 transition-colors group">
+                    <td className="px-4 py-3 font-medium text-stone-700">
+                      <div className="flex items-center gap-2">
+                        {a.agent_name}
+                        <Link
+                          href={`/quality?agent=${encodeURIComponent(a.agent_name)}&tab=log`}
+                          className="text-[10px] text-emerald-600 font-semibold opacity-0 group-hover:opacity-100 transition"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          Quality →
+                        </Link>
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-right text-stone-600 tabular-nums">{a.conv_count}</td>
                     <td className="px-4 py-3 text-center"><CsatBadge pct={a.bad_csat_pct} /></td>
                     <td className="px-4 py-3 text-right tabular-nums"><IqsBadge iqs={a.avg_iqs} /></td>

@@ -68,6 +68,8 @@ interface QualityClientProps {
   userRole?: string;
   userEmail?: string;
   selfAgentName?: string;
+  initialAgent?: string;
+  initialTab?: 'log';
 }
 interface ParsedRow {
   chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string;
@@ -854,8 +856,8 @@ function NavItem({ icon, label, active, badge, onClick }: {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function QualityClient({ userRole, userEmail, selfAgentName }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports'>('performance');
+export default function QualityClient({ userRole, userEmail, selfAgentName, initialAgent, initialTab }: QualityClientProps = {}) {
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports'>(initialTab || 'performance');
 
   // Upload state
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
@@ -1105,7 +1107,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName }: Qu
   // Auto-load on mount — Performance and Score Log load independently
   useEffect(() => {
     loadPerfData('30d');
-    loadScores(0, DEFAULT_FILTERS);
+    const startFilters = initialAgent
+      ? { ...DEFAULT_FILTERS, agent: initialAgent }
+      : DEFAULT_FILTERS;
+    if (initialAgent) setPendingFilters(startFilters);
+    loadScores(0, startFilters);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

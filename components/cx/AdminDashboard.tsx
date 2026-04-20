@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useCallback, Fragment } from 'react';
+import Link from 'next/link';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 type DatePreset = 'today' | '7d' | '30d' | 'all' | 'custom';
@@ -64,13 +65,102 @@ function fmtDuration(secs: number | null | undefined): string {
 function IqsPill({ val }: { val: number | null | undefined }) {
   if (val == null) return <span className="text-stone-400 text-xs">—</span>;
   const color =
-    val >= 85 ? 'bg-emerald-900/40 text-emerald-400 border border-emerald-500/30' :
-    val >= 70 ? 'bg-amber-900/40 text-amber-400 border border-amber-500/30' :
-                'bg-red-900/40 text-red-400 border border-red-500/30';
+    val >= 85 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+    val >= 70 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                'bg-red-50 text-red-700 border border-red-200';
   return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums ${color}`}>
+    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>
       {val.toFixed(1)}%
     </span>
+  );
+}
+
+function CsatBadge({ val }: { val: number | null | undefined }) {
+  if (val == null) return <span className="text-stone-400 text-xs">—</span>;
+  const color =
+    val >= 90 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+    val >= 75 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                'bg-red-50 text-red-700 border border-red-200';
+  return (
+    <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>
+      {val.toFixed(1)}%
+    </span>
+  );
+}
+
+function ResolutionCell({ secs }: { secs: number | null | undefined }) {
+  if (secs == null) return <span className="text-stone-400 text-xs">—</span>;
+  const hours = secs / 3600;
+  const cls = hours > 10 ? 'text-red-600 font-semibold' : hours > 5 ? 'text-amber-600' : 'text-stone-600';
+  return <span className={`text-xs tabular-nums ${cls}`}>{fmtDuration(secs)}</span>;
+}
+
+function AgentDrawer({ agent, onClose }: { agent: AgentData | null; onClose: () => void }) {
+  useEffect(() => {
+    if (agent) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
+    return () => { document.body.style.overflow = ''; };
+  }, [agent]);
+
+  if (!agent) return null;
+  const qualityUrl = `/quality?agent=${encodeURIComponent(agent.name)}&tab=log`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="fixed inset-0 bg-black/20" onClick={onClose} />
+      <div className="relative bg-white w-full max-w-sm h-full flex flex-col shadow-2xl z-51">
+        <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-stone-800">{agent.name}</h3>
+            <p className="text-xs text-stone-500 mt-0.5">Agent performance overview</p>
+          </div>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-xl">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: 'Volume', value: String(agent.volume), plain: true },
+              { label: 'CSAT %', value: agent.csat_pct != null ? `${agent.csat_pct.toFixed(1)}%` : '—',
+                color: agent.csat_pct == null ? '' : agent.csat_pct >= 90 ? 'text-emerald-700' : agent.csat_pct >= 75 ? 'text-amber-700' : 'text-red-700' },
+              { label: 'Avg IQS', value: agent.avg_iqs != null ? `${agent.avg_iqs.toFixed(1)}%` : '—',
+                color: agent.avg_iqs == null ? '' : agent.avg_iqs >= 85 ? 'text-emerald-700' : agent.avg_iqs >= 70 ? 'text-amber-700' : 'text-red-700' },
+              { label: 'Avg FRT', value: fmtDuration(agent.avg_frt), plain: true },
+              { label: 'Resolution', value: fmtDuration(agent.avg_resolution),
+                color: agent.avg_resolution == null ? '' : agent.avg_resolution > 36000 ? 'text-red-600' : agent.avg_resolution > 18000 ? 'text-amber-600' : 'text-stone-700' },
+              { label: 'Handoff', value: fmtDuration(agent.avg_handoff), plain: true },
+            ].map(m => (
+              <div key={m.label} className="bg-stone-50 rounded-xl p-3 border border-stone-100">
+                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">{m.label}</p>
+                <p className={`text-lg font-bold tabular-nums ${m.color || 'text-stone-800'}`}>{m.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {agent.counterpart && (
+            <div className="bg-stone-50 rounded-xl p-3 border border-stone-100 text-xs text-stone-600">
+              <span className="font-semibold text-stone-400 uppercase tracking-wider text-[10px]">Counterpart</span>
+              <p className="mt-0.5 font-medium text-stone-700">{agent.counterpart}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-4 border-t border-stone-200 space-y-2">
+          <Link
+            href={qualityUrl}
+            className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition"
+          >
+            View Quality Scores
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 7h8M7 3l4 4-4 4"/>
+            </svg>
+          </Link>
+          <button onClick={onClose} className="w-full py-2 text-stone-500 text-sm hover:text-stone-700 transition">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -169,16 +259,18 @@ function TeamsView() {
 }
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, href }: { label: string; value: string; sub?: string; href?: string }) {
-  const cls = `bg-white border border-stone-200 rounded-xl p-5 text-left w-full${href ? ' hover:border-emerald-400 hover:shadow-sm cursor-pointer transition' : ''}`;
+function KpiCard({ label, value, sub, href, accent }: { label: string; value: string; sub?: string; href?: string; accent?: 'good' | 'warn' | 'bad' | 'neutral' }) {
+  const accentCls = accent === 'good' ? 'border-l-4 border-l-emerald-400' : accent === 'warn' ? 'border-l-4 border-l-amber-400' : accent === 'bad' ? 'border-l-4 border-l-red-400' : '';
+  const cls = `bg-white border border-stone-200 rounded-xl p-5 text-left w-full ${accentCls}${href ? ' hover:shadow-sm cursor-pointer transition hover:border-emerald-300' : ''}`;
   const inner = (
     <>
       <p className="text-xs text-stone-500 uppercase tracking-wider font-medium mb-1">{label}</p>
       <p className="text-2xl font-bold text-stone-800 tabular-nums">{value}</p>
       {sub && <p className="text-xs text-stone-500 mt-1">{sub}</p>}
+      {href && <p className="text-[10px] text-emerald-600 font-semibold mt-2 opacity-0 group-hover:opacity-100">View details →</p>}
     </>
   );
-  if (href) return <a href={href} className={cls}>{inner}</a>;
+  if (href) return <a href={href} className={`group ${cls}`}>{inner}</a>;
   return <div className={cls}>{inner}</div>;
 }
 
@@ -195,6 +287,7 @@ export default function AdminDashboard() {
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [loadingGroups, setLoadingGroups] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAgent, setSelectedAgent] = useState<AgentData | null>(null);
 
   const { dateFrom, dateTo } = getDateRange(preset, customFrom, customTo);
 
@@ -255,10 +348,11 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      <AgentDrawer agent={selectedAgent} onClose={() => setSelectedAgent(null)} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold text-white">CX Performance</h1>
+          <h1 className="text-xl font-semibold text-stone-800">CX Performance</h1>
           <div className="flex bg-white/5 rounded-lg p-0.5 gap-0.5">
             {(['metrics', 'teams'] as const).map(t => (
               <button
@@ -343,22 +437,29 @@ export default function AdminDashboard() {
                 <KpiCard
                   label="Volume"
                   value={overview?.volume != null ? overview.volume.toLocaleString() : '—'}
+                  sub={`${dateFrom || 'All time'}`}
                   href="/quality"
+                  accent="neutral"
                 />
                 <KpiCard
                   label="CSAT %"
                   value={overview?.csat_pct != null ? `${overview.csat_pct}%` : '—'}
-                  sub={overview?.csat_good != null ? `Good: ${overview.csat_good}` : undefined}
+                  sub={overview?.csat_good != null ? `${overview.csat_good} good ratings` : undefined}
                   href="/quality"
+                  accent={overview?.csat_pct == null ? 'neutral' : overview.csat_pct >= 90 ? 'good' : overview.csat_pct >= 75 ? 'warn' : 'bad'}
                 />
                 <KpiCard
                   label="Avg IQS %"
                   value={overview?.avg_iqs != null ? `${overview.avg_iqs}%` : '—'}
+                  sub={overview?.avg_iqs != null ? (overview.avg_iqs >= 85 ? 'On track' : overview.avg_iqs >= 70 ? 'Needs attention' : 'At risk') : undefined}
                   href="/quality"
+                  accent={overview?.avg_iqs == null ? 'neutral' : overview.avg_iqs >= 85 ? 'good' : overview.avg_iqs >= 70 ? 'warn' : 'bad'}
                 />
                 <KpiCard
                   label="Avg Resolution"
                   value={fmtDuration(overview?.avg_resolution)}
+                  sub={overview?.avg_resolution != null ? (overview.avg_resolution > 36000 ? 'Above target' : 'Within target') : undefined}
+                  accent={overview?.avg_resolution == null ? 'neutral' : overview.avg_resolution > 36000 ? 'bad' : overview.avg_resolution > 18000 ? 'warn' : 'good'}
                 />
               </>
             )}
@@ -422,43 +523,41 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 text-stone-700 font-medium">{group.entity_name}</td>
                             <td className="px-4 py-3 text-stone-400 tabular-nums">{group.agent_count}</td>
                             <td className="px-4 py-3 text-stone-400 tabular-nums">{group.volume}</td>
-                            <td className="px-4 py-3 text-stone-600 tabular-nums">
-                              {group.csat_pct != null ? `${group.csat_pct}%` : '—'}
+                            <td className="px-4 py-3">
+                              <CsatBadge val={group.csat_pct} />
                             </td>
                             <td className="px-4 py-3">
                               <IqsPill val={group.avg_iqs} />
                             </td>
-                            <td className="px-4 py-3 text-stone-400 tabular-nums">
-                              {fmtDuration(group.avg_resolution)}
+                            <td className="px-4 py-3">
+                              <ResolutionCell secs={group.avg_resolution} />
                             </td>
                           </tr>
 
                           {expanded && group.agents.map(agent => (
                             <tr
                               key={`${group.entity_name}-${agent.agent_id}`}
-                              className="border-b border-stone-100 bg-white/[0.03]"
+                              onClick={() => setSelectedAgent(agent)}
+                              className="border-b border-stone-100 bg-stone-50/50 hover:bg-emerald-50/40 cursor-pointer transition group"
                             >
                               <td className="px-4 py-2.5"></td>
-                              <td className="px-4 py-2.5 pl-8 text-stone-600 text-xs">
-                                <span className="font-medium">{agent.name}</span>
+                              <td className="px-4 py-2.5 pl-8 text-stone-700 text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-semibold">{agent.name}</span>
+                                  <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 transition font-medium">View →</span>
+                                </div>
+                                <span className="text-stone-400 text-[10px]">{counterpartLabel}: {agent.counterpart}</span>
                               </td>
-                              <td className="px-4 py-2.5 text-stone-500 text-xs">
-                                <span className="text-stone-400 mr-1">{counterpartLabel}:</span>
-                                {agent.counterpart}
-                              </td>
-                              <td className="px-4 py-2.5 text-stone-500 text-xs tabular-nums">{agent.volume}</td>
-                              <td className="px-4 py-2.5 text-stone-500 text-xs tabular-nums">
-                                {agent.csat_pct != null ? `${agent.csat_pct}%` : '—'}
+                              <td className="px-4 py-2.5 text-stone-500 text-xs tabular-nums">—</td>
+                              <td className="px-4 py-2.5 text-stone-600 text-xs font-medium tabular-nums">{agent.volume}</td>
+                              <td className="px-4 py-2.5">
+                                <CsatBadge val={agent.csat_pct} />
                               </td>
                               <td className="px-4 py-2.5">
                                 <IqsPill val={agent.avg_iqs} />
                               </td>
                               <td className="px-4 py-2.5">
-                                <div className="flex flex-col gap-0.5 text-xs text-stone-500">
-                                  <span>Res: {fmtDuration(agent.avg_resolution)}</span>
-                                  <span>FRT: {fmtDuration(agent.avg_frt)}</span>
-                                  <span>Hnd: {fmtDuration(agent.avg_handoff)}</span>
-                                </div>
+                                <ResolutionCell secs={agent.avg_resolution} />
                               </td>
                             </tr>
                           ))}

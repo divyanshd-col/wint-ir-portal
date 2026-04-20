@@ -58,8 +58,11 @@ function CsatBadge({ pct }: { pct: number | null }) {
 
 function IqsBadge({ iqs }: { iqs: number | null }) {
   if (iqs == null) return <span className="text-stone-400">—</span>;
-  const color = iqs < 60 ? 'text-red-600' : iqs < 75 ? 'text-amber-600' : 'text-emerald-600';
-  return <span className={`font-semibold ${color}`}>{iqs.toFixed(1)}</span>;
+  const color =
+    iqs >= 85 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+    iqs >= 70 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                'bg-red-50 text-red-700 border border-red-200';
+  return <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>{iqs.toFixed(1)}%</span>;
 }
 
 function CsatLabelPill({ label }: { label: string | null }) {
