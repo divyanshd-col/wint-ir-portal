@@ -947,6 +947,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
   // Toast
   const [toast, setToast] = useState<string | null>(null);
 
+  // Batch scoring (admin)
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchRunResult, setBatchRunResult] = useState<{ processed: number; total: number; skipped: number } | null>(null);
+
   // ── Column visibility derived ────────────────────────────────────────────────
   const autoHiddenLogCols = useMemo(() => {
     const hidden = new Set<string>();
@@ -1064,6 +1068,24 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
   const switchTab = (t: typeof tab) => {
     setTab(t);
     if (t === 'log' && !logsLoaded) loadScores(0, appliedFilters);
+  };
+
+  const runPendingScores = async () => {
+    setBatchRunning(true);
+    setBatchRunResult(null);
+    try {
+      const res = await fetch('/api/admin/run-pending-scores', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed');
+      const skipped = data.total - data.processed;
+      setBatchRunResult({ processed: data.processed, total: data.total, skipped });
+      setToast(`Scored ${data.processed} of ${data.total} pending chats`);
+      if (data.processed > 0) loadPerfData(perfPeriod);
+    } catch (err: any) {
+      setToast(`Error: ${err.message}`);
+    } finally {
+      setBatchRunning(false);
+    }
   };
 
   // Apply filters: copy pending → applied, reset to page 0, fetch
@@ -1500,7 +1522,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
 
           {/* Performance tab — independent period picker */}
           {tab === 'performance' && (
-            <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
+            <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
               {(['today', '7d', '30d', 'all'] as const).map(r => (
                 <button key={r}
                   onClick={() => { setPerfPeriod(r); loadPerfData(r); }}
@@ -1510,6 +1532,31 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                   {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : 'All time'}
                 </button>
               ))}
+              {userRole === 'admin' && (
+                <button
+                  onClick={runPendingScores}
+                  disabled={batchRunning}
+                  title="Score all unscored conversations in the DB"
+                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition border border-blue-200"
+                >
+                  {batchRunning ? (
+                    <>
+                      <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+                      Scoring…
+                    </>
+                  ) : batchRunResult ? (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2.5L6 10l-3.5-3.5L1 8l5 5 9-9z"/></svg>
+                      {batchRunResult.processed} scored
+                    </>
+                  ) : (
+                    <>
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/></svg>
+                      Score Pending
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           )}
 
