@@ -174,11 +174,11 @@ export async function getAllScoredConversations(
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    conditions.push(`(s.scored_at::date >= $${params.length} OR c.started_at::date >= $${params.length})`);
+    conditions.push(`c.started_at::date >= $${params.length}`);
   }
   if (opts.dateTo) {
     params.push(opts.dateTo);
-    conditions.push(`(s.scored_at::date <= $${params.length} OR c.started_at::date <= $${params.length})`);
+    conditions.push(`c.started_at::date <= $${params.length}`);
   }
   if (opts.agentName) {
     params.push(opts.agentName);

@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { getDispositions } from '@/lib/analytics/dispositions';
 import { runAnalyticsAgent } from '@/lib/analytics/agent';
-import { formatFilterHeader, formatAgentResult } from '@/lib/analytics/formatter';
+import { formatAgentResult } from '@/lib/analytics/formatter';
 import { appendHistory } from '@/lib/analytics/sessions';
 import { writeAuditLog } from '@/lib/analytics/executor';
 import type { AnalyticsFilters, StreamChunk, InsightBlock, HistoryEntry } from '@/lib/analytics/types';
@@ -44,20 +44,17 @@ export async function POST(req: Request) {
     async start(controller) {
       const t0 = Date.now();
       try {
-        // Filter header — always first
-        send(controller, { event: 'blocks', blocks: [formatFilterHeader(barFilters)] }, encoder);
-
         // Disposition list for agent context
         const dispositionPayload = await getDispositions();
         const dispositionNames = dispositionPayload.dispositions.map(d => d.disposition);
 
-        // Run agent loop — stream progress as text deltas
+        // Run agent loop — stream progress as log events (separate from answer)
         const result = await runAnalyticsAgent(
           message,
           barFilters,
           dispositionNames,
           priorContext,
-          (update) => send(controller, { event: 'text', delta: update }, encoder),
+          (update) => send(controller, { event: 'log', delta: update }, encoder),
         );
 
         let resultBlocks: InsightBlock[] = [];
@@ -95,7 +92,7 @@ export async function POST(req: Request) {
             id:        crypto.randomUUID(),
             message,
             response:  answer.answer_text ?? '',
-            blocks:    [formatFilterHeader(barFilters), ...resultBlocks],
+            blocks:    resultBlocks,
             type:      1,
             filters:   barFilters,
             timestamp: new Date().toISOString(),

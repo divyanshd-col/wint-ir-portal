@@ -6,7 +6,14 @@ import InsightsChatClient from '@/components/InsightsChatClient';
 export default async function AnalyticsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
-  if (!(session.user as any)?.isAdmin) redirect('/');
+  const user = session.user as any;
+  if (!user?.isAdmin) redirect('/');
 
-  return <InsightsChatClient />;
+  return (
+    <InsightsChatClient
+      username={user.email ?? 'admin'}
+      role={user.role ?? 'admin'}
+      isAdmin={true}
+    />
+  );
 }

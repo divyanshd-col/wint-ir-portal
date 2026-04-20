@@ -64,6 +64,7 @@ export interface HistoryEntry {
 
 export type StreamChunk =
   | { event: 'text'; delta: string }
+  | { event: 'log'; delta: string }
   | { event: 'blocks'; blocks: InsightBlock[] }
   | { event: 'error'; message: string }
   | { event: 'done' };
