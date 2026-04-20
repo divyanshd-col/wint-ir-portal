@@ -6,6 +6,7 @@ import {
   LineChart, Line, CartesianGrid,
 } from 'recharts';
 import type { AnalyticsFilters, InsightBlock, StreamChunk } from '@/lib/analytics/types';
+import PageNav from '@/components/PageNav';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   blocks: InsightBlock[];
+  logs?: string;
   loading?: boolean;
 }
 
@@ -49,7 +51,6 @@ function resolveDateRange(
     return { dateFrom: isoDate(first), dateTo: isoDate(last) };
   }
   if (range === 'custom') {
-    // Clamp to max 90 days
     if (customFrom && customTo) {
       const diff = (new Date(customTo).getTime() - new Date(customFrom).getTime()) / 86400_000;
       if (diff > 90) {
@@ -60,34 +61,186 @@ function resolveDateRange(
     }
     return { dateFrom: isoDate(new Date(today.getTime() - 6 * 86400_000)), dateTo: todayStr };
   }
-  // default 7d
   const from = new Date(today); from.setDate(today.getDate() - 6);
   return { dateFrom: isoDate(from), dateTo: todayStr };
+}
+
+// ── Inline markdown renderer ──────────────────────────────────────────────────
+
+function renderInlineMd(text: string, keyPrefix: string): React.ReactNode {
+  const parts: React.ReactNode[] = [];
+  const regex = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  let lastIndex = 0;
+  let match;
+  let k = 0;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    if (match[1] !== undefined) {
+      parts.push(
+        <strong key={`${keyPrefix}-b${k++}`} className="font-semibold text-gray-900">
+          {match[1]}
+        </strong>,
+      );
+    } else if (match[2] !== undefined) {
+      parts.push(<em key={`${keyPrefix}-i${k++}`}>{match[2]}</em>);
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length === 1 ? parts[0] : parts;
+}
+
+function renderMarkdown(text: string): React.ReactNode {
+  const lines = text.split('\n');
+  const result: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let listOrdered = false;
+  let listKey = 0;
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    const Tag = listOrdered ? 'ol' : 'ul';
+    result.push(
+      <Tag key={`list-${listKey++}`} className={`my-2 space-y-1 ${listOrdered ? 'list-none' : 'list-none'}`}>
+        {listItems.map((item, i) => (
+          <li key={i} className="flex gap-2 text-sm text-gray-700 leading-relaxed">
+            <span className="text-emerald-600 shrink-0 mt-0.5 font-medium select-none">
+              {listOrdered ? `${i + 1}.` : '•'}
+            </span>
+            <span>{renderInlineMd(item, `li-${listKey}-${i}`)}</span>
+          </li>
+        ))}
+      </Tag>,
+    );
+    listItems = [];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Unordered list
+    if (/^[-*] /.test(line)) {
+      if (listItems.length && listOrdered) flushList();
+      listOrdered = false;
+      listItems.push(line.slice(2));
+      continue;
+    }
+
+    // Ordered list
+    const orderedMatch = line.match(/^(\d+)\. (.+)/);
+    if (orderedMatch) {
+      if (listItems.length && !listOrdered) flushList();
+      listOrdered = true;
+      listItems.push(orderedMatch[2]);
+      continue;
+    }
+
+    flushList();
+
+    // H2
+    if (line.startsWith('## ')) {
+      result.push(
+        <h3 key={i} className="text-sm font-semibold text-gray-900 mt-4 mb-1.5 first:mt-0">
+          {line.slice(3)}
+        </h3>,
+      );
+      continue;
+    }
+
+    // H3
+    if (line.startsWith('### ')) {
+      result.push(
+        <h4 key={i} className="text-xs font-semibold text-gray-500 uppercase tracking-wider mt-3 mb-1">
+          {line.slice(4)}
+        </h4>,
+      );
+      continue;
+    }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) {
+      result.push(<hr key={i} className="border-gray-100 my-3" />);
+      continue;
+    }
+
+    // Blank line → small gap
+    if (line.trim() === '') {
+      result.push(<div key={i} className="h-1.5" />);
+      continue;
+    }
+
+    // Normal paragraph
+    result.push(
+      <p key={i} className="text-sm text-gray-700 leading-relaxed">
+        {renderInlineMd(line, `p-${i}`)}
+      </p>,
+    );
+  }
+
+  flushList();
+  return <div className="space-y-0.5">{result}</div>;
+}
+
+// ── Thought process (collapsible logs) ───────────────────────────────────────
+
+function ThoughtProcess({ logs, isStreaming }: { logs?: string; isStreaming?: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!logs && !isStreaming) return null;
+  return (
+    <div className="mb-3">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 transition-colors"
+      >
+        <svg
+          className={`w-3 h-3 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+        {isStreaming && !logs ? (
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            Thinking…
+          </span>
+        ) : isStreaming ? (
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+            Working…
+          </span>
+        ) : (
+          <span>Thought process</span>
+        )}
+      </button>
+      {open && logs && (
+        <div className="mt-2 font-mono text-[11px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 whitespace-pre-wrap leading-relaxed border border-gray-100 max-h-52 overflow-y-auto">
+          {logs}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Block renderer ────────────────────────────────────────────────────────────
 
 function BlockRenderer({ block }: { block: InsightBlock }) {
-  if (block.type === 'filter_header') {
-    return (
-      <div className="text-[11px] text-gray-400 bg-gray-50 rounded-md px-3 py-1.5 mb-2 border border-gray-100 leading-relaxed">
-        Showing: {block.summary}
-      </div>
-    );
-  }
+  // filter_header no longer shown inline — it's handled by the filter bar
+  if (block.type === 'filter_header') return null;
 
   if (block.type === 'stat_row') {
     const colorCls: Record<string, string> = {
-      green: 'text-emerald-600',
-      red:   'text-red-600',
-      orange:'text-orange-500',
+      green:  'text-emerald-600',
+      red:    'text-red-500',
+      orange: 'text-orange-500',
     };
     return (
-      <div className="flex flex-wrap gap-3 my-2">
+      <div className="flex flex-wrap gap-3 my-3">
         {block.stats.map((s, i) => (
-          <div key={i} className="bg-white border border-gray-100 rounded-xl px-4 py-3 min-w-[100px]">
-            <div className="text-[11px] text-gray-400 mb-0.5">{s.label}</div>
-            <div className={`text-lg font-semibold ${s.color ? colorCls[s.color] : 'text-gray-900'}`}>{s.value}</div>
+          <div key={i} className="bg-white border border-gray-100 rounded-xl px-4 py-3 min-w-[100px] shadow-sm">
+            <div className="text-[11px] text-gray-400 mb-0.5 font-medium">{s.label}</div>
+            <div className={`text-xl font-semibold tracking-tight ${s.color ? colorCls[s.color] : 'text-gray-900'}`}>
+              {s.value}
+            </div>
             {s.sub && <div className="text-[11px] text-gray-400 mt-0.5">{s.sub}</div>}
           </div>
         ))}
@@ -97,56 +250,73 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
 
   if (block.type === 'bar_chart') {
     return (
-      <div className="my-3">
-        {block.title && <div className="text-xs font-medium text-gray-600 mb-1">{block.title}</div>}
-        <ResponsiveContainer width="100%" height={Math.min(40 + block.data.length * 28, 320)}>
-          <BarChart data={block.data} layout="vertical" margin={{ left: 0, right: 24, top: 4, bottom: 4 }}>
-            <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false}
-              unit={block.unit ?? ''} />
-            <YAxis type="category" dataKey="name" width={140} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v: any) => [`${v}${block.unit ?? ''}`, 'Value']} />
-            <Bar dataKey="value" fill="#2d6a4f" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      <div className="my-4">
+        {block.title && (
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{block.title}</div>
+        )}
+        <div className="bg-white rounded-xl border border-gray-100 px-3 py-3 shadow-sm">
+          <ResponsiveContainer width="100%" height={Math.min(48 + block.data.length * 32, 360)}>
+            <BarChart data={block.data} layout="vertical" margin={{ left: 0, right: 28, top: 4, bottom: 4 }}>
+              <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false}
+                unit={block.unit ?? ''} />
+              <YAxis type="category" dataKey="name" width={148} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip
+                formatter={(v: any) => [`${v}${block.unit ?? ''}`, 'Value']}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #f0f0f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              />
+              <Bar dataKey="value" fill="#2d6a4f" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     );
   }
 
   if (block.type === 'line_chart') {
     return (
-      <div className="my-3">
-        {block.title && <div className="text-xs font-medium text-gray-600 mb-1">{block.title}</div>}
-        <ResponsiveContainer width="100%" height={200}>
-          <LineChart data={block.data} margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} unit={block.unit ?? ''} />
-            <Tooltip />
-            <Line type="monotone" dataKey="value" stroke="#2d6a4f" strokeWidth={2} dot={false} />
-          </LineChart>
-        </ResponsiveContainer>
+      <div className="my-4">
+        {block.title && (
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{block.title}</div>
+        )}
+        <div className="bg-white rounded-xl border border-gray-100 px-3 py-3 shadow-sm">
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={block.data} margin={{ left: 0, right: 20, top: 4, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f4" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} unit={block.unit ?? ''} />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #f0f0f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              />
+              <Line type="monotone" dataKey="value" stroke="#2d6a4f" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     );
   }
 
   if (block.type === 'table') {
     return (
-      <div className="my-3">
-        {block.title && <div className="text-xs font-medium text-gray-600 mb-1">{block.title}</div>}
-        <div className="overflow-x-auto rounded-lg border border-gray-100">
+      <div className="my-4">
+        {block.title && (
+          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{block.title}</div>
+        )}
+        <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
           <table className="w-full text-xs">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50/80">
               <tr>
                 {block.columns.map((col, i) => (
-                  <th key={i} className="text-left px-3 py-2 text-gray-500 font-medium whitespace-nowrap">{col}</th>
+                  <th key={i} className="text-left px-3.5 py-2.5 text-gray-500 font-semibold whitespace-nowrap tracking-wide">
+                    {col}
+                  </th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {block.rows.map((row, ri) => (
-                <tr key={ri} className="border-t border-gray-50 hover:bg-gray-50/50">
+                <tr key={ri} className={`border-t border-gray-50 ${ri % 2 === 0 ? '' : 'bg-gray-50/40'} hover:bg-emerald-50/30 transition-colors`}>
                   {row.map((cell, ci) => (
-                    <td key={ci} className="px-3 py-2 text-gray-700 whitespace-nowrap">{cell ?? '—'}</td>
+                    <td key={ci} className="px-3.5 py-2.5 text-gray-700 whitespace-nowrap">{cell ?? '—'}</td>
                   ))}
                 </tr>
               ))}
@@ -164,7 +334,7 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
       danger:  'bg-red-50 border-red-100 text-red-800',
     };
     return (
-      <div className={`rounded-lg border px-3 py-2 text-xs my-2 ${cls[block.severity ?? 'info']}`}>
+      <div className={`rounded-xl border px-4 py-3 text-sm my-3 ${cls[block.severity ?? 'info']}`}>
         {block.text}
       </div>
     );
@@ -172,20 +342,20 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
 
   if (block.type === 'analysis_card') {
     return (
-      <div className="bg-white border border-gray-100 rounded-xl p-4 my-2 shadow-sm space-y-3">
+      <div className="bg-white border border-gray-100 rounded-xl p-4 my-3 shadow-sm space-y-3">
         {block.finding && (
           <div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Finding</div>
-            <p className="text-sm text-gray-800 leading-relaxed">{block.finding}</p>
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Finding</div>
+            <p className="text-sm text-gray-800 leading-relaxed font-medium">{block.finding}</p>
           </div>
         )}
         {block.evidence && block.evidence.length > 0 && (
           <div>
-            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Evidence</div>
-            <ul className="space-y-1">
+            <div className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5">Evidence</div>
+            <ul className="space-y-1.5">
               {block.evidence.map((e, i) => (
-                <li key={i} className="text-xs text-gray-700 flex gap-2">
-                  <span className="text-emerald-600 shrink-0">•</span>
+                <li key={i} className="text-sm text-gray-700 flex gap-2 leading-relaxed">
+                  <span className="text-emerald-600 shrink-0 font-medium">•</span>
                   <span>{e}</span>
                 </li>
               ))}
@@ -195,7 +365,7 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
         {(block.coverage || block.caveats) && (
           <div className="pt-2 border-t border-gray-50 text-[11px] text-gray-400 space-y-0.5">
             {block.coverage && <p>{block.coverage}</p>}
-            {block.caveats  && <p>{block.caveats}</p>}
+            {block.caveats  && <p className="italic">{block.caveats}</p>}
           </div>
         )}
       </div>
@@ -204,23 +374,18 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
 
   if (block.type === 'theme_card') {
     return (
-      <div className="bg-white border border-gray-100 rounded-xl p-4 my-2 shadow-sm">
-        <div className="flex items-start justify-between gap-2 mb-1">
+      <div className="bg-white border border-gray-100 rounded-xl p-4 my-3 shadow-sm">
+        <div className="flex items-start justify-between gap-3 mb-1.5">
           <h3 className="text-sm font-semibold text-gray-900 leading-snug">{block.name}</h3>
-          <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">
+          <span className="text-xs text-gray-400 whitespace-nowrap shrink-0 bg-gray-50 px-2 py-0.5 rounded-full">
             {block.count} chats · {block.pct}%
           </span>
         </div>
-        <p className="text-xs text-gray-600 leading-relaxed mb-2">{block.description}</p>
+        <p className="text-sm text-gray-600 leading-relaxed mb-2">{block.description}</p>
         {block.topParams.length > 0 && (
-          <p className="text-[11px] text-red-600">
-            Top failing parameters: {block.topParams.join(', ')}
+          <p className="text-[11px] text-red-500 font-medium">
+            Failing: {block.topParams.join(', ')}
           </p>
-        )}
-        {block.examplesAvailable && (
-          <button className="text-[11px] text-emerald-700 mt-2 underline">
-            Show examples
-          </button>
         )}
       </div>
     );
@@ -272,19 +437,25 @@ function MultiSelect({
     value.length === 1 ? options.find(o => o.value === value[0])?.label ?? value[0] :
     `${value.length} ${label}`;
 
+  const isActive = value.length > 0;
+
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="h-7 px-2.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-gray-300 flex items-center gap-1 whitespace-nowrap"
+        className={`h-7 px-2.5 text-xs rounded-lg flex items-center gap-1 whitespace-nowrap transition-colors border ${
+          isActive
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-medium'
+            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+        }`}
       >
         {displayLabel}
-        <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
       {open && (
-        <div className="absolute top-8 left-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[160px] max-h-52 overflow-y-auto py-1">
+        <div className="absolute top-8 left-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[160px] max-h-52 overflow-y-auto py-1">
           {options.map(opt => (
             <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
               <input
@@ -297,7 +468,10 @@ function MultiSelect({
             </label>
           ))}
           {value.length > 0 && (
-            <button onClick={() => onChange([])} className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1">
+            <button
+              onClick={() => onChange([])}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1"
+            >
               Clear
             </button>
           )}
@@ -334,19 +508,25 @@ function DispositionSelect({
   const label = value.length === 0 ? 'All Dispositions' :
     value.length === 1 ? value[0] : `${value.length} Dispositions`;
 
+  const isActive = value.length > 0;
+
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
-        className="h-7 px-2.5 text-xs bg-white border border-gray-200 rounded-lg hover:border-gray-300 flex items-center gap-1 whitespace-nowrap max-w-[160px] truncate"
+        className={`h-7 px-2.5 text-xs rounded-lg flex items-center gap-1 whitespace-nowrap max-w-[160px] truncate transition-colors border ${
+          isActive
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-medium'
+            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+        }`}
       >
         <span className="truncate">{label}</span>
-        <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-3 h-3 opacity-60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
       {open && (
-        <div className="absolute top-8 left-0 z-50 bg-white border border-gray-200 rounded-lg shadow-lg w-52 max-h-64 overflow-y-auto py-1">
+        <div className="absolute top-8 left-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg w-52 max-h-64 overflow-y-auto py-1">
           {trees.map(t => (
             <label key={t.disposition} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs font-medium">
               <input
@@ -371,7 +551,13 @@ function DispositionSelect({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function InsightsChatClient() {
+interface InsightsChatClientProps {
+  username?: string;
+  role?: string;
+  isAdmin?: boolean;
+}
+
+export default function InsightsChatClient({ username = 'admin', role = 'admin', isAdmin = true }: InsightsChatClientProps) {
   // Filter bar state
   const [dateRange, setDateRange] = useState<'7d' | '15d' | 'this_month' | 'last_month' | 'custom'>('7d');
   const [customFrom, setCustomFrom] = useState('');
@@ -380,17 +566,35 @@ export default function InsightsChatClient() {
   const [csatLabels, setCsatLabels]     = useState<string[]>(['bad', 'could_be_better']);
   const [convTypes, setConvTypes]       = useState<string[]>([]);
 
-  // Available options (from API)
-  const [dispTrees, setDispTrees]   = useState<DispositionTree[]>([]);
-  const [agentOptions]              = useState<AgentOption[]>([]); // future use
+  const [dispTrees, setDispTrees] = useState<DispositionTree[]>([]);
+  const [agentOptions]            = useState<AgentOption[]>([]);
 
   // Chat state
   const [messages, setMessages]   = useState<ChatMessage[]>([]);
   const [input, setInput]         = useState('');
   const [streaming, setStreaming] = useState(false);
 
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef  = useRef<HTMLTextAreaElement>(null);
+  const bottomRef     = useRef<HTMLDivElement>(null);
+  const inputRef      = useRef<HTMLTextAreaElement>(null);
+  const isInitialLoad = useRef(true);
+
+  // Derived: non-default filters active
+  const defaultCsat = ['bad', 'could_be_better'];
+  const hasNonDefaultFilters =
+    dateRange !== '7d' ||
+    dispositions.length > 0 ||
+    convTypes.length > 0 ||
+    csatLabels.length !== defaultCsat.length ||
+    !csatLabels.every(c => defaultCsat.includes(c));
+
+  const resetFilters = () => {
+    setDateRange('7d');
+    setCustomFrom('');
+    setCustomTo('');
+    setDispositions([]);
+    setCsatLabels(['bad', 'could_be_better']);
+    setConvTypes([]);
+  };
 
   // Load dispositions + session history on mount
   useEffect(() => {
@@ -403,7 +607,11 @@ export default function InsightsChatClient() {
       .then(r => r.json())
       .then(d => {
         if (Array.isArray(d.history) && d.history.length) {
-          const loaded: ChatMessage[] = d.history.flatMap((h: any) => [
+          // Sort oldest-first so newest is at bottom
+          const sorted = [...d.history].sort(
+            (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+          );
+          const loaded: ChatMessage[] = sorted.flatMap((h: any) => [
             { id: h.id + '-u', role: 'user' as const, content: h.message, blocks: [] },
             { id: h.id + '-a', role: 'assistant' as const, content: h.response || '', blocks: h.blocks || [] },
           ]);
@@ -413,9 +621,14 @@ export default function InsightsChatClient() {
       .catch(() => {});
   }, []);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom when messages change
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (isInitialLoad.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'instant' as ScrollBehavior });
+      isInitialLoad.current = false;
+    } else {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   function buildFilters(): AnalyticsFilters {
@@ -447,6 +660,7 @@ export default function InsightsChatClient() {
       role: 'assistant',
       content: '',
       blocks: [],
+      logs: '',
       loading: true,
     };
 
@@ -455,9 +669,9 @@ export default function InsightsChatClient() {
     setStreaming(true);
 
     let accText = '';
+    let accLogs = '';
     const accBlocks: InsightBlock[] = [];
 
-    // Last assistant message text for follow-up resolution
     const priorContext = (() => {
       const assistantMsgs = messages.filter(m => m.role === 'assistant' && m.content);
       return assistantMsgs.length ? assistantMsgs[assistantMsgs.length - 1].content : undefined;
@@ -493,6 +707,12 @@ export default function InsightsChatClient() {
             accText += chunk.delta;
             setMessages(prev =>
               prev.map(m => m.id === assistantId ? { ...m, content: accText } : m),
+            );
+          }
+          if (chunk.event === 'log') {
+            accLogs += chunk.delta;
+            setMessages(prev =>
+              prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m),
             );
           }
           if (chunk.event === 'blocks') {
@@ -534,6 +754,13 @@ export default function InsightsChatClient() {
     }
   };
 
+  // Auto-resize textarea
+  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    e.target.style.height = 'auto';
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+  };
+
   const csatOptions = [
     { value: 'bad', label: 'Bad' },
     { value: 'could_be_better', label: 'Could Be Better' },
@@ -545,155 +772,233 @@ export default function InsightsChatClient() {
     { value: 'hybrid', label: 'Hybrid' },
   ];
 
+  // Active filter summary chips
+  const filterChips: { label: string; onRemove: () => void }[] = [];
+  if (dateRange !== '7d') {
+    const labels: Record<string, string> = { '15d': 'Last 15d', this_month: 'This month', last_month: 'Last month', custom: 'Custom range' };
+    filterChips.push({ label: labels[dateRange] ?? dateRange, onRemove: () => setDateRange('7d') });
+  }
+  dispositions.forEach(d => filterChips.push({ label: d, onRemove: () => setDispositions(prev => prev.filter(x => x !== d)) }));
+  convTypes.forEach(t => filterChips.push({ label: t.charAt(0).toUpperCase() + t.slice(1), onRemove: () => setConvTypes(prev => prev.filter(x => x !== t)) }));
+  if (!csatLabels.every(c => defaultCsat.includes(c)) || csatLabels.length !== defaultCsat.length) {
+    filterChips.push({ label: `CSAT: ${csatLabels.join(', ')}`, onRemove: () => setCsatLabels(defaultCsat) });
+  }
+
   return (
-    <div className="flex flex-col h-screen bg-[#f5f3ee]">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
-        <div>
-          <h1 className="text-sm font-semibold text-gray-900">Insight Chat</h1>
-          <p className="text-xs text-gray-400">Ask questions about CX conversation data</p>
-        </div>
-        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">
-          Admin
-        </span>
-      </div>
+    <div className="flex h-screen bg-[#1a1a1a]">
+      {/* Sidebar */}
+      <PageNav username={username} role={role} isAdmin={isAdmin} />
 
-      {/* Filter bar */}
-      <div className="bg-white border-b border-gray-100 px-6 py-2.5 shrink-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Date range */}
-          <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-0.5">
-            {(['7d', '15d', 'this_month', 'last_month', 'custom'] as const).map(r => (
-              <button
-                key={r}
-                onClick={() => setDateRange(r)}
-                className={`h-6 px-2 text-[11px] rounded-md transition-colors ${
-                  dateRange === r ? 'bg-white shadow-sm text-gray-900 font-medium' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {r === 'this_month' ? 'This month' : r === 'last_month' ? 'Last month' : r === 'custom' ? 'Custom' : r}
-              </button>
-            ))}
+      {/* Main */}
+      <div className="flex flex-col flex-1 min-w-0 bg-[#f5f3ee]">
+
+        {/* Header */}
+        <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
+          <div>
+            <h1 className="text-sm font-semibold text-gray-900">Insight Chat</h1>
+            <p className="text-xs text-gray-400">Ask questions about CX conversation data</p>
           </div>
-
-          {/* Custom date inputs */}
-          {dateRange === 'custom' && (
-            <div className="flex items-center gap-1">
-              <input
-                type="date"
-                value={customFrom}
-                onChange={e => setCustomFrom(e.target.value)}
-                className="h-7 px-2 text-xs border border-gray-200 rounded-lg"
-              />
-              <span className="text-xs text-gray-400">→</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={e => setCustomTo(e.target.value)}
-                className="h-7 px-2 text-xs border border-gray-200 rounded-lg"
-              />
-            </div>
+          {hasNonDefaultFilters && (
+            <button
+              onClick={resetFilters}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+              Reset filters
+            </button>
           )}
-
-          <div className="w-px h-5 bg-gray-200 mx-1" />
-
-          <DispositionSelect trees={dispTrees} value={dispositions} onChange={setDispositions} />
-
-          <MultiSelect
-            label="CSAT"
-            options={csatOptions}
-            value={csatLabels}
-            onChange={setCsatLabels}
-          />
-          <MultiSelect
-            label="Types"
-            options={typeOptions}
-            value={convTypes}
-            onChange={setConvTypes}
-          />
         </div>
-      </div>
 
-      {/* Message list */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {messages.length === 0 && (
-          <div className="max-w-2xl mx-auto mt-12">
-            <p className="text-sm text-gray-400 text-center mb-6">
-              Ask anything about your CX conversations
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {EXAMPLE_QUERIES.map((q, i) => (
+        {/* Filter bar */}
+        <div className="bg-white border-b border-gray-100 px-6 py-2.5 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Date range */}
+            <div className="flex items-center gap-0.5 bg-gray-50 rounded-lg p-0.5">
+              {(['7d', '15d', 'this_month', 'last_month', 'custom'] as const).map(r => (
                 <button
-                  key={i}
-                  onClick={() => sendMessage(q)}
-                  className="text-left text-xs text-gray-600 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors"
+                  key={r}
+                  onClick={() => setDateRange(r)}
+                  className={`h-6 px-2.5 text-[11px] rounded-md transition-all ${
+                    dateRange === r
+                      ? 'bg-white shadow-sm text-gray-900 font-semibold'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
                 >
-                  {q}
+                  {r === 'this_month' ? 'This month' : r === 'last_month' ? 'Last month' : r === 'custom' ? 'Custom' : r}
                 </button>
               ))}
             </div>
-          </div>
-        )}
 
-        <div className="max-w-3xl mx-auto space-y-4">
-          {messages.map(msg => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {msg.role === 'user' ? (
-                <div className="max-w-[75%] bg-emerald-700 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 text-sm">
-                  {msg.content}
-                </div>
-              ) : (
-                <div className="flex-1 min-w-0">
-                  {msg.loading && !msg.content && !msg.blocks.length && (
-                    <div className="flex items-center gap-2 text-xs text-gray-400 py-2">
-                      <span className="animate-pulse">Analysing…</span>
-                    </div>
-                  )}
-                  {msg.content && (
-                    <p className="text-sm text-gray-700 leading-relaxed mb-2 whitespace-pre-wrap">
-                      {msg.content}
-                    </p>
-                  )}
-                  {msg.blocks.map((block, bi) => (
-                    <BlockRenderer key={bi} block={block} />
-                  ))}
-                </div>
-              )}
+            {dateRange === 'custom' && (
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={e => setCustomFrom(e.target.value)}
+                  className="h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300"
+                />
+                <span className="text-xs text-gray-400">→</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={e => setCustomTo(e.target.value)}
+                  className="h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300"
+                />
+              </div>
+            )}
+
+            <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+            <DispositionSelect trees={dispTrees} value={dispositions} onChange={setDispositions} />
+
+            <MultiSelect label="CSAT" options={csatOptions} value={csatLabels} onChange={setCsatLabels} />
+            <MultiSelect label="Types" options={typeOptions} value={convTypes} onChange={setConvTypes} />
+          </div>
+        </div>
+
+        {/* Message list */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {messages.length === 0 && (
+            <div className="max-w-2xl mx-auto mt-10">
+              <p className="text-sm text-gray-400 text-center mb-6">
+                Ask anything about your CX conversations
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {EXAMPLE_QUERIES.map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendMessage(q)}
+                    className="text-left text-xs text-gray-600 bg-white border border-gray-100 rounded-xl px-4 py-3 hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors leading-relaxed"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
             </div>
-          ))}
-          <div ref={bottomRef} />
-        </div>
-      </div>
+          )}
 
-      {/* Input area */}
-      <div className="bg-white border-t border-gray-100 px-6 py-4 shrink-0">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex gap-2 items-end bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2 focus-within:border-emerald-400 focus-within:ring-1 focus-within:ring-emerald-100 transition-all">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about CSAT, dispositions, agent performance, IQS trends…"
-              rows={1}
-              className="flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 resize-none outline-none min-h-[20px] max-h-24 overflow-y-auto"
-              style={{ lineHeight: '1.5' }}
-              disabled={streaming}
-            />
-            <button
-              onClick={() => sendMessage(input)}
-              disabled={streaming || !input.trim()}
-              className="shrink-0 w-8 h-8 bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl flex items-center justify-center transition-colors"
-            >
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </button>
+          <div className="max-w-3xl mx-auto space-y-5">
+            {messages.map(msg => (
+              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {msg.role === 'user' ? (
+                  <div className="max-w-[72%] bg-[#1a3a2a] text-white rounded-2xl rounded-tr-md px-4 py-3 text-sm leading-relaxed shadow-sm">
+                    {msg.content}
+                  </div>
+                ) : (
+                  <div className="flex-1 min-w-0">
+                    {/* Thought process / loading */}
+                    <ThoughtProcess
+                      logs={msg.logs}
+                      isStreaming={!!(msg.loading && (msg.logs !== undefined))}
+                    />
+
+                    {/* Loading state — no content yet */}
+                    {msg.loading && !msg.content && !msg.blocks.length && !msg.logs && (
+                      <div className="flex items-center gap-2 text-xs text-gray-400 py-1">
+                        <span className="flex gap-1">
+                          <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:0ms]" />
+                          <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:150ms]" />
+                          <span className="w-1.5 h-1.5 bg-gray-300 rounded-full animate-bounce [animation-delay:300ms]" />
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Rendered answer text */}
+                    {msg.content && (
+                      <div className="mb-1">
+                        {renderMarkdown(msg.content)}
+                      </div>
+                    )}
+
+                    {/* Visual blocks */}
+                    {msg.blocks.map((block, bi) => (
+                      <BlockRenderer key={bi} block={block} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            <div ref={bottomRef} />
           </div>
-          <p className="text-[10px] text-gray-400 text-center mt-1.5">
-            Enter to send · Shift+Enter for new line
-          </p>
         </div>
+
+        {/* Premium input area */}
+        <div className="bg-white border-t border-gray-100 px-6 py-5 shrink-0">
+          <div className="max-w-3xl mx-auto">
+
+            {/* Active filter chips */}
+            {filterChips.length > 0 && (
+              <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+                <span className="text-[11px] text-gray-400 font-medium">Active filters:</span>
+                {filterChips.map((chip, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-0.5 font-medium"
+                  >
+                    {chip.label}
+                    <button
+                      onClick={chip.onRemove}
+                      className="hover:text-red-500 transition-colors ml-0.5 leading-none"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                <button
+                  onClick={resetFilters}
+                  className="text-[11px] text-gray-400 hover:text-red-500 transition-colors underline ml-1"
+                >
+                  Clear all
+                </button>
+              </div>
+            )}
+
+            {/* Input box */}
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-[0_2px_16px_rgba(0,0,0,0.06)] focus-within:border-emerald-400 focus-within:shadow-[0_2px_20px_rgba(45,158,79,0.10)] transition-all duration-200">
+              <div className="px-4 pt-4 pb-2">
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={handleInput}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask about CSAT, agent performance, IQS trends, dispositions…"
+                  rows={1}
+                  className="w-full bg-transparent text-sm text-gray-900 placeholder:text-gray-400 resize-none outline-none min-h-[28px] max-h-40 overflow-y-auto leading-relaxed"
+                  disabled={streaming}
+                  style={{ lineHeight: '1.6' }}
+                />
+              </div>
+              <div className="flex items-center justify-between px-3 pb-3 pt-1">
+                <span className="text-[11px] text-gray-400 select-none">
+                  Enter to send · Shift+Enter for new line
+                </span>
+                <button
+                  onClick={() => sendMessage(input)}
+                  disabled={streaming || !input.trim()}
+                  className="flex items-center gap-1.5 bg-[#1a3a2a] hover:bg-[#0f2a1a] active:bg-[#0a1f14] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-1.5 rounded-xl transition-all shadow-sm"
+                >
+                  {streaming ? (
+                    <>
+                      <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                      <span>Thinking</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Send</span>
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
       </div>
     </div>
   );
