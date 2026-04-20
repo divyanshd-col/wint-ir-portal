@@ -31,6 +31,8 @@ function isRetryable(err: any): boolean {
 const FALLBACK_MODEL: Record<string, string> = {
   'gemini-3-flash-preview': 'gemini-2.5-pro',
   'gemini-2.5-pro': 'gemini-2.5-flash',
+  'gemini-2.5-flash': 'gemini-2.0-flash',
+  'gemini-2.0-flash': 'gemini-1.5-flash',
 };
 
 /** Non-streaming Gemini call with automatic key rotation on 429, then model fallback. */
