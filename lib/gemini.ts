@@ -10,18 +10,15 @@ export function getIQSGeminiKeys(config: any): string[] {
   return getOrderedGeminiKeys(config);
 }
 
-/** Returns all configured Gemini keys, starting with the active one. */
+/** Returns all configured Gemini keys in fixed order 1→2→3→4→5. */
 export function getOrderedGeminiKeys(config: any): string[] {
-  const keyMap: Record<number, string | undefined> = {
-    1: config.geminiApiKey,
-    2: config.geminiApiKey2,
-    3: config.geminiApiKey3,
-    4: config.geminiApiKey4,
-    5: config.geminiApiKey5,
-  };
-  const active = config.activeGeminiKey || 1;
-  const order = [active, 1, 2, 3, 4, 5].filter((v, i, a) => a.indexOf(v) === i);
-  return order.map(k => keyMap[k]).filter(Boolean) as string[];
+  return [
+    config.geminiApiKey,
+    config.geminiApiKey2,
+    config.geminiApiKey3,
+    config.geminiApiKey4,
+    config.geminiApiKey5,
+  ].filter(Boolean) as string[];
 }
 
 function isRetryable(err: any): boolean {
