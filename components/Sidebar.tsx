@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import type { SavedConversation } from '@/lib/types';
 
@@ -28,6 +29,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
   const canSeeQuality = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
   const [open, setOpen] = useState(true);
   const [conversations, setConversations] = useState<SavedConversation[]>([]);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!historyEnabled) return;
@@ -64,7 +66,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         <nav className="px-4 py-4 flex-1 overflow-y-auto space-y-1">
           <button
             onClick={onNewChat}
-            className="w-full flex items-center gap-3 px-3 py-2.5 bg-[#2d9e4f]/20 text-[#2d9e4f] rounded-lg text-sm font-medium hover:bg-[#2d9e4f]/30 transition"
+            className="w-full flex items-center gap-3 px-3 min-h-[44px] bg-[#2d9e4f]/20 text-[#2d9e4f] rounded-lg text-sm font-medium hover:bg-[#2d9e4f]/30 transition"
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
               <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z"/>
@@ -75,16 +77,16 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           {/* Recent conversations */}
           {historyEnabled && conversations.length > 0 && (
             <div className="pt-3">
-              <p className="text-gray-500 text-[10px] font-semibold uppercase tracking-wider px-3 mb-1.5">Recent</p>
+              <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider px-3 mb-1.5">Recent</p>
               <div className="space-y-0.5">
                 {conversations.map(conv => (
                   <button
                     key={conv.id}
                     onClick={() => onRestoreConversation?.(conv)}
-                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition group"
+                    className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-white/5 transition group min-h-[44px]"
                   >
-                    <p className="text-gray-300 text-xs truncate group-hover:text-white transition">{conv.title}</p>
-                    <p className="text-gray-600 text-[10px] mt-0.5">{formatTimeAgo(conv.timestamp)}</p>
+                    <p className="text-gray-300 text-sm truncate group-hover:text-white transition">{conv.title}</p>
+                    <p className="text-gray-500 text-xs mt-0.5">{formatTimeAgo(conv.timestamp)}</p>
                   </button>
                 ))}
               </div>
@@ -95,7 +97,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
             <div className="pt-2">
               <Link
                 href="/analytics"
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+                className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/analytics' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
               >
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M2 12l3-4 3 2 3-5 3 3"/>
@@ -109,7 +111,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
             <div className={isAdmin ? '' : 'pt-2'}>
               <Link
                 href="/quality"
-                className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+                className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/quality' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
               >
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
@@ -121,7 +123,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           <div>
             <Link
               href="/cx"
-              className="w-full flex items-center gap-3 px-3 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+              className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/cx' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
             >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="1" y="9" width="3" height="6" rx="0.5"/>
@@ -138,7 +140,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           {isAdmin && (
             <Link
               href="/settings"
-              className="w-full flex items-center gap-3 px-3 py-2 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg text-sm font-medium transition"
+              className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/settings' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
             >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <circle cx="8" cy="8" r="2.5"/>
@@ -149,12 +151,12 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           )}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 bg-[#2d9e4f] rounded-full flex items-center justify-center text-white text-xs font-bold uppercase">
+              <div className="w-8 h-8 bg-[#2d9e4f] rounded-full flex items-center justify-center text-white text-sm font-bold uppercase shrink-0">
                 {username?.[0] || 'I'}
               </div>
               <div>
                 <span className="text-gray-300 text-sm truncate max-w-[100px] block">{username.split('@')[0]}</span>
-                {role && <span className="text-gray-600 text-[10px] capitalize">{role}</span>}
+                {role && <span className="text-gray-500 text-xs capitalize">{role}</span>}
               </div>
             </div>
             <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-gray-500 hover:text-white transition text-xs" title="Sign out">

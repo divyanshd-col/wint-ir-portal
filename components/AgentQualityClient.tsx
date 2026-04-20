@@ -103,7 +103,7 @@ function Modal({ open, onClose, title, subtitle, children, wide = false }: {
         <div className="flex items-start justify-between px-6 py-4 border-b border-gray-100 shrink-0">
           <div>
             <h2 className="text-base font-bold text-gray-900">{title}</h2>
-            {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+            {subtitle && <p className="text-xs text-gray-600 mt-0.5">{subtitle}</p>}
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none ml-4">×</button>
         </div>
@@ -158,7 +158,7 @@ function FlagButton({ entry, existingFlag }: { entry: IQSScoreEntry; existingFla
           <div className="fixed inset-0 bg-black/20" />
           <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-[61]" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-bold text-gray-900 mb-1">Flag Score for Review</h3>
-            <p className="text-xs text-gray-400 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}% — describe what seems incorrect</p>
+            <p className="text-xs text-gray-600 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}% — describe what seems incorrect</p>
             <textarea
               value={note}
               onChange={e => setNote(e.target.value)}
@@ -213,13 +213,13 @@ function IQSDrawer({ entry, onClose, flagged }: { entry: IQSScoreEntry | null; o
         {/* Header */}
         <div className="px-5 py-4 border-b border-gray-100 shrink-0 flex items-start justify-between">
           <div>
-            <p className="text-xs text-gray-400 mb-0.5">Chat #{entry.chatId}</p>
+            <p className="text-xs text-gray-600 mb-0.5">Chat #{entry.chatId}</p>
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold" style={{ color: t.text }}>{entry.iqs}%</span>
               <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: t.bg, color: t.text }}>{t.label}</span>
               {cs && <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cs.cls}`}>{cs.label}</span>}
             </div>
-            <p className="text-[11px] text-gray-400 mt-1">
+            <p className="text-[11px] text-gray-600 mt-1">
               {entry.scoredAt?.slice(0, 10)}
               {entry.frt != null && <> &nbsp;·&nbsp; FRT {fmtDuration(entry.frt)}</>}
               {entry.resolutionTime != null && <> &nbsp;·&nbsp; Res {fmtDuration(entry.resolutionTime)}</>}
@@ -286,7 +286,7 @@ function IQSDrawer({ entry, onClose, flagged }: { entry: IQSScoreEntry | null; o
           {/* Flag */}
           <div className="pt-1">
             <FlagButton entry={entry} existingFlag={flagged} />
-            <p className="text-[10px] text-gray-400 mt-1.5">If this score seems incorrect, flag it and our quality team will review.</p>
+            <p className="text-[10px] text-gray-600 mt-1.5">If this score seems incorrect, flag it and our quality team will review.</p>
           </div>
         </div>
       </div>
@@ -490,6 +490,7 @@ interface Props {
 
 type DateRange = 'today' | '7d' | '30d' | '90d';
 type ModalKind = 'iqs' | 'csat' | null;
+type WoWExpanded = boolean;
 
 export default function AgentQualityClient({ userEmail, selfAgentName }: Props) {
   const [entries, setEntries] = useState<IQSScoreEntry[]>([]);
@@ -500,6 +501,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
   const [modal, setModal] = useState<ModalKind>(null);
   const [drawerEntry, setDrawerEntry] = useState<IQSScoreEntry | null>(null);
   const [chatFilter, setChatFilter] = useState<'all' | 'flagged' | 'low' | 'cbb'>('all');
+  const [wowExpanded, setWowExpanded] = useState<WoWExpanded>(false);
 
   // ── Fetch agent's own scores ─────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -638,7 +640,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
           <div className="w-px h-5 bg-gray-100" />
           <div>
             <h1 className="text-sm font-bold text-gray-900">My Quality Dashboard</h1>
-            <p className="text-[11px] text-gray-400">Personal metrics · {selfAgentName || userEmail.split('@')[0]}</p>
+            <p className="text-[11px] text-gray-600">Personal metrics · {selfAgentName || userEmail.split('@')[0]}</p>
           </div>
         </div>
         <div className="flex items-center bg-gray-100 rounded-lg p-0.5 gap-0.5">
@@ -654,114 +656,122 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
       <div className="px-6 py-5 space-y-5 max-w-[1400px] mx-auto">
 
         {/* ── Hero cards ── */}
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-[1fr_1fr_1fr] grid-rows-[auto_auto] gap-4">
 
-          {/* IQS */}
+          {/* IQS — hero, spans 2 rows */}
           <button
             onClick={() => setModal('iqs')}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md hover:border-[#2d9e4f]/30 transition-all group cursor-pointer"
+            className="row-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-left hover:shadow-md hover:border-[#2d9e4f]/30 transition-all group cursor-pointer flex flex-col"
           >
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">My IQS Score</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-4">My IQS Score</p>
             {avgIqs != null ? (
-              <div className="flex items-center gap-3">
-                <IQSRing iqs={avgIqs} size={60} />
-                <div>
-                  <p className="text-2xl font-bold" style={{ color: iqsT?.text }}>{avgIqs}%</p>
-                  <p className="text-xs font-semibold" style={{ color: iqsT?.text }}>{iqsT?.label}</p>
-                  {tw.avgIqs != null && lw.avgIqs != null && (
-                    <div className="flex items-center gap-1 mt-1">
-                      {deltaIcon(tw.avgIqs - lw.avgIqs)}
-                      <span className={`text-[10px] font-semibold ${tw.avgIqs > lw.avgIqs ? 'text-emerald-600' : tw.avgIqs < lw.avgIqs ? 'text-red-500' : 'text-gray-400'}`}>
-                        {tw.avgIqs > lw.avgIqs ? '+' : ''}{tw.avgIqs - lw.avgIqs} vs last wk
-                      </span>
-                    </div>
-                  )}
+              <>
+                <div className="flex items-center gap-5 mb-3">
+                  <IQSRing iqs={avgIqs} size={88} />
+                  <div>
+                    <p className="text-4xl font-bold leading-none" style={{ color: iqsT?.text }}>{avgIqs}<span className="text-2xl">%</span></p>
+                    <p className="text-sm font-semibold mt-1" style={{ color: iqsT?.text }}>{iqsT?.label}</p>
+                  </div>
                 </div>
-              </div>
+                {tw.avgIqs != null && lw.avgIqs != null && (
+                  <div className="flex items-center gap-1.5 mb-1">
+                    {deltaIcon(tw.avgIqs - lw.avgIqs)}
+                    <span className={`text-xs font-semibold ${tw.avgIqs > lw.avgIqs ? 'text-emerald-600' : tw.avgIqs < lw.avgIqs ? 'text-red-500' : 'text-gray-400'}`}>
+                      {tw.avgIqs > lw.avgIqs ? '+' : ''}{tw.avgIqs - lw.avgIqs} pts vs last week
+                    </span>
+                  </div>
+                )}
+                <p className="text-xs text-gray-500 mt-1">{scoredFiltered.length} scored conversations</p>
+              </>
             ) : (
-              <p className="text-2xl font-bold text-gray-300">—</p>
+              <p className="text-3xl font-bold text-gray-300">No scores yet</p>
             )}
-            <p className="text-[11px] text-gray-400 mt-2">{scoredFiltered.length} scored chats</p>
-            <p className="text-[10px] text-[#2d9e4f] font-semibold mt-1 opacity-0 group-hover:opacity-100 transition">View all scored chats →</p>
+            <p className="text-xs text-[#2d9e4f] font-semibold mt-auto pt-4 opacity-0 group-hover:opacity-100 transition">View all scored chats →</p>
           </button>
 
           {/* CSAT */}
           <button
             onClick={() => setModal('csat')}
-            className="bg-white rounded-2xl border-l-4 border-blue-400 border-t border-r border-b border-gray-100 shadow-sm p-5 text-left hover:shadow-md transition-all group cursor-pointer"
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-left hover:shadow-md transition-all group cursor-pointer"
           >
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">My CSAT</p>
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">My CSAT</p>
             <p className="text-3xl font-bold text-blue-600">{avgCsat != null ? `${avgCsat}%` : '—'}</p>
             {tw.avgCsat != null && lw.avgCsat != null && (
               <div className="flex items-center gap-1 mt-1.5">
                 {deltaIcon(tw.avgCsat - lw.avgCsat)}
-                <span className={`text-[11px] font-semibold ${tw.avgCsat >= lw.avgCsat ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {tw.avgCsat >= lw.avgCsat ? '+' : ''}{tw.avgCsat - lw.avgCsat}pp vs last week
+                <span className={`text-xs font-semibold ${tw.avgCsat >= lw.avgCsat ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {tw.avgCsat >= lw.avgCsat ? '+' : ''}{tw.avgCsat - lw.avgCsat}pp vs last wk
                 </span>
               </div>
             )}
-            <p className="text-[11px] text-gray-400 mt-2">{ratedFiltered.length} rated conversations</p>
-            <p className="text-[10px] text-blue-500 font-semibold mt-1 opacity-0 group-hover:opacity-100 transition">View rating breakdown →</p>
+            <p className="text-xs text-gray-500 mt-2">{ratedFiltered.length} rated conversations</p>
           </button>
 
-          {/* Resolution Time (own vs team) */}
-          <div className="bg-white rounded-2xl border-l-4 border-amber-400 border-t border-r border-b border-gray-100 shadow-sm p-5">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Avg Resolution Time</p>
-            <p className="text-3xl font-bold text-amber-600">{fmtDuration(avgRes)}</p>
-            {teamAvg.avgResolution != null && (
+          {/* Chats this period */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Chats Handled</p>
+            <p className="text-3xl font-bold text-stone-800">{filtered.length}</p>
+            {tw.chats != null && lw.chats != null && (
               <div className="flex items-center gap-1 mt-1.5">
-                {deltaIcon(teamAvg.avgResolution - (avgRes ?? 0))}
-                <span className={`text-[11px] font-semibold ${(avgRes ?? 0) <= teamAvg.avgResolution ? 'text-emerald-600' : 'text-red-500'}`}>
-                  Team avg: {fmtDuration(teamAvg.avgResolution)}
+                {deltaIcon(tw.chats - lw.chats)}
+                <span className={`text-xs font-semibold ${tw.chats >= lw.chats ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {tw.chats >= lw.chats ? '+' : ''}{tw.chats - lw.chats} vs last wk
                 </span>
               </div>
             )}
-            <p className="text-[11px] text-gray-400 mt-2">{resVals.length} timed chats</p>
+            <p className="text-xs text-gray-500 mt-2">in selected period</p>
           </div>
 
-          {/* Avg FRT */}
-          <div className="bg-white rounded-2xl border-l-4 border-red-400 border-t border-r border-b border-gray-100 shadow-sm p-5">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-3">Avg FRT</p>
-            <p className="text-3xl font-bold text-red-600">{fmtDuration(avgFrt)}</p>
+          {/* Resolution Time */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Avg FRT</p>
+            <p className="text-3xl font-bold text-amber-600">{fmtDuration(avgFrt)}</p>
             {tw.avgFrt != null && lw.avgFrt != null && (
               <div className="flex items-center gap-1 mt-1.5">
                 {deltaIcon(lw.avgFrt - tw.avgFrt)}
-                <span className={`text-[11px] font-semibold ${(tw.avgFrt ?? 0) <= (lw.avgFrt ?? 0) ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {tw.avgFrt <= lw.avgFrt ? 'Faster' : 'Slower'} than last week
+                <span className={`text-xs font-semibold ${(tw.avgFrt ?? 0) <= (lw.avgFrt ?? 0) ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {tw.avgFrt <= lw.avgFrt ? 'Faster' : 'Slower'} than last wk
                 </span>
               </div>
             )}
-            <p className="text-[11px] text-gray-400 mt-2">SLA target: ≤ 3 min</p>
+            <p className="text-xs text-gray-500 mt-2">SLA target: ≤ 3 min</p>
           </div>
 
         </div>
 
         {/* ── Week-over-week comparison ── */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-baseline justify-between mb-4">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-sm font-bold text-gray-900">This Week vs Last Week</h2>
-              <p className="text-xs text-gray-400 mt-0.5">{thisWeek.from} – {thisWeek.to} vs {lastWeek.from} – {lastWeek.to}</p>
+              <p className="text-xs text-gray-500 mt-0.5">{thisWeek.from} – {thisWeek.to} vs {lastWeek.from} – {lastWeek.to}</p>
             </div>
-            <span className="text-[10px] text-gray-400">Updated in real-time</span>
+            <button
+              onClick={() => setWowExpanded(p => !p)}
+              className="text-xs text-gray-500 hover:text-gray-800 font-medium transition flex items-center gap-1"
+            >
+              {wowExpanded ? 'Hide breakdown' : 'See full breakdown'}
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" className={`transition-transform ${wowExpanded ? 'rotate-180' : ''}`}>
+                <path d="M2 4l4 4 4-4"/>
+              </svg>
+            </button>
           </div>
-          <div className="grid grid-cols-6 divide-x divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
+
+          {/* Primary 3 metrics */}
+          <div className="grid grid-cols-3 divide-x divide-gray-100 border border-gray-100 rounded-xl overflow-hidden">
             {[
-              { label: 'IQS Score',   this: tw.avgIqs   != null ? `${tw.avgIqs}%` : '—', last: lw.avgIqs   != null ? `${lw.avgIqs}%`   : '—', delta: tw.avgIqs != null && lw.avgIqs != null ? tw.avgIqs - lw.avgIqs : null, unit: 'pts', inv: false },
-              { label: 'CSAT',        this: tw.avgCsat  != null ? `${tw.avgCsat}%` : '—', last: lw.avgCsat  != null ? `${lw.avgCsat}%`  : '—', delta: tw.avgCsat != null && lw.avgCsat != null ? tw.avgCsat - lw.avgCsat : null, unit: 'pp', inv: false },
-              { label: 'Chats',       this: String(tw.chats),  last: String(lw.chats),  delta: tw.chats - lw.chats, unit: '', inv: false },
-              { label: 'Avg FRT',     this: fmtDuration(tw.avgFrt), last: fmtDuration(lw.avgFrt), delta: tw.avgFrt != null && lw.avgFrt != null ? lw.avgFrt - tw.avgFrt : null, unit: 's', inv: true },
-              { label: 'Escalations', this: String(tw.escals), last: String(lw.escals), delta: lw.escals - tw.escals, unit: '', inv: true },
-              { label: 'Resolution',  this: fmtDuration(tw.avgRes), last: fmtDuration(lw.avgRes), delta: tw.avgRes != null && lw.avgRes != null ? lw.avgRes - tw.avgRes : null, unit: 's', inv: true },
+              { label: 'IQS Score', thisVal: tw.avgIqs != null ? `${tw.avgIqs}%` : '—', lastVal: lw.avgIqs != null ? `${lw.avgIqs}%` : '—', delta: tw.avgIqs != null && lw.avgIqs != null ? tw.avgIqs - lw.avgIqs : null, unit: 'pts', inv: false },
+              { label: 'CSAT',      thisVal: tw.avgCsat != null ? `${tw.avgCsat}%` : '—', lastVal: lw.avgCsat != null ? `${lw.avgCsat}%` : '—', delta: tw.avgCsat != null && lw.avgCsat != null ? tw.avgCsat - lw.avgCsat : null, unit: 'pp', inv: false },
+              { label: 'Chats',     thisVal: String(tw.chats), lastVal: String(lw.chats), delta: tw.chats - lw.chats, unit: '', inv: false },
             ].map(col => (
-              <div key={col.label} className="px-4 py-3">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">{col.label}</p>
-                <p className="text-lg font-bold text-gray-900 tabular-nums">{col.this}</p>
-                <p className="text-[11px] text-gray-400 tabular-nums">Last: {col.last}</p>
+              <div key={col.label} className="px-5 py-3.5">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{col.label}</p>
+                <p className="text-2xl font-bold text-gray-900 tabular-nums">{col.thisVal}</p>
+                <p className="text-xs text-gray-500 tabular-nums mt-0.5">Last wk: {col.lastVal}</p>
                 {col.delta != null && (
-                  <div className="flex items-center gap-1 mt-1">
+                  <div className="flex items-center gap-1 mt-1.5">
                     {deltaIcon(col.delta, col.inv)}
-                    <span className={`text-[10px] font-bold ${(col.inv ? col.delta > 0 : col.delta > 0) ? 'text-emerald-600' : col.delta < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                    <span className={`text-xs font-semibold ${col.delta > 0 ? 'text-emerald-600' : col.delta < 0 ? 'text-red-500' : 'text-gray-400'}`}>
                       {col.delta > 0 ? '+' : ''}{col.delta}{col.unit}
                     </span>
                   </div>
@@ -769,6 +779,31 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
               </div>
             ))}
           </div>
+
+          {/* Expanded secondary metrics */}
+          {wowExpanded && (
+            <div className="grid grid-cols-3 divide-x divide-gray-100 border border-gray-100 rounded-xl overflow-hidden mt-3">
+              {[
+                { label: 'Avg FRT',     thisVal: fmtDuration(tw.avgFrt), lastVal: fmtDuration(lw.avgFrt), delta: tw.avgFrt != null && lw.avgFrt != null ? lw.avgFrt - tw.avgFrt : null, unit: 's', inv: true },
+                { label: 'Escalations', thisVal: String(tw.escals), lastVal: String(lw.escals), delta: lw.escals - tw.escals, unit: '', inv: true },
+                { label: 'Resolution',  thisVal: fmtDuration(tw.avgRes), lastVal: fmtDuration(lw.avgRes), delta: tw.avgRes != null && lw.avgRes != null ? lw.avgRes - tw.avgRes : null, unit: 's', inv: true },
+              ].map(col => (
+                <div key={col.label} className="px-5 py-3.5">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">{col.label}</p>
+                  <p className="text-xl font-bold text-gray-900 tabular-nums">{col.thisVal}</p>
+                  <p className="text-xs text-gray-500 tabular-nums mt-0.5">Last wk: {col.lastVal}</p>
+                  {col.delta != null && (
+                    <div className="flex items-center gap-1 mt-1.5">
+                      {deltaIcon(col.delta, col.inv)}
+                      <span className={`text-xs font-semibold ${(col.inv ? col.delta > 0 : col.delta > 0) ? 'text-emerald-600' : col.delta < 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                        {col.delta > 0 ? '+' : ''}{col.delta}{col.unit}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* ── Trend + params row ── */}
@@ -779,7 +814,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-sm font-bold text-gray-900">IQS Trend — Last 14 Days</h2>
-                <p className="text-xs text-gray-400">Scored conversations only</p>
+                <p className="text-xs text-gray-600">Scored conversations only</p>
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-400">
                 <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400" />≥80
@@ -806,7 +841,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
             <div className="mb-3">
               <h2 className="text-sm font-bold text-gray-900">Quality Parameters</h2>
-              <p className="text-xs text-gray-400">Your pass rate · {dateRange}</p>
+              <p className="text-xs text-gray-600">Your pass rate · {dateRange}</p>
             </div>
             <div className="space-y-2">
               {paramRates.map(p => {
@@ -836,7 +871,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
               <h2 className="text-sm font-bold text-gray-900">My Chats</h2>
-              <p className="text-xs text-gray-400 mt-0.5">{filtered.length} conversations · click any row to see IQS detail</p>
+              <p className="text-xs text-gray-600 mt-0.5">{filtered.length} conversations · click any row to see IQS detail</p>
             </div>
             <div className="flex items-center gap-1.5">
               {([['all','All'],['flagged','⚑ Flagged'],['low','Low IQS'],['cbb','CBB / Bad']] as const).map(([v, l]) => (
