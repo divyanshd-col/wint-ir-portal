@@ -366,15 +366,22 @@ export async function runAnalyticsAgent(
         contents as any,
         {
           systemInstruction: { parts: [{ text: systemPrompt }] },
-          config: { thinkingConfig: { thinkingBudget: 0 } },
         },
         25_000,
       );
     } catch (err: any) {
-      console.error('[analytics/agent] LLM error:', err?.message);
+      const msg = err?.message ?? String(err);
+      console.error('[analytics/agent] LLM error:', msg);
+      const userMsg = msg.includes('timeout')
+        ? 'Request timed out — try a simpler question or smaller date range.'
+        : msg.includes('quota') || msg.includes('429')
+        ? 'API quota exhausted — try again in a few seconds.'
+        : msg.includes('API_KEY') || msg.includes('401') || msg.includes('403')
+        ? 'Invalid API key — check your Gemini key in Settings.'
+        : `LLM error: ${msg.slice(0, 120)}`;
       return {
         kind: 'answer',
-        answer: { output_shape: 'insight_summary', answer_text: 'LLM unavailable — please try again.', warnings: [] },
+        answer: { output_shape: 'insight_summary', answer_text: userMsg, warnings: [] },
       };
     }
 
