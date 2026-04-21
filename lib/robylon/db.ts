@@ -19,6 +19,22 @@ export async function getAgentName(agentId: number): Promise<string> {
   return rows[0]?.name ?? '';
 }
 
+/** Returns agent names whose tl_name matches (case-insensitive). */
+export async function getAgentNamesByTL(tlName: string): Promise<string[]> {
+  const rows = await query<{ name: string }>(
+    `SELECT name FROM agents WHERE LOWER(tl_name) = LOWER($1)`, [tlName]
+  );
+  return rows.map(r => r.name);
+}
+
+/** Returns agent names whose qa_name matches (case-insensitive). */
+export async function getAgentNamesByQA(qaName: string): Promise<string[]> {
+  const rows = await query<{ name: string }>(
+    `SELECT name FROM agents WHERE LOWER(qa_name) = LOWER($1)`, [qaName]
+  );
+  return rows.map(r => r.name);
+}
+
 // ── Contact helpers ───────────────────────────────────────────────────────────
 
 /** Upsert a contact by phone number. Returns contact.id */
@@ -167,7 +183,7 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 2000,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[] } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [limit];
@@ -183,6 +199,12 @@ export async function getAllScoredConversations(
   if (opts.agentName) {
     params.push(opts.agentName);
     conditions.push(`a.name = $${params.length}`);
+  } else if (opts.agentNames && opts.agentNames.length > 0) {
+    params.push(opts.agentNames);
+    conditions.push(`a.name = ANY($${params.length})`);
+  } else if (opts.agentNames && opts.agentNames.length === 0) {
+    // Scoped role with no assigned agents — return nothing
+    conditions.push(`1=0`);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

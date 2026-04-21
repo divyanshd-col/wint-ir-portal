@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { getAllScoredConversations } from '@/lib/robylon/db';
+import { getAllScoredConversations, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
 import { PARAM_ORDER } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -120,9 +120,13 @@ export async function GET(req: NextRequest) {
   const dateTo        = searchParams.get('dateTo') || '';
   const typeFilter    = searchParams.get('type') || '';
 
-  // Auto-filter for agent role
+  const role = session.user?.role;
+
+  // Resolve the portal user's agentName for scoped roles
   let selfAgentName = '';
-  if (session.user?.role === 'agent') {
+  let scopedAgentNames: string[] | null = null; // null = no scope restriction
+
+  if (role === 'agent' || role === 'tl' || role === 'quality') {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
     const email = session.user?.email || '';
@@ -130,12 +134,28 @@ export async function GET(req: NextRequest) {
     selfAgentName = configUser?.agentName || '';
   }
 
-  // Push date + agent filters to DB to reduce data transferred and processed
-  const dbOpts: { dateFrom?: string; dateTo?: string; agentName?: string } = {};
+  if (role === 'agent' && selfAgentName) {
+    scopedAgentNames = [selfAgentName];
+  } else if (role === 'tl' && selfAgentName) {
+    scopedAgentNames = await getAgentNamesByTL(selfAgentName);
+  } else if (role === 'quality' && selfAgentName) {
+    scopedAgentNames = await getAgentNamesByQA(selfAgentName);
+  }
+
+  // Push date + agent filters to DB
+  const dbOpts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[] } = {};
   if (dateFrom) dbOpts.dateFrom = dateFrom;
   if (dateTo)   dbOpts.dateTo   = dateTo;
-  if (session.user?.role === 'agent' && selfAgentName) dbOpts.agentName = selfAgentName;
-  else if (agentFilter) dbOpts.agentName = agentFilter;
+  if (scopedAgentNames) {
+    // Further restrict by the requested agentFilter if one is active
+    if (agentFilter) {
+      dbOpts.agentName = agentFilter;
+    } else {
+      dbOpts.agentNames = scopedAgentNames;
+    }
+  } else if (agentFilter) {
+    dbOpts.agentName = agentFilter;
+  }
 
   let rawRows: any[] = [];
   try {
@@ -161,8 +181,11 @@ export async function GET(req: NextRequest) {
 
   // Apply remaining in-memory filters (tag, csat, score range, type)
   let entries = [...allParsed];
-  if (session.user?.role === 'agent') {
-    entries = selfAgentName ? entries.filter(e => e.agentName === selfAgentName) : [];
+  if (scopedAgentNames !== null) {
+    // scoped role (agent/tl/quality) — DB already filtered, but agentFilter may further narrow
+    if (agentFilter) {
+      entries = entries.filter(e => e.agentName === agentFilter);
+    }
   } else if (agentFilter) {
     entries = entries.filter(e => e.agentName === agentFilter);
   }
