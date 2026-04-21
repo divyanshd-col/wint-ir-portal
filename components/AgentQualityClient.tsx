@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import Link from 'next/link';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -15,83 +16,112 @@ function fmtDuration(secs: number | undefined | null): string {
   return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
 }
 
-function iqsColor(iqs: number) {
-  if (iqs >= 90) return { text: '#15803d', bar: '#22c55e', label: 'Excellent' };
-  if (iqs >= 80) return { text: '#92400e', bar: '#f59e0b', label: 'Good' };
-  if (iqs >= 70) return { text: '#c2410c', bar: '#f97316', label: 'Average' };
-  return { text: '#b91c1c', bar: '#ef4444', label: 'Needs work' };
+function iqsTheme(iqs: number) {
+  if (iqs >= 90) return { text: '#15803d', bg: '#dcfce7', bar: '#22c55e', label: 'Excellent' };
+  if (iqs >= 80) return { text: '#92400e', bg: '#fef3c7', bar: '#f59e0b', label: 'Good' };
+  if (iqs >= 70) return { text: '#c2410c', bg: '#ffedd5', bar: '#f97316', label: 'Average' };
+  return { text: '#b91c1c', bg: '#fee2e2', bar: '#ef4444', label: 'Needs Work' };
 }
 
-function csatBadge(csat?: string) {
-  if (csat === '5') return { label: 'Good',  cls: 'bg-emerald-50 text-emerald-700' };
-  if (csat === '3') return { label: 'CBB',   cls: 'bg-stone-100 text-stone-600' };
-  if (csat === '1') return { label: 'Bad',   cls: 'bg-red-50 text-red-600' };
+function csatLabel(c?: string) {
+  if (c === '5') return { label: 'Good',  cls: 'bg-emerald-50 text-emerald-700' };
+  if (c === '3') return { label: 'CBB',   cls: 'bg-amber-50 text-amber-700' };
+  if (c === '1') return { label: 'Bad',   cls: 'bg-red-50 text-red-600' };
   return null;
 }
 
-function typeBadge(type?: string) {
-  if (type === 'bot') return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-violet-50 text-violet-600">Bot</span>;
-  if (type === 'hybrid') return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-600">Hybrid</span>;
-  return <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-stone-100 text-stone-500">Human</span>;
-}
-
-function delta(next: number | null, prev: number | null, inverse = false) {
-  if (next == null || prev == null) return null;
-  const d = next - prev;
-  const good = inverse ? d < 0 : d > 0;
-  if (d === 0) return <span className="text-stone-400 text-xs">–</span>;
-  return (
-    <span className={`text-xs font-semibold ${good ? 'text-emerald-600' : 'text-red-500'}`}>
-      {d > 0 ? '+' : ''}{d}
-    </span>
-  );
-}
-
-function getWeekBounds(weeksAgo = 0) {
-  const now = new Date();
-  const day = now.getUTCDay() || 7;
-  const mon = new Date(now);
-  mon.setUTCDate(now.getUTCDate() - (day - 1) - weeksAgo * 7);
-  mon.setUTCHours(0, 0, 0, 0);
-  const sun = new Date(mon);
-  sun.setUTCDate(mon.getUTCDate() + 6);
-  sun.setUTCHours(23, 59, 59, 999);
-  return { from: mon.toISOString().slice(0, 10), to: sun.toISOString().slice(0, 10) };
-}
-
-function inRange(e: IQSScoreEntry, from: string, to: string) {
-  const d = (e.scoredAt || e.date || '').slice(0, 10);
-  return d >= from && d <= to;
+function TypeBadge({ type }: { type?: string }) {
+  if (type === 'bot')    return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Bot</span>;
+  if (type === 'hybrid') return <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Hybrid</span>;
+  return                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Human</span>;
 }
 
 // ── IQS Ring ──────────────────────────────────────────────────────────────────
-function IQSRing({ iqs, size = 72 }: { iqs: number; size?: number }) {
-  const c = iqsColor(iqs);
-  const r = (size - 8) / 2;
+function IQSRing({ iqs, size = 52 }: { iqs: number; size?: number }) {
+  const t = iqsTheme(iqs);
+  const r = (size - 6) / 2;
   const circ = 2 * Math.PI * r;
   const dash = (iqs / 100) * circ;
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={6} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={c.bar} strokeWidth={6}
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={5} />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={t.bar} strokeWidth={5}
           strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
       </svg>
-      <span className="absolute text-xs font-bold tabular-nums" style={{ color: c.text }}>{iqs}%</span>
+      <span className="absolute text-xs font-bold tabular-nums" style={{ color: t.text }}>{iqs}</span>
     </div>
   );
 }
 
-// ── Challenge (flag) modal ────────────────────────────────────────────────────
-function ChallengeButton({ entry }: { entry: IQSScoreEntry }) {
-  const [open, setOpen] = useState(false);
+function IQSPill({ iqs }: { iqs: number }) {
+  const t = iqsTheme(iqs);
+  return (
+    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold tabular-nums"
+      style={{ background: t.bg, color: t.text }}>{iqs}%</span>
+  );
+}
+
+function ParamBadge({ val }: { val: string | undefined }) {
+  if (val === 'Yes') return <span className="text-emerald-500 font-bold text-sm">✓</span>;
+  if (val === 'No')  return <span className="text-red-500 font-bold text-sm">✗</span>;
+  return <span className="text-gray-300 text-sm">—</span>;
+}
+
+// ── Transcript bubbles ────────────────────────────────────────────────────────
+const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
+const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
+
+function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; content: string; timestamp?: string }> }) {
+  return (
+    <div className="space-y-2 py-1">
+      {messages.map((m, i) => {
+        const lc = (m.sender || '').toLowerCase().trim();
+        const isCustomer = CUSTOMER_LABELS.has(lc);
+        const isBot = BOT_NAMES.has(lc);
+        const time = m.timestamp
+          ? new Date(m.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+          : '';
+        if (isCustomer) return (
+          <div key={i} className="flex gap-2">
+            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-1">
+              <span className="text-[9px] font-bold text-gray-500">U</span>
+            </div>
+            <div className="max-w-[78%]">
+              <p className="text-[9px] font-semibold text-gray-400 mb-0.5">{m.sender}{time && ` · ${time}`}</p>
+              <div className="bg-gray-100 text-gray-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-xs leading-relaxed">{m.content}</div>
+            </div>
+          </div>
+        );
+        if (isBot) return (
+          <div key={i} className="flex justify-end gap-2">
+            <div className="max-w-[78%]">
+              <p className="text-[9px] font-semibold text-violet-400 text-right mb-0.5 pr-1">{m.sender}{time && ` · ${time}`}</p>
+              <div className="bg-violet-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed">{m.content}</div>
+            </div>
+          </div>
+        );
+        return (
+          <div key={i} className="flex justify-end gap-2">
+            <div className="max-w-[78%]">
+              <p className="text-[9px] font-semibold text-emerald-600 text-right mb-0.5 pr-1">{m.sender}{time && ` · ${time}`}</p>
+              <div className="bg-emerald-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed">{m.content}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Challenge modal ───────────────────────────────────────────────────────────
+function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onClose: () => void; onDone: () => void }) {
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const [done, setDone] = useState(false);
   const [err, setErr] = useState('');
 
   async function submit() {
-    if (!note.trim()) { setErr('Describe what seems wrong.'); return; }
+    if (!note.trim()) { setErr('Please describe what seems incorrect.'); return; }
     setBusy(true); setErr('');
     try {
       const res = await fetch('/api/quality/flag', {
@@ -100,256 +130,234 @@ function ChallengeButton({ entry }: { entry: IQSScoreEntry }) {
       });
       const d = await res.json();
       if (d.error) { setErr(d.error); return; }
-      setDone(true); setOpen(false);
+      onDone();
     } catch { setErr('Request failed.'); }
     finally { setBusy(false); }
   }
 
-  if (done) return (
-    <span className="text-xs font-semibold text-stone-500 bg-stone-100 border border-stone-200 px-3 py-1.5 rounded-lg">
-      Sent to quality team
-    </span>
-  );
-
   return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        className="text-xs font-semibold text-stone-500 hover:text-stone-800 border border-stone-200 hover:border-stone-400 px-3 py-1.5 rounded-lg transition"
-      >
-        Challenge score
-      </button>
-
-      {open && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center px-4" onClick={() => setOpen(false)}>
-          <div className="fixed inset-0 bg-black/25" />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-[71]" onClick={e => e.stopPropagation()}>
-            <h3 className="text-sm font-bold text-stone-900 mb-1">Challenge this IQS score</h3>
-            <p className="text-xs text-stone-500 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}% — tell us what seems incorrect</p>
-            <textarea
-              value={note} onChange={e => setNote(e.target.value)} rows={4}
-              placeholder="e.g. I greeted the customer in my first message — the opening parameter should be Yes."
-              className="w-full border border-stone-200 rounded-xl px-3.5 py-3 text-sm text-stone-800 focus:outline-none focus:ring-2 focus:ring-stone-300 resize-none"
-            />
-            {err && <p className="text-xs text-red-500 mt-1.5">{err}</p>}
-            <div className="flex gap-2 mt-4">
-              <button onClick={submit} disabled={busy}
-                className="flex-1 py-2.5 bg-stone-800 hover:bg-stone-900 text-white text-sm font-semibold rounded-xl disabled:opacity-50 transition">
-                {busy ? 'Sending…' : 'Send to Quality'}
-              </button>
-              <button onClick={() => setOpen(false)}
-                className="px-4 py-2.5 border border-stone-200 text-stone-500 rounded-xl text-sm hover:bg-stone-50 transition">
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-// ── Chat detail drawer ────────────────────────────────────────────────────────
-function ChatDrawer({ entry, onClose }: { entry: IQSScoreEntry | null; onClose: () => void }) {
-  const [transcript, setTranscript] = useState<string | null>(null);
-  const [loadingTx, setLoadingTx] = useState(false);
-  const [txOpen, setTxOpen] = useState(true);
-
-  useEffect(() => {
-    if (!entry) return;
-    setTranscript(null);
-    setLoadingTx(true);
-    fetch(`/api/quality/transcript?chatId=${encodeURIComponent(entry.chatId)}`)
-      .then(r => r.json())
-      .then(d => { if (d.found && d.transcript) setTranscript(d.transcript); })
-      .catch(() => {})
-      .finally(() => setLoadingTx(false));
-  }, [entry?.id]);
-
-  useEffect(() => {
-    if (entry) document.body.style.overflow = 'hidden';
-    else document.body.style.overflow = '';
-    return () => { document.body.style.overflow = ''; };
-  }, [entry]);
-
-  if (!entry) return null;
-  const c = iqsColor(entry.iqs);
-  const cs = csatBadge(entry.csat);
-
-  const failedParams = PARAM_ORDER.filter(p => entry.scores?.[p] === 'No');
-  const passedParams = PARAM_ORDER.filter(p => entry.scores?.[p] === 'Yes');
-  const naParams     = PARAM_ORDER.filter(p => !entry.scores?.[p] || entry.scores[p] === 'NA');
-
-  // Parse transcript into messages
-  const messages: { sender: string; content: string }[] = [];
-  if (transcript) {
-    transcript.split('\n').forEach(line => {
-      const t = line.trim();
-      if (!t) return;
-      const m = t.match(/^([^:]+):\s*(.+)$/);
-      if (m) messages.push({ sender: m[1].trim(), content: m[2].trim() });
-      else if (messages.length) messages[messages.length - 1].content += ' ' + t;
-    });
-  }
-
-  const isAgent = (s: string) => !['user','customer','visitor','myra','bot','wintbot'].includes(s.toLowerCase());
-
-  const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
-  const chatUrl = /^\d+$/.test(entry.chatId.trim()) ? `${ROBYLON_BASE}/${entry.chatId}` : null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="fixed inset-0 bg-black/20" onClick={onClose} />
-      <div className="relative bg-white w-full max-w-2xl h-full flex flex-col shadow-2xl" style={{ zIndex: 51 }}>
-
-        {/* Header */}
-        <div className="px-5 py-4 border-b border-stone-100 shrink-0 flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              {chatUrl
-                ? <a href={chatUrl} target="_blank" rel="noopener noreferrer"
-                    className="text-xs font-mono text-emerald-600 hover:underline flex items-center gap-1">
-                    #{entry.chatId}
-                    <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8M8 1h3m0 0v3m0-3L5 7" />
-                    </svg>
-                  </a>
-                : <span className="text-xs font-mono text-stone-500">#{entry.chatId}</span>
-              }
-              <span className="text-stone-300">·</span>
-              <span className="text-xs text-stone-500">{(entry.scoredAt || entry.date || '').slice(0, 10)}</span>
-              {typeBadge(entry.conversationType)}
-            </div>
-            <div className="flex items-center gap-2.5">
-              <span className="text-2xl font-bold tabular-nums" style={{ color: c.text }}>{entry.iqs}%</span>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600">{c.label}</span>
-              {cs && <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${cs.cls}`}>{cs.label}</span>}
-            </div>
-            <p className="text-[11px] text-stone-400 mt-1">
-              {entry.frt != null && <>FRT {fmtDuration(entry.frt)}</>}
-              {entry.resolutionTime != null && <> · Res {fmtDuration(entry.resolutionTime)}</>}
-              {entry.disposition && <> · {entry.disposition}</>}
-            </p>
-          </div>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-700 text-xl leading-none ml-4">×</button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-
-          {/* Summary */}
-          {entry.summary && (
-            <div className="bg-stone-50 rounded-xl p-3.5 text-xs text-stone-700 leading-relaxed border border-stone-100">
-              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1.5">AI Summary</p>
-              {entry.summary}
-            </div>
-          )}
-
-          {/* Failed parameters — most important, shown first */}
-          {failedParams.length > 0 && (
-            <div>
-              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
-                Needs improvement ({failedParams.length})
-              </p>
-              <div className="space-y-2">
-                {failedParams.map(p => (
-                  <div key={p} className="bg-red-50 border border-red-100 rounded-xl px-4 py-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-semibold text-stone-800">{PARAM_NAMES[p]}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] text-stone-400">{Math.round((WEIGHTS[p] || 0) * 100)}%</span>
-                        <span className="text-red-500 font-bold text-sm">✗</span>
-                      </div>
-                    </div>
-                    {entry.reasoning?.[p] && (
-                      <p className="text-xs text-stone-600 leading-relaxed">{entry.reasoning[p]}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Passed parameters */}
-          {passedParams.length > 0 && (
-            <div>
-              <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-2">
-                Passed ({passedParams.length})
-              </p>
-              <div className="border border-stone-100 rounded-xl overflow-hidden">
-                {passedParams.map((p, i) => (
-                  <div key={p} className={`flex items-start justify-between px-4 py-2.5 ${i < passedParams.length - 1 ? 'border-b border-stone-50' : ''}`}>
-                    <div className="min-w-0">
-                      <span className="text-xs font-medium text-stone-700">{PARAM_NAMES[p]}</span>
-                      {entry.reasoning?.[p] && (
-                        <p className="text-[10px] text-stone-400 mt-0.5 leading-snug">{entry.reasoning[p]}</p>
-                      )}
-                    </div>
-                    <div className="ml-3 shrink-0 flex items-center gap-1.5">
-                      <span className="text-[10px] text-stone-300">{Math.round((WEIGHTS[p] || 0) * 100)}%</span>
-                      <span className="text-emerald-500 font-bold text-sm">✓</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* NA parameters — collapsed */}
-          {naParams.length > 0 && (
-            <p className="text-[10px] text-stone-400">
-              {naParams.map(p => PARAM_NAMES[p]).join(', ')} — marked N/A
-            </p>
-          )}
-
-          {/* Transcript */}
-          <div className="border border-stone-100 rounded-xl overflow-hidden">
-            <button
-              onClick={() => setTxOpen(o => !o)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-stone-50 text-left hover:bg-stone-100 transition"
-            >
-              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">Transcript</span>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
-                className={`transition-transform ${txOpen ? 'rotate-180' : ''}`}>
-                <path d="M2 4l4 4 4-4"/>
-              </svg>
-            </button>
-            {txOpen && (
-              <div className="px-4 py-3 max-h-72 overflow-y-auto space-y-2">
-                {loadingTx && <p className="text-xs text-stone-400 animate-pulse">Loading…</p>}
-                {!loadingTx && messages.length === 0 && <p className="text-xs text-stone-400">No transcript available.</p>}
-                {messages.map((msg, i) => {
-                  const agent = isAgent(msg.sender);
-                  return (
-                    <div key={i} className={`flex ${agent ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] rounded-xl px-3 py-2 ${agent ? 'bg-emerald-50 text-emerald-900' : 'bg-stone-100 text-stone-700'}`}>
-                        <p className="text-[9px] font-bold uppercase tracking-wide mb-1 opacity-60">{msg.sender}</p>
-                        <p className="text-xs leading-relaxed">{msg.content}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Challenge */}
-          <div className="pt-1 flex items-start justify-between">
-            <div>
-              <ChallengeButton entry={entry} />
-              <p className="text-[10px] text-stone-400 mt-1.5 max-w-[280px]">
-                If you disagree with the AI score, send it to the quality team for review.
-              </p>
-            </div>
-          </div>
-
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center px-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-[71]" onClick={e => e.stopPropagation()}>
+        <h3 className="text-sm font-bold text-gray-900 mb-1">Challenge this IQS score</h3>
+        <p className="text-xs text-gray-500 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}% — your note goes to the Quality team for review</p>
+        <textarea value={note} onChange={e => setNote(e.target.value)} rows={4}
+          placeholder="e.g. I greeted the customer in my first message — Opening should be Yes."
+          className="w-full border border-gray-200 rounded-xl px-3.5 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none" />
+        {err && <p className="text-xs text-red-500 mt-1.5">{err}</p>}
+        <div className="flex gap-2 mt-4">
+          <button onClick={submit} disabled={busy}
+            className="flex-1 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 hover:bg-emerald-700 transition">
+            {busy ? 'Sending…' : 'Send to Quality Team'}
+          </button>
+          <button onClick={onClose}
+            className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-sm hover:bg-gray-50 transition">
+            Cancel
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── Score Detail Modal ────────────────────────────────────────────────────────
+function ScoreDetailModal({ entry, flagged, onClose }: { entry: IQSScoreEntry; flagged: boolean; onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<'scores' | 'transcript'>('scores');
+  const [transcript, setTranscript] = useState<{ timedMessages?: any[]; rawTranscript?: string } | null>(null);
+  const [txLoading, setTxLoading] = useState(false);
+  const [txError, setTxError] = useState('');
+  const [showChallenge, setShowChallenge] = useState(false);
+  const [challenged, setChallenged] = useState(flagged);
 
+  useEffect(() => {
+    if (activeTab !== 'transcript') return;
+    if (transcript !== null) return;
+    setTxLoading(true); setTxError('');
+    fetch(`/api/quality/transcript?chatId=${encodeURIComponent(entry.chatId)}`)
+      .then(r => r.json())
+      .then(d => { if (d.found) setTranscript({ timedMessages: d.timedMessages, rawTranscript: d.rawTranscript }); else setTranscript({}); })
+      .catch(() => setTxError('Failed to load transcript'))
+      .finally(() => setTxLoading(false));
+  }, [activeTab, entry.chatId, transcript]);
+
+  const fails = PARAM_ORDER.filter(p => entry.scores[p] === 'No');
+  const t = iqsTheme(entry.iqs);
+  const cs = csatLabel(entry.csat);
+  const chatUrl = /^\d+$/.test(entry.chatId.trim())
+    ? `https://app.robylon.ai/unified-inbox/share/${entry.chatId}` : null;
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
+        <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+
+          {/* Header */}
+          <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 rounded-t-2xl">
+            <IQSRing iqs={entry.iqs} size={52} />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {chatUrl
+                  ? <a href={chatUrl} target="_blank" rel="noopener noreferrer"
+                      className="font-mono text-sm text-emerald-600 hover:underline flex items-center gap-1">
+                      #{entry.chatId}
+                      <svg width="9" height="9" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M5 2H2a1 1 0 00-1 1v7a1 1 0 001 1h7a1 1 0 001-1V8M8 1h3m0 0v3m0-3L5 7"/></svg>
+                    </a>
+                  : <span className="font-mono text-sm text-gray-600">#{entry.chatId}</span>
+                }
+                {fails.length === 0
+                  ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Clean</span>
+                  : <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{fails.length} fail{fails.length > 1 ? 's' : ''}</span>}
+                {challenged && <span className="text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">⚑ Challenged</span>}
+              </div>
+              <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
+                <span>{entry.scoredAt?.slice(0, 10)}</span>
+                {cs && <><span>·</span><span className={`font-semibold text-xs px-1.5 py-0.5 rounded-full ${cs.cls}`}>{cs.label}</span></>}
+                {entry.disposition && <><span>·</span><span className="text-gray-500">{entry.disposition}</span></>}
+                {entry.frt != null && <><span>·</span><span>FRT {fmtDuration(entry.frt)}</span></>}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!challenged ? (
+                <button onClick={() => setShowChallenge(true)}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-gray-200 text-gray-600 hover:border-gray-400 transition">
+                  Challenge
+                </button>
+              ) : (
+                <span className="text-xs text-amber-600 font-semibold bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-xl">
+                  Sent to Quality
+                </span>
+              )}
+              <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14"/></svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Tab bar */}
+          <div className="shrink-0 flex border-b border-gray-100 px-6">
+            {(['scores', 'transcript'] as const).map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition -mb-px ${activeTab === tab ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}>
+                {tab === 'scores' ? 'IQS Scores' : 'Transcript'}
+              </button>
+            ))}
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto">
+            {activeTab === 'scores' && (
+              <div className="px-6 py-5 grid md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Parameter Scores</p>
+                  <div className="space-y-2">
+                    {PARAM_ORDER.map(p => {
+                      const val = entry.scores[p];
+                      return (
+                        <div key={p} className={`rounded-xl p-3 ${val === 'No' ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
+                          <div className="flex items-center gap-2">
+                            <ParamBadge val={val} />
+                            <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
+                            <span className="text-[10px] text-gray-400">{Math.round(WEIGHTS[p] * 100)}%</span>
+                          </div>
+                          {entry.reasoning[p] && (
+                            <p className="text-[11px] text-gray-500 leading-relaxed mt-1.5 ml-5">{entry.reasoning[p]}</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  {entry.summary && (
+                    <div>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">AI Summary</p>
+                      <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 leading-relaxed">{entry.summary}</p>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: 'FRT', val: fmtDuration(entry.frt) },
+                      { label: 'Resolution', val: fmtDuration(entry.resolutionTime) },
+                      { label: 'Type', val: entry.conversationType || '—' },
+                      { label: 'IQS', val: `${entry.iqs}%` },
+                    ].map(k => (
+                      <div key={k.label} className="bg-gray-50 rounded-xl px-3 py-2.5 text-center">
+                        <p className="text-lg font-bold text-gray-800">{k.val}</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide mt-0.5">{k.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {!challenged && (
+                    <div className="pt-2">
+                      <button onClick={() => setShowChallenge(true)}
+                        className="w-full py-2.5 border border-gray-200 text-gray-600 text-sm font-semibold rounded-xl hover:border-gray-400 transition">
+                        ⚑ Challenge this score
+                      </button>
+                      <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+                        If the AI scoring seems wrong, send it to the Quality team
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'transcript' && (
+              <div className="px-6 py-5">
+                {txLoading && (
+                  <div className="flex items-center justify-center py-12 text-gray-400 gap-2 text-sm">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                    Loading transcript…
+                  </div>
+                )}
+                {txError && <p className="text-sm text-red-500 text-center py-8">{txError}</p>}
+                {!txLoading && !txError && transcript !== null && (
+                  transcript?.timedMessages && transcript.timedMessages.length > 0 ? (
+                    <>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">{transcript.timedMessages.length} messages</p>
+                      <TranscriptBubbles messages={transcript.timedMessages} />
+                    </>
+                  ) : transcript?.rawTranscript ? (
+                    <>
+                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Raw Transcript</p>
+                      <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{transcript.rawTranscript}</pre>
+                    </>
+                  ) : (
+                    <div className="text-center py-12">
+                      <p className="text-sm text-gray-400">No transcript saved for this chat.</p>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {showChallenge && (
+        <ChallengeModal
+          entry={entry}
+          onClose={() => setShowChallenge(false)}
+          onDone={() => { setChallenged(true); setShowChallenge(false); }}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Nav Item ──────────────────────────────────────────────────────────────────
+function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+        active ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30' : 'text-slate-400 hover:text-white hover:bg-white/8'
+      }`}>
+      <span className="shrink-0">{icon}</span>
+      <span className="flex-1 text-left">{label}</span>
+    </button>
+  );
+}
+
+// ── Interfaces ────────────────────────────────────────────────────────────────
 interface TeamAvg {
   avgIqs: number | null;
   avgFrt: number | null;
@@ -359,394 +367,808 @@ interface TeamAvg {
   top3Count: number;
 }
 
-type DateRange = 'today' | '7d' | '30d' | '90d';
-type ChatFilter = 'all' | 'low' | 'cbb' | 'flagged';
+interface WeeklyRow { key: string; label: string; total: number; params: Record<string, number>; }
 
-interface Props {
-  userEmail: string;
-  selfAgentName?: string;
+interface SummaryMetrics {
+  totalConvos: number; botConvos: number; agentConvos: number;
+  overallCsat: number | null; good: number; cbbBad: number;
+  avgFrt: number | null; avgResolution: number | null;
+  avgIqs: number | null; iqsSampleSize: number;
 }
 
-export default function AgentQualityClient({ userEmail, selfAgentName }: Props) {
-  const [entries, setEntries] = useState<IQSScoreEntry[]>([]);
-  const [teamAvg, setTeamAvg] = useState<TeamAvg | null>(null);
-  const [flags, setFlags] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState<DateRange>('30d');
-  const [chatFilter, setChatFilter] = useState<ChatFilter>('all');
-  const [drawerEntry, setDrawerEntry] = useState<IQSScoreEntry | null>(null);
+interface LogFilters {
+  minScore: number; maxScore: number; csat: string; type: string;
+  dateRange: 'today' | '7d' | '30d' | 'all'; dateFrom: string; dateTo: string;
+  flaggedOnly: boolean; disposition: string; subDisposition: string;
+}
 
-  const load = useCallback(async () => {
-    setLoading(true);
+const DEFAULT_FILTERS: LogFilters = {
+  minScore: 0, maxScore: 100, csat: '', type: '',
+  dateRange: '30d', dateFrom: '', dateTo: '', flaggedOnly: false,
+  disposition: '', subDisposition: '',
+};
+
+function buildParams(page: number, f: LogFilters) {
+  const p = new URLSearchParams();
+  p.set('page', String(page));
+  if (f.minScore > 0)  p.set('minScore', String(f.minScore));
+  if (f.maxScore < 100) p.set('maxScore', String(f.maxScore));
+  if (f.csat)  p.set('csat', f.csat);
+  if (f.type)  p.set('type', f.type);
+  if (f.disposition) p.set('tag', f.disposition);
+  if (f.subDisposition) p.set('subTag', f.subDisposition);
+  if (f.dateRange === 'today') p.set('dateFrom', new Date().toISOString().slice(0, 10));
+  else if (f.dateRange === '7d')  p.set('dateFrom', new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+  else if (f.dateRange === '30d') p.set('dateFrom', new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10));
+  else if (f.dateRange === 'all') {}
+  return p;
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
+interface Props { userEmail: string; selfAgentName?: string; }
+
+export default function AgentQualityClient({ userEmail, selfAgentName }: Props) {
+  const [tab, setTab] = useState<'performance' | 'log'>('performance');
+
+  // Performance state
+  const [perfPeriod, setPerfPeriod] = useState<'today'|'7d'|'30d'|'all'>('30d');
+  const [perfEntries, setPerfEntries] = useState<IQSScoreEntry[]>([]);
+  const [summary, setSummary] = useState<SummaryMetrics | null>(null);
+  const [weeklyParamData, setWeeklyParamData] = useState<WeeklyRow[]>([]);
+  const [teamAvg, setTeamAvg] = useState<TeamAvg | null>(null);
+  const [perfLoading, setPerfLoading] = useState(true);
+  const [showAllWeeks, setShowAllWeeks] = useState(false);
+  const [showAllDispositions, setShowAllDispositions] = useState(false);
+  const perfAbortRef = useRef<AbortController | null>(null);
+  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
+  const [availableSubDispositions, setAvailableSubDispositions] = useState<string[]>([]);
+
+  // Score Log state
+  const [entries, setEntries] = useState<IQSScoreEntry[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
+  const [logLoaded, setLogLoaded] = useState(false);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [pendingFilters, setPendingFilters] = useState<LogFilters>(DEFAULT_FILTERS);
+  const [appliedFilters, setAppliedFilters] = useState<LogFilters>(DEFAULT_FILTERS);
+  const logAbortRef = useRef<AbortController | null>(null);
+
+  // Flags
+  const [flags, setFlags] = useState<Record<string, boolean>>({});  // chatId → challenged
+
+  // Detail modal
+  const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
+
+  // Toast
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
+  // ── Fetch performance data ────────────────────────────────────────────────
+  const loadPerf = useCallback(async (period: 'today'|'7d'|'30d'|'all') => {
+    perfAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    perfAbortRef.current = ctrl;
+    setPerfLoading(true);
     try {
-      const [sRes, tRes, fRes] = await Promise.all([
-        fetch('/api/quality/scores'),
-        fetch('/api/quality/team-avg'),
-        fetch('/api/quality/flag'),
+      const today = new Date().toISOString().slice(0, 10);
+      const from = period === 'today' ? today
+        : period === '7d'  ? new Date(Date.now() - 6*86400000).toISOString().slice(0, 10)
+        : period === '30d' ? new Date(Date.now() - 29*86400000).toISOString().slice(0, 10) : '';
+      const params = new URLSearchParams({ page: '0' });
+      if (from) { params.set('dateFrom', from); params.set('dateTo', today); }
+      const [scoresRes, teamRes, flagsRes] = await Promise.all([
+        fetch(`/api/quality/scores?${params}`, { signal: ctrl.signal }),
+        fetch('/api/quality/team-avg', { signal: ctrl.signal }),
+        fetch('/api/quality/flag', { signal: ctrl.signal }),
       ]);
-      const [sData, tData, fData] = await Promise.all([sRes.json(), tRes.json(), fRes.json()]);
-      setEntries(Array.isArray(sData.entries) ? sData.entries : []);
-      setTeamAvg(tData);
-      if (Array.isArray(fData.flags)) setFlags(fData.flags.map((f: any) => f.scoreId));
+      if (ctrl.signal.aborted) return;
+      const [scoresData, teamData, flagsData] = await Promise.all([
+        scoresRes.json(), teamRes.json(), flagsRes.json(),
+      ]);
+      if (ctrl.signal.aborted) return;
+      // Performance tab uses all entries (up to 2000) for stats
+      setPerfEntries(scoresData.entries || []);
+      if (scoresData.summary) setSummary(scoresData.summary);
+      setWeeklyParamData(scoresData.weeklyParamData || []);
+      setTeamAvg(teamData);
+      // Build flag map: chatId → true
+      if (Array.isArray(flagsData.flags)) {
+        const m: Record<string, boolean> = {};
+        for (const f of flagsData.flags) if (f.chatId) m[f.chatId] = true;
+        setFlags(m);
+      }
+      if (Array.isArray(scoresData.availableDispositions)) setAvailableDispositions(scoresData.availableDispositions);
+      if (Array.isArray(scoresData.availableSubDispositions)) setAvailableSubDispositions(scoresData.availableSubDispositions);
     } catch {}
-    finally { setLoading(false); }
+    setPerfLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // ── Fetch score log ───────────────────────────────────────────────────────
+  const loadLog = useCallback(async (pg: number, f: LogFilters) => {
+    logAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    logAbortRef.current = ctrl;
+    setLogLoading(true); setLogError(null);
+    try {
+      const params = buildParams(pg, f);
+      params.set('skipStats', '1');
+      const res = await fetch(`/api/quality/scores?${params}`, { signal: ctrl.signal });
+      if (ctrl.signal.aborted) return;
+      let data: any;
+      try { data = await res.json(); } catch {
+        if (!ctrl.signal.aborted) setLogError(`Server error ${res.status}`);
+        setLogLoading(false); return;
+      }
+      if (ctrl.signal.aborted) return;
+      if (!res.ok) { setLogError(`${data?.error || res.statusText}`); setLogLoading(false); return; }
+      setEntries(data.entries || []);
+      setTotal(data.total ?? 0);
+      setHasMore(data.hasMore ?? false);
+      setLogLoaded(true);
+      if (Array.isArray(data.availableDispositions)) setAvailableDispositions(data.availableDispositions);
+      if (Array.isArray(data.availableSubDispositions)) setAvailableSubDispositions(data.availableSubDispositions);
+    } catch (e: any) {
+      if (!ctrl.signal.aborted) setLogError(e?.message || 'Failed to load');
+    }
+    setLogLoading(false);
+  }, []);
 
-  // ── Date filtering ────────────────────────────────────────────────────────
-  function dateBounds(r: DateRange) {
-    const to = new Date().toISOString().slice(0, 10);
-    if (r === 'today') return { from: to, to };
-    if (r === '7d')  return { from: new Date(Date.now() -  7 * 86400000).toISOString().slice(0, 10), to };
-    if (r === '30d') return { from: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10), to };
-    return { from: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10), to };
-  }
-  const { from, to } = dateBounds(dateRange);
-  const filtered = entries.filter(e => { const d = (e.scoredAt || e.date || '').slice(0, 10); return d >= from && d <= to; });
+  // Apply log filters
+  const applyFilters = () => {
+    setAppliedFilters(pendingFilters);
+    setPage(0);
+    loadLog(0, pendingFilters);
+  };
 
-  // ── KPI calculations ──────────────────────────────────────────────────────
-  const scored    = filtered.filter(e => e.iqs != null);
-  const avgIqs    = scored.length ? Math.round(scored.reduce((s, e) => s + e.iqs, 0) / scored.length) : null;
-  const rated     = filtered.filter(e => ['5','3','1'].includes(e.csat || ''));
-  const csatNums: number[]  = rated.map(e => e.csat === '5' ? 100 : e.csat === '3' ? 50 : 0);
-  const avgCsat   = csatNums.length ? Math.round(csatNums.reduce((s, n) => s + n, 0) / csatNums.length) : null;
-  const resVals   = filtered.map(e => e.resolutionTime).filter((v): v is number => typeof v === 'number');
-  const avgRes    = resVals.length ? Math.round(resVals.reduce((s, n) => s + n, 0) / resVals.length) : null;
-  const frtVals   = filtered.map(e => e.frt).filter((v): v is number => typeof v === 'number');
-  const avgFrt    = frtVals.length ? Math.round(frtVals.reduce((s, n) => s + n, 0) / frtVals.length) : null;
+  useEffect(() => { loadPerf('30d'); }, [loadPerf]);
 
-  // ── Week-over-week ────────────────────────────────────────────────────────
-  const tw = getWeekBounds(0);
-  const lw = getWeekBounds(1);
+  const switchTab = (t: typeof tab) => {
+    setTab(t);
+    if (t === 'log' && !logLoaded) loadLog(0, appliedFilters);
+  };
 
-  function wkStats(entries: IQSScoreEntry[]) {
-    const s = entries.filter(e => inRange(e, tw.from, tw.to));
-    const l = entries.filter(e => inRange(e, lw.from, lw.to));
-    const stat = (arr: IQSScoreEntry[]) => {
-      const iq = arr.filter(e => e.iqs != null).map(e => e.iqs);
-      const cs = arr.reduce<number[]>((a, e) => { if (e.csat === '5') a.push(100); else if (e.csat === '3') a.push(50); else if (e.csat === '1') a.push(0); return a; }, []);
-      return {
-        avgIqs:  iq.length ? Math.round(iq.reduce((a, v) => a + v, 0) / iq.length) : null,
-        avgCsat: cs.length ? Math.round(cs.reduce((a, v) => a + v, 0) / cs.length) : null,
-        chats: arr.length,
-      };
-    };
-    return { this: stat(s), last: stat(l) };
-  }
-  const wow = wkStats(entries);
+  // ── Perf derived metrics ──────────────────────────────────────────────────
+  const scored = perfEntries.filter(e => e.iqs != null);
+  const avgIqs = scored.length ? Math.round(scored.reduce((s, e) => s + e.iqs, 0) / scored.length) : null;
+  const t = avgIqs != null ? iqsTheme(avgIqs) : null;
 
-  // ── My parameter pass rates ───────────────────────────────────────────────
   const myParamRates: Record<string, number | null> = {};
   for (const p of PARAM_ORDER) {
-    const relevant = scored.filter(e => e.scores?.[p] != null && e.scores[p] !== 'NA');
-    const yes      = relevant.filter(e => e.scores[p] === 'Yes').length;
-    myParamRates[p] = relevant.length ? Math.round((yes / relevant.length) * 100) : null;
+    const rel = scored.filter(e => e.scores?.[p] != null && e.scores[p] !== 'NA');
+    const yes = rel.filter(e => e.scores[p] === 'Yes').length;
+    myParamRates[p] = rel.length ? Math.round((yes / rel.length) * 100) : null;
   }
 
-  // Sort params: failed/low first
-  const paramsSorted = [...PARAM_ORDER].sort((a, b) => {
+  const top3Rates = teamAvg?.top3ParamRates ?? {};
+
+  // Sort params: worst first
+  const paramsSorted = useMemo(() => [...PARAM_ORDER].sort((a, b) => {
     const ra = myParamRates[a] ?? 101, rb = myParamRates[b] ?? 101;
     return ra - rb;
-  });
+  }), [JSON.stringify(myParamRates)]);
 
-  // ── Chat list ─────────────────────────────────────────────────────────────
-  const displayed = filtered.filter(e => {
-    if (chatFilter === 'low')     return e.iqs != null && e.iqs < 70;
-    if (chatFilter === 'cbb')     return e.csat === '3' || e.csat === '1';
-    if (chatFilter === 'flagged') return flags.includes(e.id);
-    return true;
-  }).sort((a, b) => (b.scoredAt || b.date || '').localeCompare(a.scoredAt || a.date || ''));
+  const worstParams = useMemo(() => paramsSorted
+    .filter(p => myParamRates[p] != null && myParamRates[p]! < 100)
+    .slice(0, 4), [paramsSorted]);
 
-  // ── Improvement areas ─────────────────────────────────────────────────────
-  const top3 = teamAvg?.top3ParamRates ?? {};
-  const gaps = PARAM_ORDER
-    .filter(p => myParamRates[p] != null && top3[p] != null && (top3[p]! - myParamRates[p]!) >= 10)
-    .sort((a, b) => (top3[b]! - myParamRates[b]!) - (top3[a]! - myParamRates[a]!))
-    .slice(0, 3);
+  const gaps = useMemo(() => PARAM_ORDER
+    .filter(p => myParamRates[p] != null && top3Rates[p] != null && (top3Rates[p]! - myParamRates[p]!) >= 10)
+    .sort((a, b) => (top3Rates[b]! - myParamRates[b]!) - (top3Rates[a]! - myParamRates[a]!))
+    .slice(0, 3), [JSON.stringify(myParamRates), JSON.stringify(top3Rates)]);
 
-  if (loading) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <p className="text-stone-400 text-sm animate-pulse">Loading your quality data…</p>
-    </div>
-  );
+  const dispositionStats = useMemo(() => {
+    const map: Record<string, { count: number; iqsSum: number; csatGood: number; csatTotal: number }> = {};
+    for (const e of scored) {
+      const d = e.disposition?.trim() || 'Untagged';
+      if (!map[d]) map[d] = { count: 0, iqsSum: 0, csatGood: 0, csatTotal: 0 };
+      map[d].count++;
+      map[d].iqsSum += e.iqs;
+      if (e.csat === '5' || e.csat === '3' || e.csat === '1') {
+        map[d].csatTotal++;
+        if (e.csat === '5') map[d].csatGood++;
+      }
+    }
+    return Object.entries(map)
+      .map(([disp, d]) => ({
+        disp,
+        count: d.count,
+        avgIqs: Math.round(d.iqsSum / d.count),
+        csatPct: d.csatTotal > 0 ? Math.round(d.csatGood / d.csatTotal * 100) : null,
+      }))
+      .filter(d => d.count >= 2)
+      .sort((a, b) => a.avgIqs - b.avgIqs);
+  }, [scored]);
 
-  const iqsC = avgIqs != null ? iqsColor(avgIqs) : null;
+  // ── Filtered log entries ──────────────────────────────────────────────────
+  const displayedEntries = useMemo(() => {
+    if (!pendingFilters.flaggedOnly) return entries;
+    return entries.filter(e => flags[e.chatId]);
+  }, [entries, pendingFilters.flaggedOnly, flags]);
 
+  const icons = {
+    performance: <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12l3-4 3 2 3-5 3 3"/><rect x="1" y="1" width="14" height="14" rx="1.5"/></svg>,
+    log: <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h3"/></svg>,
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-5">
+    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: '#f5f3ee' }}>
 
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-base font-bold text-stone-800">My Quality</h1>
-          <p className="text-xs text-stone-500 mt-0.5">{selfAgentName || userEmail.split('@')[0]}</p>
+      {detailEntry && (
+        <ScoreDetailModal
+          entry={detailEntry}
+          flagged={!!flags[detailEntry.chatId]}
+          onClose={() => setDetailEntry(null)}
+        />
+      )}
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl">
+          {toast}
         </div>
-        <div className="flex items-center bg-stone-100 rounded-lg p-0.5 gap-0.5">
-          {(['today','7d','30d','90d'] as DateRange[]).map(r => (
-            <button key={r} onClick={() => setDateRange(r)}
-              className={`text-xs px-3 py-1.5 rounded-md font-semibold transition ${dateRange === r ? 'bg-white text-stone-800 shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}>
-              {r === 'today' ? 'Today' : r.toUpperCase()}
-            </button>
-          ))}
-        </div>
-      </div>
+      )}
 
-      {/* ── KPI cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-
-        {/* IQS */}
-        <div className="bg-white rounded-2xl border border-stone-100 p-5">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-3">IQS Score</p>
-          {avgIqs != null ? (
-            <div className="flex items-center gap-3">
-              <IQSRing iqs={avgIqs} size={56} />
-              <div>
-                <p className="text-2xl font-bold leading-none tabular-nums" style={{ color: iqsC?.text }}>{avgIqs}<span className="text-sm">%</span></p>
-                <p className="text-xs text-stone-400 mt-0.5">{iqsC?.label}</p>
-              </div>
-            </div>
-          ) : <p className="text-2xl font-bold text-stone-300">—</p>}
-          <p className="text-[10px] text-stone-400 mt-2">{scored.length} scored chats</p>
-        </div>
-
-        {/* CSAT */}
-        <div className="bg-white rounded-2xl border border-stone-100 p-5">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-3">CSAT</p>
-          <p className="text-2xl font-bold text-stone-800 tabular-nums">{avgCsat != null ? `${avgCsat}%` : '—'}</p>
-          <div className="flex items-center gap-2 mt-1.5">
-            {delta(wow.this.avgCsat, wow.last.avgCsat)}
-            {wow.this.avgCsat != null && <span className="text-[10px] text-stone-400">vs last wk</span>}
+      {/* ── Left sidebar ── */}
+      <aside className="w-64 shrink-0 bg-[#111827] flex flex-col h-full">
+        <div className="px-4 py-4 border-b border-white/10">
+          <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5"/></svg>
+            Back to chat
+          </Link>
+          <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/wint-logo.png" alt="Wint" width={64} height={22} className="object-contain block" />
           </div>
-          <p className="text-[10px] text-stone-400 mt-1">{rated.length} rated</p>
+          <p className="text-slate-500 text-[10px] mt-1.5 font-semibold uppercase tracking-wider">My Quality</p>
         </div>
 
-        {/* Chats */}
-        <div className="bg-white rounded-2xl border border-stone-100 p-5">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-3">Chats Handled</p>
-          <p className="text-2xl font-bold text-stone-800 tabular-nums">{filtered.length}</p>
-          <div className="flex items-center gap-2 mt-1.5">
-            {delta(wow.this.chats, wow.last.chats)}
-            {<span className="text-[10px] text-stone-400">vs last wk</span>}
-          </div>
-          <p className="text-[10px] text-stone-400 mt-1">in selected period</p>
-        </div>
+        <nav className="px-3 py-4 flex-1 space-y-1">
+          <NavItem icon={icons.performance} label="Performance" active={tab === 'performance'} onClick={() => switchTab('performance')} />
+          <NavItem icon={icons.log} label="Score Log" active={tab === 'log'} onClick={() => switchTab('log')} />
+        </nav>
 
-        {/* Resolution */}
-        <div className="bg-white rounded-2xl border border-stone-100 p-5">
-          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-3">Avg Resolution</p>
-          <p className="text-2xl font-bold text-stone-800 tabular-nums">{fmtDuration(avgRes)}</p>
-          {avgFrt != null && <p className="text-[10px] text-stone-400 mt-1.5">FRT {fmtDuration(avgFrt)}</p>}
-          {teamAvg?.avgResolution != null && avgRes != null && (
-            <p className="text-[10px] text-stone-400 mt-1">
-              Team avg {fmtDuration(teamAvg.avgResolution)}
-              {avgRes > teamAvg.avgResolution
-                ? <span className="text-red-500 ml-1">↑ slower</span>
-                : <span className="text-emerald-600 ml-1">↓ faster</span>
-              }
+        {/* Agent identity */}
+        <div className="px-4 py-4 border-t border-white/10">
+          <p className="text-xs text-slate-400 truncate">{selfAgentName || userEmail.split('@')[0]}</p>
+          <p className="text-[10px] text-slate-600 mt-0.5">Agent</p>
+        </div>
+      </aside>
+
+      {/* ── Main content ── */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden">
+
+        {/* Top bar */}
+        <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
+          <div className="shrink-0">
+            <h1 className="text-base font-bold text-gray-900">
+              {tab === 'performance' ? 'My Performance' : 'Score Log'}
+            </h1>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {tab === 'performance' && `${scored.length} scored · ${perfEntries.length} total chats`}
+              {tab === 'log' && `${displayedEntries.length} of ${total} chats`}
             </p>
-          )}
-        </div>
-      </div>
-
-      {/* ── Middle row: params + wow ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4">
-
-        {/* Parameter benchmark */}
-        <div className="bg-white rounded-2xl border border-stone-100 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-bold text-stone-800">Quality Parameters</h2>
-              <p className="text-xs text-stone-400 mt-0.5">Your pass rate vs top-3 benchmark</p>
-            </div>
-            <div className="flex items-center gap-3 text-[10px] text-stone-400">
-              <span className="flex items-center gap-1">
-                <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400" />Mine
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block w-1 h-3 rounded-sm bg-stone-300" />Top 3
-              </span>
-            </div>
           </div>
 
-          <div className="space-y-3">
-            {paramsSorted.map(p => {
-              const mine = myParamRates[p];
-              const bench = top3[p] ?? null;
-              const gap = mine != null && bench != null ? bench - mine : null;
-              const barColor = mine == null ? '#e5e7eb' : mine >= 80 ? '#22c55e' : mine >= 60 ? '#f59e0b' : '#ef4444';
-              const textColor = mine == null ? '#9ca3af' : mine >= 80 ? '#15803d' : mine >= 60 ? '#92400e' : '#b91c1c';
-
-              return (
-                <div key={p}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-stone-600 font-medium truncate pr-2">{PARAM_NAMES[p]}</span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {gap != null && gap > 0 && (
-                        <span className="text-[9px] text-stone-400">−{gap}pp</span>
-                      )}
-                      <span className="text-xs font-bold tabular-nums" style={{ color: textColor }}>
-                        {mine != null ? `${mine}%` : '—'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="relative h-1.5 bg-stone-100 rounded-full">
-                    <div className="h-1.5 rounded-full transition-all" style={{ width: `${mine ?? 0}%`, background: barColor }} />
-                    {bench != null && (
-                      <div className="absolute top-0 bottom-0 w-0.5 bg-stone-400 rounded-full" style={{ left: `${bench}%`, transform: 'translateX(-50%)' }} />
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* WoW + improvement areas */}
-        <div className="space-y-4">
-
-          {/* Week comparison */}
-          <div className="bg-white rounded-2xl border border-stone-100 p-5">
-            <h2 className="text-sm font-bold text-stone-800 mb-3">This week vs last week</h2>
-            <div className="grid grid-cols-3 gap-3">
-              {[
-                { label: 'IQS', this: wow.this.avgIqs, last: wow.last.avgIqs, fmt: (v: number | null) => v != null ? `${v}%` : '—' },
-                { label: 'CSAT', this: wow.this.avgCsat, last: wow.last.avgCsat, fmt: (v: number | null) => v != null ? `${v}%` : '—' },
-                { label: 'Chats', this: wow.this.chats, last: wow.last.chats, fmt: (v: number | null) => String(v ?? 0) },
-              ].map(col => (
-                <div key={col.label}>
-                  <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">{col.label}</p>
-                  <p className="text-lg font-bold text-stone-800 tabular-nums">{col.fmt(col.this)}</p>
-                  <p className="text-[10px] text-stone-400 tabular-nums">Last: {col.fmt(col.last)}</p>
-                  <div className="mt-1">{delta(col.this, col.last)}</div>
-                </div>
+          {tab === 'performance' && (
+            <div className="flex items-center gap-2 ml-auto">
+              {(['today','7d','30d','all'] as const).map(r => (
+                <button key={r} onClick={() => { setPerfPeriod(r); loadPerf(r); }}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                    perfPeriod === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : 'All time'}
+                </button>
               ))}
             </div>
-          </div>
+          )}
 
-          {/* Improvement focus */}
-          {gaps.length > 0 && (
-            <div className="bg-white rounded-2xl border border-stone-100 p-5">
-              <h2 className="text-sm font-bold text-stone-800 mb-1">Focus areas</h2>
-              <p className="text-[10px] text-stone-400 mb-3">Biggest gaps vs top-3 benchmark</p>
-              <div className="space-y-2.5">
-                {gaps.map(p => {
-                  const mine = myParamRates[p]!;
-                  const bench = top3[p]!;
-                  return (
-                    <div key={p} className="flex items-center justify-between">
-                      <span className="text-xs text-stone-700 font-medium">{PARAM_NAMES[p]}</span>
-                      <div className="flex items-center gap-2 text-xs tabular-nums">
-                        <span className="text-stone-800 font-semibold">{mine}%</span>
-                        <span className="text-stone-300">vs</span>
-                        <span className="text-stone-500">{bench}%</span>
-                        <span className="text-red-500 font-semibold text-[10px]">−{bench - mine}pp</span>
+          {tab === 'log' && (
+            <div className="flex items-center gap-1.5 ml-auto">
+              {(['today','7d','30d','all'] as const).map(r => (
+                <button key={r}
+                  onClick={() => {
+                    const f = { ...pendingFilters, dateRange: r };
+                    setPendingFilters(f); setAppliedFilters(f); setPage(0); loadLog(0, f);
+                  }}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                    appliedFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {r === 'today' ? 'Today' : r === '7d' ? '7 days' : r === '30d' ? '30 days' : 'All time'}
+                </button>
+              ))}
+              <button onClick={() => loadLog(page, appliedFilters)} disabled={logLoading}
+                className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 disabled:opacity-40 transition font-medium ml-1">
+                {logLoading ? '…' : '↻'}
+              </button>
+            </div>
+          )}
+        </header>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto p-6">
+
+          {/* ── PERFORMANCE TAB ── */}
+          {tab === 'performance' && (
+            <div className="space-y-6 max-w-5xl mx-auto">
+              {perfLoading ? (
+                <div className="flex items-center justify-center h-48 text-gray-400 gap-2 text-sm">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                  Loading…
+                </div>
+              ) : (
+                <>
+                  {/* KPI cards */}
+                  {(() => {
+                    const botPct = summary && summary.totalConvos > 0 ? Math.round(summary.botConvos / summary.totalConvos * 100) : 0;
+                    const humanPct = Math.max(0, 100 - botPct);
+                    const ratedEntries = perfEntries.filter(e => ['5','3','1'].includes(e.csat || ''));
+                    const good = ratedEntries.filter(e => e.csat === '5').length;
+                    const bad  = ratedEntries.filter(e => e.csat !== '5' && e.csat != null).length;
+                    const humanFrts = perfEntries.filter(e => e.conversationType !== 'bot' && e.frt != null).map(e => e.frt as number);
+                    const avgHumanFrt = humanFrts.length ? Math.round(humanFrts.reduce((s, n) => s + n, 0) / humanFrts.length) : null;
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Chats</p>
+                          <p className="text-3xl font-bold text-gray-900">{perfEntries.length}</p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {botPct > 0 && <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">{botPct}% Bot</span>}
+                            {humanPct > 0 && <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{humanPct}% Human</span>}
+                          </div>
+                        </div>
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg Resolution</p>
+                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(summary?.avgResolution ?? null)}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">all conversations</p>
+                        </div>
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">CSAT</p>
+                          <p className="text-3xl font-bold text-gray-900">{summary?.overallCsat != null ? `${summary.overallCsat}%` : '—'}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">{good} good · {bad} bad</p>
+                        </div>
+                        <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
+                          <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg FRT (Human)</p>
+                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(avgHumanFrt)}</p>
+                          <p className="text-[11px] text-gray-400 mt-1">first response time</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* My scorecard */}
+                  {avgIqs != null && (
+                    <div>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-3">My Scorecard</p>
+                      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="px-5 pt-5 pb-4">
+                          <div className="flex items-start gap-3">
+                            <IQSRing iqs={avgIqs} size={64} />
+                            <div className="flex-1 min-w-0 pt-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-bold text-gray-900 text-lg tabular-nums" style={{ color: t?.text }}>{avgIqs}%</p>
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: t?.bg, color: t?.text }}>{t?.label}</span>
+                              </div>
+                              <p className="text-xs text-gray-500 mt-0.5">{scored.length} scored chats · range {Math.min(...scored.map(e => e.iqs))}–{Math.max(...scored.map(e => e.iqs))}%</p>
+                              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                {scored.filter(e => e.iqs >= 90).length > 0 && (
+                                  <span className="text-[10px] bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded-full">
+                                    {scored.filter(e => e.iqs >= 90).length} excellent
+                                  </span>
+                                )}
+                                {scored.filter(e => e.iqs < 70).length > 0 && (
+                                  <span className="text-[10px] bg-red-50 text-red-600 font-semibold px-2 py-0.5 rounded-full">
+                                    {scored.filter(e => e.iqs < 70).length} need review
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border-t border-gray-100 bg-gray-50/40 px-5 py-3.5">
+                          {worstParams.length === 0 ? (
+                            <p className="text-xs text-emerald-600 font-semibold text-center py-1">✓ No consistent failure areas</p>
+                          ) : (
+                            <>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2.5">Coaching Focus</p>
+                              <div className="space-y-1.5">
+                                {worstParams.map(p => {
+                                  const rate = myParamRates[p]!;
+                                  const failPct = 100 - rate;
+                                  const bench = top3Rates[p];
+                                  const aboveBench = bench != null && failPct > (100 - bench);
+                                  return (
+                                    <div key={p} className="flex items-center justify-between gap-2">
+                                      <span className="text-[11.5px] text-gray-600 truncate">{PARAM_NAMES[p]}</span>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {aboveBench && <span className="text-[9px] text-amber-500 font-semibold">↑ top-3</span>}
+                                        <span className={`text-[12px] font-bold tabular-nums ${failPct >= 40 ? 'text-red-500' : failPct >= 20 ? 'text-amber-500' : 'text-gray-500'}`}>
+                                          {failPct}% fail
+                                        </span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  )}
+
+                  {/* Disposition Breakdown */}
+                  {dispositionStats.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-100">
+                        <p className="text-sm font-bold text-gray-900">Disposition Performance</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Your IQS by conversation topic — {dispositionStats.length} disposition{dispositionStats.length !== 1 ? 's' : ''}</p>
+                      </div>
+
+                      {/* Highlights row */}
+                      <div className="grid grid-cols-2 divide-x divide-gray-100">
+                        {/* Weakest */}
+                        <div className="px-5 py-4">
+                          <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-2.5">Needs Focus</p>
+                          <div className="space-y-2">
+                            {dispositionStats.slice(0, 3).map(d => {
+                              const theme = iqsTheme(d.avgIqs);
+                              return (
+                                <div key={d.disp} className="flex items-center gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-gray-700 truncate">{d.disp}</p>
+                                    <p className="text-[10px] text-gray-400">{d.count} chat{d.count !== 1 ? 's' : ''}</p>
+                                  </div>
+                                  <span className="text-sm font-bold tabular-nums shrink-0" style={{ color: theme.text }}>{d.avgIqs}%</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* Strongest */}
+                        <div className="px-5 py-4">
+                          <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest mb-2.5">Strong Points</p>
+                          <div className="space-y-2">
+                            {[...dispositionStats].reverse().slice(0, 3).map(d => {
+                              const theme = iqsTheme(d.avgIqs);
+                              return (
+                                <div key={d.disp} className="flex items-center gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-gray-700 truncate">{d.disp}</p>
+                                    <p className="text-[10px] text-gray-400">{d.count} chat{d.count !== 1 ? 's' : ''}</p>
+                                  </div>
+                                  <span className="text-sm font-bold tabular-nums shrink-0" style={{ color: theme.text }}>{d.avgIqs}%</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Full table */}
+                      {dispositionStats.length > 3 && (
+                        <>
+                          <div className="border-t border-gray-100">
+                            <div className="px-5 py-2.5 flex items-center justify-between">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">All Dispositions</p>
+                              {dispositionStats.length > 6 && (
+                                <button onClick={() => setShowAllDispositions(v => !v)} className="text-xs text-emerald-600 font-semibold hover:underline">
+                                  {showAllDispositions ? 'Show less ↑' : `View all ${dispositionStats.length} →`}
+                                </button>
+                              )}
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="bg-gray-50/60 border-t border-b border-gray-100">
+                                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Disposition</th>
+                                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Chats</th>
+                                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Avg IQS</th>
+                                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">CSAT</th>
+                                    <th className="px-4 py-2.5 w-24"></th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(showAllDispositions ? dispositionStats : dispositionStats.slice(0, 6)).map((d, i) => {
+                                    const theme = iqsTheme(d.avgIqs);
+                                    return (
+                                      <tr key={d.disp} className={`border-b border-gray-50 ${i % 2 === 1 ? 'bg-gray-50/20' : ''}`}>
+                                        <td className="px-4 py-2.5 font-medium text-gray-700 truncate max-w-[180px]">{d.disp}</td>
+                                        <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">{d.count}</td>
+                                        <td className="px-4 py-2.5 text-right">
+                                          <span className="font-bold tabular-nums" style={{ color: theme.text }}>{d.avgIqs}%</span>
+                                        </td>
+                                        <td className="px-4 py-2.5 text-right text-gray-500 tabular-nums">
+                                          {d.csatPct != null ? `${d.csatPct}%` : '—'}
+                                        </td>
+                                        <td className="px-4 py-2.5">
+                                          <div className="h-1.5 bg-gray-100 rounded-full w-20 ml-auto">
+                                            <div className="h-1.5 rounded-full" style={{ width: `${d.avgIqs}%`, background: theme.bar }} />
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Parameter comparison vs top-3 */}
+                  {teamAvg && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <div>
+                          <p className="text-sm font-bold text-gray-900">Parameter Pass Rates</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Your rate vs top-3 benchmark (anonymous avg)</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px] text-gray-400">
+                          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400" />Mine</span>
+                          <span className="flex items-center gap-1"><span className="inline-block w-0.5 h-3 rounded-sm bg-gray-400" />Top 3</span>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        {paramsSorted.map(p => {
+                          const mine  = myParamRates[p];
+                          const bench = top3Rates[p] ?? null;
+                          const failPct = mine != null ? 100 - mine : null;
+                          const barColor = mine == null ? '#e5e7eb' : mine >= 80 ? '#22c55e' : mine >= 60 ? '#f59e0b' : '#ef4444';
+                          const textColor = mine == null ? '#9ca3af' : mine >= 80 ? '#15803d' : mine >= 60 ? '#92400e' : '#b91c1c';
+                          return (
+                            <div key={p}>
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs text-gray-600 font-medium truncate pr-2">{PARAM_NAMES[p]}</span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {bench != null && mine != null && bench - mine >= 10 && (
+                                    <span className="text-[9px] text-red-400 font-semibold">−{bench - mine}pp</span>
+                                  )}
+                                  <span className="text-xs font-bold tabular-nums" style={{ color: textColor }}>
+                                    {mine != null ? `${mine}%` : '—'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="relative h-1.5 bg-gray-100 rounded-full">
+                                <div className="h-1.5 rounded-full transition-all" style={{ width: `${mine ?? 0}%`, background: barColor }} />
+                                {bench != null && (
+                                  <div className="absolute top-0 bottom-0 w-0.5 bg-gray-400 rounded-full" style={{ left: `${bench}%`, transform: 'translateX(-50%)' }} />
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Weekly parameter breakdown */}
+                  {weeklyParamData.length > 0 && (
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-gray-900">Parameter Failure by Week</p>
+                          <p className="text-xs text-gray-500 mt-0.5">% of your chats failing each parameter</p>
+                        </div>
+                        {weeklyParamData.length > 4 && (
+                          <button onClick={() => setShowAllWeeks(v => !v)} className="text-xs text-emerald-600 font-semibold hover:underline shrink-0">
+                            {showAllWeeks ? 'Show less ↑' : `View all ${weeklyParamData.length} weeks →`}
+                          </button>
+                        )}
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs min-w-[900px]">
+                          <thead>
+                            <tr className="bg-gray-50/80 border-b border-gray-100">
+                              <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap sticky left-0 bg-gray-50/80">Week</th>
+                              <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Chats</th>
+                              {PARAM_ORDER.map(p => (
+                                <th key={p} className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap" title={PARAM_NAMES[p]}>
+                                  {p === 'AllQuestions' ? 'All Q' : p === 'Expectation' ? 'Expect' : p === 'Contextual' ? 'Context' : p === 'FollowUp' ? 'Follow' : p === 'Sentences' ? 'Tone' : p === 'Technical' ? 'Tech' : p}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(showAllWeeks ? weeklyParamData : weeklyParamData.slice(0, 4)).map((row, i) => (
+                              <tr key={row.key} className={`border-b border-gray-50 hover:bg-emerald-50/20 transition ${i % 2 === 1 ? 'bg-gray-50/20' : ''}`}>
+                                <td className="px-4 py-3 font-medium text-gray-700 whitespace-nowrap sticky left-0 bg-white">{row.label}</td>
+                                <td className="px-3 py-3 text-right text-gray-500 tabular-nums">{row.total}</td>
+                                {PARAM_ORDER.map(p => {
+                                  const pct = row.params[p];
+                                  const color = pct >= 40 ? 'text-red-600 font-bold' : pct >= 20 ? 'text-amber-600 font-semibold' : pct > 0 ? 'text-gray-600' : 'text-gray-300';
+                                  return (
+                                    <td key={p} className={`px-3 py-3 text-right tabular-nums ${color}`}>
+                                      {pct > 0 ? `${pct}%` : '—'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           )}
 
-          {/* CBB/Bad quick stat */}
-          {rated.length > 0 && (
-            <div className="bg-white rounded-2xl border border-stone-100 p-5">
-              <h2 className="text-sm font-bold text-stone-800 mb-3">CSAT breakdown</h2>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: 'Good', count: rated.filter(e => e.csat === '5').length, color: 'text-emerald-600' },
-                  { label: 'CBB',  count: rated.filter(e => e.csat === '3').length, color: 'text-stone-600' },
-                  { label: 'Bad',  count: rated.filter(e => e.csat === '1').length, color: 'text-red-500' },
-                ].map(s => (
-                  <div key={s.label} className="text-center">
-                    <p className={`text-xl font-bold tabular-nums ${s.color}`}>{s.count}</p>
-                    <p className="text-[10px] text-stone-400">{s.label}</p>
-                    <p className="text-[10px] text-stone-300">{rated.length > 0 ? Math.round(s.count / rated.length * 100) : 0}%</p>
+          {/* ── SCORE LOG TAB ── */}
+          {tab === 'log' && (
+            <div className="space-y-4 max-w-5xl mx-auto">
+
+              {/* Filters */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                <div className="flex flex-wrap items-end gap-4">
+                  {/* CSAT */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
+                    <select value={pendingFilters.csat} onChange={e => setPendingFilters(f => ({ ...f, csat: e.target.value }))}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
+                      <option value="">Any</option>
+                      <option value="5">Good</option>
+                      <option value="3">CBB</option>
+                      <option value="1">Bad</option>
+                    </select>
                   </div>
-                ))}
+                  {/* IQS range */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={100} value={pendingFilters.minScore}
+                        onChange={e => setPendingFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 }))}
+                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                      <span className="text-gray-400 text-xs">–</span>
+                      <input type="number" min={0} max={100} value={pendingFilters.maxScore}
+                        onChange={e => setPendingFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 }))}
+                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                    </div>
+                  </div>
+                  {/* Type */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Type</p>
+                    <select value={pendingFilters.type} onChange={e => setPendingFilters(f => ({ ...f, type: e.target.value }))}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[100px]">
+                      <option value="">All</option>
+                      <option value="agent">Human</option>
+                      <option value="bot">Bot</option>
+                      <option value="hybrid">Hybrid</option>
+                    </select>
+                  </div>
+                  {/* Disposition */}
+                  {availableDispositions.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+                      <select value={pendingFilters.disposition}
+                        onChange={e => setPendingFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' }))}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px] max-w-[180px]">
+                        <option value="">Any</option>
+                        {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {/* Sub-Disposition */}
+                  {availableSubDispositions.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+                      <select value={pendingFilters.subDisposition}
+                        onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px] max-w-[180px]">
+                        <option value="">Any</option>
+                        {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {/* Flagged toggle */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Show</p>
+                    <button
+                      onClick={() => setPendingFilters(f => ({ ...f, flaggedOnly: !f.flaggedOnly }))}
+                      className={`text-xs px-3 py-1.5 rounded-xl font-semibold border transition ${
+                        pendingFilters.flaggedOnly
+                          ? 'bg-amber-50 border-amber-300 text-amber-700'
+                          : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'
+                      }`}>
+                      ⚑ Flagged only
+                    </button>
+                  </div>
+                  {/* Apply button */}
+                  <div className="ml-auto">
+                    <button onClick={applyFilters} disabled={logLoading}
+                      className="text-xs px-4 py-1.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 transition">
+                      {logLoading ? 'Loading…' : 'Apply'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {logError && (
+                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-700 text-sm">{logError}</div>
+              )}
+
+              {/* Table */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                  <p className="text-sm font-bold text-gray-900">{displayedEntries.length} chats</p>
+                  <p className="text-xs text-gray-400">click any row to view scores + transcript</p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-gray-50/60 border-b border-gray-100">
+                        {['Chat ID','Date','Type','CSAT','IQS','FRT','Resolution','Disposition',''].map(col => (
+                          <th key={col} className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {logLoading && !displayedEntries.length && (
+                        <tr><td colSpan={9} className="text-center text-sm text-gray-400 py-12">
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin inline mr-2"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                          Loading…
+                        </td></tr>
+                      )}
+                      {!logLoading && displayedEntries.length === 0 && (
+                        <tr><td colSpan={9} className="text-center text-sm text-gray-400 py-14">No chats match these filters.</td></tr>
+                      )}
+                      {displayedEntries.map((e, i) => {
+                        const theme = iqsTheme(e.iqs);
+                        const cs = csatLabel(e.csat);
+                        const isFlagged = !!flags[e.chatId];
+                        return (
+                          <tr key={e.id}
+                            onClick={() => setDetailEntry(e)}
+                            className={`border-b border-gray-50 hover:bg-emerald-50/30 cursor-pointer transition ${i % 2 === 1 ? 'bg-gray-50/20' : ''}`}>
+                            <td className="px-4 py-3 font-mono text-emerald-700 font-semibold whitespace-nowrap">
+                              {e.chatId}
+                              {isFlagged && <span className="ml-1.5 text-amber-500 text-[10px]">⚑</span>}
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{e.scoredAt?.slice(0, 10) || e.date || '—'}</td>
+                            <td className="px-4 py-3"><TypeBadge type={e.conversationType} /></td>
+                            <td className="px-4 py-3">
+                              {cs
+                                ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cs.cls}`}>{cs.label}</span>
+                                : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3">
+                              <IQSPill iqs={e.iqs} />
+                            </td>
+                            <td className="px-4 py-3 text-gray-500 tabular-nums">{fmtDuration(e.frt)}</td>
+                            <td className="px-4 py-3 text-gray-500 tabular-nums">{fmtDuration(e.resolutionTime)}</td>
+                            <td className="px-4 py-3 text-gray-500 max-w-[120px] truncate">
+                              {e.disposition || '—'}
+                              {e.subDisposition && <span className="text-gray-400"> / {e.subDisposition}</span>}
+                            </td>
+                            <td className="px-4 py-3 text-gray-300">→</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {hasMore && (
+                  <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
+                    <p className="text-xs text-gray-400">Showing {displayedEntries.length} of {total}</p>
+                    <button onClick={() => { const next = page + 1; setPage(next); loadLog(next, appliedFilters); }}
+                      disabled={logLoading}
+                      className="text-xs font-semibold text-emerald-600 hover:underline disabled:opacity-40">
+                      Load more →
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* ── Chat log ── */}
-      <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden">
-        <div className="px-5 py-4 border-b border-stone-100 flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-bold text-stone-800">My Chats</h2>
-            <p className="text-xs text-stone-400 mt-0.5">Click any row to see IQS breakdown and transcript</p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {([['all','All'],['low','Low IQS'],['cbb','CBB / Bad'],['flagged','Flagged']] as const).map(([v, l]) => (
-              <button key={v} onClick={() => setChatFilter(v)}
-                className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${chatFilter === v ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-500 hover:bg-stone-200'}`}>
-                {l}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-stone-100 bg-stone-50/60">
-              {['Chat','Date','Type','CSAT','IQS','FRT','Resolution',''].map(col => (
-                <th key={col} className="text-left px-4 py-2.5 text-[10px] font-semibold text-stone-400 uppercase tracking-wider">{col}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {displayed.length === 0 && (
-              <tr><td colSpan={8} className="text-center text-sm text-stone-400 py-14">
-                No chats for this filter and period.
-              </td></tr>
-            )}
-            {displayed.slice(0, 60).map(e => {
-              const c = e.iqs != null ? iqsColor(e.iqs) : null;
-              const cs = csatBadge(e.csat);
-              const isFlagged = flags.includes(e.id);
-              return (
-                <tr key={e.id} onClick={() => setDrawerEntry(e)}
-                  className="border-b border-stone-50 hover:bg-stone-50/70 cursor-pointer transition">
-                  <td className="px-4 py-3 font-mono text-xs text-emerald-600 font-semibold">
-                    {e.chatId}{isFlagged && <span className="ml-1.5 text-stone-400 text-[10px]">⚑</span>}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-stone-500">{(e.scoredAt || e.date || '').slice(0, 10)}</td>
-                  <td className="px-4 py-3">{typeBadge(e.conversationType)}</td>
-                  <td className="px-4 py-3">
-                    {cs
-                      ? <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${cs.cls}`}>{cs.label}</span>
-                      : <span className="text-stone-300 text-xs">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    {c
-                      ? <span className="text-xs font-bold tabular-nums" style={{ color: c.text }}>{e.iqs}%</span>
-                      : <span className="text-stone-300 text-xs">—</span>}
-                  </td>
-                  <td className="px-4 py-3 text-xs text-stone-500 tabular-nums">{fmtDuration(e.frt)}</td>
-                  <td className="px-4 py-3 text-xs text-stone-500 tabular-nums">{fmtDuration(e.resolutionTime)}</td>
-                  <td className="px-4 py-3">
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-stone-300">
-                      <path d="M5 2h5m0 0v5m0-5L2 10"/>
-                    </svg>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-
-        {displayed.length > 60 && (
-          <div className="px-5 py-3 border-t border-stone-50 text-xs text-stone-400">
-            Showing 60 of {displayed.length} — narrow the date range to see more
-          </div>
-        )}
-      </div>
-
-      {/* ── Chat drawer ── */}
-      <ChatDrawer entry={drawerEntry} onClose={() => setDrawerEntry(null)} />
-
     </div>
   );
 }
