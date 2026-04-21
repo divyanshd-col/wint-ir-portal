@@ -88,17 +88,19 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
             }
           />
         )}
-        <NavLink
-          href="/cx"
-          label="CX Dashboard"
-          icon={
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="1" y="9" width="3" height="6" rx="0.5" />
-              <rect x="6" y="5" width="3" height="10" rx="0.5" />
-              <rect x="11" y="1" width="3" height="14" rx="0.5" />
-            </svg>
-          }
-        />
+        {role !== 'agent' && (
+          <NavLink
+            href="/cx"
+            label="CX Dashboard"
+            icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="9" width="3" height="6" rx="0.5" />
+                <rect x="6" y="5" width="3" height="10" rx="0.5" />
+                <rect x="11" y="1" width="3" height="14" rx="0.5" />
+              </svg>
+            }
+          />
+        )}
         {isAdmin && (
           <NavLink
             href="/settings"
