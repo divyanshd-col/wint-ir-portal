@@ -409,7 +409,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
   const scored    = filtered.filter(e => e.iqs != null);
   const avgIqs    = scored.length ? Math.round(scored.reduce((s, e) => s + e.iqs, 0) / scored.length) : null;
   const rated     = filtered.filter(e => ['5','3','1'].includes(e.csat || ''));
-  const csatNums  = rated.map(e => e.csat === '5' ? 100 : e.csat === '3' ? 50 : 0);
+  const csatNums: number[]  = rated.map(e => e.csat === '5' ? 100 : e.csat === '3' ? 50 : 0);
   const avgCsat   = csatNums.length ? Math.round(csatNums.reduce((s, n) => s + n, 0) / csatNums.length) : null;
   const resVals   = filtered.map(e => e.resolutionTime).filter((v): v is number => typeof v === 'number');
   const avgRes    = resVals.length ? Math.round(resVals.reduce((s, n) => s + n, 0) / resVals.length) : null;
