@@ -353,10 +353,13 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     ? analyzeConversationTiming(timedMessages, convEnded, transferTimestamp)
     : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
+  // Bot-handled conversations are attributed to Myra (the AI bot)
+  const effectiveWebhookAgent = agentName || (timing.conversationType === 'bot' ? 'Myra' : '');
+
   // Upsert contact + agent
   const [contactId, agentId] = await Promise.all([
     upsertContact(mobileNumber),
-    upsertAgent(agentName),
+    upsertAgent(effectiveWebhookAgent),
   ]);
 
   // Persist conversation to PostgreSQL
@@ -383,13 +386,13 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     const tags = existingConv.tags as any;
     const scored = await executeScoring(
       existingConv,
-      agentName,
+      effectiveWebhookAgent,
       tags?.disposition || '',
       tags?.sub_disposition || '',
     );
     if (scored) {
       return NextResponse.json({
-        ok: true, chat_id: chatId, iqs: scored.iqs, agent: agentName,
+        ok: true, chat_id: chatId, iqs: scored.iqs, agent: effectiveWebhookAgent,
         conversation_type: timing.conversationType,
         frt_secs: timing.frt, b_to_t_secs: timing.botToTeamSecs,
         resolution_secs: timing.resolutionTime,
