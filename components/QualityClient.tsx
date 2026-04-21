@@ -949,7 +949,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
 
   // Batch scoring (admin)
   const [batchRunning, setBatchRunning] = useState(false);
-  const [batchRunResult, setBatchRunResult] = useState<{ processed: number; total: number; skipped: number } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ scored: number; errors: number; remaining: number } | null>(null);
 
   // ── Column visibility derived ────────────────────────────────────────────────
   const autoHiddenLogCols = useMemo(() => {
@@ -1072,15 +1072,20 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
 
   const runPendingScores = async () => {
     setBatchRunning(true);
-    setBatchRunResult(null);
+    setBatchProgress({ scored: 0, errors: 0, remaining: 0 });
+    let scored = 0, errors = 0;
     try {
-      const res = await fetch('/api/admin/run-pending-scores', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      const skipped = data.total - data.processed;
-      setBatchRunResult({ processed: data.processed, total: data.total, skipped });
-      setToast(`Scored ${data.processed} of ${data.total} pending chats`);
-      if (data.processed > 0) loadPerfData(perfPeriod);
+      while (true) {
+        const res = await fetch('/api/admin/run-pending-scores', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) { errors++; }
+        else if (data.iqs != null) { scored++; }
+        else if (data.error) { errors++; }
+        setBatchProgress({ scored, errors, remaining: data.remaining ?? 0 });
+        if (data.done || (!res.ok && data.remaining === 0)) break;
+      }
+      setToast(`Scored ${scored} pending chats${errors > 0 ? ` · ${errors} errors` : ''}`);
+      if (scored > 0) loadPerfData(perfPeriod);
     } catch (err: any) {
       setToast(`Error: ${err.message}`);
     } finally {
@@ -1542,12 +1547,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                   {batchRunning ? (
                     <>
                       <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
-                      Scoring…
+                      {batchProgress ? `${batchProgress.scored} done · ${batchProgress.remaining} left` : 'Starting…'}
                     </>
-                  ) : batchRunResult ? (
+                  ) : batchProgress ? (
                     <>
                       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2.5L6 10l-3.5-3.5L1 8l5 5 9-9z"/></svg>
-                      {batchRunResult.processed} scored
+                      {batchProgress.scored} scored{batchProgress.errors > 0 ? ` · ${batchProgress.errors} errors` : ''}
                     </>
                   ) : (
                     <>
