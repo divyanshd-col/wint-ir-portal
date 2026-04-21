@@ -270,6 +270,46 @@ Respond with EXACTLY this JSON structure:
 
 CRITICAL: Output ONLY the JSON. No other text before or after.`;
 
+/**
+ * Trim a transcript before sending to the LLM to reduce token cost.
+ * - Removes blank lines
+ * - Truncates individual lines longer than 400 chars (bot FAQ dumps, copy-pastes)
+ * - Removes consecutive duplicate lines (agent accidentally sends same message twice)
+ * - Hard-caps total at maxChars with head+tail preservation so Opening and Closing
+ *   context are both visible to the scorer
+ */
+export function trimTranscript(transcript: string, maxChars = 5000): string {
+  const lines = transcript.split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map(l => l.length > 400 ? l.slice(0, 397) + '…' : l);
+
+  // Remove consecutive identical lines
+  const deduped: string[] = [];
+  for (const line of lines) {
+    if (deduped.length === 0 || deduped[deduped.length - 1] !== line) {
+      deduped.push(line);
+    }
+  }
+
+  const joined = deduped.join('\n');
+  if (joined.length <= maxChars) return joined;
+
+  // Keep 55% head (Opening matters) + 45% tail (Closing/FollowUp matter)
+  const headChars = Math.round(maxChars * 0.55);
+  const tailChars = maxChars - headChars - 35;
+  const headRaw = joined.slice(0, headChars);
+  const tailRaw = joined.slice(joined.length - tailChars);
+
+  // Cut at line boundaries where possible
+  const headEnd = headRaw.lastIndexOf('\n');
+  const tailStart = tailRaw.indexOf('\n');
+  const head = headEnd > 0 ? headRaw.slice(0, headEnd) : headRaw;
+  const tail = tailStart > 0 ? tailRaw.slice(tailStart + 1) : tailRaw;
+
+  return `${head}\n[… transcript trimmed …]\n${tail}`;
+}
+
 export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = '', kbContext = '', subDisposition = ''): string {
   return `Score the following customer support chat transcript.
 

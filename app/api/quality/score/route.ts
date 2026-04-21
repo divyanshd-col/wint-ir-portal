@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
-import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, calculateIQS, IQSScoreEntry } from '@/lib/quality';
+import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, calculateIQS, trimTranscript, IQSScoreEntry } from '@/lib/quality';
 import { storeAppendIQSScore, storeSetTranscript } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const geminiKeys   = getIQSGeminiKeys(config);
   const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
-  const userPrompt = buildScoringPrompt(transcript, tags, chatId);
+  const userPrompt = buildScoringPrompt(trimTranscript(transcript), tags, chatId);
 
   let rawResponse: string;
 
