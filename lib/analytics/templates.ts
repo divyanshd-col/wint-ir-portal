@@ -399,7 +399,7 @@ export function agent_breakdown_in_team(f: AnalyticsFilters, extras?: TemplateEx
       ${toWhere(teamClauses)}
       GROUP BY a.id, a.name
       ORDER BY chats DESC
-      LIMIT 20
+      LIMIT 50
     `,
     params,
   };

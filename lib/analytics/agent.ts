@@ -199,7 +199,7 @@ Column aliasing rules for charts:
 - single_number: any column names, one row preferred
 - table:        descriptive aliases, max 6 columns
 
-Always include LIMIT 500 (except single-row aggregates). For ID fetches before read_transcripts: LIMIT 20.
+Always include LIMIT 500 (except single-row aggregates). For ID fetches before read_transcripts: LIMIT 50.
 Trend bucket: daily if window ≤ 30 days, weekly if 31–90 days. Do not run trends over 90 days.
 
 When fetching IDs for read_transcripts, use:
@@ -212,13 +212,13 @@ FROM conversations c
 INNER JOIN iqs_scores i ON i.chat_id = c.id
 WHERE /* your filters */
 ORDER BY c.closed_at DESC, c.csat_score ASC
-LIMIT 20
+LIMIT 50
 \`\`\`
 
 ---
 
 ## WARNINGS — add to warnings array when applicable
-- "Analysis based on 20 conversations sampled. May not represent full distribution."
+- "Analysis based on 50 conversations sampled. May not represent full distribution."
 - "Showing most recent 500 conversations. Apply more filters for complete data."
 - "N conversations excluded due to missing disposition."
 - "Reached 3-tool-call limit. Could not verify: [list]."`;
