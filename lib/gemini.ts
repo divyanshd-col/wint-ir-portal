@@ -28,14 +28,29 @@ function isRetryable(err: any): boolean {
     || msg.includes('quota') || msg.includes('unavailable') || msg.includes('high demand');
 }
 
+// Fallback chain: follow links until no next entry or a cycle is detected.
+// gemini-2.5-flash → gemini-3-flash-preview → gemini-3.1-flash-lite-preview → gemini-2.5-pro
 const FALLBACK_MODEL: Record<string, string> = {
-  'gemini-3-flash-preview': 'gemini-2.5-pro',
-  'gemini-2.5-pro': 'gemini-2.5-flash',
-  'gemini-2.5-flash': 'gemini-2.0-flash',
-  'gemini-2.0-flash': 'gemini-1.5-flash',
+  'gemini-2.5-flash':              'gemini-3-flash-preview',
+  'gemini-3-flash-preview':        'gemini-3.1-flash-lite-preview',
+  'gemini-3.1-flash-lite-preview': 'gemini-2.5-pro',
 };
 
-/** Non-streaming Gemini call with automatic key rotation on 429, then model fallback. */
+function buildModelChain(model: string): string[] {
+  const chain = [model];
+  const seen = new Set([model]);
+  let current = model;
+  while (FALLBACK_MODEL[current]) {
+    const next = FALLBACK_MODEL[current];
+    if (seen.has(next)) break;
+    chain.push(next);
+    seen.add(next);
+    current = next;
+  }
+  return chain;
+}
+
+/** Non-streaming Gemini call with automatic key rotation on 429/503, then model fallback chain. */
 export async function geminiGenerate(
   keys: string[],
   model: string,
@@ -43,7 +58,7 @@ export async function geminiGenerate(
   extra?: Record<string, any>,
   timeoutMs = 8000
 ): Promise<string> {
-  const modelsToTry = [model, ...(FALLBACK_MODEL[model] ? [FALLBACK_MODEL[model]] : [])];
+  const modelsToTry = buildModelChain(model);
   let lastError: any;
 
   for (const currentModel of modelsToTry) {
@@ -68,7 +83,7 @@ export async function geminiGenerate(
           }),
           timeoutPromise,
         ]);
-        if (currentModel !== model) console.warn(`[gemini] Pro quota exhausted — using ${currentModel} fallback`);
+        if (currentModel !== model) console.warn(`[gemini] ${model} unavailable — used ${currentModel} fallback`);
         return response.text || '';
       } catch (err: any) {
         if (isRetryable(err)) { lastError = err; continue; }
@@ -79,14 +94,14 @@ export async function geminiGenerate(
   throw lastError;
 }
 
-/** Streaming Gemini call with automatic key rotation on 429, then model fallback. */
+/** Streaming Gemini call with automatic key rotation on 429/503, then model fallback chain. */
 export async function geminiStream(
   keys: string[],
   model: string,
   contents: any[],
   systemInstruction: string
 ) {
-  const modelsToTry = [model, ...(FALLBACK_MODEL[model] ? [FALLBACK_MODEL[model]] : [])];
+  const modelsToTry = buildModelChain(model);
   let lastError: any;
 
   for (const currentModel of modelsToTry) {
@@ -97,7 +112,7 @@ export async function geminiStream(
     for (const key of keys) {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
-        if (currentModel !== model) console.warn(`[gemini] Pro quota exhausted — using ${currentModel} fallback`);
+        if (currentModel !== model) console.warn(`[gemini] ${model} unavailable — used ${currentModel} fallback`);
         return await ai.models.generateContentStream({
           model: currentModel,
           contents,
