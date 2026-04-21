@@ -306,10 +306,11 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     body.phone_number          || body.mobile               || undefined;
 
   // Extract assignment timestamp (FRT start)
+  // Robylon sends either "assigned by <agent>" or "Auto-Assigned chat to <agent>"
   let transferTimestamp: string | undefined;
   for (const m of rawMessages) {
     const content = (m.content || m.text || '').trim().toLowerCase();
-    if (content.includes('assigned by') && m.timestamp) {
+    if ((content.includes('assigned by') || content.includes('auto-assigned')) && m.timestamp) {
       transferTimestamp = parseRobyTimestamp(m.timestamp, year) || undefined;
       break;
     }

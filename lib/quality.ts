@@ -131,8 +131,10 @@ export function analyzeConversationTiming(
   };
 
   // FRT = assignment timestamp → first human agent message
-  // Falls back to first customer message → first human agent message if no transfer time
-  const frtStart = transferTimestamp ?? firstCustomer?.timestamp;
+  // Only falls back to first customer message when there is no bot involved
+  // (pure agent chats have no assignment event, so first customer msg is the right start)
+  const frtStart = transferTimestamp
+    ?? (conversationType === 'agent' ? firstCustomer?.timestamp : undefined);
   const frt = diffSecs(frtStart, firstHuman?.timestamp);
   const botToTeamSecs = diffSecs(firstBot?.timestamp, firstHuman?.timestamp);
   const resolutionTime = diffSecs(firstCustomer?.timestamp, lastMsg?.timestamp);
