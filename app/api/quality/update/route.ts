@@ -31,7 +31,9 @@ export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const body = await req.json();
+  let body: any;
+  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
+
   const { id, chatId, scores, reasoning, agentName, disposition, subDisposition, csat, summary, note } = body;
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
@@ -45,118 +47,118 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  // Check the iqs_scores row exists
-  const existing = await query<{ chat_id: string; parameters: any; iqs_score: number }>(
-    `SELECT chat_id, parameters, iqs_score FROM iqs_scores WHERE chat_id = $1`, [chatId]
-  );
-  if (!existing.length) {
-    return NextResponse.json({ error: 'Entry not found in database — score may not have been generated yet.' }, { status: 404 });
-  }
-
-  const updatedBy = session.user?.email || session.user?.name || 'unknown';
-
-  // ── Update iqs_scores (parameters + iqs_score) ────────────────────────────
-  if (scores) {
-    // Merge new scores into existing parameters (keep existing reasoning unless provided)
-    let params = existing[0].parameters || {};
-    if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
-
-    for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
-      const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
-      if (!params[dbKey]) params[dbKey] = {};
-      params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : null;
-      if (reasoning && reasoning[legacyKey] !== undefined) {
-        params[dbKey].reasoning = reasoning[legacyKey];
-      }
+  try {
+    // Check the iqs_scores row exists
+    const existing = await query<{ chat_id: string; parameters: any; iqs_score: number }>(
+      `SELECT chat_id, parameters, iqs_score FROM iqs_scores WHERE chat_id = $1`, [chatId]
+    );
+    if (!existing.length) {
+      return NextResponse.json({ error: 'Entry not found in database — score may not have been generated yet.' }, { status: 404 });
     }
 
-    // If reasoning provided for keys not in scores, apply them too
-    if (reasoning) {
+    const updatedBy = session.user?.email || session.user?.name || 'unknown';
+
+    // ── Update iqs_scores (parameters + iqs_score) ────────────────────────────
+    if (scores) {
+      let params = existing[0].parameters || {};
+      if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
+
+      for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
+        const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
+        if (!params[dbKey]) params[dbKey] = {};
+        params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : null;
+        if (reasoning?.[legacyKey] !== undefined) params[dbKey].reasoning = reasoning[legacyKey];
+      }
+
+      if (reasoning) {
+        for (const [legacyKey, text] of Object.entries(reasoning) as [string, string][]) {
+          const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
+          if (!params[dbKey]) params[dbKey] = {};
+          params[dbKey].reasoning = text;
+        }
+      }
+
+      const newIqs = calculateIQS(scores);
+      await query(
+        `UPDATE iqs_scores SET parameters = $1, iqs_score = $2 WHERE chat_id = $3`,
+        [JSON.stringify(params), newIqs, chatId]
+      );
+    } else if (reasoning) {
+      let params = existing[0].parameters || {};
+      if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
       for (const [legacyKey, text] of Object.entries(reasoning) as [string, string][]) {
         const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
         if (!params[dbKey]) params[dbKey] = {};
         params[dbKey].reasoning = text;
       }
+      await query(
+        `UPDATE iqs_scores SET parameters = $1 WHERE chat_id = $2`,
+        [JSON.stringify(params), chatId]
+      );
     }
 
-    const newIqs = calculateIQS(scores);
-    await query(
-      `UPDATE iqs_scores SET parameters = $1, iqs_score = $2, scored_at = scored_at WHERE chat_id = $3`,
-      [JSON.stringify(params), newIqs, chatId]
-    );
-  } else if (reasoning) {
-    // Reasoning-only update
-    let params = existing[0].parameters || {};
-    if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
-    for (const [legacyKey, text] of Object.entries(reasoning) as [string, string][]) {
-      const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
-      if (!params[dbKey]) params[dbKey] = {};
-      params[dbKey].reasoning = text;
+    // ── Update conversations (csat, tags, agent) ──────────────────────────────
+    const convUpdates: string[] = [];
+    const convParams: any[] = [];
+
+    if (csat !== undefined) {
+      const csatNum = csat ? parseInt(csat) : null;
+      const csatLbl = csat === '5' ? 'Good' : csat === '3' ? 'Neutral' : csat === '1' ? 'Bad' : null;
+      convParams.push(isNaN(csatNum as any) ? null : csatNum);
+      convUpdates.push(`csat_score = $${convParams.length}`);
+      convParams.push(csatLbl);
+      convUpdates.push(`csat_label = $${convParams.length}`);
     }
-    await query(
-      `UPDATE iqs_scores SET parameters = $1, scored_at = scored_at WHERE chat_id = $2`,
-      [JSON.stringify(params), chatId]
-    );
-  }
 
-  // ── Update conversations (csat, tags, agent) ──────────────────────────────
-  const convUpdates: string[] = [];
-  const convParams: any[] = [];
-
-  if (csat !== undefined) {
-    convParams.push(csat ? parseInt(csat) : null);
-    convUpdates.push(`csat_score = $${convParams.length}`);
-    convParams.push(csat === '5' ? 'Good' : csat === '3' ? 'Neutral' : csat === '1' ? 'Bad' : null);
-    convUpdates.push(`csat_label = $${convParams.length}`);
-  }
-
-  if (disposition !== undefined || subDisposition !== undefined) {
-    // Fetch existing tags to merge
-    const convRow = await query<{ tags: any }>(`SELECT tags FROM conversations WHERE id = $1`, [chatId]);
-    let existingTags: any = convRow[0]?.tags || {};
-    if (typeof existingTags === 'string') { try { existingTags = JSON.parse(existingTags); } catch { existingTags = {}; } }
-    if (disposition !== undefined) existingTags.disposition = disposition;
-    if (subDisposition !== undefined) existingTags.sub_disposition = subDisposition;
-    convParams.push(JSON.stringify(existingTags));
-    convUpdates.push(`tags = $${convParams.length}`);
-  }
-
-  if (agentName !== undefined) {
-    // Upsert agent and get/create id
-    const agentRows = await query<{ id: number }>(
-      `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-      [agentName]
-    );
-    if (agentRows[0]?.id) {
-      convParams.push(agentRows[0].id);
-      convUpdates.push(`agent_id = $${convParams.length}`);
+    if (disposition !== undefined || subDisposition !== undefined) {
+      const convRow = await query<{ tags: any }>(`SELECT tags FROM conversations WHERE id = $1`, [chatId]);
+      let existingTags: any = convRow[0]?.tags || {};
+      if (typeof existingTags === 'string') { try { existingTags = JSON.parse(existingTags); } catch { existingTags = {}; } }
+      if (disposition !== undefined) existingTags.disposition = disposition;
+      if (subDisposition !== undefined) existingTags.sub_disposition = subDisposition;
+      convParams.push(JSON.stringify(existingTags));
+      convUpdates.push(`tags = $${convParams.length}`);
     }
+
+    if (agentName !== undefined && agentName !== '') {
+      const agentRows = await query<{ id: number }>(
+        `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+        [agentName]
+      );
+      if (agentRows[0]?.id) {
+        convParams.push(agentRows[0].id);
+        convUpdates.push(`agent_id = $${convParams.length}`);
+      }
+    }
+
+    if (convUpdates.length) {
+      convParams.push(chatId);
+      await query(
+        `UPDATE conversations SET ${convUpdates.join(', ')}, updated_at = NOW() WHERE id = $${convParams.length}`,
+        convParams
+      );
+    }
+
+    const newIqs = scores ? calculateIQS(scores) : existing[0].iqs_score;
+
+    return NextResponse.json({
+      ok: true,
+      entry: {
+        id: id || `${new Date().toISOString()}-${chatId}`,
+        chatId,
+        iqs: newIqs,
+        scores,
+        reasoning,
+        agentName,
+        disposition,
+        subDisposition,
+        csat,
+        updatedBy,
+        updatedAt: new Date().toISOString(),
+      },
+    });
+  } catch (err: any) {
+    console.error('[quality/update] PATCH error:', err?.message ?? err);
+    return NextResponse.json({ error: err?.message || 'Database error' }, { status: 500 });
   }
-
-  if (convUpdates.length) {
-    convParams.push(chatId);
-    await query(
-      `UPDATE conversations SET ${convUpdates.join(', ')}, updated_at = NOW() WHERE id = $${convParams.length}`,
-      convParams
-    );
-  }
-
-  const newIqs = scores ? calculateIQS(scores) : existing[0].iqs_score;
-
-  return NextResponse.json({
-    ok: true,
-    entry: {
-      id: id || `${new Date().toISOString()}-${chatId}`,
-      chatId,
-      iqs: newIqs,
-      scores,
-      reasoning,
-      agentName,
-      disposition,
-      subDisposition,
-      csat,
-      updatedBy,
-      updatedAt: new Date().toISOString(),
-    },
-  });
 }
