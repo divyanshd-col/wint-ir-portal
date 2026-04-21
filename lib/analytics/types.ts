@@ -7,6 +7,7 @@ export interface AnalyticsFilters {
   csatLabels: string[];
   conversationTypes: string[];
   agentIds: number[];
+  minUserMessages?: number | null;  // filter: user_message_count > N from raw_payload counts
 }
 
 export type InsightBlock =

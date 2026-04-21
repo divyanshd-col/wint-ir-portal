@@ -239,18 +239,34 @@ export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Pro
 
 const IQS_FLAGS_KEY = 'wint_iqs_flags';
 
+export interface IQSChallengedParam {
+  param: string;   // e.g. "Opening"
+  note: string;    // agent's specific note for this param
+}
+
 export interface IQSFlag {
   id: string;
   scoreId: string;
   chatId: string;
   agentName: string;
   agentEmail: string;
-  agentNote: string;           // why the agent thinks the score is wrong
+  agentNote: string;           // overall note
+  challengedParams?: IQSChallengedParam[];  // per-parameter challenges
   flaggedAt: string;           // ISO
   status: 'pending' | 'reviewed';
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
+}
+
+export interface IQSFlagComment {
+  id: string;
+  flagId: string;
+  authorEmail: string;
+  authorName: string;
+  role: string;   // agent / quality / admin / tl
+  content: string;
+  createdAt: string;  // ISO
 }
 
 export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
@@ -285,6 +301,27 @@ export async function storeUpdateIQSFlag(
     });
     return true;
   } catch { return false; }
+}
+
+// --- Flag Thread Comments ---
+
+function flagThreadKey(flagId: string) { return `wint_iqs_thread:${flagId}`; }
+
+export async function storeAppendFlagComment(comment: IQSFlagComment): Promise<void> {
+  if (!ready()) return;
+  try {
+    const key = flagThreadKey(comment.flagId);
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['RPUSH', key, JSON.stringify(comment)], ['LTRIM', key, '-200', '-1']]),
+    });
+  } catch {}
+}
+
+export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment[]> {
+  const raw = await kv_lrange(flagThreadKey(flagId), 0, -1);
+  return raw.map(r => { try { return JSON.parse(r) as IQSFlagComment; } catch { return null; } }).filter(Boolean) as IQSFlagComment[];
 }
 
 // --- Pending Score State (accumulates TICKET_CLOSED + CLASSIFICATION + CSAT before scoring) ---

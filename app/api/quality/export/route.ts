@@ -97,20 +97,24 @@ export async function GET(req: NextRequest) {
   if (dateTo)       entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) <= dateTo   || (e.date || '') <= dateTo);
   if (typeFilter)   entries = entries.filter(e => (e.conversationType || 'agent') === typeFilter);
 
+  const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
+
   // CSV headers
   const paramCols = PARAM_ORDER.map(p => PARAM_NAMES[p]);
   const headers = [
-    'Chat ID', 'Agent', 'Date', 'Tags', 'CSAT', 'IQS',
+    'Chat ID', 'Chat Link', 'Agent', 'Date', 'Disposition', 'Sub-Disposition', 'CSAT', 'IQS',
     ...paramCols,
     'Summary', 'Scored At', 'Model',
-    'Conversation Type', 'FRT secs (I→T)', 'B→T secs', 'Resolution secs',
+    'Conversation Type', 'FRT secs', 'B→T secs', 'Resolution secs',
   ];
 
   const rows = entries.map(e => [
     e.chatId,
+    /^\d+$/.test((e.chatId || '').trim()) ? `${ROBYLON_BASE}/${e.chatId}` : '',
     e.agentName || '',
     e.date || e.scoredAt?.slice(0, 10) || '',
     e.disposition || '',
+    (e as any).subDisposition || '',
     e.csat || '',
     e.iqs,
     ...PARAM_ORDER.map(p => e.scores?.[p] || ''),

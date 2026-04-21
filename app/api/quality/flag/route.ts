@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag } from '@/lib/store';
-import type { IQSFlag } from '@/lib/store';
+import type { IQSFlag, IQSChallengedParam } from '@/lib/store';
 import { randomUUID } from 'crypto';
 
 function qualityAccess(session: any) {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const { scoreId, chatId, agentNote } = await req.json();
+  const { scoreId, chatId, agentNote, challengedParams } = await req.json();
   if (!scoreId || !chatId) return NextResponse.json({ error: 'scoreId and chatId required' }, { status: 400 });
 
   const { readConfig } = await import('@/lib/config');
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     agentName,
     agentEmail: email,
     agentNote: agentNote || '',
+    challengedParams: Array.isArray(challengedParams) ? (challengedParams as IQSChallengedParam[]) : undefined,
     flaggedAt: new Date().toISOString(),
     status: 'pending',
   };

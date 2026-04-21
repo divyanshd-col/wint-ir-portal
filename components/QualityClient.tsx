@@ -856,8 +856,262 @@ function NavItem({ icon, label, active, badge, onClick }: {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
+// ── Flag Thread Component ─────────────────────────────────────────────────────
+interface IQSFlagData {
+  id: string; scoreId: string; chatId: string; agentName: string; agentEmail: string;
+  agentNote: string; challengedParams?: { param: string; note: string }[];
+  flaggedAt: string; status: 'pending' | 'reviewed';
+  reviewedBy?: string; reviewedAt?: string; reviewNote?: string;
+}
+interface IQSFlagComment {
+  id: string; flagId: string; authorEmail: string; authorName: string;
+  role: string; content: string; createdAt: string;
+}
+
+function ChallengesTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
+  const [flags, setFlags] = useState<IQSFlagData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<Record<string, IQSFlagComment[]>>({});
+  const [threadLoading, setThreadLoading] = useState<Record<string, boolean>>({});
+  const [replyText, setReplyText] = useState<Record<string, string>>({});
+  const [replySending, setReplySending] = useState<Record<string, boolean>>({});
+  const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
+  const [filter, setFilter] = useState<'all' | 'pending' | 'reviewed'>('all');
+
+  useEffect(() => {
+    setLoading(true);
+    fetch('/api/quality/flag')
+      .then(r => r.json())
+      .then(d => setFlags(d.flags || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const loadThread = async (flagId: string) => {
+    if (threads[flagId] !== undefined) return;
+    setThreadLoading(t => ({ ...t, [flagId]: true }));
+    try {
+      const d = await fetch(`/api/quality/flag-thread?flagId=${encodeURIComponent(flagId)}`).then(r => r.json());
+      setThreads(t => ({ ...t, [flagId]: d.comments || [] }));
+    } catch {}
+    setThreadLoading(t => ({ ...t, [flagId]: false }));
+  };
+
+  const expand = (flagId: string) => {
+    if (expandedId === flagId) { setExpandedId(null); return; }
+    setExpandedId(flagId);
+    loadThread(flagId);
+  };
+
+  const sendReply = async (flagId: string) => {
+    const text = (replyText[flagId] || '').trim();
+    if (!text) return;
+    setReplySending(s => ({ ...s, [flagId]: true }));
+    try {
+      const d = await fetch('/api/quality/flag-thread', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flagId, content: text }),
+      }).then(r => r.json());
+      if (d.comment) {
+        setThreads(t => ({ ...t, [flagId]: [...(t[flagId] || []), d.comment] }));
+        setReplyText(r => ({ ...r, [flagId]: '' }));
+      }
+    } catch {}
+    setReplySending(s => ({ ...s, [flagId]: false }));
+  };
+
+  const markReviewed = async (flagId: string) => {
+    setStatusUpdating(s => ({ ...s, [flagId]: true }));
+    try {
+      await fetch('/api/quality/flag', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: flagId, status: 'reviewed', reviewNote: reviewNotes[flagId] || '' }),
+      });
+      setFlags(prev => prev.map(f => f.id === flagId ? { ...f, status: 'reviewed' } : f));
+    } catch {}
+    setStatusUpdating(s => ({ ...s, [flagId]: false }));
+  };
+
+  const filtered = flags.filter(f => filter === 'all' || f.status === filter)
+    .sort((a, b) => new Date(b.flaggedAt).getTime() - new Date(a.flaggedAt).getTime());
+
+  const pendingCount = flags.filter(f => f.status === 'pending').length;
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-48 text-gray-400 gap-2 text-sm">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+      Loading challenges…
+    </div>
+  );
+
+  return (
+    <div className="space-y-4 max-w-3xl mx-auto">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <h2 className="text-sm font-bold text-gray-900">Score Challenges</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{flags.length} total · {pendingCount} pending review</p>
+        </div>
+        <div className="flex gap-1.5">
+          {(['all','pending','reviewed'] as const).map(f => (
+            <button key={f} onClick={() => setFilter(f)}
+              className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${filter === f ? 'bg-emerald-600 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-400'}`}>
+              {f === 'all' ? 'All' : f === 'pending' ? `Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}` : 'Reviewed'}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-12 text-center">
+          <p className="text-sm text-gray-400">No challenges {filter !== 'all' ? `with status "${filter}"` : 'yet'}.</p>
+        </div>
+      )}
+
+      {filtered.map(flag => {
+        const isExpanded = expandedId === flag.id;
+        const thread = threads[flag.id] || [];
+        const isPending = flag.status === 'pending';
+        const chatUrl = /^\d+$/.test(flag.chatId.trim()) ? `https://app.robylon.ai/unified-inbox/share/${flag.chatId}` : null;
+
+        return (
+          <div key={flag.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${isPending ? 'border-amber-200' : 'border-gray-100'}`}>
+            {/* Flag row */}
+            <div className="px-5 py-4 flex items-start gap-4 cursor-pointer hover:bg-gray-50/40 transition" onClick={() => expand(flag.id)}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap mb-1">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPending ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
+                    {isPending ? '⚑ Pending' : '✓ Reviewed'}
+                  </span>
+                  <span className="text-xs font-semibold text-gray-700">{flag.agentName}</span>
+                  {chatUrl
+                    ? <a href={chatUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                        className="text-xs font-mono text-emerald-600 hover:underline">#{flag.chatId} ↗</a>
+                    : <span className="text-xs font-mono text-gray-500">#{flag.chatId}</span>
+                  }
+                  <span className="text-[10px] text-gray-400">{new Date(flag.flaggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                {flag.challengedParams && flag.challengedParams.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap mt-1.5">
+                    {flag.challengedParams.map(cp => (
+                      <span key={cp.param} className="text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">
+                        {PARAM_NAMES[cp.param] || cp.param}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {flag.agentNote && (
+                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed line-clamp-2">{flag.agentNote}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[10px] text-gray-400 font-semibold">{thread.length > 0 ? `${thread.length} comment${thread.length > 1 ? 's' : ''}` : ''}</span>
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                  className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                  <path d="M2 4l4 4 4-4"/>
+                </svg>
+              </div>
+            </div>
+
+            {/* Expanded: challenged params detail + thread */}
+            {isExpanded && (
+              <div className="border-t border-gray-100">
+                {/* Challenged params with notes */}
+                {flag.challengedParams && flag.challengedParams.length > 0 && (
+                  <div className="px-5 py-3 bg-red-50/40 border-b border-red-100/60">
+                    <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-2">Challenged Parameters</p>
+                    <div className="space-y-1.5">
+                      {flag.challengedParams.map(cp => (
+                        <div key={cp.param} className="flex items-start gap-2">
+                          <span className="text-xs font-semibold text-gray-700 w-28 shrink-0 pt-0.5">{PARAM_NAMES[cp.param] || cp.param}</span>
+                          {cp.note
+                            ? <p className="text-xs text-gray-600 leading-relaxed">{cp.note}</p>
+                            : <p className="text-[11px] text-gray-400 italic">No note provided</p>
+                          }
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Thread */}
+                <div className="px-5 py-3">
+                  {threadLoading[flag.id] && (
+                    <p className="text-xs text-gray-400 py-2">Loading thread…</p>
+                  )}
+                  {thread.length > 0 && (
+                    <div className="space-y-2.5 mb-3">
+                      {thread.map(c => {
+                        const isQa = ['quality','admin','tl'].includes(c.role);
+                        return (
+                          <div key={c.id} className={`flex gap-2 ${isQa ? 'flex-row-reverse' : ''}`}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold ${isQa ? 'bg-emerald-200 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>
+                              {c.authorName.slice(0, 1).toUpperCase()}
+                            </div>
+                            <div className={`max-w-[80%] ${isQa ? 'items-end' : ''}`}>
+                              <p className={`text-[9px] font-semibold mb-0.5 ${isQa ? 'text-right text-emerald-600' : 'text-gray-400'}`}>
+                                {c.authorName} · {new Date(c.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                              </p>
+                              <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${isQa ? 'bg-emerald-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}>
+                                {c.content}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {thread.length === 0 && !threadLoading[flag.id] && (
+                    <p className="text-xs text-gray-400 mb-3">No comments yet. Start the conversation below.</p>
+                  )}
+
+                  {/* Reply input */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={replyText[flag.id] || ''}
+                      onChange={e => setReplyText(r => ({ ...r, [flag.id]: e.target.value }))}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(flag.id); } }}
+                      placeholder="Add a comment…"
+                      className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                    />
+                    <button onClick={() => sendReply(flag.id)} disabled={replySending[flag.id] || !replyText[flag.id]?.trim()}
+                      className="px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                      {replySending[flag.id] ? '…' : 'Send'}
+                    </button>
+                  </div>
+
+                  {/* QA/admin mark as reviewed */}
+                  {isPending && ['quality','admin','tl'].includes(userRole || '') && (
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+                      <input
+                        type="text"
+                        value={reviewNotes[flag.id] || ''}
+                        onChange={e => setReviewNotes(r => ({ ...r, [flag.id]: e.target.value }))}
+                        placeholder="Review note (optional)…"
+                        className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                      />
+                      <button onClick={() => markReviewed(flag.id)} disabled={statusUpdating[flag.id]}
+                        className="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition whitespace-nowrap">
+                        {statusUpdating[flag.id] ? '…' : 'Mark Reviewed'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function QualityClient({ userRole, userEmail, selfAgentName, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports'>(initialTab || 'performance');
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'challenges'>(initialTab || 'performance');
+  const [challengeCount, setChallengeCount] = useState(0);
 
   // Upload state
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
@@ -919,7 +1173,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
   const [forcedVisibleCols, setForcedVisibleCols] = useState<Set<string>>(new Set());
 
   // Sortable columns
-  const [sortCol, setSortCol] = useState<'iqs' | 'fails' | null>(null);
+  const [sortCol, setSortCol] = useState<'iqs' | 'fails' | 'date' | 'csat' | 'frt' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Performance tab — independent period state (decoupled from Score Log)
@@ -976,9 +1230,18 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
     return [...entries].sort((a, b) => {
       let aVal: number, bVal: number;
       if (sortCol === 'iqs') { aVal = a.iqs; bVal = b.iqs; }
-      else {
+      else if (sortCol === 'fails') {
         aVal = PARAM_ORDER.filter(p => a.scores[p] === 'No').length;
         bVal = PARAM_ORDER.filter(p => b.scores[p] === 'No').length;
+      } else if (sortCol === 'date') {
+        aVal = new Date(a.scoredAt || a.date || '').getTime();
+        bVal = new Date(b.scoredAt || b.date || '').getTime();
+      } else if (sortCol === 'csat') {
+        aVal = parseInt(a.csat || '0') || 0;
+        bVal = parseInt(b.csat || '0') || 0;
+      } else {
+        aVal = a.frt ?? 999999;
+        bVal = b.frt ?? 999999;
       }
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
     });
@@ -1139,6 +1402,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
       : DEFAULT_FILTERS;
     if (initialAgent) setPendingFilters(startFilters);
     loadScores(0, startFilters);
+    // Load pending challenge count for nav badge
+    fetch('/api/quality/flag')
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d.flags)) setChallengeCount(d.flags.filter((f: any) => f.status === 'pending').length); })
+      .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1339,6 +1607,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
         <rect x="2" y="2" width="12" height="12" rx="1.5" /><path d="M5 10V8M8 10V6M11 10V4" />
       </svg>
     ),
+    challenges: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M8 2v7M8 12v2"/><circle cx="8" cy="8" r="7"/>
+      </svg>
+    ),
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -1504,6 +1777,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
           )}
           <NavItem icon={icons.reports} label="Reports" active={tab === 'reports'}
             onClick={() => setTab('reports')} />
+          <NavItem icon={icons.challenges} label="Challenges" active={tab === 'challenges'}
+            badge={challengeCount} onClick={() => setTab('challenges')} />
         </nav>
 
       </aside>
@@ -1515,13 +1790,14 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
         <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
           <div className="shrink-0">
             <h1 className="text-base font-bold text-gray-900">
-              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : 'Upload & Score'}
+              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'challenges' ? 'Score Challenges' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {tab === 'performance' && `${agentStats.length} agents · ${perfTotal} chats`}
               {tab === 'log' && `${entries.length} of ${totalFiltered} · ${totalStored.toLocaleString()} all-time`}
               {tab === 'upload' && (fileName ? `${totalToScore} chats ready` : 'Drop a Wint CSV export to begin')}
               {tab === 'reports' && 'Download filtered data as CSV'}
+              {tab === 'challenges' && `${challengeCount} pending review`}
             </p>
           </div>
 
@@ -2077,8 +2353,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                         <tr className="border-b border-gray-100 bg-gray-50/60">
                           {/* Fix 3 — sortable column headers */}
                           {visibleLogCols.map(h => {
-                            const isSortable = h === 'IQS' || h === 'Fails';
-                            const colKey = h === 'IQS' ? 'iqs' : 'fails';
+                            const sortKeyMap: Record<string, 'iqs' | 'fails' | 'date' | 'csat' | 'frt'> = {
+                              'IQS': 'iqs', 'Fails': 'fails', 'Date': 'date', 'CSAT': 'csat', 'FRT': 'frt'
+                            };
+                            const colKey = sortKeyMap[h];
+                            const isSortable = !!colKey;
                             const isActive = sortCol === colKey;
                             return (
                               <th
@@ -2086,7 +2365,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                                 className={`text-left px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider${isSortable ? ' cursor-pointer select-none hover:text-gray-700' : ''}`}
                                 onClick={isSortable ? () => {
                                   if (isActive) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-                                  else { setSortCol(colKey as 'iqs' | 'fails'); setSortDir('desc'); }
+                                  else { setSortCol(colKey); setSortDir('desc'); }
                                 } : undefined}
                               >
                                 {h}{isSortable && (isActive ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ' ↕')}
@@ -2597,6 +2876,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                 )}
               </div>
             </div>
+          )}
+
+          {/* ── CHALLENGES TAB ── */}
+          {tab === 'challenges' && (
+            <ChallengesTab userRole={userRole} userEmail={userEmail} />
           )}
 
         </div>

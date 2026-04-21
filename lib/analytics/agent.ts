@@ -96,8 +96,15 @@ conversations (
   tags                JSONB,             -- {"disposition":"...","sub_disposition":"..."}
   frt_seconds         INTEGER,
   bot_to_team_seconds INTEGER,
-  resolution_seconds  INTEGER
+  resolution_seconds  INTEGER,
+  raw_payload         JSONB              -- webhook payload; counts live here
 )
+
+Message count access (from raw_payload):
+  (c.raw_payload->'counts'->>'user_message_count')::int    -- number of user messages
+  (c.raw_payload->'counts'->>'agent_message_count')::int   -- number of agent messages
+  (c.raw_payload->'counts'->>'bot_message_count')::int     -- number of bot messages
+Use NULLIF(..., NULL)::int pattern or a LATERAL to safely cast.
 
 iqs_scores (
   chat_id       VARCHAR(100) PRIMARY KEY,   -- FK conversations.id
@@ -229,14 +236,17 @@ function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[]): s
   const today = new Date().toISOString().slice(0, 10);
 
   const activeFilters = [
-    `time_range_start:  ${filters.dateFrom}`,
-    `time_range_end:    ${filters.dateTo}`,
-    `team:              ${filters.teams.length ? `IDs ${filters.teams.join(', ')}` : 'all'}`,
-    `csat_label:        ${filters.csatLabels.length ? filters.csatLabels.join(', ') : 'all'}`,
-    `conversation_type: ${filters.conversationTypes.length ? filters.conversationTypes.join(', ') : 'all'}`,
-    `disposition:       ${filters.dispositions.length ? filters.dispositions.join(', ') : 'all'}`,
-    `sub_disposition:   ${filters.subDispositions?.length ? filters.subDispositions.join(', ') : 'all'}`,
-    `agent_id:          ${filters.agentIds.length ? filters.agentIds.join(', ') : 'all'}`,
+    `time_range_start:    ${filters.dateFrom}`,
+    `time_range_end:      ${filters.dateTo}`,
+    `team:                ${filters.teams.length ? `IDs ${filters.teams.join(', ')}` : 'all'}`,
+    `csat_label:          ${filters.csatLabels.length ? filters.csatLabels.join(', ') : 'all'}`,
+    `conversation_type:   ${filters.conversationTypes.length ? filters.conversationTypes.join(', ') : 'all'}`,
+    `disposition:         ${filters.dispositions.length ? filters.dispositions.join(', ') : 'all'}`,
+    `sub_disposition:     ${filters.subDispositions?.length ? filters.subDispositions.join(', ') : 'all'}`,
+    `agent_id:            ${filters.agentIds.length ? filters.agentIds.join(', ') : 'all'}`,
+    filters.minUserMessages != null
+      ? `min_user_messages:   ${filters.minUserMessages}  (apply as: (c.raw_payload->'counts'->>'user_message_count')::int > ${filters.minUserMessages})`
+      : `min_user_messages:   none`,
   ].join('\n');
 
   const IQS_PARAMS = 'technical, all_questions, expectation, contextual, follow_up, sentences, process, opening, call, tags, grammar, empathy';

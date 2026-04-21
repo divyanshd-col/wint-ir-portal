@@ -77,22 +77,23 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const agentRanked = Object.entries(agentMap)
-    .map(([name, d]) => ({ name, avgIqs: d.iqs.length ? Math.round(d.iqs.reduce((s, n) => s + n, 0) / d.iqs.length) : 0, params: d.params }))
-    .filter(a => a.avgIqs > 0)
-    .sort((a, b) => b.avgIqs - a.avgIqs);
+  const agentList = Object.entries(agentMap).map(([name, d]) => ({
+    name,
+    avgIqs: d.iqs.length ? Math.round(d.iqs.reduce((s, n) => s + n, 0) / d.iqs.length) : 0,
+    params: d.params,
+  })).filter(a => a.avgIqs > 0);
 
-  const top3 = agentRanked.slice(0, 3);
-
-  // Merge top-3 param counts, compute pass rate per param
+  // Per-parameter top-3: for each param find top-3 agents by pass rate, average their rates
   const top3ParamRates: Record<string, number | null> = {};
   for (const p of PARAM_ORDER) {
-    let yes = 0, total = 0;
-    for (const a of top3) {
-      yes   += a.params[p]?.yes ?? 0;
-      total += a.params[p]?.total ?? 0;
-    }
-    top3ParamRates[p] = total > 0 ? Math.round((yes / total) * 100) : null;
+    const ranked = agentList
+      .filter(a => (a.params[p]?.total ?? 0) >= 3)  // at least 3 samples for reliability
+      .map(a => ({ name: a.name, rate: Math.round((a.params[p].yes / a.params[p].total) * 100) }))
+      .sort((a, b) => b.rate - a.rate)
+      .slice(0, 3);
+    top3ParamRates[p] = ranked.length > 0
+      ? Math.round(ranked.reduce((s, a) => s + a.rate, 0) / ranked.length)
+      : null;
   }
 
   return NextResponse.json({
@@ -104,6 +105,6 @@ export async function GET(req: NextRequest) {
     avgCsat:       avg(csatScores),
     slaPercent:    b2tValues.length > 0 ? Math.round((slaOk / b2tValues.length) * 100) : null,
     top3ParamRates,
-    top3Count:     top3.length,
+    top3Count:     agentList.length,
   });
 }

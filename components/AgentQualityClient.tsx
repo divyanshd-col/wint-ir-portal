@@ -116,17 +116,37 @@ function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; con
 
 // ── Challenge modal ───────────────────────────────────────────────────────────
 function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onClose: () => void; onDone: () => void }) {
-  const [note, setNote] = useState('');
+  const failedParams = PARAM_ORDER.filter(p => entry.scores[p] === 'No');
+  const [selectedParams, setSelectedParams] = useState<Set<string>>(new Set(failedParams));
+  const [paramNotes, setParamNotes] = useState<Record<string, string>>({});
+  const [generalNote, setGeneralNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
+  const toggleParam = (p: string) => setSelectedParams(prev => {
+    const next = new Set(prev);
+    next.has(p) ? next.delete(p) : next.add(p);
+    return next;
+  });
+
   async function submit() {
-    if (!note.trim()) { setErr('Please describe what seems incorrect.'); return; }
+    if (selectedParams.size === 0 && !generalNote.trim()) {
+      setErr('Select at least one parameter to challenge, or add a general note.');
+      return;
+    }
     setBusy(true); setErr('');
     try {
+      const challengedParams = [...selectedParams].map(p => ({
+        param: p,
+        note: (paramNotes[p] || '').trim(),
+      }));
       const res = await fetch('/api/quality/flag', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scoreId: entry.id, chatId: entry.chatId, agentNote: note }),
+        body: JSON.stringify({
+          scoreId: entry.id, chatId: entry.chatId,
+          agentNote: generalNote.trim(),
+          challengedParams,
+        }),
       });
       const d = await res.json();
       if (d.error) { setErr(d.error); return; }
@@ -137,17 +157,54 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center px-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 z-[71]" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 z-[71] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h3 className="text-sm font-bold text-gray-900 mb-1">Challenge this IQS score</h3>
-        <p className="text-xs text-gray-500 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}% — your note goes to the Quality team for review</p>
-        <textarea value={note} onChange={e => setNote(e.target.value)} rows={4}
-          placeholder="e.g. I greeted the customer in my first message — Opening should be Yes."
-          className="w-full border border-gray-200 rounded-xl px-3.5 py-3 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none" />
-        {err && <p className="text-xs text-red-500 mt-1.5">{err}</p>}
-        <div className="flex gap-2 mt-4">
+        <p className="text-xs text-gray-500 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}% — select the parameters you think are wrong</p>
+
+        {failedParams.length > 0 ? (
+          <div className="space-y-2 mb-4">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Failed Parameters</p>
+            {failedParams.map(p => (
+              <div key={p} className={`rounded-xl border transition ${selectedParams.has(p) ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-gray-50'}`}>
+                <label className="flex items-center gap-3 px-3.5 py-2.5 cursor-pointer">
+                  <input type="checkbox" checked={selectedParams.has(p)} onChange={() => toggleParam(p)}
+                    className="w-3.5 h-3.5 rounded accent-amber-500" />
+                  <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
+                  <span className="text-[10px] text-red-500 font-bold">Fail</span>
+                </label>
+                {selectedParams.has(p) && (
+                  <div className="px-3.5 pb-2.5">
+                    <input
+                      type="text"
+                      value={paramNotes[p] || ''}
+                      onChange={e => setParamNotes(prev => ({ ...prev, [p]: e.target.value }))}
+                      placeholder={`Why should ${PARAM_NAMES[p]} be Yes? (optional)`}
+                      className="w-full text-xs border border-amber-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                    />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 mb-4">
+            <p className="text-xs text-emerald-700 font-semibold">No failed parameters — all scored Yes.</p>
+            <p className="text-[11px] text-emerald-600 mt-0.5">Use the general note below if you disagree with the overall score.</p>
+          </div>
+        )}
+
+        <div className="mb-4">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">General Note (optional)</p>
+          <textarea value={generalNote} onChange={e => setGeneralNote(e.target.value)} rows={3}
+            placeholder="Any additional context for the Quality team…"
+            className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none" />
+        </div>
+
+        {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
+        <div className="flex gap-2">
           <button onClick={submit} disabled={busy}
             className="flex-1 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl disabled:opacity-50 hover:bg-emerald-700 transition">
-            {busy ? 'Sending…' : 'Send to Quality Team'}
+            {busy ? 'Sending…' : `Send to Quality Team${selectedParams.size > 0 ? ` (${selectedParams.size} param${selectedParams.size > 1 ? 's' : ''})` : ''}`}
           </button>
           <button onClick={onClose}
             className="px-4 py-2.5 border border-gray-200 text-gray-500 rounded-xl text-sm hover:bg-gray-50 transition">
@@ -438,6 +495,10 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
   // Flags
   const [flags, setFlags] = useState<Record<string, boolean>>({});  // chatId → challenged
 
+  // Sort state for score log
+  const [sortCol, setSortCol] = useState<'iqs' | 'date' | 'csat' | 'frt' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
   // Detail modal
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
 
@@ -581,11 +642,21 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
       .sort((a, b) => a.avgIqs - b.avgIqs);
   }, [scored]);
 
-  // ── Filtered log entries ──────────────────────────────────────────────────
+  // ── Filtered + sorted log entries ────────────────────────────────────────
   const displayedEntries = useMemo(() => {
-    if (!pendingFilters.flaggedOnly) return entries;
-    return entries.filter(e => flags[e.chatId]);
-  }, [entries, pendingFilters.flaggedOnly, flags]);
+    let list = pendingFilters.flaggedOnly ? entries.filter(e => flags[e.chatId]) : entries;
+    if (sortCol) {
+      list = [...list].sort((a, b) => {
+        let av: number, bv: number;
+        if (sortCol === 'iqs') { av = a.iqs; bv = b.iqs; }
+        else if (sortCol === 'date') { av = new Date(a.scoredAt || '').getTime(); bv = new Date(b.scoredAt || '').getTime(); }
+        else if (sortCol === 'csat') { av = parseInt(a.csat || '0') || 0; bv = parseInt(b.csat || '0') || 0; }
+        else { av = a.frt ?? 999999; bv = b.frt ?? 999999; }
+        return sortDir === 'asc' ? av - bv : bv - av;
+      });
+    }
+    return list;
+  }, [entries, pendingFilters.flaggedOnly, flags, sortCol, sortDir]);
 
   const icons = {
     performance: <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12l3-4 3 2 3-5 3 3"/><rect x="1" y="1" width="14" height="14" rx="1.5"/></svg>,
@@ -900,43 +971,44 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
                     </div>
                   )}
 
-                  {/* Parameter comparison vs top-3 */}
+                  {/* Parameter fail rates vs top-3 benchmark */}
                   {teamAvg && (
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                       <div className="flex items-center justify-between mb-4">
                         <div>
-                          <p className="text-sm font-bold text-gray-900">Parameter Pass Rates</p>
-                          <p className="text-xs text-gray-500 mt-0.5">Your rate vs top-3 benchmark (anonymous avg)</p>
+                          <p className="text-sm font-bold text-gray-900">Parameter Fail Rates</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Your fail% vs top-3 benchmark — lower is better</p>
                         </div>
                         <div className="flex items-center gap-3 text-[10px] text-gray-400">
-                          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-400" />Mine</span>
+                          <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-400" />Mine</span>
                           <span className="flex items-center gap-1"><span className="inline-block w-0.5 h-3 rounded-sm bg-gray-400" />Top 3</span>
                         </div>
                       </div>
                       <div className="space-y-3">
                         {paramsSorted.map(p => {
-                          const mine  = myParamRates[p];
-                          const bench = top3Rates[p] ?? null;
-                          const failPct = mine != null ? 100 - mine : null;
-                          const barColor = mine == null ? '#e5e7eb' : mine >= 80 ? '#22c55e' : mine >= 60 ? '#f59e0b' : '#ef4444';
-                          const textColor = mine == null ? '#9ca3af' : mine >= 80 ? '#15803d' : mine >= 60 ? '#92400e' : '#b91c1c';
+                          const passRate = myParamRates[p];
+                          const benchPass = top3Rates[p] ?? null;
+                          const myFail   = passRate != null ? 100 - passRate : null;
+                          const benchFail = benchPass != null ? 100 - benchPass : null;
+                          const barColor = myFail == null ? '#e5e7eb' : myFail === 0 ? '#22c55e' : myFail <= 20 ? '#f59e0b' : '#ef4444';
+                          const textColor = myFail == null ? '#9ca3af' : myFail === 0 ? '#15803d' : myFail <= 20 ? '#92400e' : '#b91c1c';
                           return (
                             <div key={p}>
                               <div className="flex items-center justify-between mb-1">
                                 <span className="text-xs text-gray-600 font-medium truncate pr-2">{PARAM_NAMES[p]}</span>
                                 <div className="flex items-center gap-2 shrink-0">
-                                  {bench != null && mine != null && bench - mine >= 10 && (
-                                    <span className="text-[9px] text-red-400 font-semibold">−{bench - mine}pp</span>
+                                  {benchFail != null && myFail != null && myFail - benchFail >= 10 && (
+                                    <span className="text-[9px] text-red-400 font-semibold">+{myFail - benchFail}pp above top-3</span>
                                   )}
                                   <span className="text-xs font-bold tabular-nums" style={{ color: textColor }}>
-                                    {mine != null ? `${mine}%` : '—'}
+                                    {myFail != null ? `${myFail}% fail` : '—'}
                                   </span>
                                 </div>
                               </div>
                               <div className="relative h-1.5 bg-gray-100 rounded-full">
-                                <div className="h-1.5 rounded-full transition-all" style={{ width: `${mine ?? 0}%`, background: barColor }} />
-                                {bench != null && (
-                                  <div className="absolute top-0 bottom-0 w-0.5 bg-gray-400 rounded-full" style={{ left: `${bench}%`, transform: 'translateX(-50%)' }} />
+                                <div className="h-1.5 rounded-full transition-all" style={{ width: `${myFail ?? 0}%`, background: barColor }} />
+                                {benchFail != null && (
+                                  <div className="absolute top-0 bottom-0 w-0.5 bg-gray-400 rounded-full" style={{ left: `${benchFail}%`, transform: 'translateX(-50%)' }} />
                                 )}
                               </div>
                             </div>
@@ -1103,8 +1175,27 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50/60 border-b border-gray-100">
-                        {['Chat ID','Date','Type','CSAT','IQS','FRT','Resolution','Disposition',''].map(col => (
-                          <th key={col} className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{col}</th>
+                        {[
+                          { col: 'Chat ID', key: null },
+                          { col: 'Date', key: 'date' as const },
+                          { col: 'Type', key: null },
+                          { col: 'CSAT', key: 'csat' as const },
+                          { col: 'IQS', key: 'iqs' as const },
+                          { col: 'FRT', key: 'frt' as const },
+                          { col: 'Resolution', key: null },
+                          { col: 'Disposition', key: null },
+                          { col: '', key: null },
+                        ].map(({ col, key }) => (
+                          <th key={col}
+                            className={`text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${key ? 'cursor-pointer hover:text-gray-700 select-none' : ''}`}
+                            onClick={() => {
+                              if (!key) return;
+                              if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                              else { setSortCol(key); setSortDir('desc'); }
+                            }}>
+                            {col}
+                            {key && sortCol === key && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
+                          </th>
                         ))}
                       </tr>
                     </thead>

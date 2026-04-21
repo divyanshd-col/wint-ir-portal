@@ -565,6 +565,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [dispositions, setDispositions] = useState<string[]>([]);
   const [csatLabels, setCsatLabels]     = useState<string[]>(['good', 'bad', 'could_be_better']);
   const [convTypes, setConvTypes]       = useState<string[]>([]);
+  const [minUserMsgs, setMinUserMsgs]   = useState<number | null>(null);
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
 
   const [dispTrees, setDispTrees] = useState<DispositionTree[]>([]);
@@ -585,6 +586,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     dateRange !== '7d' ||
     dispositions.length > 0 ||
     convTypes.length > 0 ||
+    minUserMsgs != null ||
     csatLabels.length !== defaultCsat.length ||
     !csatLabels.every(c => defaultCsat.includes(c));
 
@@ -595,6 +597,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     setDispositions([]);
     setCsatLabels(['good', 'bad', 'could_be_better']);
     setConvTypes([]);
+    setMinUserMsgs(null);
   };
 
   // Load dispositions + session history on mount
@@ -643,6 +646,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       csatLabels,
       conversationTypes: convTypes,
       agentIds: [],
+      minUserMessages: minUserMsgs,
     };
   }
 
@@ -784,6 +788,9 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   if (!csatLabels.every(c => defaultCsat.includes(c)) || csatLabels.length !== defaultCsat.length) {
     filterChips.push({ label: `CSAT: ${csatLabels.join(', ')}`, onRemove: () => setCsatLabels(defaultCsat) });
   }
+  if (minUserMsgs != null) {
+    filterChips.push({ label: `>=${minUserMsgs} user msgs`, onRemove: () => setMinUserMsgs(null) });
+  }
 
   return (
     <div className="flex h-screen bg-[#1a1a1a]">
@@ -871,6 +878,22 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
 
             <MultiSelect label="CSAT" options={csatOptions} value={csatLabels} onChange={setCsatLabels} />
             <MultiSelect label="Types" options={typeOptions} value={convTypes} onChange={setConvTypes} />
+
+            {/* Min user messages filter */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[11px] text-gray-500 font-semibold whitespace-nowrap">≥</span>
+              <input
+                type="number"
+                min={1}
+                max={200}
+                value={minUserMsgs ?? ''}
+                onChange={e => setMinUserMsgs(e.target.value ? parseInt(e.target.value) : null)}
+                placeholder="7"
+                title="Minimum user messages"
+                className="w-12 text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-center bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+              <span className="text-[11px] text-gray-400 whitespace-nowrap">user msgs</span>
+            </div>
           </div>
         </div>
 
