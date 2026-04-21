@@ -86,8 +86,8 @@ function IqsPill({ val }: { val: number | null | undefined }) {
   if (val == null) return <span className="text-stone-400 text-xs">—</span>;
   const color =
     val >= 85 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-    val >= 70 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                'bg-red-50 text-red-700 border border-red-200';
+    val >= 70 ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                'bg-stone-50 text-stone-500 border border-stone-200';
   return (
     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>
       {val.toFixed(1)}%
@@ -99,8 +99,8 @@ function CsatBadge({ val }: { val: number | null | undefined }) {
   if (val == null) return <span className="text-stone-400 text-xs">—</span>;
   const color =
     val >= 90 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-    val >= 75 ? 'bg-amber-50 text-amber-700 border border-amber-200' :
-                'bg-red-50 text-red-700 border border-red-200';
+    val >= 75 ? 'bg-orange-50 text-orange-600 border border-orange-200' :
+                'bg-stone-50 text-stone-500 border border-stone-200';
   return (
     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>
       {val.toFixed(1)}%
@@ -110,9 +110,7 @@ function CsatBadge({ val }: { val: number | null | undefined }) {
 
 function ResolutionCell({ secs }: { secs: number | null | undefined }) {
   if (secs == null) return <span className="text-stone-400 text-xs">—</span>;
-  const hours = secs / 3600;
-  const cls = hours > 10 ? 'text-red-600 font-semibold' : hours > 5 ? 'text-amber-600' : 'text-stone-600';
-  return <span className={`text-xs tabular-nums ${cls}`}>{fmtDuration(secs)}</span>;
+  return <span className="text-xs tabular-nums text-stone-600">{fmtDuration(secs)}</span>;
 }
 
 // ── Agent Drawer ──────────────────────────────────────────────────────────────
@@ -204,23 +202,23 @@ function CsatStrip({ good, cbb, bad, total }: { good: number; cbb: number; bad: 
   return (
     <div>
       <div className="flex rounded-full overflow-hidden h-2.5 gap-px mb-3">
-        <div className="bg-emerald-500 transition-all" style={{ width: `${goodPct}%` }} />
-        <div className="bg-amber-400 transition-all"   style={{ width: `${cbbPct}%`  }} />
-        <div className="bg-red-400 transition-all"     style={{ width: `${badPct}%`  }} />
+        <div className="bg-emerald-400 transition-all" style={{ width: `${goodPct}%` }} />
+        <div className="bg-orange-300 transition-all"  style={{ width: `${cbbPct}%`  }} />
+        <div className="bg-stone-300 transition-all"   style={{ width: `${badPct}%`  }} />
       </div>
       <div className="flex items-center gap-4 text-xs">
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
           <span className="text-stone-600 font-medium">Good</span>
           <span className="text-stone-500">{good} · {goodPct}%</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-300 shrink-0" />
           <span className="text-stone-600 font-medium">CBB</span>
           <span className="text-stone-500">{cbb} · {cbbPct}%</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-400 shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-stone-300 shrink-0" />
           <span className="text-stone-600 font-medium">Bad</span>
           <span className="text-stone-500">{bad} · {badPct}%</span>
         </span>
@@ -240,23 +238,23 @@ function IqsHealth({ excellent, warn, risk }: { excellent: number; warn: number;
   return (
     <div>
       <div className="flex rounded-full overflow-hidden h-2.5 gap-px mb-3">
-        <div className="bg-emerald-500 transition-all" style={{ width: `${excPct}%` }} />
-        <div className="bg-amber-400 transition-all"   style={{ width: `${warnPct}%` }} />
-        <div className="bg-red-400 transition-all"     style={{ width: `${riskPct}%` }} />
+        <div className="bg-emerald-400 transition-all" style={{ width: `${excPct}%` }} />
+        <div className="bg-orange-300 transition-all"  style={{ width: `${warnPct}%` }} />
+        <div className="bg-stone-300 transition-all"   style={{ width: `${riskPct}%` }} />
       </div>
       <div className="flex items-center gap-4 text-xs">
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
           <span className="text-stone-600 font-medium">≥85</span>
           <span className="text-stone-500">{excellent} chats</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-amber-400 shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-orange-300 shrink-0" />
           <span className="text-stone-600 font-medium">70–84</span>
           <span className="text-stone-500">{warn} chats</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-red-400 shrink-0" />
+          <span className="w-2.5 h-2.5 rounded-full bg-stone-300 shrink-0" />
           <span className="text-stone-600 font-medium">&lt;70</span>
           <span className="text-stone-500">{risk} chats</span>
         </span>
@@ -265,74 +263,6 @@ function IqsHealth({ excellent, warn, risk }: { excellent: number; warn: number;
   );
 }
 
-// ── Quick Insights ────────────────────────────────────────────────────────────
-function QuickInsights({ groups, overview }: { groups: GroupData[]; overview: OverviewData | null }) {
-  const allAgents = groups.flatMap(g => g.agents);
-
-  const topCsat = [...allAgents]
-    .filter(a => a.csat_pct != null && a.volume >= 5)
-    .sort((a, b) => (b.csat_pct ?? 0) - (a.csat_pct ?? 0))[0];
-
-  const atRiskAgents = allAgents
-    .filter(a => a.avg_iqs != null && a.avg_iqs < 70)
-    .sort((a, b) => (a.avg_iqs ?? 0) - (b.avg_iqs ?? 0));
-
-  const slowestResolution = [...allAgents]
-    .filter(a => a.avg_resolution != null)
-    .sort((a, b) => (b.avg_resolution ?? 0) - (a.avg_resolution ?? 0))[0];
-
-  const frtSlaPct = overview && overview.with_frt > 0
-    ? Math.round((overview.frt_sla_met / overview.with_frt) * 100)
-    : null;
-
-  const csatResponseRate = overview && overview.volume > 0
-    ? Math.round((overview.with_csat / overview.volume) * 100)
-    : null;
-
-  const flags: { type: 'good' | 'warn' | 'bad' | 'info'; text: string }[] = [];
-
-  if (topCsat) {
-    flags.push({ type: 'good', text: `Top agent: ${topCsat.name} — ${topCsat.csat_pct?.toFixed(0)}% CSAT across ${topCsat.volume} chats` });
-  }
-
-  if (atRiskAgents.length > 0) {
-    const names = atRiskAgents.slice(0, 3).map(a => `${a.name} (${a.avg_iqs?.toFixed(0)}%)`).join(', ');
-    flags.push({ type: 'bad', text: `${atRiskAgents.length} agent${atRiskAgents.length > 1 ? 's' : ''} below IQS threshold: ${names}` });
-  }
-
-  if (frtSlaPct != null && frtSlaPct < 60) {
-    flags.push({ type: 'warn', text: `FRT SLA compliance low: only ${frtSlaPct}% of chats responded within 3 minutes` });
-  } else if (frtSlaPct != null && frtSlaPct >= 85) {
-    flags.push({ type: 'good', text: `FRT SLA on track: ${frtSlaPct}% of chats responded within 3 minutes` });
-  }
-
-  if (csatResponseRate != null && csatResponseRate < 40) {
-    flags.push({ type: 'warn', text: `Low CSAT response rate: only ${csatResponseRate}% of chats received a rating` });
-  }
-
-  if (slowestResolution && slowestResolution.avg_resolution && slowestResolution.avg_resolution > 36000) {
-    flags.push({ type: 'warn', text: `Slow resolution: ${slowestResolution.name} averaging ${fmtDuration(slowestResolution.avg_resolution)} per chat` });
-  }
-
-  if (flags.length === 0) {
-    flags.push({ type: 'info', text: 'All metrics within normal range.' });
-  }
-
-  const dotCls = { good: 'bg-emerald-500', warn: 'bg-amber-400', bad: 'bg-red-400', info: 'bg-stone-300' };
-  const bgCls  = { good: 'bg-emerald-50 border-emerald-100', warn: 'bg-amber-50 border-amber-100', bad: 'bg-red-50 border-red-100', info: 'bg-stone-50 border-stone-100' };
-  const txtCls = { good: 'text-emerald-800', warn: 'text-amber-800', bad: 'text-red-800', info: 'text-stone-600' };
-
-  return (
-    <div className="space-y-2">
-      {flags.map((f, i) => (
-        <div key={i} className={`flex items-start gap-2.5 px-3.5 py-2.5 rounded-xl border text-sm ${bgCls[f.type]}`}>
-          <span className={`w-2 h-2 rounded-full shrink-0 mt-1.5 ${dotCls[f.type]}`} />
-          <span className={txtCls[f.type]}>{f.text}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ── Channel comparison card ───────────────────────────────────────────────────
 function ChannelCard({
@@ -357,7 +287,7 @@ function ChannelCard({
         </div>
         <div>
           <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">CSAT %</p>
-          <p className={`text-xl font-bold tabular-nums ${csat == null ? 'text-stone-400' : csat >= 90 ? 'text-emerald-600' : csat >= 75 ? 'text-amber-600' : 'text-red-600'}`}>
+          <p className={`text-xl font-bold tabular-nums ${csat == null ? 'text-stone-400' : csat >= 90 ? 'text-emerald-600' : csat >= 75 ? 'text-orange-500' : 'text-stone-500'}`}>
             {csat != null ? `${csat}%` : '—'}
           </p>
         </div>
@@ -367,7 +297,7 @@ function ChannelCard({
         </div>
         <div>
           <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Avg Resolution</p>
-          <p className={`text-sm font-semibold tabular-nums ${resolution == null ? 'text-stone-400' : resolution > 36000 ? 'text-red-600' : 'text-stone-700'}`}>
+          <p className={`text-sm font-semibold tabular-nums ${resolution == null ? 'text-stone-400' : 'text-stone-700'}`}>
             {fmtDuration(resolution)}
           </p>
         </div>
@@ -377,13 +307,21 @@ function ChannelCard({
 }
 
 // ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, accent }: { label: string; value: string; sub?: string; accent?: 'good' | 'warn' | 'bad' | 'neutral' }) {
-  const accentCls = accent === 'good' ? 'border-l-4 border-l-emerald-400' : accent === 'warn' ? 'border-l-4 border-l-amber-400' : accent === 'bad' ? 'border-l-4 border-l-red-400' : '';
+function KpiCard({ label, value, sub, onClick, active }: {
+  label: string; value: string; sub?: string;
+  onClick?: () => void; active?: boolean;
+}) {
   return (
-    <div className={`bg-white border border-stone-200 rounded-xl p-4 ${accentCls}`}>
+    <div
+      onClick={onClick}
+      className={`bg-white border rounded-xl p-4 transition ${
+        onClick ? 'cursor-pointer hover:border-emerald-300 hover:shadow-sm' : ''
+      } ${active ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-stone-200'}`}
+    >
       <p className="text-[11px] text-stone-500 uppercase tracking-wider font-semibold mb-1">{label}</p>
       <p className="text-2xl font-bold text-stone-800 tabular-nums">{value}</p>
       {sub && <p className="text-xs text-stone-400 mt-1">{sub}</p>}
+      {onClick && <p className="text-[10px] text-stone-300 mt-1.5">Click to expand</p>}
     </div>
   );
 }
@@ -486,6 +424,9 @@ export default function AdminDashboard() {
   const [loadingGroups, setLoadingGroups]     = useState(true);
   const [error, setError]           = useState<string | null>(null);
   const [selectedAgent, setSelectedAgent] = useState<AgentData | null>(null);
+  const [activeCard, setActiveCard]       = useState<string | null>(null);
+
+  const toggleCard = (id: string) => setActiveCard(prev => prev === id ? null : id);
 
   const { dateFrom, dateTo } = getDateRange(preset, customFrom, customTo);
 
@@ -627,43 +568,94 @@ export default function AdminDashboard() {
             {loadingOverview ? skeletonCards : (
               <>
                 <KpiCard label="Volume" value={overview?.volume != null ? overview.volume.toLocaleString() : '—'}
-                  sub={dateFrom ? `from ${dateFrom}` : 'All time'} accent="neutral" />
+                  sub={dateFrom ? `from ${dateFrom}` : 'All time'}
+                  onClick={() => toggleCard('volume')} active={activeCard === 'volume'} />
                 <KpiCard label="CSAT %" value={overview?.csat_pct != null ? `${overview.csat_pct}%` : '—'}
                   sub={overview?.with_csat ? `${overview.with_csat} rated` : undefined}
-                  accent={overview?.csat_pct == null ? 'neutral' : overview.csat_pct >= 90 ? 'good' : overview.csat_pct >= 75 ? 'warn' : 'bad'} />
+                  onClick={() => toggleCard('csat')} active={activeCard === 'csat'} />
                 <KpiCard label="Avg FRT" value={fmtDuration(overview?.avg_frt)}
                   sub={frtSlaPct != null ? `${frtSlaPct}% met 3min SLA` : undefined}
-                  accent={frtSlaPct == null ? 'neutral' : frtSlaPct >= 70 ? 'good' : frtSlaPct >= 50 ? 'warn' : 'bad'} />
+                  onClick={() => toggleCard('frt')} active={activeCard === 'frt'} />
                 <KpiCard label="Avg IQS" value={overview?.avg_iqs != null ? `${overview.avg_iqs}%` : '—'}
                   sub={overview?.iqs_risk ? `${overview.iqs_risk} chats at risk` : undefined}
-                  accent={overview?.avg_iqs == null ? 'neutral' : overview.avg_iqs >= 85 ? 'good' : overview.avg_iqs >= 70 ? 'warn' : 'bad'} />
+                  onClick={() => toggleCard('iqs')} active={activeCard === 'iqs'} />
                 <KpiCard label="Avg Resolution" value={fmtDuration(overview?.avg_resolution)}
                   sub={overview?.avg_resolution != null ? (overview.avg_resolution > 36000 ? 'Above 10h target' : 'Within target') : undefined}
-                  accent={overview?.avg_resolution == null ? 'neutral' : overview.avg_resolution > 36000 ? 'bad' : overview.avg_resolution > 18000 ? 'warn' : 'good'} />
+                  onClick={() => toggleCard('resolution')} active={activeCard === 'resolution'} />
               </>
             )}
           </div>
 
-          {/* CSAT sentiment + IQS health */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white border border-stone-200 rounded-xl p-5">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">CSAT Sentiment Breakdown</p>
-              {loadingOverview ? (
-                <div className="space-y-2"><div className="h-2.5 bg-stone-100 rounded-full animate-pulse" /><div className="h-4 bg-stone-100 rounded animate-pulse w-3/4" /></div>
-              ) : overview ? (
-                <CsatStrip good={overview.csat_good} cbb={overview.csat_cbb ?? 0} bad={overview.csat_bad} total={overview.with_csat} />
-              ) : <p className="text-xs text-stone-400">No data</p>}
+          {/* Expanded card detail */}
+          {!loadingOverview && overview && activeCard && (
+            <div className="bg-white border border-emerald-200 rounded-xl p-5 -mt-2">
+              {activeCard === 'csat' && (
+                <>
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">CSAT Sentiment Breakdown</p>
+                  <CsatStrip good={overview.csat_good} cbb={overview.csat_cbb ?? 0} bad={overview.csat_bad} total={overview.with_csat} />
+                </>
+              )}
+              {activeCard === 'iqs' && (
+                <>
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">IQS Score Distribution</p>
+                  <IqsHealth excellent={overview.iqs_excellent} warn={overview.iqs_warn} risk={overview.iqs_risk} />
+                </>
+              )}
+              {activeCard === 'volume' && (
+                <>
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">Volume by Channel</p>
+                  <div className="flex items-center gap-6 text-sm">
+                    {[
+                      { label: 'Bot', val: overview.bot_volume },
+                      { label: 'Agent', val: overview.agent_volume },
+                      { label: 'Hybrid', val: overview.hybrid_volume },
+                    ].filter(c => c.val > 0).map(c => (
+                      <div key={c.label}>
+                        <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">{c.label}</p>
+                        <p className="text-xl font-bold text-stone-700 tabular-nums">{c.val.toLocaleString()}</p>
+                        <p className="text-[10px] text-stone-400">{Math.round((c.val / overview.volume) * 100)}% of total</p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+              {activeCard === 'frt' && (
+                <>
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">FRT Detail</p>
+                  <div className="flex items-center gap-8 text-sm">
+                    <div>
+                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">SLA Met (≤3 min)</p>
+                      <p className="text-xl font-bold text-stone-700 tabular-nums">{overview.frt_sla_met}</p>
+                      <p className="text-[10px] text-stone-400">{frtSlaPct != null ? `${frtSlaPct}% of ${overview.with_frt} chats` : '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Bot Avg FRT</p>
+                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.bot_avg_frt)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Agent Avg FRT</p>
+                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.agent_avg_frt)}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+              {activeCard === 'resolution' && (
+                <>
+                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">Resolution by Channel</p>
+                  <div className="flex items-center gap-8 text-sm">
+                    <div>
+                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Bot Avg</p>
+                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.bot_avg_resolution)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Agent Avg</p>
+                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.agent_avg_resolution)}</p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-
-            <div className="bg-white border border-stone-200 rounded-xl p-5">
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">IQS Score Distribution</p>
-              {loadingOverview ? (
-                <div className="space-y-2"><div className="h-2.5 bg-stone-100 rounded-full animate-pulse" /><div className="h-4 bg-stone-100 rounded animate-pulse w-3/4" /></div>
-              ) : overview ? (
-                <IqsHealth excellent={overview.iqs_excellent} warn={overview.iqs_warn} risk={overview.iqs_risk} />
-              ) : <p className="text-xs text-stone-400">No data</p>}
-            </div>
-          </div>
+          )}
 
           {/* Bot vs Agent comparison */}
           {!loadingOverview && overview && (overview.bot_volume > 0 || overview.agent_volume > 0) && (
@@ -692,14 +684,6 @@ export default function AdminDashboard() {
                   />
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Quick insights */}
-          {!loadingGroups && (
-            <div>
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">Insights & Flags</p>
-              <QuickInsights groups={groups} overview={overview} />
             </div>
           )}
 

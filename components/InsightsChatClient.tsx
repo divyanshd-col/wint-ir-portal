@@ -563,8 +563,9 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo]   = useState('');
   const [dispositions, setDispositions] = useState<string[]>([]);
-  const [csatLabels, setCsatLabels]     = useState<string[]>(['bad', 'could_be_better']);
+  const [csatLabels, setCsatLabels]     = useState<string[]>(['good', 'bad', 'could_be_better']);
   const [convTypes, setConvTypes]       = useState<string[]>([]);
+  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
 
   const [dispTrees, setDispTrees] = useState<DispositionTree[]>([]);
   const [agentOptions]            = useState<AgentOption[]>([]);
@@ -579,7 +580,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const isInitialLoad = useRef(true);
 
   // Derived: non-default filters active
-  const defaultCsat = ['bad', 'could_be_better'];
+  const defaultCsat = ['good', 'bad', 'could_be_better'];
   const hasNonDefaultFilters =
     dateRange !== '7d' ||
     dispositions.length > 0 ||
@@ -592,7 +593,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     setCustomFrom('');
     setCustomTo('');
     setDispositions([]);
-    setCsatLabels(['bad', 'could_be_better']);
+    setCsatLabels(['good', 'bad', 'could_be_better']);
     setConvTypes([]);
   };
 
@@ -814,40 +815,55 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
         {/* Filter bar */}
         <div className="bg-white border-b border-gray-100 px-6 py-2.5 shrink-0">
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Date range */}
-            <div className="flex items-center gap-0.5 bg-gray-50 rounded-lg p-0.5">
-              {(['7d', '15d', 'this_month', 'last_month', 'custom'] as const).map(r => (
-                <button
-                  key={r}
-                  onClick={() => setDateRange(r)}
-                  className={`h-6 px-2.5 text-[11px] rounded-md transition-all ${
-                    dateRange === r
-                      ? 'bg-white shadow-sm text-gray-900 font-semibold'
-                      : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  {r === 'this_month' ? 'This month' : r === 'last_month' ? 'Last month' : r === 'custom' ? 'Custom' : r}
-                </button>
-              ))}
+            {/* Time Range dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowTimeDropdown(v => !v)}
+                className={`flex items-center gap-1.5 h-7 px-3 text-[11px] border rounded-lg transition font-medium ${
+                  showTimeDropdown ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="2" y="3" width="12" height="11" rx="1.5"/>
+                  <path d="M5 1v3M11 1v3M2 7h12"/>
+                </svg>
+                {({ '7d': '7 days', '15d': '15 days', 'this_month': 'This month', 'last_month': 'Last month', 'custom': customFrom && customTo ? `${customFrom} → ${customTo}` : 'Custom' } as Record<string, string>)[dateRange]}
+                <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>
+              </button>
+              {showTimeDropdown && (
+                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-50 p-1.5 min-w-[160px]">
+                  {([
+                    { id: '7d',         label: '7 days' },
+                    { id: '15d',        label: '15 days' },
+                    { id: 'this_month', label: 'This month' },
+                    { id: 'last_month', label: 'Last month' },
+                    { id: 'custom',     label: 'Custom range' },
+                  ] as const).map(opt => (
+                    <button
+                      key={opt.id}
+                      onClick={() => { setDateRange(opt.id); if (opt.id !== 'custom') setShowTimeDropdown(false); }}
+                      className={`w-full text-left px-3 py-1.5 text-xs rounded-lg transition ${
+                        dateRange === opt.id ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                  {dateRange === 'custom' && (
+                    <div className="px-2 pt-2 pb-1 border-t border-gray-100 mt-1 space-y-1.5">
+                      <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                        className="w-full h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300" />
+                      <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                        className="w-full h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300" />
+                      <button onClick={() => setShowTimeDropdown(false)}
+                        className="w-full py-1.5 bg-emerald-600 text-white text-xs rounded-lg font-semibold mt-0.5 hover:bg-emerald-700 transition">
+                        Apply
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
-
-            {dateRange === 'custom' && (
-              <div className="flex items-center gap-1">
-                <input
-                  type="date"
-                  value={customFrom}
-                  onChange={e => setCustomFrom(e.target.value)}
-                  className="h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300"
-                />
-                <span className="text-xs text-gray-400">→</span>
-                <input
-                  type="date"
-                  value={customTo}
-                  onChange={e => setCustomTo(e.target.value)}
-                  className="h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300"
-                />
-              </div>
-            )}
 
             <div className="w-px h-5 bg-gray-200 mx-0.5" />
 
