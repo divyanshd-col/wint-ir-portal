@@ -92,6 +92,8 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   const [userPage, setUserPage] = useState(0);
   const [userSearch, setUserSearch] = useState('');
   const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
+  const [pendingAssignments, setPendingAssignments] = useState<Record<string, { tl_name?: string | null; qa_name?: string | null }>>({});
+  const [savingAssignments, setSavingAssignments] = useState(false);
 
   // ── Integrations state ─────────────────────────────────────────────────────
   const [hasSlackToken, setHasSlackToken] = useState(!!config.hasSlackToken);
@@ -285,6 +287,30 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
       setEditingAgentName(prev => { const n = { ...prev }; delete n[email]; return n; });
       showToast('Agent name updated');
     }
+  };
+
+  const saveAssignments = async () => {
+    const entries = Object.entries(pendingAssignments);
+    if (!entries.length) return;
+    setSavingAssignments(true);
+    let failed = 0;
+    await Promise.all(entries.map(async ([agentName, changes]) => {
+      const res = await fetch('/api/cx/admin/agents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent_name: agentName, ...changes }),
+      });
+      if (res.ok) {
+        const key = agentName.toLowerCase();
+        setAgentAssignments(prev => ({
+          ...prev,
+          [key]: { tl_name: changes.tl_name ?? prev[key]?.tl_name ?? null, qa_name: changes.qa_name ?? prev[key]?.qa_name ?? null },
+        }));
+      } else { failed++; }
+    }));
+    setPendingAssignments({});
+    setSavingAssignments(false);
+    showToast(failed ? `Saved with ${failed} error(s)` : 'Assignments saved');
   };
 
   const deleteUser = async (email: string) => {
@@ -597,16 +623,7 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
           const totalPages = Math.ceil(filteredUsers.length / PAGE);
           return (
           <div className="space-y-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-900">Users</h2>
-              <button onClick={loadUsers} disabled={loadingUsers}
-                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-600 rounded-xl text-xs font-semibold hover:border-gray-400 disabled:opacity-50 transition">
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className={loadingUsers ? 'animate-spin' : ''}>
-                  <path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.4.87 4.4 2.2M14 2v3h-3"/>
-                </svg>
-                Refresh
-              </button>
-            </div>
+            <h2 className="text-xl font-bold text-gray-900">Users</h2>
 
             {/* Search */}
             <input
@@ -660,58 +677,58 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                         </select>
                       </td>
                       <td className="px-4 py-3">
-                        <select
-                          value={agentAssignments[(u.agentName || '').toLowerCase()]?.tl_name || ''}
-                          onChange={async e => {
-                            const val = e.target.value;
-                            if (!u.agentName) { showToast('Set an Agent Name first'); return; }
-                            const key = u.agentName.toLowerCase();
-                            setAgentAssignments(prev => ({
-                              ...prev,
-                              [key]: { ...prev[key], tl_name: val || null },
-                            }));
-                            const res = await fetch('/api/cx/admin/agents', {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ agent_name: u.agentName, tl_name: val || null }),
-                            });
-                            if (res.ok) showToast('TL updated');
-                            else showToast('Failed to save TL — check agent name matches DB');
-                          }}
-                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
-                        >
-                          <option value="">—</option>
-                          {users.filter(uu => uu.role === 'tl').map(uu => (
-                            <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
-                          ))}
-                        </select>
+                        {(() => {
+                          const key = (u.agentName || '').toLowerCase();
+                          const saved = agentAssignments[key]?.tl_name || '';
+                          const pending = pendingAssignments[u.agentName || ''];
+                          const val = pending?.tl_name !== undefined ? (pending.tl_name || '') : saved;
+                          const isDirty = pending?.tl_name !== undefined && (pending.tl_name || '') !== saved;
+                          return (
+                            <select
+                              value={val}
+                              onChange={e => {
+                                if (!u.agentName) { showToast('Set an Agent Name first'); return; }
+                                setPendingAssignments(prev => ({
+                                  ...prev,
+                                  [u.agentName!]: { ...prev[u.agentName!], tl_name: e.target.value || null },
+                                }));
+                              }}
+                              className={`border rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32 ${isDirty ? 'border-amber-400' : 'border-gray-200'}`}
+                            >
+                              <option value="">—</option>
+                              {users.filter(uu => uu.role === 'tl').map(uu => (
+                                <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
+                              ))}
+                            </select>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3">
-                        <select
-                          value={agentAssignments[(u.agentName || '').toLowerCase()]?.qa_name || ''}
-                          onChange={async e => {
-                            const val = e.target.value;
-                            if (!u.agentName) { showToast('Set an Agent Name first'); return; }
-                            const key = u.agentName.toLowerCase();
-                            setAgentAssignments(prev => ({
-                              ...prev,
-                              [key]: { ...prev[key], qa_name: val || null },
-                            }));
-                            const res = await fetch('/api/cx/admin/agents', {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ agent_name: u.agentName, qa_name: val || null }),
-                            });
-                            if (res.ok) showToast('QA updated');
-                            else showToast('Failed to save QA — check agent name matches DB');
-                          }}
-                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
-                        >
-                          <option value="">—</option>
-                          {users.filter(uu => uu.role === 'quality').map(uu => (
-                            <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
-                          ))}
-                        </select>
+                        {(() => {
+                          const key = (u.agentName || '').toLowerCase();
+                          const saved = agentAssignments[key]?.qa_name || '';
+                          const pending = pendingAssignments[u.agentName || ''];
+                          const val = pending?.qa_name !== undefined ? (pending.qa_name || '') : saved;
+                          const isDirty = pending?.qa_name !== undefined && (pending.qa_name || '') !== saved;
+                          return (
+                            <select
+                              value={val}
+                              onChange={e => {
+                                if (!u.agentName) { showToast('Set an Agent Name first'); return; }
+                                setPendingAssignments(prev => ({
+                                  ...prev,
+                                  [u.agentName!]: { ...prev[u.agentName!], qa_name: e.target.value || null },
+                                }));
+                              }}
+                              className={`border rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32 ${isDirty ? 'border-amber-400' : 'border-gray-200'}`}
+                            >
+                              <option value="">—</option>
+                              {users.filter(uu => uu.role === 'quality').map(uu => (
+                                <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
+                              ))}
+                            </select>
+                          );
+                        })()}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <button onClick={() => deleteUser(u.email)} className="text-gray-300 hover:text-red-500 transition" title="Remove user">
@@ -728,6 +745,25 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                 <p className="text-sm text-gray-400 text-center py-8">No users found</p>
               )}
             </div>
+
+            {/* Save assignments bar */}
+            {Object.keys(pendingAssignments).length > 0 && (
+              <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
+                <p className="text-sm text-amber-700 font-medium">
+                  {Object.keys(pendingAssignments).length} unsaved assignment change{Object.keys(pendingAssignments).length !== 1 ? 's' : ''}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setPendingAssignments({})}
+                    className="text-xs text-amber-600 hover:underline font-medium">
+                    Discard
+                  </button>
+                  <button onClick={saveAssignments} disabled={savingAssignments}
+                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {savingAssignments ? 'Saving…' : 'Save Assignments'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Pagination */}
             {filteredUsers.length > PAGE && (

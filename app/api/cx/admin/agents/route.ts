@@ -111,7 +111,11 @@ export async function PATCH(req: NextRequest) {
   const { agent_name, tl_name, qa_name } = await req.json();
   if (!agent_name) return NextResponse.json({ error: 'agent_name required' }, { status: 400 });
 
-  // Only update columns that were passed
+  // Upsert: create agent row if it doesn't exist yet, then update the columns passed
+  await query(
+    `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
+    [agent_name]
+  );
   if (tl_name !== undefined) {
     await query(`UPDATE agents SET tl_name = $1 WHERE LOWER(name) = LOWER($2)`, [tl_name || null, agent_name]);
   }
