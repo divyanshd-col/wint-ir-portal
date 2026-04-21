@@ -112,7 +112,8 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
       const agentData = await fetch('/api/cx/admin/agents').then(r => r.ok ? r.json() : []).catch(() => []);
       const assignMap: Record<string, { tl_name: string | null; qa_name: string | null }> = {};
       for (const a of (agentData as { name: string; tl_name: string | null; qa_name: string | null }[])) {
-        assignMap[a.name] = { tl_name: a.tl_name, qa_name: a.qa_name };
+        // Key by lowercase so lookups by portal agentName (which may differ in case) still work
+        assignMap[a.name.toLowerCase()] = { tl_name: a.tl_name, qa_name: a.qa_name };
       }
       setAgentAssignments(assignMap);
     } catch {} finally { setLoadingUsers(false); }
@@ -261,22 +262,29 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   };
 
   const updateUserRole = async (email: string, role: string) => {
-    await fetch('/api/users', {
+    const res = await fetch('/api/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, role }),
     });
-    await loadUsers();
+    if (res.ok) {
+      setUsers(prev => prev.map(u =>
+        u.email === email ? { ...u, role: role as any, isAdmin: role === 'admin' } : u
+      ));
+    }
   };
 
   const updateAgentName = async (email: string, agentName: string) => {
-    await fetch('/api/users', {
+    const res = await fetch('/api/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, agentName }),
     });
-    await loadUsers();
-    showToast('Agent name updated');
+    if (res.ok) {
+      setUsers(prev => prev.map(u => u.email === email ? { ...u, agentName } : u));
+      setEditingAgentName(prev => { const n = { ...prev }; delete n[email]; return n; });
+      showToast('Agent name updated');
+    }
   };
 
   const deleteUser = async (email: string) => {
@@ -653,14 +661,14 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                       </td>
                       <td className="px-4 py-3">
                         <select
-                          value={agentAssignments[u.agentName || '']?.tl_name || ''}
+                          value={agentAssignments[(u.agentName || '').toLowerCase()]?.tl_name || ''}
                           onChange={async e => {
                             const val = e.target.value;
                             if (!u.agentName) { showToast('Set an Agent Name first'); return; }
-                            // Optimistic update
+                            const key = u.agentName.toLowerCase();
                             setAgentAssignments(prev => ({
                               ...prev,
-                              [u.agentName!]: { ...prev[u.agentName!], tl_name: val || null },
+                              [key]: { ...prev[key], tl_name: val || null },
                             }));
                             const res = await fetch('/api/cx/admin/agents', {
                               method: 'PATCH',
@@ -680,14 +688,14 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                       </td>
                       <td className="px-4 py-3">
                         <select
-                          value={agentAssignments[u.agentName || '']?.qa_name || ''}
+                          value={agentAssignments[(u.agentName || '').toLowerCase()]?.qa_name || ''}
                           onChange={async e => {
                             const val = e.target.value;
                             if (!u.agentName) { showToast('Set an Agent Name first'); return; }
-                            // Optimistic update
+                            const key = u.agentName.toLowerCase();
                             setAgentAssignments(prev => ({
                               ...prev,
-                              [u.agentName!]: { ...prev[u.agentName!], qa_name: val || null },
+                              [key]: { ...prev[key], qa_name: val || null },
                             }));
                             const res = await fetch('/api/cx/admin/agents', {
                               method: 'PATCH',

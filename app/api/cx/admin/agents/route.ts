@@ -113,10 +113,10 @@ export async function PATCH(req: NextRequest) {
 
   // Only update columns that were passed
   if (tl_name !== undefined) {
-    await query(`UPDATE agents SET tl_name = $1 WHERE name = $2`, [tl_name || null, agent_name]);
+    await query(`UPDATE agents SET tl_name = $1 WHERE LOWER(name) = LOWER($2)`, [tl_name || null, agent_name]);
   }
   if (qa_name !== undefined) {
-    await query(`UPDATE agents SET qa_name = $1 WHERE name = $2`, [qa_name || null, agent_name]);
+    await query(`UPDATE agents SET qa_name = $1 WHERE LOWER(name) = LOWER($2)`, [qa_name || null, agent_name]);
   }
   return NextResponse.json({ ok: true });
 }
