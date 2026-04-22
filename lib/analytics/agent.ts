@@ -17,13 +17,15 @@ Today: {TODAY}
 You operate in a tool-calling loop. On each turn output ONLY a JSON object — no markdown, no prose, nothing else.
 
 Decision rules:
-- Counts, trends, breakdowns, rankings → run_sql, then final_answer.
-- What customers/agents said, exact queries, tone, phrasing, complaints → run_sql for IDs, then read_transcripts, then final_answer.
+- Counts, trends, breakdowns, rankings → run_sql only, then final_answer. Never read transcripts just to count.
+- "How many chats where user mentioned X" → run_sql with transcript::text ILIKE '%X%'. No transcript reading needed.
+- What customers/agents said, exact queries, tone, phrasing, complaints → run_sql for exact count (ILIKE), then run_sql for IDs, then read_transcripts for evidence.
+- Analysis across many chats → run_sql for count + IDs, then read_transcripts in batches of 20 per call. You can make multiple read_transcripts calls with different ID slices to cover more ground.
 - Both structured insight AND transcript evidence → use both tools, combine in final_answer.
 
-Hard budget: 3 tool calls maximum per query. Plan before calling. Use the minimum calls needed.
+Budget: 5 tool calls maximum per query. Plan efficiently. Counts always come from SQL.
 
-Never answer from memory. Every number and every quoted phrase must come from a tool result in this session.
+Never answer from memory. Every number must come from SQL. Every quoted phrase must come from a read_transcripts result.
 
 ---
 
@@ -64,15 +66,16 @@ Zero rows rule: if run_sql returns 0 rows → immediately return final_answer wi
 
 ## ABSOLUTE RULES
 - Only SELECT in run_sql. Never INSERT / UPDATE / DELETE / DROP / ALTER.
-- Never reference raw_payload or contacts.phone.
+- Never reference contacts.phone.
 - INNER JOIN iqs_scores ONLY when the query needs iqs_score or parameters columns. Pure CSAT queries (csat_label, csat_score counts) do NOT require this join.
 - Never count score = null as IQS failure. null = N/A — exclude from denominator.
 - Never surface a parameter failure rate when applicable < 10.
 - Always filter time on c.closed_at. Never started_at or created_at.
 - Always use csat_label for CSAT filtering, not csat_score.
-- read_transcripts cap: 20 conversation IDs maximum per call. This is a hard limit — requesting more will be silently truncated to 20. Fetch LIMIT 20 IDs in your SQL, never 50.
+- read_transcripts cap: 20 IDs per call (hard limit). You can make multiple read_transcripts calls with different ID batches to cover more chats.
 - Do NOT hallucinate transcript content. Only quote or paraphrase what is literally in the returned messages.
-- Keep your final_answer JSON concise: answer_text ≤ 250 words, evidence array ≤ 5 bullets (each ≤ 120 chars). The JSON must be complete and valid — never truncate it.
+- Counts must always come from SQL — never estimate counts from a transcript sample.
+- final_answer JSON must be complete and valid. Keep answer_text ≤ 300 words. evidence array ≤ 6 bullets, each ≤ 150 chars.
 
 ---
 
@@ -123,6 +126,18 @@ JSONB access patterns — use exactly these:
 c.tags->>'disposition'               -- disposition string
 c.tags->>'sub_disposition'           -- sub-disposition string
 i.parameters->'technical'->>'score'  -- returns 'true' | 'false' | 'null' as string
+\`\`\`
+
+Transcript text search (use for content-based counting — avoids reading transcripts):
+\`\`\`sql
+-- Count chats where transcript mentions a keyword/phrase
+SELECT COUNT(*) FROM conversations c
+WHERE c.closed_at BETWEEN ... AND ...
+  AND c.transcript::text ILIKE '%1% deduction%'
+
+-- The transcript column is a JSONB array of message objects.
+-- Casting to text lets you search the full conversation content with ILIKE.
+-- Use this whenever the question is "how many chats where user mentioned X".
 \`\`\`
 
 Team filter:
@@ -207,29 +222,36 @@ Column aliasing rules for charts:
 - single_number: any column names, one row preferred
 - table:        descriptive aliases, max 6 columns
 
-Always include LIMIT 500 (except single-row aggregates). For ID fetches before read_transcripts: LIMIT 50.
+Always include LIMIT 500 (except single-row aggregates).
 Trend bucket: daily if window ≤ 30 days, weekly if 31–90 days. Do not run trends over 90 days.
 
-When fetching IDs for read_transcripts, use LIMIT 20 (never more):
+When fetching IDs for read_transcripts — fetch enough for your planned batches (20 per batch, up to 60 if you plan 3 read_transcripts calls):
 \`\`\`sql
 SELECT c.id, c.csat_label, c.csat_score,
        c.tags->>'disposition' AS disposition,
        c.tags->>'sub_disposition' AS sub_disposition,
        i.iqs_score
 FROM conversations c
-INNER JOIN iqs_scores i ON i.chat_id = c.id
+LEFT JOIN iqs_scores i ON i.chat_id = c.id
 WHERE /* your filters */
 ORDER BY c.closed_at DESC, c.csat_score ASC
-LIMIT 20
+LIMIT 60   -- fetch up to 60, then split into batches of 20 across multiple read_transcripts calls
 \`\`\`
+
+Batching pattern (use when analysing many chats):
+- Call 1: run_sql → exact count (use ILIKE or filters) + fetch up to 60 IDs
+- Call 2: read_transcripts → IDs[0..19]
+- Call 3: read_transcripts → IDs[20..39]
+- Call 4: read_transcripts → IDs[40..59]  (if needed)
+- Call 5: final_answer with exact SQL count + patterns synthesised from transcripts read
 
 ---
 
 ## WARNINGS — add to warnings array when applicable
-- "Analysis based on 50 conversations sampled. May not represent full distribution."
+- "Count is exact (from SQL). Analysis based on N conversations sampled."
 - "Showing most recent 500 conversations. Apply more filters for complete data."
 - "N conversations excluded due to missing disposition."
-- "Reached 3-tool-call limit. Could not verify: [list]."`;
+- "Reached tool-call limit. Analysis covers N of M total conversations."`;
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
@@ -364,8 +386,8 @@ export async function runAnalyticsAgent(
   ];
 
   let toolCallCount = 0;
-  const MAX_TOOL_CALLS = 3;
-  const MAX_ITERATIONS = 9; // hard ceiling to prevent infinite loops
+  const MAX_TOOL_CALLS = 5;
+  const MAX_ITERATIONS = 12; // hard ceiling to prevent infinite loops
   let iterations = 0;
 
   while (iterations++ < MAX_ITERATIONS) {
@@ -378,7 +400,7 @@ export async function runAnalyticsAgent(
         {
           systemInstruction: { parts: [{ text: systemPrompt }] },
         },
-        40_000,
+        65_000,
       );
     } catch (err: any) {
       const msg = err?.message ?? String(err);
@@ -434,7 +456,7 @@ export async function runAnalyticsAgent(
       if (toolCallCount >= MAX_TOOL_CALLS) {
         contents.push({
           role: 'user',
-          parts: [{ text: 'Budget reached (3 tool calls used). Return your final_answer now based on the data collected so far. Include "Reached 3-tool-call limit." in warnings if anything could not be verified.' }],
+          parts: [{ text: `Budget reached (${MAX_TOOL_CALLS} tool calls used). Return your final_answer now based on the data collected so far. In warnings note how many conversations were analysed vs. total count if you have both.` }],
         });
         continue;
       }
@@ -456,11 +478,11 @@ export async function runAnalyticsAgent(
         contents.push({ role: 'user', parts: [{ text: `run_sql result:\n${JSON.stringify(toolResult)}` }] });
 
       } else if (tool === 'read_transcripts') {
-        // Hard cap: never read more than 20 transcripts — larger batches cause JSON truncation
+        // Hard cap per call: 20 transcripts max to keep context manageable
         const rawIds: string[] = params.conversation_ids ?? [];
         const ids = rawIds.slice(0, 20);
         if (rawIds.length > 20) {
-          onProgress?.(`Capped to 20 transcripts (requested ${rawIds.length})\n`);
+          onProgress?.(`Capped to 20 per batch (requested ${rawIds.length}) — pass next 20 IDs in a separate call\n`);
         }
         onProgress?.(`Reading ${ids.length} transcript${ids.length !== 1 ? 's' : ''}…\n`);
         let toolResult: object;
