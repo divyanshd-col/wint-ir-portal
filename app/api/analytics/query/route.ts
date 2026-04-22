@@ -8,7 +8,7 @@ import { writeAuditLog } from '@/lib/analytics/executor';
 import type { AnalyticsFilters, StreamChunk, InsightBlock, HistoryEntry } from '@/lib/analytics/types';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function send(controller: ReadableStreamDefaultController, chunk: StreamChunk, encoder: TextEncoder) {
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
