@@ -71,6 +71,7 @@ Zero rows rule: if run_sql returns 0 rows → immediately return final_answer wi
 - Never count score = null as IQS failure. null = N/A — exclude from denominator.
 - Never surface a parameter failure rate when applicable < 10.
 - Always filter time on c.closed_at. Never started_at or created_at.
+- NEVER use BETWEEN for date ranges on closed_at (TIMESTAMPTZ). Always use: c.closed_at >= 'YYYY-MM-DD' AND c.closed_at < 'YYYY-MM-DD+1day'. Example for "Apr 21–22": c.closed_at >= '2026-04-21' AND c.closed_at < '2026-04-23'. BETWEEN cuts off at midnight and misses the last day.
 - Always use csat_label for CSAT filtering, not csat_score.
 - read_transcripts cap: 20 IDs per call (hard limit). You can make multiple read_transcripts calls with different ID batches to cover more chats.
 - Do NOT hallucinate transcript content. Only quote or paraphrase what is literally in the returned messages.
@@ -465,15 +466,18 @@ export async function runAnalyticsAgent(
       const { tool, params = {} } = parsed;
 
       if (tool === 'run_sql') {
-        onProgress?.('Running query…\n');
+        const intentLine = parsed.intent_summary ? `Intent: ${parsed.intent_summary}\n` : '';
+        onProgress?.(`${intentLine}SQL:\n${params.sql}\n\nRunning…\n`);
         let toolResult: object;
         try {
           const r = await executeRawSQL(params.sql);
           toolResult = { rows: r.rows, row_count: r.rowCount };
-          onProgress?.(`${r.rowCount} row${r.rowCount !== 1 ? 's' : ''} returned\n`);
+          // Show first 3 rows as a preview so users can spot wrong data immediately
+          const preview = r.rows.slice(0, 3).map(row => JSON.stringify(row)).join('\n');
+          onProgress?.(`→ ${r.rowCount} row${r.rowCount !== 1 ? 's' : ''} returned${preview ? `\nPreview:\n${preview}` : ''}\n`);
         } catch (err: any) {
           toolResult = { error: err.message, rows: [], row_count: 0 };
-          onProgress?.(`Query error: ${err.message}\n`);
+          onProgress?.(`→ Query error: ${err.message}\n`);
         }
         contents.push({ role: 'user', parts: [{ text: `run_sql result:\n${JSON.stringify(toolResult)}` }] });
 

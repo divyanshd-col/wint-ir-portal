@@ -213,7 +213,7 @@ function ThoughtProcess({ logs, isStreaming }: { logs?: string; isStreaming?: bo
         )}
       </button>
       {open && logs && (
-        <div className="mt-2 font-mono text-[11px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 whitespace-pre-wrap leading-relaxed border border-gray-100 max-h-52 overflow-y-auto">
+        <div className="mt-2 font-mono text-[11px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 whitespace-pre-wrap leading-relaxed border border-gray-100 max-h-80 overflow-y-auto">
           {logs}
         </div>
       )}
