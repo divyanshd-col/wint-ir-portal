@@ -73,7 +73,7 @@ Zero rows rule: if run_sql returns 0 rows → immediately return final_answer wi
 - Always filter time on c.closed_at. Never started_at or created_at.
 - NEVER use BETWEEN for date ranges on closed_at (TIMESTAMPTZ). Always use: c.closed_at >= 'YYYY-MM-DD' AND c.closed_at < 'YYYY-MM-DD+1day'. Example for "Apr 21–22": c.closed_at >= '2026-04-21' AND c.closed_at < '2026-04-23'. BETWEEN cuts off at midnight and misses the last day.
 - Always use csat_label for CSAT filtering, not csat_score.
-- read_transcripts cap: 20 IDs per call (hard limit). You can make multiple read_transcripts calls with different ID batches to cover more chats.
+- read_transcripts cap: {TRANSCRIPT_CAP} IDs per call (hard limit). You can make multiple read_transcripts calls with different ID batches to cover more chats.
 - Do NOT hallucinate transcript content. Only quote or paraphrase what is literally in the returned messages.
 - Counts must always come from SQL — never estimate counts from a transcript sample.
 - final_answer JSON must be complete and valid. Keep answer_text ≤ 300 words. evidence array ≤ 6 bullets, each ≤ 150 chars.
@@ -226,7 +226,7 @@ Column aliasing rules for charts:
 Always include LIMIT 500 (except single-row aggregates).
 Trend bucket: daily if window ≤ 30 days, weekly if 31–90 days. Do not run trends over 90 days.
 
-When fetching IDs for read_transcripts — fetch enough for your planned batches (20 per batch, up to 60 if you plan 3 read_transcripts calls):
+When fetching IDs for read_transcripts — fetch enough for your planned batches ({TRANSCRIPT_CAP} per batch, up to {ID_FETCH_LIMIT} total):
 \`\`\`sql
 SELECT c.id, c.csat_label, c.csat_score,
        c.tags->>'disposition' AS disposition,
@@ -236,15 +236,13 @@ FROM conversations c
 LEFT JOIN iqs_scores i ON i.chat_id = c.id
 WHERE /* your filters */
 ORDER BY c.closed_at DESC, c.csat_score ASC
-LIMIT 60   -- fetch up to 60, then split into batches of 20 across multiple read_transcripts calls
+LIMIT {ID_FETCH_LIMIT}   -- fetch up to {ID_FETCH_LIMIT}, then split into batches of {TRANSCRIPT_CAP} across multiple read_transcripts calls
 \`\`\`
 
 Batching pattern (use when analysing many chats):
-- Call 1: run_sql → exact count (use ILIKE or filters) + fetch up to 60 IDs
-- Call 2: read_transcripts → IDs[0..19]
-- Call 3: read_transcripts → IDs[20..39]
-- Call 4: read_transcripts → IDs[40..59]  (if needed)
-- Call 5: final_answer with exact SQL count + patterns synthesised from transcripts read
+- Call 1: run_sql → exact count (use ILIKE or filters) + fetch up to {ID_FETCH_LIMIT} IDs
+- Calls 2…{BATCH_CALL_END}: read_transcripts → {TRANSCRIPT_CAP} IDs per call until all fetched IDs are covered
+- Final call: final_answer with exact SQL count + patterns synthesised from all transcripts read
 
 ---
 
@@ -275,15 +273,23 @@ function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[], an
 
   const IQS_PARAMS = 'technical, all_questions, expectation, contextual, follow_up, sentences, process, opening, call, tags, grammar, empathy';
 
+  const transcriptCap   = analyzeAll ? 50 : 20;
+  const idFetchLimit    = analyzeAll ? 500 : 60;
+  // e.g. call 2 through call 11 for analyzeAll, call 2 through call 4 otherwise
+  const batchCallEnd    = analyzeAll ? 11 : 4;
+
   const analyzeAllNote = analyzeAll
-    ? '\n\n## ANALYSE ALL MODE — USER EXPLICITLY REMOVED THE LIMIT\nThe user has turned off transcript limits. You may fetch up to 50 IDs per read_transcripts call and make as many read_transcripts calls as needed (budget is 15 tool calls). Fetch ALL matching conversation IDs from SQL and process them in batches of 50. In your final_answer coverage field, report exactly how many conversations you analysed out of the total count.'
+    ? '\n\n## ANALYSE ALL MODE — USER EXPLICITLY REMOVED THE LIMIT\nThe user has turned off transcript limits. Fetch ALL matching IDs (up to 500) in a single SQL call, then process them in batches of 50 per read_transcripts call. You have a budget of 15 tool calls — use as many as needed. Report exact coverage in the final_answer coverage field.'
     : '';
 
   return (SYSTEM_PROMPT + analyzeAllNote)
     .replace('{TODAY}', today)
     .replace('{ACTIVE_FILTERS}', activeFilters)
     .replace('{DISPOSITION_LIST}', dispositions.length ? dispositions.join(', ') : '(none loaded — treat all disposition strings as valid)')
-    .replace('{IQS_PARAMETER_LIST}', IQS_PARAMS);
+    .replace('{IQS_PARAMETER_LIST}', IQS_PARAMS)
+    .replace(/{TRANSCRIPT_CAP}/g, String(transcriptCap))
+    .replace(/{ID_FETCH_LIMIT}/g, String(idFetchLimit))
+    .replace(/{BATCH_CALL_END}/g, String(batchCallEnd));
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
