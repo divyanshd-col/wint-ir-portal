@@ -575,7 +575,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [messages, setMessages]   = useState<ChatMessage[]>([]);
   const [input, setInput]         = useState('');
   const [streaming, setStreaming] = useState(false);
-  const [analyzeAll, setAnalyzeAll] = useState(false);
+  const [maxConversations, setMaxConversations] = useState(60);
 
   const bottomRef     = useRef<HTMLDivElement>(null);
   const inputRef      = useRef<HTMLTextAreaElement>(null);
@@ -687,7 +687,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       const res = await fetch('/api/analytics/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, filters: buildFilters(), priorContext, analyzeAll }),
+        body: JSON.stringify({ message: text, filters: buildFilters(), priorContext, maxConversations }),
       });
 
       if (!res.ok || !res.body) {
@@ -1015,25 +1015,22 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
                   <span className="text-[11px] text-gray-400 select-none">
                     Enter to send · Shift+Enter for new line
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => setAnalyzeAll(v => !v)}
-                    title={analyzeAll ? 'Transcript limit removed — analysing all conversations' : 'Click to remove the 20-transcript limit and analyse all conversations'}
-                    className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-all ${
-                      analyzeAll
-                        ? 'bg-amber-50 text-amber-700 border-amber-300'
-                        : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-300 hover:text-amber-600'
-                    }`}
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d={analyzeAll
-                          ? 'M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z'
-                          : 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM16 11V7a4 4 0 00-8 0v4'}
-                      />
-                    </svg>
-                    {analyzeAll ? 'Limit removed' : 'Remove limit'}
-                  </button>
+                  <label className="flex items-center gap-1 text-[11px] text-gray-500 select-none">
+                    Max chats:
+                    <input
+                      type="number"
+                      min={1}
+                      max={2000}
+                      value={maxConversations}
+                      onChange={e => setMaxConversations(Math.max(1, parseInt(e.target.value) || 1))}
+                      className={`w-16 text-[11px] text-center border rounded px-1 py-0.5 outline-none focus:border-emerald-400 transition-colors ${
+                        maxConversations > 60
+                          ? 'border-amber-300 bg-amber-50 text-amber-700'
+                          : 'border-gray-200 bg-gray-50 text-gray-600'
+                      }`}
+                      title="Number of conversations to read transcripts for. Higher = slower but more thorough."
+                    />
+                  </label>
                 </div>
                 <button
                   onClick={() => sendMessage(input)}

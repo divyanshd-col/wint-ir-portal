@@ -24,7 +24,9 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const message: string = (body.message ?? '').trim();
   const priorContext: string | undefined = body.priorContext || undefined;
-  const analyzeAll: boolean = body.analyzeAll === true;
+  const maxConversations: number = typeof body.maxConversations === 'number' && body.maxConversations > 0
+    ? body.maxConversations
+    : 60;
   const barFilters: AnalyticsFilters = body.filters ?? {
     dateFrom: new Date(Date.now() - 6 * 86400_000).toISOString().slice(0, 10),
     dateTo: new Date().toISOString().slice(0, 10),
@@ -56,7 +58,7 @@ export async function POST(req: Request) {
           dispositionNames,
           priorContext,
           (update) => send(controller, { event: 'log', delta: update }, encoder),
-          analyzeAll,
+          maxConversations,
         );
 
         let resultBlocks: InsightBlock[] = [];

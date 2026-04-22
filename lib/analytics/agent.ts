@@ -254,7 +254,7 @@ Batching pattern (use when analysing many chats):
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[], analyzeAll = false): string {
+function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[], maxConversations = 60): string {
   const today = new Date().toISOString().slice(0, 10);
 
   const activeFilters = [
@@ -273,13 +273,12 @@ function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[], an
 
   const IQS_PARAMS = 'technical, all_questions, expectation, contextual, follow_up, sentences, process, opening, call, tags, grammar, empathy';
 
-  const transcriptCap   = analyzeAll ? 50 : 20;
-  const idFetchLimit    = analyzeAll ? 500 : 60;
-  // e.g. call 2 through call 11 for analyzeAll, call 2 through call 4 otherwise
-  const batchCallEnd    = analyzeAll ? 11 : 4;
+  const transcriptCap = maxConversations > 20 ? 50 : 20;
+  const idFetchLimit  = maxConversations;
+  const batchCallEnd  = 1 + Math.ceil(maxConversations / transcriptCap); // call index of last batch
 
-  const analyzeAllNote = analyzeAll
-    ? '\n\n## ANALYSE ALL MODE — USER EXPLICITLY REMOVED THE LIMIT\nThe user has turned off transcript limits. Fetch ALL matching IDs (up to 500) in a single SQL call, then process them in batches of 50 per read_transcripts call. You have a budget of 15 tool calls — use as many as needed. Report exact coverage in the final_answer coverage field.'
+  const analyzeAllNote = maxConversations > 60
+    ? `\n\n## EXTENDED ANALYSIS MODE — user set max conversations to ${maxConversations}\nFetch up to ${maxConversations} IDs in a single SQL call (LIMIT ${maxConversations}), then process in batches of ${transcriptCap} per read_transcripts call. Use as many read_transcripts calls as needed to cover all ${maxConversations} IDs. Report exact coverage in final_answer coverage field.`
     : '';
 
   return (SYSTEM_PROMPT + analyzeAllNote)
@@ -376,7 +375,7 @@ export async function runAnalyticsAgent(
   dispositions: string[],
   priorContext?: string,
   onProgress?: (update: string) => void,
-  analyzeAll = false,
+  maxConversations = 60,
 ): Promise<AgentResult> {
   const config = await readConfig();
   const keys = getOrderedGeminiKeys(config);
@@ -388,7 +387,7 @@ export async function runAnalyticsAgent(
     };
   }
 
-  const systemPrompt = buildSystemPrompt(filters, dispositions, analyzeAll);
+  const systemPrompt = buildSystemPrompt(filters, dispositions, maxConversations);
   const userMessage = priorContext
     ? `PRIOR CONTEXT (previous answer — use to resolve follow-ups):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
     : message;
@@ -398,9 +397,11 @@ export async function runAnalyticsAgent(
   ];
 
   let toolCallCount = 0;
-  const MAX_TOOL_CALLS = analyzeAll ? 15 : 5;
-  const MAX_ITERATIONS = analyzeAll ? 30 : 12;
-  const TRANSCRIPT_CAP = analyzeAll ? 50 : 20;
+  const TRANSCRIPT_CAP = maxConversations > 20 ? 50 : 20;
+  // 1 SQL count + 1 SQL ID fetch + N transcript batches + 1 final answer
+  const transcriptBatches = Math.ceil(maxConversations / TRANSCRIPT_CAP);
+  const MAX_TOOL_CALLS = 2 + transcriptBatches + 2; // generous headroom
+  const MAX_ITERATIONS = MAX_TOOL_CALLS * 2;
   let iterations = 0;
 
   while (iterations++ < MAX_ITERATIONS) {
