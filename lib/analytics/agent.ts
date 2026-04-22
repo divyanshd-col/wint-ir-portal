@@ -70,8 +70,9 @@ Zero rows rule: if run_sql returns 0 rows → immediately return final_answer wi
 - Never surface a parameter failure rate when applicable < 10.
 - Always filter time on c.closed_at. Never started_at or created_at.
 - Always use csat_label for CSAT filtering, not csat_score.
-- read_transcripts cap: 20 conversation IDs maximum per call.
+- read_transcripts cap: 20 conversation IDs maximum per call. This is a hard limit — requesting more will be silently truncated to 20. Fetch LIMIT 20 IDs in your SQL, never 50.
 - Do NOT hallucinate transcript content. Only quote or paraphrase what is literally in the returned messages.
+- Keep your final_answer JSON concise: answer_text ≤ 250 words, evidence array ≤ 5 bullets (each ≤ 120 chars). The JSON must be complete and valid — never truncate it.
 
 ---
 
@@ -209,7 +210,7 @@ Column aliasing rules for charts:
 Always include LIMIT 500 (except single-row aggregates). For ID fetches before read_transcripts: LIMIT 50.
 Trend bucket: daily if window ≤ 30 days, weekly if 31–90 days. Do not run trends over 90 days.
 
-When fetching IDs for read_transcripts, use:
+When fetching IDs for read_transcripts, use LIMIT 20 (never more):
 \`\`\`sql
 SELECT c.id, c.csat_label, c.csat_score,
        c.tags->>'disposition' AS disposition,
@@ -219,7 +220,7 @@ FROM conversations c
 INNER JOIN iqs_scores i ON i.chat_id = c.id
 WHERE /* your filters */
 ORDER BY c.closed_at DESC, c.csat_score ASC
-LIMIT 50
+LIMIT 20
 \`\`\`
 
 ---
@@ -377,7 +378,7 @@ export async function runAnalyticsAgent(
         {
           systemInstruction: { parts: [{ text: systemPrompt }] },
         },
-        25_000,
+        40_000,
       );
     } catch (err: any) {
       const msg = err?.message ?? String(err);
@@ -401,10 +402,23 @@ export async function runAnalyticsAgent(
     try {
       parsed = parseJSON(raw);
     } catch {
-      console.error('[analytics/agent] JSON parse failed:', raw.slice(0, 300));
+      console.error('[analytics/agent] JSON parse failed after', toolCallCount, 'tool calls. First 400 chars:', raw.slice(0, 400));
+      // If transcripts were loaded, the response may have been cut mid-JSON due to length.
+      // Ask the model to retry with a concise summary instead of detailed evidence.
+      if (toolCallCount > 0 && iterations < MAX_ITERATIONS - 1) {
+        contents.push({
+          role: 'user',
+          parts: [{ text: 'Your previous response could not be parsed as JSON. Please return a valid final_answer JSON now. Keep answer_text under 300 words, evidence array under 5 bullets, each bullet under 120 chars. No additional prose — only the JSON object.' }],
+        });
+        continue;
+      }
       return {
         kind: 'answer',
-        answer: { output_shape: 'insight_summary', answer_text: 'Could not parse LLM response. Please try rephrasing your question.', warnings: [] },
+        answer: {
+          output_shape: 'insight_summary',
+          answer_text: 'The response was too large to process. Try narrowing the date range or being more specific (e.g. "top 5 chats where user asked about 1% deduction").',
+          warnings: [],
+        },
       };
     }
 
@@ -442,7 +456,12 @@ export async function runAnalyticsAgent(
         contents.push({ role: 'user', parts: [{ text: `run_sql result:\n${JSON.stringify(toolResult)}` }] });
 
       } else if (tool === 'read_transcripts') {
-        const ids: string[] = params.conversation_ids ?? [];
+        // Hard cap: never read more than 20 transcripts — larger batches cause JSON truncation
+        const rawIds: string[] = params.conversation_ids ?? [];
+        const ids = rawIds.slice(0, 20);
+        if (rawIds.length > 20) {
+          onProgress?.(`Capped to 20 transcripts (requested ${rawIds.length})\n`);
+        }
         onProgress?.(`Reading ${ids.length} transcript${ids.length !== 1 ? 's' : ''}…\n`);
         let toolResult: object;
         try {
