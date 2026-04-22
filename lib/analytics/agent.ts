@@ -256,7 +256,7 @@ Batching pattern (use when analysing many chats):
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[]): string {
+function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[], analyzeAll = false): string {
   const today = new Date().toISOString().slice(0, 10);
 
   const activeFilters = [
@@ -275,7 +275,11 @@ function buildSystemPrompt(filters: AnalyticsFilters, dispositions: string[]): s
 
   const IQS_PARAMS = 'technical, all_questions, expectation, contextual, follow_up, sentences, process, opening, call, tags, grammar, empathy';
 
-  return SYSTEM_PROMPT
+  const analyzeAllNote = analyzeAll
+    ? '\n\n## ANALYSE ALL MODE — USER EXPLICITLY REMOVED THE LIMIT\nThe user has turned off transcript limits. You may fetch up to 50 IDs per read_transcripts call and make as many read_transcripts calls as needed (budget is 15 tool calls). Fetch ALL matching conversation IDs from SQL and process them in batches of 50. In your final_answer coverage field, report exactly how many conversations you analysed out of the total count.'
+    : '';
+
+  return (SYSTEM_PROMPT + analyzeAllNote)
     .replace('{TODAY}', today)
     .replace('{ACTIVE_FILTERS}', activeFilters)
     .replace('{DISPOSITION_LIST}', dispositions.length ? dispositions.join(', ') : '(none loaded — treat all disposition strings as valid)')
@@ -366,6 +370,7 @@ export async function runAnalyticsAgent(
   dispositions: string[],
   priorContext?: string,
   onProgress?: (update: string) => void,
+  analyzeAll = false,
 ): Promise<AgentResult> {
   const config = await readConfig();
   const keys = getOrderedGeminiKeys(config);
@@ -377,7 +382,7 @@ export async function runAnalyticsAgent(
     };
   }
 
-  const systemPrompt = buildSystemPrompt(filters, dispositions);
+  const systemPrompt = buildSystemPrompt(filters, dispositions, analyzeAll);
   const userMessage = priorContext
     ? `PRIOR CONTEXT (previous answer — use to resolve follow-ups):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
     : message;
@@ -387,8 +392,9 @@ export async function runAnalyticsAgent(
   ];
 
   let toolCallCount = 0;
-  const MAX_TOOL_CALLS = 5;
-  const MAX_ITERATIONS = 12; // hard ceiling to prevent infinite loops
+  const MAX_TOOL_CALLS = analyzeAll ? 15 : 5;
+  const MAX_ITERATIONS = analyzeAll ? 30 : 12;
+  const TRANSCRIPT_CAP = analyzeAll ? 50 : 20;
   let iterations = 0;
 
   while (iterations++ < MAX_ITERATIONS) {
@@ -482,11 +488,10 @@ export async function runAnalyticsAgent(
         contents.push({ role: 'user', parts: [{ text: `run_sql result:\n${JSON.stringify(toolResult)}` }] });
 
       } else if (tool === 'read_transcripts') {
-        // Hard cap per call: 20 transcripts max to keep context manageable
         const rawIds: string[] = params.conversation_ids ?? [];
-        const ids = rawIds.slice(0, 20);
-        if (rawIds.length > 20) {
-          onProgress?.(`Capped to 20 per batch (requested ${rawIds.length}) — pass next 20 IDs in a separate call\n`);
+        const ids = rawIds.slice(0, TRANSCRIPT_CAP);
+        if (rawIds.length > TRANSCRIPT_CAP) {
+          onProgress?.(`Capped to ${TRANSCRIPT_CAP} per batch (requested ${rawIds.length}) — pass next batch of IDs in a separate call\n`);
         }
         onProgress?.(`Reading ${ids.length} transcript${ids.length !== 1 ? 's' : ''}…\n`);
         let toolResult: object;

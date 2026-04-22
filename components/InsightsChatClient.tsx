@@ -575,6 +575,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [messages, setMessages]   = useState<ChatMessage[]>([]);
   const [input, setInput]         = useState('');
   const [streaming, setStreaming] = useState(false);
+  const [analyzeAll, setAnalyzeAll] = useState(false);
 
   const bottomRef     = useRef<HTMLDivElement>(null);
   const inputRef      = useRef<HTMLTextAreaElement>(null);
@@ -686,7 +687,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       const res = await fetch('/api/analytics/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, filters: buildFilters(), priorContext }),
+        body: JSON.stringify({ message: text, filters: buildFilters(), priorContext, analyzeAll }),
       });
 
       if (!res.ok || !res.body) {
@@ -1010,9 +1011,30 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
                 />
               </div>
               <div className="flex items-center justify-between px-3 pb-3 pt-1">
-                <span className="text-[11px] text-gray-400 select-none">
-                  Enter to send · Shift+Enter for new line
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-400 select-none">
+                    Enter to send · Shift+Enter for new line
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setAnalyzeAll(v => !v)}
+                    title={analyzeAll ? 'Transcript limit removed — analysing all conversations' : 'Click to remove the 20-transcript limit and analyse all conversations'}
+                    className={`flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-all ${
+                      analyzeAll
+                        ? 'bg-amber-50 text-amber-700 border-amber-300'
+                        : 'bg-gray-50 text-gray-400 border-gray-200 hover:border-amber-300 hover:text-amber-600'
+                    }`}
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d={analyzeAll
+                          ? 'M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z'
+                          : 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zM16 11V7a4 4 0 00-8 0v4'}
+                      />
+                    </svg>
+                    {analyzeAll ? 'Limit removed' : 'Remove limit'}
+                  </button>
+                </div>
                 <button
                   onClick={() => sendMessage(input)}
                   disabled={streaming || !input.trim()}
