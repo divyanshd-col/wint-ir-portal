@@ -444,6 +444,131 @@ export async function runAnalyticsAgent(
   }
 }
 
+// ── Split-phase exports (used by /api/analytics/plan + /api/analytics/insights) ──
+
+export interface SqlResult {
+  intent: string;
+  rows: any[];
+  row_count: number;
+  error: string | null;
+}
+
+export type PlannerPhaseResult =
+  | { kind: 'plan'; intent: string; sql_results: SqlResult[]; needs_transcripts: boolean; transcript_intent: string | null; output_shape: string; transcript_ids: string[] }
+  | { kind: 'clarify'; question: string }
+  | { kind: 'error'; message: string };
+
+export async function runPlannerPhase(
+  message: string,
+  filters: AnalyticsFilters,
+  dispositions: string[],
+  keys: string[],
+  priorContext?: string,
+  maxConversations = 100,
+): Promise<PlannerPhaseResult> {
+  if (!keys.length) return { kind: 'error', message: 'No LLM API keys configured.' };
+
+  const plannerPrompt = buildPlannerPrompt(filters, dispositions, maxConversations);
+  const userMessage = priorContext
+    ? `PRIOR CONTEXT (previous answer):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
+    : message;
+
+  let planRaw: string;
+  try {
+    planRaw = await geminiGenerate(
+      keys,
+      'gemini-2.5-flash',
+      [{ role: 'user', parts: [{ text: userMessage }] }],
+      {
+        systemInstruction: { parts: [{ text: plannerPrompt }] },
+        config: { thinkingConfig: { thinkingBudget: 1024 } },
+      },
+      28_000,
+    );
+  } catch (err: any) {
+    return { kind: 'error', message: err?.message ?? 'Planner LLM failed' };
+  }
+
+  let plan: PlannerResult;
+  try {
+    plan = parseJSON(planRaw);
+  } catch {
+    return { kind: 'error', message: 'Could not parse planner response. Try rephrasing.' };
+  }
+
+  if (plan.action === 'clarify') {
+    return { kind: 'clarify', question: plan.question };
+  }
+
+  const sql_results: SqlResult[] = await Promise.all(
+    (plan.sqls ?? []).map(async (q) => {
+      try {
+        const r = await executeRawSQL(q.sql);
+        return { intent: q.intent, rows: r.rows, row_count: r.rowCount, error: null };
+      } catch (err: any) {
+        return { intent: q.intent, rows: [], row_count: 0, error: err.message };
+      }
+    }),
+  );
+
+  let transcript_ids: string[] = [];
+  if (plan.needs_transcripts && plan.transcript_id_sql) {
+    try {
+      const idResult = await executeRawSQL(plan.transcript_id_sql);
+      transcript_ids = idResult.rows
+        .map((r: any) => r.id ?? r[Object.keys(r)[0]])
+        .filter(Boolean)
+        .slice(0, maxConversations);
+    } catch { /* proceed without transcripts */ }
+  }
+
+  return {
+    kind: 'plan',
+    intent: plan.intent,
+    sql_results,
+    needs_transcripts: plan.needs_transcripts,
+    transcript_intent: plan.transcript_intent,
+    output_shape: plan.output_shape,
+    transcript_ids,
+  };
+}
+
+export async function runSynthesizerPhase(
+  question: string,
+  intent: string,
+  outputShapeHint: string,
+  sqlResults: SqlResult[],
+  transcriptSummaries: string[],
+  keys: string[],
+): Promise<AgentFinalAnswer> {
+  const synthesisInput = JSON.stringify({
+    question,
+    intent,
+    output_shape_hint: outputShapeHint,
+    sql_results: sqlResults,
+    transcript_summaries: transcriptSummaries.length
+      ? { summaries: transcriptSummaries, note: 'Each summary covers ~20 conversations. Use phrasing like "across the reviewed conversations" rather than quoting specific exchanges.' }
+      : null,
+  });
+
+  const synthExtra: any = {
+    systemInstruction: { parts: [{ text: SYNTHESIZER_PROMPT }] },
+  };
+  if (!transcriptSummaries.length) {
+    synthExtra.config = { thinkingConfig: { thinkingBudget: 0 } };
+  }
+
+  const raw = await geminiGenerate(
+    keys,
+    'gemini-2.5-flash',
+    [{ role: 'user', parts: [{ text: synthesisInput }] }],
+    synthExtra,
+    40_000,
+  );
+
+  return parseJSON(raw) as AgentFinalAnswer;
+}
+
 // ── LLM error helper ──────────────────────────────────────────────────────────
 
 function llmError(err: any): AgentResult {

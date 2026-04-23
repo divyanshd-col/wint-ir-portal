@@ -18,7 +18,7 @@ export interface ConversationTranscript {
 
 export async function readTranscripts(conversationIds: string[]): Promise<ConversationTranscript[]> {
   if (!conversationIds.length) return [];
-  const ids = conversationIds.slice(0, 20);
+  const ids = conversationIds.slice(0, 100);
 
   const rows = await query<any>(
     `SELECT c.id, c.csat_label, c.csat_score,

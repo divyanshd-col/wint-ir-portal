@@ -2142,8 +2142,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                   <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-bold text-gray-900">Parameter Failure by Week</p>
-                        <p className="text-xs text-gray-500 mt-0.5">% of chats failing each parameter per week · click a row to filter Score Log</p>
+                        <p className="text-sm font-bold text-gray-900">Parameter Pass Rate by Week</p>
+                        <p className="text-xs text-gray-500 mt-0.5">% of chats passing each parameter per week · click a row to filter Score Log</p>
                       </div>
                       {weeklyParamData.length > 5 && (
                         <button onClick={() => setShowAllWeeks(v => !v)} className="text-xs text-emerald-600 font-semibold hover:underline shrink-0">
@@ -2185,11 +2185,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                                 </td>
                                 <td className="px-3 py-3 text-right text-gray-500 tabular-nums">{row.total}</td>
                                 {PARAM_ORDER.map(p => {
-                                  const pct = row.params[p];
-                                  const color = pct >= 40 ? 'text-red-600 font-bold' : pct >= 20 ? 'text-amber-600 font-semibold' : pct > 0 ? 'text-gray-600' : 'text-gray-300';
+                                  const failPct = row.params[p];
+                                  const passPct = failPct > 0 ? 100 - failPct : null;
+                                  const color = passPct == null ? 'text-gray-300' : passPct >= 80 ? 'text-green-600 font-semibold' : passPct >= 60 ? 'text-gray-600' : 'text-red-600 font-bold';
                                   return (
                                     <td key={p} className={`px-3 py-3 text-right tabular-nums ${color}`}>
-                                      {pct > 0 ? `${pct}%` : '—'}
+                                      {passPct != null ? `${passPct}%` : '—'}
                                     </td>
                                   );
                                 })}

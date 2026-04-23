@@ -683,25 +683,17 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       return assistantMsgs.length ? assistantMsgs[assistantMsgs.length - 1].content : undefined;
     })();
 
-    try {
-      const res = await fetch('/api/analytics/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, filters: buildFilters(), priorContext, maxConversations }),
-      });
+    const activeFilters = buildFilters();
 
-      if (!res.ok || !res.body) {
-        throw new Error(res.statusText || 'Request failed');
-      }
-
+    // Helper: read an SSE stream and update message state
+    async function readSseStream(res: Response) {
+      if (!res.body) throw new Error('No response body');
       const reader  = res.body.getReader();
       const decoder = new TextDecoder();
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const text2 = decoder.decode(value);
-        const lines = text2.split('\n');
+        const lines = decoder.decode(value).split('\n');
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const raw = line.slice(6).trim();
@@ -711,42 +703,83 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
 
           if (chunk.event === 'text') {
             accText += chunk.delta;
-            setMessages(prev =>
-              prev.map(m => m.id === assistantId ? { ...m, content: accText } : m),
-            );
+            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accText } : m));
           }
           if (chunk.event === 'log') {
             accLogs += chunk.delta;
-            setMessages(prev =>
-              prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m),
-            );
+            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m));
           }
           if (chunk.event === 'blocks') {
             accBlocks.push(...chunk.blocks);
-            setMessages(prev =>
-              prev.map(m => m.id === assistantId ? { ...m, blocks: [...accBlocks] } : m),
-            );
+            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, blocks: [...accBlocks] } : m));
           }
           if (chunk.event === 'error') {
             accText += `\n\nError: ${chunk.message}`;
-            setMessages(prev =>
-              prev.map(m => m.id === assistantId ? { ...m, content: accText, loading: false } : m),
-            );
+            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accText, loading: false } : m));
           }
           if (chunk.event === 'done') {
-            setMessages(prev =>
-              prev.map(m => m.id === assistantId ? { ...m, loading: false } : m),
-            );
+            setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, loading: false } : m));
           }
         }
       }
+    }
+
+    try {
+      // ── Phase 1: Plan + SQL (JSON, fast) ──────────────────────────────────
+      accLogs += 'Planning query…\n';
+      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m));
+
+      const planRes = await fetch('/api/analytics/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, filters: activeFilters, priorContext, maxConversations }),
+      });
+      if (!planRes.ok) throw new Error(planRes.statusText || 'Plan request failed');
+      const planData = await planRes.json();
+
+      if (planData.status === 'clarify') {
+        accText = planData.question;
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: accText, loading: false } : m));
+        return;
+      }
+      if (planData.status === 'error') {
+        throw new Error(planData.message ?? 'Plan failed');
+      }
+
+      // SQL-only question — answer already complete from phase 1
+      if (planData.status === 'complete') {
+        accText = planData.answer_text ?? '';
+        const blocks: InsightBlock[] = Array.isArray(planData.blocks) ? planData.blocks : [];
+        setMessages(prev => prev.map(m => m.id === assistantId
+          ? { ...m, content: accText, blocks, loading: false }
+          : m,
+        ));
+        return;
+      }
+
+      // ── Phase 2: Transcripts + parallel summarise + synthesis (SSE) ────────
+      accLogs += `Fetching ${planData.transcript_ids?.length ?? 0} conversations…\n`;
+      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m));
+
+      const insightsRes = await fetch('/api/analytics/insights', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message:           text,
+          intent:            planData.intent,
+          output_shape:      planData.output_shape,
+          transcript_intent: planData.transcript_intent,
+          transcript_ids:    planData.transcript_ids,
+          sql_results:       planData.sql_results,
+          filters:           activeFilters,
+        }),
+      });
+      if (!insightsRes.ok) throw new Error(insightsRes.statusText || 'Insights request failed');
+      await readSseStream(insightsRes);
+
     } catch (err: any) {
       setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantId
-            ? { ...m, content: `Error: ${err.message}`, loading: false }
-            : m,
-        ),
+        prev.map(m => m.id === assistantId ? { ...m, content: `Error: ${err.message}`, loading: false } : m),
       );
     } finally {
       setStreaming(false);
