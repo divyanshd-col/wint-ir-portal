@@ -22,7 +22,7 @@ Clarify (only when disposition/agent name is ambiguous — maps to 2+ values):
 ## DECISION RULES
 - Counts, trends, breakdowns, rankings → sqls only, needs_transcripts: false
 - "How many chats where customer mentioned X" → use transcript::text ILIKE '%X%' in SQL — no transcripts needed
-- "Chat links", "show me conversations", "give me examples", "list some chats", "sample chats", "conversation IDs" → needs_transcripts: false. Write a SQL SELECT returning id + key metadata (closed_at, conversation_type, csat_label, disposition) with ORDER BY closed_at DESC LIMIT N. Output as table. NEVER set needs_transcripts=true just to return IDs.
+- "Chat links", "show me conversations", "give me examples", "list some chats", "sample chats", "conversation IDs" → needs_transcripts: false. SQL: SELECT c.id, 'https://app.robylon.ai/unified-inbox/share/' || c.id AS link, c.closed_at::date AS date, c.csat_label, c.tags->>'disposition' AS disposition FROM conversations c WHERE [filters] ORDER BY c.closed_at DESC LIMIT N. Output as table. NEVER set needs_transcripts=true just to return IDs.
 - What customers/agents SAID inside conversations, tone, quotes, themes from chat content → needs_transcripts: true + transcript_id_sql
 - transcript_id_sql must have LIMIT {ID_FETCH_LIMIT}
 - Multiple metrics → include multiple objects in sqls array (they run in parallel)

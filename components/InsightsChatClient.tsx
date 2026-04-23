@@ -221,6 +221,94 @@ function ThoughtProcess({ logs, isStreaming }: { logs?: string; isStreaming?: bo
   );
 }
 
+// ── Table block (with copy + CSV download) ────────────────────────────────────
+
+function TableBlock({ block }: { block: Extract<InsightBlock, { type: 'table' }> }) {
+  const [copied, setCopied] = useState(false);
+
+  function copyTable() {
+    const lines = [
+      block.columns.join('\t'),
+      ...block.rows.map(r => r.join('\t')),
+    ];
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+
+  function downloadCSV() {
+    const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const lines = [
+      block.columns.map(escape).join(','),
+      ...block.rows.map(r => r.map(escape).join(',')),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = (block.title || 'data').replace(/\s+/g, '_') + '.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  return (
+    <div className="my-4">
+      <div className="flex items-center justify-between mb-2">
+        {block.title
+          ? <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{block.title}</div>
+          : <div />}
+        <div className="flex gap-1.5">
+          <button
+            onClick={copyTable}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50 transition"
+          >
+            {copied ? '✓ Copied' : 'Copy'}
+          </button>
+          <button
+            onClick={downloadCSV}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border border-gray-200 text-gray-500 hover:bg-gray-50 transition"
+          >
+            CSV ↓
+          </button>
+        </div>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50/80">
+            <tr>
+              {block.columns.map((col, i) => (
+                <th key={i} className="text-left px-3.5 py-2.5 text-gray-500 font-semibold whitespace-nowrap tracking-wide">
+                  {col}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, ri) => (
+              <tr key={ri} className={`border-t border-gray-50 ${ri % 2 === 0 ? '' : 'bg-gray-50/40'} hover:bg-emerald-50/30 transition-colors`}>
+                {row.map((cell, ci) => {
+                  const str = String(cell ?? '');
+                  const isUrl = str.startsWith('https://') || str.startsWith('http://');
+                  return (
+                    <td key={ci} className="px-3.5 py-2.5 text-gray-700 whitespace-nowrap">
+                      {isUrl
+                        ? <a href={str} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-emerald-600 font-medium hover:text-emerald-800 hover:underline transition-colors">
+                            Open ↗
+                          </a>
+                        : (cell ?? '—')}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Block renderer ────────────────────────────────────────────────────────────
 
 function BlockRenderer({ block }: { block: InsightBlock }) {
@@ -296,35 +384,7 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
   }
 
   if (block.type === 'table') {
-    return (
-      <div className="my-4">
-        {block.title && (
-          <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{block.title}</div>
-        )}
-        <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-          <table className="w-full text-xs">
-            <thead className="bg-gray-50/80">
-              <tr>
-                {block.columns.map((col, i) => (
-                  <th key={i} className="text-left px-3.5 py-2.5 text-gray-500 font-semibold whitespace-nowrap tracking-wide">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {block.rows.map((row, ri) => (
-                <tr key={ri} className={`border-t border-gray-50 ${ri % 2 === 0 ? '' : 'bg-gray-50/40'} hover:bg-emerald-50/30 transition-colors`}>
-                  {row.map((cell, ci) => (
-                    <td key={ci} className="px-3.5 py-2.5 text-gray-700 whitespace-nowrap">{cell ?? '—'}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
+    return <TableBlock block={block} />;
   }
 
   if (block.type === 'insight') {
