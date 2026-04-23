@@ -1,17 +1,19 @@
 import { geminiGenerate } from '@/lib/gemini';
 import type { ConversationTranscript } from './transcript-reader';
 
-const PROMPT = `You are summarising a batch of customer service conversations for a CX analytics system.
+const PROMPT = `You are summarising a batch of customer service conversations for a senior CX analyst at Wint Wealth.
 Analysis goal: {INTENT}
 
-Write a single concise paragraph (5-8 sentences) covering:
-- The main issues or questions raised by customers
-- Overall customer sentiment (frustrated / neutral / positive)
-- How agents handled these conversations
-- Patterns or themes relevant to the analysis goal
+Write a single analytical paragraph (5-8 sentences). Go beyond surface description — identify patterns, concentrations, and anomalies.
 
-Be specific — use rough numbers where you can (e.g. "roughly half of customers...").
-Synthesise across all conversations; do not list them individually.`;
+Cover:
+- The dominant theme or issue in this batch (name it specifically, with rough frequency: "~8 of 20 customers...")
+- Customer sentiment and what specifically triggers it (not just "frustrated" — what causes it)
+- How agents handled it: what worked, what didn't, where conversations broke down or escalated
+- Any outliers or surprising cases that don't fit the dominant pattern
+- Resolution rate and what determines whether a chat resolves or escalates
+
+Be specific and use numbers. Synthesise across all conversations — do not list them individually.`;
 
 export async function miniSummarizeTranscripts(
   transcripts: ConversationTranscript[],
