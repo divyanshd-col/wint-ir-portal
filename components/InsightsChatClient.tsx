@@ -571,8 +571,26 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [dispTrees, setDispTrees] = useState<DispositionTree[]>([]);
   const [agentOptions]            = useState<AgentOption[]>([]);
 
-  // Chat state
-  const [messages, setMessages]   = useState<ChatMessage[]>([]);
+  // Multi-chat state
+  const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string }>>(() =>
+    [{ id: 'chat-1', title: 'New chat' }],
+  );
+  const [activeId, setActiveId] = useState('chat-1');
+  const [allMessages, setAllMessages] = useState<Record<string, ChatMessage[]>>({});
+  const activeIdRef = useRef(activeId);
+  useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
+
+  const messages = allMessages[activeId] ?? [];
+  const setMessages = useCallback((updater: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => {
+    setAllMessages(prev => {
+      const id = activeIdRef.current;
+      const current = prev[id] ?? [];
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      return { ...prev, [id]: next };
+    });
+  }, []);
+
+  // Chat input / streaming state
   const [input, setInput]         = useState('');
   const [streaming, setStreaming] = useState(false);
   const [maxConversations, setMaxConversations] = useState(60);
@@ -600,6 +618,27 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     setConvTypes([]);
     setMinUserMsgs(null);
   };
+
+  function newChat() {
+    if (streaming) return;
+    const id = crypto.randomUUID();
+    setChatSessions(prev => [...prev, { id, title: 'New chat' }]);
+    setActiveId(id);
+    activeIdRef.current = id;
+  }
+
+  function closeChat(id: string) {
+    if (streaming || chatSessions.length === 1) return;
+    const idx = chatSessions.findIndex(s => s.id === id);
+    const remaining = chatSessions.filter(s => s.id !== id);
+    setChatSessions(remaining);
+    if (id === activeId) {
+      const next = remaining[Math.max(0, idx - 1)];
+      setActiveId(next.id);
+      activeIdRef.current = next.id;
+    }
+    setAllMessages(prev => { const { [id]: _, ...rest } = prev; return rest; });
+  }
 
   // Load dispositions + session history on mount
   useEffect(() => {
@@ -653,6 +692,13 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
 
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || streaming) return;
+
+    // Auto-title the session from the first message sent in it
+    setChatSessions(prev => prev.map(s =>
+      s.id === activeIdRef.current && s.title === 'New chat'
+        ? { ...s, title: text.slice(0, 36) + (text.length > 36 ? '…' : '') }
+        : s,
+    ));
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -784,7 +830,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     } finally {
       setStreaming(false);
     }
-  }, [streaming, dateRange, customFrom, customTo, dispositions, csatLabels, convTypes]);
+  }, [streaming, dateRange, customFrom, customTo, dispositions, csatLabels, convTypes, activeId]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -851,6 +897,37 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
               Reset filters
             </button>
           )}
+        </div>
+
+        {/* Chat tabs */}
+        <div className="bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5 overflow-x-auto shrink-0">
+          {chatSessions.map(session => (
+            <button
+              key={session.id}
+              onClick={() => { if (!streaming) { setActiveId(session.id); activeIdRef.current = session.id; } }}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all max-w-[180px] ${
+                session.id === activeId
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <span className="truncate">{session.title}</span>
+              {chatSessions.length > 1 && (
+                <span
+                  onClick={e => { e.stopPropagation(); closeChat(session.id); }}
+                  className={`shrink-0 ml-0.5 text-[14px] leading-none ${session.id === activeId ? 'opacity-60 hover:opacity-100' : 'opacity-30 hover:opacity-60'}`}
+                >×</span>
+              )}
+            </button>
+          ))}
+          <button
+            onClick={newChat}
+            disabled={streaming}
+            title="New chat"
+            className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:opacity-40 transition"
+          >
+            + New
+          </button>
         </div>
 
         {/* Filter bar */}
