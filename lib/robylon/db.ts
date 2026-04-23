@@ -182,11 +182,11 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 // ── Fetch all scored conversations (for quality dashboard) ────────────────────
 
 export async function getAllScoredConversations(
-  limit = 2000,
+  limit = 0,
   opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[] } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
-  const params: any[] = [limit];
+  const params: any[] = [];
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
@@ -207,7 +207,8 @@ export async function getAllScoredConversations(
     conditions.push(`1=0`);
   }
 
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const limitSql = limit > 0 ? `LIMIT ${limit}` : '';
 
   return query(`
     SELECT
@@ -230,7 +231,7 @@ export async function getAllScoredConversations(
     LEFT JOIN agents a ON a.id = c.agent_id
     ${where}
     ORDER BY s.scored_at DESC
-    LIMIT $1
+    ${limitSql}
   `, params);
 }
 

@@ -159,7 +159,7 @@ export async function GET(req: NextRequest) {
 
   let rawRows: any[] = [];
   try {
-    rawRows = await getAllScoredConversations(2000, dbOpts);
+    rawRows = await getAllScoredConversations(0, dbOpts);
   } catch (dbErr: any) {
     console.error('[quality/scores] DB fetch failed:', dbErr?.message ?? dbErr);
     return NextResponse.json({ error: 'Database error', detail: dbErr?.message }, { status: 500 });

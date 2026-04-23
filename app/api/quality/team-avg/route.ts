@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const dateFrom = searchParams.get('dateFrom') || '';
   const dateTo   = searchParams.get('dateTo') || '';
 
-  const rawRows = await getAllScoredConversations(2000);
+  const rawRows = await getAllScoredConversations(0);
 
   let entries = rawRows.map(row => ({
     agentName:      (row.agentName as string | null) || 'Unknown',
