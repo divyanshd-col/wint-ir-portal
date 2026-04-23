@@ -2012,10 +2012,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                     );
                   })()}
 
-                  {/* Agent Scorecards — top 3 only */}
+                  {/* Agent Scorecards — lowest IQS first */}
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Top Agent Scorecards</p>
+                      <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Needs Attention · Lowest IQS First</p>
                       {agentStats.length > 3 && (
                         <button onClick={() => setShowAllAgents(true)}
                           className="text-xs text-emerald-600 font-semibold hover:underline">
@@ -2049,7 +2049,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
                         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
                           <div>
                             <h2 className="font-bold text-gray-900">All Agent Scorecards</h2>
-                            <p className="text-xs text-gray-500 mt-0.5">{agentStats.length} agents · sorted by avg IQS</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{agentStats.length} agents · lowest IQS first</p>
                           </div>
                           <button onClick={() => setShowAllAgents(false)} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
                             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>

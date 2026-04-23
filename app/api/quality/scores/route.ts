@@ -241,7 +241,7 @@ export async function GET(req: NextRequest) {
       avgClosure: d.closures.length ? Math.round(d.closures.reduce((s,n) => s+n, 0) / d.closures.length) : null,
       avgBotToTeam: d.b2ts.length ? Math.round(d.b2ts.reduce((s,n) => s+n, 0) / d.b2ts.length) : null,
       csatPct: d.csatTotal > 0 ? Math.round(d.csatGood / d.csatTotal * 100) : null,
-    })).sort((a, b) => b.avgIqs - a.avgIqs);
+    })).sort((a, b) => a.avgIqs - b.avgIqs);
 
     // Param failure rates
     if (filteredForStats.length) {
