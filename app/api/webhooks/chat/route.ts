@@ -21,7 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { sendSlackMessage } from '@/lib/slack';
+import { hasCallInteraction, fireQualityAlert, fireCallSkipAlert } from '@/lib/quality-alert';
 import {
   IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
@@ -174,6 +174,17 @@ export async function executeScoring(
     return null;
   }
 
+  // ── Call detection — skip scoring, flag to QA ────────────────────────────
+  if (hasCallInteraction(transcriptText, conv.tags)) {
+    const tagDisp = (conv.tags as any)?.disposition || '';
+    const reason  = /\bcall\b/i.test(tagDisp)
+      ? `Disposition tagged as: ${tagDisp}`
+      : 'Transcript contains a call interaction or callback request';
+    console.log(`[webhook] Skipping scoring for chat ${chatId} — call interaction detected`);
+    fireCallSkipAlert({ chatId, agentName, contactPhone, reason }).catch(() => {});
+    return null;
+  }
+
   // Determine conversation type from stored timed messages
   const timedMessages: TimedMessage[] = transcriptMessages.map((m: any) => ({
     sender: m.sender_type === 'customer' ? 'user'
@@ -267,36 +278,14 @@ export async function executeScoring(
   const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
   console.log(`[webhook] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
 
-  // ── Slack alert: critical parameter failures ──────────────────────────────────
-  const CRITICAL_PARAMS = [
-    { key: 'Technical',    label: 'Technically / Legally Incorrect' },
-    { key: 'AllQuestions', label: 'All Questions Not Answered' },
-    { key: 'Process',      label: 'Process Incorrect' },
-  ] as const;
-  const failedParams = CRITICAL_PARAMS
-    .filter(p => parsed.scores?.[p.key] === 'No')
-    .map(p => ({ label: p.label, reasoning: (parsed.reasoning as any)?.[p.key] || 'No reasoning provided' }));
-
-  if (failedParams.length > 0) {
-    const slackToken   = process.env.SLACK_BOT_TOKEN || '';
-    const slackChannel = process.env.QUALITY_SLACK_CHANNEL || '';
-    if (slackToken && slackChannel) {
-      const chatLink = /^\d+$/.test(chatId.trim())
-        ? `<https://app.robylon.ai/unified-inbox/share/${chatId}|${chatId}>`
-        : chatId;
-      const failLines = failedParams.map(p => `• *${p.label}*: ${p.reasoning}`).join('\n');
-      const text = [
-        `⚠️ *Quality Flag — Parameter Failure*`,
-        `*Chat:* ${chatLink}`,
-        contactPhone ? `*Phone:* ${contactPhone}` : null,
-        `*Agent:* ${finalAgentName || 'Unknown'}`,
-        ``,
-        `*Failed parameters:*`,
-        failLines,
-      ].filter(Boolean).join('\n');
-      sendSlackMessage(slackChannel, text, slackToken).catch(() => {});
-    }
-  }
+  // ── Slack alert — deduplicated via KV ────────────────────────────────────────
+  fireQualityAlert({
+    chatId,
+    agentName: finalAgentName,
+    contactPhone,
+    scores:    parsed.scores    as Record<string, string>,
+    reasoning: parsed.reasoning as Record<string, string>,
+  }).catch(() => {});
 
   return { chatId, iqs: parsed.iqs };
 }

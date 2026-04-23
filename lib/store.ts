@@ -74,6 +74,27 @@ async function kv_lrange(key: string, start: number, end: number): Promise<strin
   }
 }
 
+// --- Quality Slack alert deduplication ---
+// Prevents the same chat from firing a Slack alert more than once
+// (can happen when webhook + manual scoring both run on the same chat).
+
+export async function storeHasQualityAlert(chatId: string): Promise<boolean> {
+  const val = await kv_get(`wint_quality_alerted:${chatId}`);
+  return val === '1';
+}
+
+export async function storeMarkQualityAlert(chatId: string): Promise<void> {
+  if (!ready()) return;
+  try {
+    // SET with EX 86400 = expires after 24 h
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['SET', `wint_quality_alerted:${chatId}`, '1', 'EX', '86400']]),
+    });
+  } catch {}
+}
+
 // --- Config ---
 
 export async function storeGetConfig(): Promise<PortalConfig | null> {

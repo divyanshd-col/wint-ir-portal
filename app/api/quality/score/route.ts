@@ -3,48 +3,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
-import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, calculateIQS, trimTranscript, IQSScoreEntry } from '@/lib/quality';
+import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, trimTranscript, IQSScoreEntry } from '@/lib/quality';
 import { storeAppendIQSScore, storeSetTranscript } from '@/lib/store';
-import { sendSlackMessage } from '@/lib/slack';
+import { hasCallInteraction, fireQualityAlert, fireCallSkipAlert } from '@/lib/quality-alert';
 import Anthropic from '@anthropic-ai/sdk';
-
-// Parameters that trigger a Slack alert when they fail
-const CRITICAL_PARAMS: { key: string; label: string }[] = [
-  { key: 'Technical',    label: 'Technically / Legally Incorrect' },
-  { key: 'AllQuestions', label: 'All Questions Not Answered' },
-  { key: 'Process',      label: 'Process Incorrect' },
-];
-
-function fireQualityAlert(
-  chatId: string,
-  agentName: string,
-  contactPhone: string,
-  failedParams: { label: string; reasoning: string }[],
-) {
-  const token   = process.env.SLACK_BOT_TOKEN || '';
-  const channel = process.env.QUALITY_SLACK_CHANNEL || '';
-  if (!token || !channel || !failedParams.length) return;
-
-  const chatLink = /^\d+$/.test(chatId.trim())
-    ? `<https://app.robylon.ai/unified-inbox/share/${chatId}|${chatId}>`
-    : chatId;
-
-  const failLines = failedParams
-    .map(p => `• *${p.label}*: ${p.reasoning}`)
-    .join('\n');
-
-  const text = [
-    `⚠️ *Quality Flag — Parameter Failure*`,
-    `*Chat:* ${chatLink}`,
-    contactPhone ? `*Phone:* ${contactPhone}` : null,
-    `*Agent:* ${agentName || 'Unknown'}`,
-    ``,
-    `*Failed parameters:*`,
-    failLines,
-  ].filter(l => l !== null).join('\n');
-
-  sendSlackMessage(channel, text, token).catch(() => {});
-}
 
 function qualityAccess(session: any): boolean {
   const role = session?.user?.role;
@@ -73,6 +35,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'transcript is required' }, { status: 400 });
   }
 
+  // ── Call detection — skip scoring, flag to QA ────────────────────────────
+  if (hasCallInteraction(transcript, tags)) {
+    const reason = /\bcall\b/i.test(String(tags?.disposition || tags || ''))
+      ? `Disposition tagged as: ${tags?.disposition || tags}`
+      : 'Transcript contains a call interaction or callback request';
+    fireCallSkipAlert({ chatId, agentName, contactPhone: contactPhone || undefined, reason }).catch(() => {});
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: 'call_interaction',
+      message: 'Scoring skipped — call interaction detected. QA has been notified.',
+    });
+  }
+
   const config       = await readConfig();
   const provider     = config.llmProvider || 'gemini';
   const geminiKeys   = getIQSGeminiKeys(config);
@@ -81,7 +57,6 @@ export async function POST(req: NextRequest) {
   const userPrompt = buildScoringPrompt(trimTranscript(transcript), tags, chatId);
 
   let rawResponse: string;
-
   try {
     if (provider === 'claude' && anthropicKey) {
       const client = new Anthropic({ apiKey: anthropicKey });
@@ -96,11 +71,9 @@ export async function POST(req: NextRequest) {
       rawResponse = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',
-        [
-          { role: 'user', parts: [{ text: IQS_SYSTEM_PROMPT + '\n\n' + userPrompt }] },
-        ],
+        [{ role: 'user', parts: [{ text: IQS_SYSTEM_PROMPT + '\n\n' + userPrompt }] }],
         {},
-        60000
+        60000,
       );
     } else {
       return NextResponse.json({ error: 'No API key configured' }, { status: 500 });
@@ -120,13 +93,11 @@ export async function POST(req: NextRequest) {
       provider,
       model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash',
       scoredBy: session.user?.email || session.user?.name || 'unknown',
-      // Use passed agentName if available; fall back to what the LLM extracted from the transcript
       agentName: agentName || (parsed as any).extractedAgentName || '',
       date,
       tags,
       csat,
       slackUrl,
-      // transcript omitted from stored entry — kept small for Redis list
       ...parsed,
     };
 
@@ -135,11 +106,14 @@ export async function POST(req: NextRequest) {
       await storeSetTranscript(chatId, { rawTranscript: transcript });
     }
 
-    // Slack alert for critical parameter failures
-    const failedParams = CRITICAL_PARAMS
-      .filter(p => entry.scores?.[p.key] === 'No')
-      .map(p => ({ label: p.label, reasoning: (entry.reasoning as any)?.[p.key] || 'No reasoning provided' }));
-    fireQualityAlert(chatId, entry.agentName || agentName, contactPhone, failedParams);
+    // Slack alert — deduplicated via KV (one alert per chat per 24 h)
+    fireQualityAlert({
+      chatId,
+      agentName: entry.agentName || agentName,
+      contactPhone: contactPhone || undefined,
+      scores:    entry.scores    as Record<string, string>,
+      reasoning: entry.reasoning as Record<string, string>,
+    }).catch(() => {});
 
     return NextResponse.json({ ok: true, entry });
   } catch (err: any) {
