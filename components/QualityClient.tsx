@@ -62,6 +62,9 @@ interface AgentStat {
   avgClosure?: number | null;
   avgBotToTeam?: number | null;
   csatPct?: number | null;
+  csatGood?: number;
+  csatCbb?: number;
+  csatBad?: number;
 }
 
 interface QualityClientProps {
@@ -588,9 +591,10 @@ function AgentReportModal({ stat, entries, paramFails, onClose, onFilterLog }: {
   const agentEntries = entries.filter(e => (e.agentName || 'Unknown') === stat.agent);
   const t = iqsTheme(stat.avgIqs);
 
-  const csatGood  = agentEntries.filter(e => e.csat === '5').length;
-  const csatCbb   = agentEntries.filter(e => e.csat === '3').length;
-  const csatBad   = agentEntries.filter(e => e.csat === '1').length;
+  // Prefer API-provided counts (computed over all filtered entries, not just the current page)
+  const csatGood  = stat.csatGood  ?? agentEntries.filter(e => e.csat === '5').length;
+  const csatCbb   = stat.csatCbb   ?? agentEntries.filter(e => e.csat === '3').length;
+  const csatBad   = stat.csatBad   ?? agentEntries.filter(e => e.csat === '1').length;
   const csatTotal = csatGood + csatCbb + csatBad;
 
   const dispMap: Record<string, number> = {};
@@ -1308,12 +1312,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
         return;
       }
       setEntries(data.entries || []);
-      // Only overwrite stats when server sent them (skipStats=false)
+      // Summary always comes back — reflects current filters
+      if (data.summary) setSummary(data.summary);
+      // Heavy per-agent stats only come back when skipStats=false
       if (!skipStats) {
         setAgentStats(data.agentStats || []);
         setParamFails(data.paramFails || {});
         setWeeklyParamData(data.weeklyParamData || []);
-        if (data.summary) setSummary(data.summary);
       }
       setAvailableAgents(data.availableAgents || []);
       setAvailableDispositions(data.availableDispositions || []);

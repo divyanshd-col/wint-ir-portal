@@ -202,20 +202,52 @@ export async function GET(req: NextRequest) {
   const displayEntries = entries.slice(start, start + PAGE_SIZE);
   const hasMore = start + PAGE_SIZE < totalFiltered;
 
-  // ── Stats over ALL filtered entries (skipped on page-only navigation) ───────
+  // ── Stats over ALL filtered entries ──────────────────────────────────────────
   let agentStats: any[] = [];
   let paramFails: Record<string, number> = {};
   let weeklyParamData: any[] = [];
   let summary: any = null;
 
+  // Summary is always computed (lightweight) so the summary bar reflects active filters.
+  // agentStats / paramFails / weeklyParamData are expensive and skipped on page navigation.
+  {
+    const filteredForStats = entries;
+    const botE    = filteredForStats.filter(e => e.conversationType === 'bot');
+    const agentE  = filteredForStats.filter(e => e.conversationType !== 'bot');
+    const allC    = filteredForStats.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
+    const botC    = botE.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
+    const agentC  = agentE.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
+    const good    = filteredForStats.filter(e => e.csat === '5').length;
+    const cbbBad  = filteredForStats.filter(e => e.csat === '3' || e.csat === '1').length;
+    const withC   = filteredForStats.filter(e => ['5','3','1'].includes(e.csat || '')).length;
+    const frtV    = filteredForStats.map(e => e.frt).filter((v): v is number => typeof v === 'number');
+    const b2tV    = filteredForStats.map(e => e.botToTeamSecs).filter((v): v is number => typeof v === 'number');
+    const resV    = filteredForStats.map(e => e.resolutionTime).filter((v): v is number => typeof v === 'number');
+    const closeV  = filteredForStats.map(e => (e as any).closureTime).filter((v): v is number => typeof v === 'number');
+    const slaOk   = b2tV.filter(v => v <= SLA_THRESHOLD_SECS).length;
+    const iqsE    = filteredForStats.filter(e => e.iqs !== undefined);
+    summary = {
+      totalConvos: totalFiltered, botConvos: botE.length, agentConvos: agentE.length,
+      overallCsat: avgOrNull(allC), botCsat: avgOrNull(botC), agentCsat: avgOrNull(agentC),
+      good, cbbBad, cbbBadPct: withC > 0 ? Math.round((cbbBad / withC) * 100) : 0,
+      avgFrt: avgOrNull(frtV), avgBotToTeam: avgOrNull(b2tV),
+      slaPercent: b2tV.length > 0 ? Math.round((slaOk / b2tV.length) * 100) : null,
+      slaThresholdSecs: SLA_THRESHOLD_SECS,
+      avgResolution: avgOrNull(resV), avgClosure: avgOrNull(closeV),
+      avgIqs: iqsE.length ? avg(iqsE.map(e => e.iqs)) : null,
+      iqsSampleSize: iqsE.length,
+      samplingPct: totalFiltered > 0 ? Math.round((iqsE.length / totalFiltered) * 100) : 0,
+    };
+  }
+
   if (!skipStats) {
     const filteredForStats = entries;
 
     // Agent stats
-    const agentMap: Record<string, { total: number; sum: number; scores: number[]; frts: number[]; resolutions: number[]; closures: number[]; b2ts: number[]; csatGood: number; csatTotal: number }> = {};
+    const agentMap: Record<string, { total: number; sum: number; scores: number[]; frts: number[]; resolutions: number[]; closures: number[]; b2ts: number[]; csatGood: number; csatCbb: number; csatBad: number; csatTotal: number }> = {};
     for (const e of filteredForStats) {
       const a = e.agentName || 'Unknown';
-      if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [], frts: [], resolutions: [], closures: [], b2ts: [], csatGood: 0, csatTotal: 0 };
+      if (!agentMap[a]) agentMap[a] = { total: 0, sum: 0, scores: [], frts: [], resolutions: [], closures: [], b2ts: [], csatGood: 0, csatCbb: 0, csatBad: 0, csatTotal: 0 };
       agentMap[a].total++;
       agentMap[a].sum += e.iqs;
       agentMap[a].scores.push(e.iqs);
@@ -226,6 +258,8 @@ export async function GET(req: NextRequest) {
       if (e.csat === '5' || e.csat === '3' || e.csat === '1') {
         agentMap[a].csatTotal++;
         if (e.csat === '5') agentMap[a].csatGood++;
+        if (e.csat === '3') agentMap[a].csatCbb++;
+        if (e.csat === '1') agentMap[a].csatBad++;
       }
     }
     agentStats = Object.entries(agentMap).map(([agent, d]) => ({
@@ -240,6 +274,7 @@ export async function GET(req: NextRequest) {
       avgResolution: d.resolutions.length ? Math.round(d.resolutions.reduce((s,n) => s+n, 0) / d.resolutions.length) : null,
       avgClosure: d.closures.length ? Math.round(d.closures.reduce((s,n) => s+n, 0) / d.closures.length) : null,
       avgBotToTeam: d.b2ts.length ? Math.round(d.b2ts.reduce((s,n) => s+n, 0) / d.b2ts.length) : null,
+      csatGood: d.csatGood, csatCbb: d.csatCbb, csatBad: d.csatBad,
       csatPct: d.csatTotal > 0 ? Math.round(d.csatGood / d.csatTotal * 100) : null,
     })).sort((a, b) => a.avgIqs - b.avgIqs);
 
@@ -275,51 +310,12 @@ export async function GET(req: NextRequest) {
         params: Object.fromEntries(PARAM_ORDER.map(p => [p, d.total ? Math.round((d.fails[p] || 0) / d.total * 100) : 0])),
       }));
 
-    // ── Summary metrics ──────────────────────────────────────────────────────
-    const botEntries    = filteredForStats.filter(e => e.conversationType === 'bot');
-    const agentEntries  = filteredForStats.filter(e => e.conversationType !== 'bot');
-
-    const allCsatScores   = filteredForStats.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
-    const botCsatScores   = botEntries.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
-    const agentCsatScores = agentEntries.map(e => csatScore(e.csat)).filter((v): v is number => v !== null);
-
-    const good   = filteredForStats.filter(e => e.csat === '5').length;
-    const cbbBad = filteredForStats.filter(e => e.csat === '3' || e.csat === '1').length;
-    const withCsat = filteredForStats.filter(e => ['5','3','1'].includes(e.csat || '')).length;
-
-    const frtValues   = filteredForStats.map(e => e.frt).filter((v): v is number => typeof v === 'number');
-    const b2tValues   = filteredForStats.map(e => e.botToTeamSecs).filter((v): v is number => typeof v === 'number');
-    const resValues   = filteredForStats.map(e => e.resolutionTime).filter((v): v is number => typeof v === 'number');
-    const closeValues = filteredForStats.map(e => (e as any).closureTime).filter((v): v is number => typeof v === 'number');
-    const slaOk       = b2tValues.filter(v => v <= SLA_THRESHOLD_SECS).length;
-
-    const iqsEntries    = filteredForStats.filter(e => e.iqs !== undefined);
-    const iqsSampleSize = iqsEntries.length;
-
-    summary = {
-      totalConvos:   totalFiltered,
-      botConvos:     botEntries.length,
-      agentConvos:   agentEntries.length,
-      overallCsat:   avgOrNull(allCsatScores),
-      botCsat:       avgOrNull(botCsatScores),
-      agentCsat:     avgOrNull(agentCsatScores),
-      good, cbbBad,
-      cbbBadPct:     withCsat > 0 ? Math.round((cbbBad / withCsat) * 100) : 0,
-      avgFrt:        avgOrNull(frtValues),
-      avgBotToTeam:  avgOrNull(b2tValues),
-      slaPercent:    b2tValues.length > 0 ? Math.round((slaOk / b2tValues.length) * 100) : null,
-      slaThresholdSecs: SLA_THRESHOLD_SECS,
-      avgResolution: avgOrNull(resValues),
-      avgClosure:    avgOrNull(closeValues),
-      avgIqs:        iqsEntries.length ? avg(iqsEntries.map(e => e.iqs)) : null,
-      iqsSampleSize,
-      samplingPct:   totalFiltered > 0 ? Math.round((iqsSampleSize / totalFiltered) * 100) : 0,
-    };
   }
 
   return NextResponse.json({
     entries: displayEntries,
-    ...(skipStats ? {} : { agentStats, paramFails, weeklyParamData, summary }),
+    summary,  // always included so filter bar reflects active filters
+    ...(skipStats ? {} : { agentStats, paramFails, weeklyParamData }),
     availableAgents,
     availableDispositions,
     availableSubDispositions,
