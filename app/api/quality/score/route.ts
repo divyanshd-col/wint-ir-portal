@@ -5,7 +5,46 @@ import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, calculateIQS, trimTranscript, IQSScoreEntry } from '@/lib/quality';
 import { storeAppendIQSScore, storeSetTranscript } from '@/lib/store';
+import { sendSlackMessage } from '@/lib/slack';
 import Anthropic from '@anthropic-ai/sdk';
+
+// Parameters that trigger a Slack alert when they fail
+const CRITICAL_PARAMS: { key: string; label: string }[] = [
+  { key: 'Technical',    label: 'Technically / Legally Incorrect' },
+  { key: 'AllQuestions', label: 'All Questions Not Answered' },
+  { key: 'Process',      label: 'Process Incorrect' },
+];
+
+function fireQualityAlert(
+  chatId: string,
+  agentName: string,
+  contactPhone: string,
+  failedParams: { label: string; reasoning: string }[],
+) {
+  const token   = process.env.SLACK_BOT_TOKEN || '';
+  const channel = process.env.QUALITY_SLACK_CHANNEL || '';
+  if (!token || !channel || !failedParams.length) return;
+
+  const chatLink = /^\d+$/.test(chatId.trim())
+    ? `<https://app.robylon.ai/unified-inbox/share/${chatId}|${chatId}>`
+    : chatId;
+
+  const failLines = failedParams
+    .map(p => `• *${p.label}*: ${p.reasoning}`)
+    .join('\n');
+
+  const text = [
+    `⚠️ *Quality Flag — Parameter Failure*`,
+    `*Chat:* ${chatLink}`,
+    contactPhone ? `*Phone:* ${contactPhone}` : null,
+    `*Agent:* ${agentName || 'Unknown'}`,
+    ``,
+    `*Failed parameters:*`,
+    failLines,
+  ].filter(l => l !== null).join('\n');
+
+  sendSlackMessage(channel, text, token).catch(() => {});
+}
 
 function qualityAccess(session: any): boolean {
   const role = session?.user?.role;
@@ -27,6 +66,7 @@ export async function POST(req: NextRequest) {
     date = '',
     csat = '',
     slackUrl = '',
+    contactPhone = '',
   } = body;
 
   if (!transcript?.trim()) {
@@ -94,6 +134,12 @@ export async function POST(req: NextRequest) {
     if (transcript && chatId) {
       await storeSetTranscript(chatId, { rawTranscript: transcript });
     }
+
+    // Slack alert for critical parameter failures
+    const failedParams = CRITICAL_PARAMS
+      .filter(p => entry.scores?.[p.key] === 'No')
+      .map(p => ({ label: p.label, reasoning: (entry.reasoning as any)?.[p.key] || 'No reasoning provided' }));
+    fireQualityAlert(chatId, entry.agentName || agentName, contactPhone, failedParams);
 
     return NextResponse.json({ ok: true, entry });
   } catch (err: any) {

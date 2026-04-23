@@ -72,7 +72,7 @@ interface QualityClientProps {
   initialTab?: 'log';
 }
 interface ParsedRow {
-  chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string;
+  chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string; contactPhone?: string;
 }
 interface MetaRow { agent?: string; tags?: string; csat?: string; date?: string; }
 type MetaMap = Record<string, MetaRow>;
@@ -328,7 +328,8 @@ function extractWint(messagesStr: string): { agent: string; csat: string; transc
 function buildParsedRows(rows: Record<string, string>[]): ParsedRow[] {
   return rows.map(r => {
     const { agent, csat, transcript } = extractWint(r.messages || '');
-    return { chatId: r.chat_id || '', agent, date: (r.conversation_started || '').slice(0, 10), csat, transcript };
+    const contactPhone = r.user_phone || r.contact_phone || r.phone || r.mobile || r.phone_number || '';
+    return { chatId: r.chat_id || '', agent, date: (r.conversation_started || '').slice(0, 10), csat, transcript, contactPhone: contactPhone || undefined };
   });
 }
 
@@ -1539,7 +1540,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
         const res = await fetch('/api/quality/score', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ transcript: row.transcript, chatId, agentName: row.agent, date: row.date, csat: row.csat, tags: row.tags || '' }),
+          body: JSON.stringify({ transcript: row.transcript, chatId, agentName: row.agent, date: row.date, csat: row.csat, tags: row.tags || '', contactPhone: row.contactPhone || '' }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');

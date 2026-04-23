@@ -156,6 +156,7 @@ export async function executeScoring(
   agentName: string,
   disposition: string,
   subDisposition: string,
+  contactPhone?: string,
 ): Promise<{ chatId: string; iqs: number } | null> {
   const chatId = conv.id;
 
@@ -266,16 +267,33 @@ export async function executeScoring(
   const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
   console.log(`[webhook] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
 
-  // ── Slack alert: fire immediately when chat is technically/legally wrong ─────
-  if (parsed.scores?.Technical === 'No') {
+  // ── Slack alert: critical parameter failures ──────────────────────────────────
+  const CRITICAL_PARAMS = [
+    { key: 'Technical',    label: 'Technically / Legally Incorrect' },
+    { key: 'AllQuestions', label: 'All Questions Not Answered' },
+    { key: 'Process',      label: 'Process Incorrect' },
+  ] as const;
+  const failedParams = CRITICAL_PARAMS
+    .filter(p => parsed.scores?.[p.key] === 'No')
+    .map(p => ({ label: p.label, reasoning: (parsed.reasoning as any)?.[p.key] || 'No reasoning provided' }));
+
+  if (failedParams.length > 0) {
     const slackToken   = process.env.SLACK_BOT_TOKEN || '';
-    const slackChannel = process.env.CX_ESCALATIONS_CHANNEL || '#cx-escalations';
-    if (slackToken) {
-      const chatLink  = /^\d+$/.test(chatId.trim())
+    const slackChannel = process.env.QUALITY_SLACK_CHANNEL || '';
+    if (slackToken && slackChannel) {
+      const chatLink = /^\d+$/.test(chatId.trim())
         ? `<https://app.robylon.ai/unified-inbox/share/${chatId}|${chatId}>`
         : chatId;
-      const reasoning = parsed.reasoning?.Technical || 'No reasoning provided';
-      const text      = `🚨 *Technical/Legal Error Detected*\n*Chat ID:* ${chatLink}\n*Agent:* ${finalAgentName || 'Unknown'}\n*Reason:* ${reasoning}\n@cx-escalations-group`;
+      const failLines = failedParams.map(p => `• *${p.label}*: ${p.reasoning}`).join('\n');
+      const text = [
+        `⚠️ *Quality Flag — Parameter Failure*`,
+        `*Chat:* ${chatLink}`,
+        contactPhone ? `*Phone:* ${contactPhone}` : null,
+        `*Agent:* ${finalAgentName || 'Unknown'}`,
+        ``,
+        `*Failed parameters:*`,
+        failLines,
+      ].filter(Boolean).join('\n');
       sendSlackMessage(slackChannel, text, slackToken).catch(() => {});
     }
   }
@@ -390,6 +408,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
       effectiveWebhookAgent,
       tags?.disposition || '',
       tags?.sub_disposition || '',
+      mobileNumber,
     );
     if (scored) {
       return NextResponse.json({
