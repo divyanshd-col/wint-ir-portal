@@ -54,11 +54,30 @@ export async function GET(req: NextRequest) {
   const email = (session.user as any)?.email || '';
 
   // Agents only see their own flags
-  const filtered = role === 'agent'
-    ? flags.filter(f => f.agentEmail === email)
-    : flags;
+  if (role === 'agent') {
+    return NextResponse.json({ flags: flags.filter(f => f.agentEmail === email) });
+  }
 
-  return NextResponse.json({ flags: filtered });
+  // Quality role: filter to agents assigned to them in the CX DB
+  if (role === 'quality') {
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig();
+    const me = config.users.find(u => (u.email || u.username) === email);
+    const myQAName = me?.agentName || email.split('@')[0];
+    try {
+      const { query } = await import('@/lib/cx/db');
+      const rows = await query<{ name: string }>(
+        `SELECT name FROM agents WHERE LOWER(qa_name) = LOWER($1)`,
+        [myQAName],
+      );
+      const myAgents = new Set(rows.map((r: any) => (r.name || '').toLowerCase()));
+      return NextResponse.json({ flags: flags.filter(f => myAgents.has((f.agentName || '').toLowerCase())) });
+    } catch {
+      // CX DB unavailable — fall through to return all
+    }
+  }
+
+  return NextResponse.json({ flags });
 }
 
 // PATCH — quality/admin reviews a flag

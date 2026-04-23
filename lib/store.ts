@@ -528,3 +528,53 @@ export async function storeGetConversations(username: string): Promise<SavedConv
 export async function storeSetConversations(username: string, convs: SavedConversation[]): Promise<void> {
   await kv_set(`convs:${username}`, JSON.stringify(convs));
 }
+
+// ── Call-skipped chats (chats pending manual QA review) ────────────────────
+
+const CALL_SKIPPED_KEY = 'wint_call_skipped';
+
+export interface CallSkippedEntry {
+  id: string;
+  chatId: string;
+  agentName: string;
+  reason: string;
+  skippedAt: string;
+  status: 'pending' | 'reviewed';
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNote?: string;
+}
+
+export async function storeAppendCallSkipped(entry: CallSkippedEntry): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LPUSH', CALL_SKIPPED_KEY, JSON.stringify(entry)], ['LTRIM', CALL_SKIPPED_KEY, '0', '999']]),
+    });
+  } catch {}
+}
+
+export async function storeGetCallSkipped(): Promise<string[]> {
+  return kv_lrange(CALL_SKIPPED_KEY, 0, -1);
+}
+
+export async function storeUpdateCallSkipped(
+  id: string,
+  updates: Partial<Pick<CallSkippedEntry, 'status' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
+): Promise<boolean> {
+  if (!ready()) return false;
+  const all = await storeGetCallSkipped();
+  const idx = all.findIndex(raw => { try { return JSON.parse(raw).id === id; } catch { return false; } });
+  if (idx < 0) return false;
+  try {
+    const entry = { ...JSON.parse(all[idx]), ...updates };
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LSET', CALL_SKIPPED_KEY, String(idx), JSON.stringify(entry)]]),
+    });
+    return true;
+  } catch { return false; }
+}

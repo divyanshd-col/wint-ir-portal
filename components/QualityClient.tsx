@@ -873,8 +873,16 @@ interface IQSFlagComment {
   role: string; content: string; createdAt: string;
 }
 
-function ChallengesTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
+interface CallSkippedItem {
+  id: string; chatId: string; agentName: string; reason: string;
+  skippedAt: string; status: 'pending' | 'reviewed';
+  reviewedBy?: string; reviewedAt?: string; reviewNote?: string;
+}
+
+function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
+  const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
   const [flags, setFlags] = useState<IQSFlagData[]>([]);
+  const [callItems, setCallItems] = useState<CallSkippedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [threads, setThreads] = useState<Record<string, IQSFlagComment[]>>({});
@@ -883,15 +891,18 @@ function ChallengesTab({ userRole, userEmail }: { userRole?: string; userEmail?:
   const [replySending, setReplySending] = useState<Record<string, boolean>>({});
   const [statusUpdating, setStatusUpdating] = useState<Record<string, boolean>>({});
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
-  const [filter, setFilter] = useState<'all' | 'pending' | 'reviewed'>('all');
+  const [callUpdating, setCallUpdating] = useState<Record<string, boolean>>({});
+  const [callNotes, setCallNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setLoading(true);
-    fetch('/api/quality/flag')
-      .then(r => r.json())
-      .then(d => setFlags(d.flags || []))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetch('/api/quality/flag').then(r => r.json()),
+      fetch('/api/quality/call-pending').then(r => r.json()),
+    ]).then(([fd, cd]) => {
+      setFlags(fd.flags || []);
+      setCallItems(cd.items || []);
+    }).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const loadThread = async (flagId: string) => {
@@ -939,184 +950,235 @@ function ChallengesTab({ userRole, userEmail }: { userRole?: string; userEmail?:
     setStatusUpdating(s => ({ ...s, [flagId]: false }));
   };
 
-  const filtered = flags.filter(f => filter === 'all' || f.status === filter)
-    .sort((a, b) => new Date(b.flaggedAt).getTime() - new Date(a.flaggedAt).getTime());
+  const markCallReviewed = async (id: string) => {
+    setCallUpdating(s => ({ ...s, [id]: true }));
+    try {
+      await fetch('/api/quality/call-pending', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: 'reviewed', reviewNote: callNotes[id] || '' }),
+      });
+      setCallItems(prev => prev.map(c => c.id === id ? { ...c, status: 'reviewed' } : c));
+    } catch {}
+    setCallUpdating(s => ({ ...s, [id]: false }));
+  };
 
-  const pendingCount = flags.filter(f => f.status === 'pending').length;
+  const pendingFlags = flags.filter(f => f.status === 'pending').sort((a,b) => new Date(b.flaggedAt).getTime() - new Date(a.flaggedAt).getTime());
+  const reviewedFlags = flags.filter(f => f.status === 'reviewed').sort((a,b) => new Date(b.flaggedAt).getTime() - new Date(a.flaggedAt).getTime());
+  const pendingCalls = callItems.filter(c => c.status === 'pending').sort((a,b) => new Date(b.skippedAt).getTime() - new Date(a.skippedAt).getTime());
+  const reviewedCalls = callItems.filter(c => c.status === 'reviewed').sort((a,b) => new Date(b.skippedAt).getTime() - new Date(a.skippedAt).getTime());
+  const totalPending = pendingFlags.length + pendingCalls.length;
+  const totalReviewed = reviewedFlags.length + reviewedCalls.length;
+
+  const canReview = ['quality','admin','tl'].includes(userRole || '');
 
   if (loading) return (
     <div className="flex items-center justify-center h-48 text-gray-400 gap-2 text-sm">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-      Loading challenges…
+      Loading…
     </div>
   );
 
-  return (
-    <div className="space-y-4 max-w-3xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1">
-          <h2 className="text-sm font-bold text-gray-900">Score Challenges</h2>
-          <p className="text-xs text-gray-500 mt-0.5">{flags.length} total · {pendingCount} pending review</p>
-        </div>
-        <div className="flex gap-1.5">
-          {(['all','pending','reviewed'] as const).map(f => (
-            <button key={f} onClick={() => setFilter(f)}
-              className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${filter === f ? 'bg-emerald-600 text-white' : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-400'}`}>
-              {f === 'all' ? 'All' : f === 'pending' ? `Pending${pendingCount > 0 ? ` (${pendingCount})` : ''}` : 'Reviewed'}
-            </button>
-          ))}
-        </div>
-      </div>
+  const flagCard = (flag: IQSFlagData) => {
+    const isExpanded = expandedId === flag.id;
+    const thread = threads[flag.id] || [];
+    const isPending = flag.status === 'pending';
+    const chatUrl = /^\d+$/.test(flag.chatId.trim()) ? `https://app.robylon.ai/unified-inbox/share/${flag.chatId}` : null;
 
-      {filtered.length === 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-12 text-center">
-          <p className="text-sm text-gray-400">No challenges {filter !== 'all' ? `with status "${filter}"` : 'yet'}.</p>
-        </div>
-      )}
-
-      {filtered.map(flag => {
-        const isExpanded = expandedId === flag.id;
-        const thread = threads[flag.id] || [];
-        const isPending = flag.status === 'pending';
-        const chatUrl = /^\d+$/.test(flag.chatId.trim()) ? `https://app.robylon.ai/unified-inbox/share/${flag.chatId}` : null;
-
-        return (
-          <div key={flag.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${isPending ? 'border-amber-200' : 'border-gray-100'}`}>
-            {/* Flag row */}
-            <div className="px-5 py-4 flex items-start gap-4 cursor-pointer hover:bg-gray-50/40 transition" onClick={() => expand(flag.id)}>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${isPending ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>
-                    {isPending ? '⚑ Pending' : '✓ Reviewed'}
-                  </span>
-                  <span className="text-xs font-semibold text-gray-700">{flag.agentName}</span>
-                  {chatUrl
-                    ? <a href={chatUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                        className="text-xs font-mono text-emerald-600 hover:underline">#{flag.chatId} ↗</a>
-                    : <span className="text-xs font-mono text-gray-500">#{flag.chatId}</span>
-                  }
-                  <span className="text-[10px] text-gray-400">{new Date(flag.flaggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-                {flag.challengedParams && flag.challengedParams.length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap mt-1.5">
-                    {flag.challengedParams.map(cp => (
-                      <span key={cp.param} className="text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">
-                        {PARAM_NAMES[cp.param] || cp.param}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {flag.agentNote && (
-                  <p className="text-xs text-gray-600 mt-1.5 leading-relaxed line-clamp-2">{flag.agentNote}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-[10px] text-gray-400 font-semibold">{thread.length > 0 ? `${thread.length} comment${thread.length > 1 ? 's' : ''}` : ''}</span>
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
-                  className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
-                  <path d="M2 4l4 4 4-4"/>
-                </svg>
-              </div>
+    return (
+      <div key={flag.id} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${isPending ? 'border-amber-200' : 'border-gray-100'}`}>
+        <div className="px-5 py-4 flex items-start gap-4 cursor-pointer hover:bg-gray-50/40 transition" onClick={() => expand(flag.id)}>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">IQS Challenge</span>
+              <span className="text-xs font-semibold text-gray-700">{flag.agentName}</span>
+              {chatUrl
+                ? <a href={chatUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-xs font-mono text-emerald-600 hover:underline">#{flag.chatId} ↗</a>
+                : <span className="text-xs font-mono text-gray-500">#{flag.chatId}</span>}
+              <span className="text-[10px] text-gray-400">{new Date(flag.flaggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-
-            {/* Expanded: challenged params detail + thread */}
-            {isExpanded && (
-              <div className="border-t border-gray-100">
-                {/* Challenged params with notes */}
-                {flag.challengedParams && flag.challengedParams.length > 0 && (
-                  <div className="px-5 py-3 bg-red-50/40 border-b border-red-100/60">
-                    <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-2">Challenged Parameters</p>
-                    <div className="space-y-1.5">
-                      {flag.challengedParams.map(cp => (
-                        <div key={cp.param} className="flex items-start gap-2">
-                          <span className="text-xs font-semibold text-gray-700 w-28 shrink-0 pt-0.5">{PARAM_NAMES[cp.param] || cp.param}</span>
-                          {cp.note
-                            ? <p className="text-xs text-gray-600 leading-relaxed">{cp.note}</p>
-                            : <p className="text-[11px] text-gray-400 italic">No note provided</p>
-                          }
-                        </div>
-                      ))}
+            {flag.challengedParams && flag.challengedParams.length > 0 && (
+              <div className="flex gap-1.5 flex-wrap mt-1.5">
+                {flag.challengedParams.map(cp => (
+                  <span key={cp.param} className="text-[10px] font-semibold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">{PARAM_NAMES[cp.param] || cp.param}</span>
+                ))}
+              </div>
+            )}
+            {flag.agentNote && <p className="text-xs text-gray-600 mt-1.5 leading-relaxed line-clamp-2">{flag.agentNote}</p>}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] text-gray-400 font-semibold">{thread.length > 0 ? `${thread.length} comment${thread.length > 1 ? 's' : ''}` : ''}</span>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" className={`transition-transform ${isExpanded ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+          </div>
+        </div>
+        {isExpanded && (
+          <div className="border-t border-gray-100">
+            {flag.challengedParams && flag.challengedParams.length > 0 && (
+              <div className="px-5 py-3 bg-red-50/40 border-b border-red-100/60">
+                <p className="text-[10px] font-bold text-red-400 uppercase tracking-widest mb-2">Challenged Parameters</p>
+                <div className="space-y-1.5">
+                  {flag.challengedParams.map(cp => (
+                    <div key={cp.param} className="flex items-start gap-2">
+                      <span className="text-xs font-semibold text-gray-700 w-28 shrink-0 pt-0.5">{PARAM_NAMES[cp.param] || cp.param}</span>
+                      {cp.note ? <p className="text-xs text-gray-600 leading-relaxed">{cp.note}</p> : <p className="text-[11px] text-gray-400 italic">No note provided</p>}
                     </div>
-                  </div>
-                )}
-
-                {/* Thread */}
-                <div className="px-5 py-3">
-                  {threadLoading[flag.id] && (
-                    <p className="text-xs text-gray-400 py-2">Loading thread…</p>
-                  )}
-                  {thread.length > 0 && (
-                    <div className="space-y-2.5 mb-3">
-                      {thread.map(c => {
-                        const isQa = ['quality','admin','tl'].includes(c.role);
-                        return (
-                          <div key={c.id} className={`flex gap-2 ${isQa ? 'flex-row-reverse' : ''}`}>
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold ${isQa ? 'bg-emerald-200 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>
-                              {c.authorName.slice(0, 1).toUpperCase()}
-                            </div>
-                            <div className={`max-w-[80%] ${isQa ? 'items-end' : ''}`}>
-                              <p className={`text-[9px] font-semibold mb-0.5 ${isQa ? 'text-right text-emerald-600' : 'text-gray-400'}`}>
-                                {c.authorName} · {new Date(c.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
-                              </p>
-                              <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${isQa ? 'bg-emerald-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}>
-                                {c.content}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {thread.length === 0 && !threadLoading[flag.id] && (
-                    <p className="text-xs text-gray-400 mb-3">No comments yet. Start the conversation below.</p>
-                  )}
-
-                  {/* Reply input */}
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={replyText[flag.id] || ''}
-                      onChange={e => setReplyText(r => ({ ...r, [flag.id]: e.target.value }))}
-                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(flag.id); } }}
-                      placeholder="Add a comment…"
-                      className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                    />
-                    <button onClick={() => sendReply(flag.id)} disabled={replySending[flag.id] || !replyText[flag.id]?.trim()}
-                      className="px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
-                      {replySending[flag.id] ? '…' : 'Send'}
-                    </button>
-                  </div>
-
-                  {/* QA/admin mark as reviewed */}
-                  {isPending && ['quality','admin','tl'].includes(userRole || '') && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
-                      <input
-                        type="text"
-                        value={reviewNotes[flag.id] || ''}
-                        onChange={e => setReviewNotes(r => ({ ...r, [flag.id]: e.target.value }))}
-                        placeholder="Review note (optional)…"
-                        className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
-                      />
-                      <button onClick={() => markReviewed(flag.id)} disabled={statusUpdating[flag.id]}
-                        className="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition whitespace-nowrap">
-                        {statusUpdating[flag.id] ? '…' : 'Mark Reviewed'}
-                      </button>
-                    </div>
-                  )}
+                  ))}
                 </div>
               </div>
             )}
+            <div className="px-5 py-3">
+              {threadLoading[flag.id] && <p className="text-xs text-gray-400 py-2">Loading thread…</p>}
+              {thread.length > 0 && (
+                <div className="space-y-2.5 mb-3">
+                  {thread.map(c => {
+                    const isQa = ['quality','admin','tl'].includes(c.role);
+                    return (
+                      <div key={c.id} className={`flex gap-2 ${isQa ? 'flex-row-reverse' : ''}`}>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[9px] font-bold ${isQa ? 'bg-emerald-200 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{c.authorName.slice(0,1).toUpperCase()}</div>
+                        <div className={`max-w-[80%] ${isQa ? 'items-end' : ''}`}>
+                          <p className={`text-[9px] font-semibold mb-0.5 ${isQa ? 'text-right text-emerald-600' : 'text-gray-400'}`}>{c.authorName} · {new Date(c.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}</p>
+                          <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${isQa ? 'bg-emerald-500 text-white rounded-tr-sm' : 'bg-gray-100 text-gray-800 rounded-tl-sm'}`}>{c.content}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {thread.length === 0 && !threadLoading[flag.id] && <p className="text-xs text-gray-400 mb-3">No comments yet.</p>}
+              <div className="flex gap-2">
+                <input type="text" value={replyText[flag.id] || ''} onChange={e => setReplyText(r => ({ ...r, [flag.id]: e.target.value }))}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(flag.id); } }}
+                  placeholder="Add a comment…" className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                <button onClick={() => sendReply(flag.id)} disabled={replySending[flag.id] || !replyText[flag.id]?.trim()}
+                  className="px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">{replySending[flag.id] ? '…' : 'Send'}</button>
+              </div>
+              {isPending && canReview && (
+                <div className="mt-3 pt-3 border-t border-gray-100 flex gap-2">
+                  <input type="text" value={reviewNotes[flag.id] || ''} onChange={e => setReviewNotes(r => ({ ...r, [flag.id]: e.target.value }))}
+                    placeholder="Review note (optional)…" className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30" />
+                  <button onClick={() => markReviewed(flag.id)} disabled={statusUpdating[flag.id]}
+                    className="px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition whitespace-nowrap">{statusUpdating[flag.id] ? '…' : 'Mark Reviewed'}</button>
+                </div>
+              )}
+            </div>
           </div>
-        );
-      })}
+        )}
+      </div>
+    );
+  };
+
+  const callCard = (item: CallSkippedItem) => {
+    const chatUrl = /^\d+$/.test(item.chatId.trim()) ? `https://app.robylon.ai/unified-inbox/share/${item.chatId}` : null;
+    return (
+      <div key={item.id} className="bg-white rounded-2xl border border-orange-200 shadow-sm px-5 py-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">📞 Call Chat</span>
+              <span className="text-xs font-semibold text-gray-700">{item.agentName}</span>
+              {chatUrl
+                ? <a href={chatUrl} target="_blank" rel="noopener noreferrer" className="text-xs font-mono text-emerald-600 hover:underline">#{item.chatId} ↗</a>
+                : <span className="text-xs font-mono text-gray-500">#{item.chatId}</span>}
+              <span className="text-[10px] text-gray-400">{new Date(item.skippedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1 leading-relaxed">{item.reason}</p>
+            {item.reviewNote && <p className="text-xs text-emerald-700 mt-1.5 bg-emerald-50 rounded-lg px-2.5 py-1.5 leading-relaxed">Note: {item.reviewNote}</p>}
+          </div>
+        </div>
+        {item.status === 'pending' && canReview && (
+          <div className="mt-3 pt-3 border-t border-orange-100 flex gap-2">
+            <input type="text" value={callNotes[item.id] || ''} onChange={e => setCallNotes(r => ({ ...r, [item.id]: e.target.value }))}
+              placeholder="Review note (optional)…" className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-orange-300/40" />
+            <button onClick={() => markCallReviewed(item.id)} disabled={callUpdating[item.id]}
+              className="px-3 py-2 bg-orange-500 text-white text-xs font-bold rounded-xl hover:bg-orange-600 disabled:opacity-40 transition whitespace-nowrap">{callUpdating[item.id] ? '…' : 'Mark Reviewed'}</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-5 max-w-3xl mx-auto">
+      {/* Header + tracker tabs */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-gray-900">Chats Pending</h2>
+          <p className="text-xs text-gray-400 mt-0.5">Your QA workspace — filtered to your agents</p>
+        </div>
+        <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
+          <button onClick={() => setSection('pending')}
+            className={`flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg font-semibold transition ${section === 'pending' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            Pending
+            {totalPending > 0 && <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{totalPending}</span>}
+          </button>
+          <button onClick={() => setSection('reviewed')}
+            className={`flex items-center gap-1.5 text-xs px-4 py-1.5 rounded-lg font-semibold transition ${section === 'reviewed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            Reviewed
+            {totalReviewed > 0 && <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{totalReviewed}</span>}
+          </button>
+        </div>
+      </div>
+
+      {section === 'pending' && (
+        <>
+          {pendingFlags.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">IQS Challenges · {pendingFlags.length}</p>
+              {pendingFlags.map(flagCard)}
+            </div>
+          )}
+          {pendingCalls.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Call Reviews · {pendingCalls.length}</p>
+              {pendingCalls.map(callCard)}
+            </div>
+          )}
+          {totalPending === 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-14 text-center">
+              <p className="text-2xl mb-2">✓</p>
+              <p className="text-sm font-semibold text-gray-700">All caught up</p>
+              <p className="text-xs text-gray-400 mt-1">No chats pending review for your agents.</p>
+            </div>
+          )}
+        </>
+      )}
+
+      {section === 'reviewed' && (
+        <>
+          {reviewedFlags.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">IQS Challenges · {reviewedFlags.length}</p>
+              {reviewedFlags.map(flagCard)}
+            </div>
+          )}
+          {reviewedCalls.length > 0 && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Call Reviews · {reviewedCalls.length}</p>
+              {reviewedCalls.map(callCard)}
+            </div>
+          )}
+          {totalReviewed === 0 && (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-14 text-center">
+              <p className="text-sm text-gray-400">No reviewed chats yet.</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
 
-export default function QualityClient({ userRole, userEmail, selfAgentName, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'challenges'>(initialTab || 'performance');
+export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab }: QualityClientProps = {}) {
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending'>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
+
+  // Fresh agentName from config (overrides stale JWT value)
+  const [selfAgentName, setSelfAgentName] = useState(selfAgentNameProp);
+  useEffect(() => {
+    fetch('/api/users/me')
+      .then(r => r.json())
+      .then(d => { if (d.agentName !== undefined) setSelfAgentName(d.agentName || undefined); })
+      .catch(() => {});
+  }, []);
 
   // Upload state
   const [rawRows, setRawRows] = useState<Record<string, string>[]>([]);
@@ -1783,8 +1845,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
           )}
           <NavItem icon={icons.reports} label="Reports" active={tab === 'reports'}
             onClick={() => setTab('reports')} />
-          <NavItem icon={icons.challenges} label="Challenges" active={tab === 'challenges'}
-            badge={challengeCount} onClick={() => setTab('challenges')} />
+          <NavItem icon={icons.challenges} label="Chats Pending" active={tab === 'pending'}
+            badge={challengeCount} onClick={() => setTab('pending')} />
         </nav>
 
       </aside>
@@ -1796,14 +1858,14 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
         <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
           <div className="shrink-0">
             <h1 className="text-base font-bold text-gray-900">
-              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'challenges' ? 'Score Challenges' : 'Upload & Score'}
+              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {tab === 'performance' && `${agentStats.length} agents · ${perfTotal} chats`}
               {tab === 'log' && `${entries.length} of ${totalFiltered} · ${totalStored.toLocaleString()} all-time`}
               {tab === 'upload' && (fileName ? `${totalToScore} chats ready` : 'Drop a Wint CSV export to begin')}
               {tab === 'reports' && 'Download filtered data as CSV'}
-              {tab === 'challenges' && `${challengeCount} pending review`}
+              {tab === 'pending' && `${challengeCount} pending review`}
             </p>
           </div>
 
@@ -2885,9 +2947,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName, init
             </div>
           )}
 
-          {/* ── CHALLENGES TAB ── */}
-          {tab === 'challenges' && (
-            <ChallengesTab userRole={userRole} userEmail={userEmail} />
+          {/* ── CHATS PENDING TAB ── */}
+          {tab === 'pending' && (
+            <PendingChatsTab userRole={userRole} userEmail={userEmail} />
           )}
 
         </div>

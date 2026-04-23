@@ -4,8 +4,8 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, trimTranscript, IQSScoreEntry } from '@/lib/quality';
-import { storeAppendIQSScore, storeSetTranscript } from '@/lib/store';
-import { hasCallInteraction, fireQualityAlert, fireCallSkipAlert } from '@/lib/quality-alert';
+import { storeAppendIQSScore, storeSetTranscript, storeAppendCallSkipped } from '@/lib/store';
+import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import Anthropic from '@anthropic-ai/sdk';
 
 function qualityAccess(session: any): boolean {
@@ -40,12 +40,20 @@ export async function POST(req: NextRequest) {
     const reason = /\bcall\b/i.test(String(tags?.disposition || tags || ''))
       ? `Disposition tagged as: ${tags?.disposition || tags}`
       : 'Transcript contains a call interaction or callback request';
-    fireCallSkipAlert({ chatId, agentName, contactPhone: contactPhone || undefined, reason }).catch(() => {});
+    // Store for QA review — no Slack alert
+    storeAppendCallSkipped({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      chatId: chatId || '',
+      agentName: agentName || '',
+      reason,
+      skippedAt: new Date().toISOString(),
+      status: 'pending',
+    }).catch(() => {});
     return NextResponse.json({
       ok: true,
       skipped: true,
       reason: 'call_interaction',
-      message: 'Scoring skipped — call interaction detected. QA has been notified.',
+      message: 'Scoring skipped — call interaction detected. Added to QA review queue.',
     });
   }
 
