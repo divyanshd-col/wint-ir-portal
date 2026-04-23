@@ -7,7 +7,7 @@ import { getDispositions } from '@/lib/analytics/dispositions';
 import { runPlannerPhase, runSynthesizerPhase } from '@/lib/analytics/agent';
 import { formatAgentResult } from '@/lib/analytics/formatter';
 import { writeAuditLog } from '@/lib/analytics/executor';
-import { appendHistory } from '@/lib/analytics/sessions';
+import { appendToSession } from '@/lib/analytics/sessions';
 import type { AnalyticsFilters, InsightBlock, HistoryEntry } from '@/lib/analytics/types';
 
 export const runtime = 'nodejs';
@@ -22,6 +22,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const message: string = (body.message ?? '').trim();
+  const sessionId: string = body.sessionId ?? '';
   const priorContext: string | undefined = body.priorContext || undefined;
   const maxConversations: number = typeof body.maxConversations === 'number' ? body.maxConversations : 100;
   const filters: AnalyticsFilters = body.filters ?? {
@@ -73,7 +74,7 @@ export async function POST(req: Request) {
         id: crypto.randomUUID(), message, response: answer.answer_text ?? '',
         blocks, type: 1, filters, timestamp: new Date().toISOString(),
       };
-      appendHistory(email, entry).catch(() => {});
+      if (sessionId) appendToSession(email, sessionId, entry).catch(() => {});
 
       return NextResponse.json({
         status: 'complete',

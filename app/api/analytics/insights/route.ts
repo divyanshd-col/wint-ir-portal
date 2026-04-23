@@ -7,7 +7,7 @@ import { miniSummarizeTranscripts } from '@/lib/analytics/summarizer';
 import { runSynthesizerPhase } from '@/lib/analytics/agent';
 import { formatAgentResult } from '@/lib/analytics/formatter';
 import { writeAuditLog } from '@/lib/analytics/executor';
-import { appendHistory } from '@/lib/analytics/sessions';
+import { appendToSession } from '@/lib/analytics/sessions';
 import type { SqlResult } from '@/lib/analytics/agent';
 import type { AnalyticsFilters, StreamChunk, InsightBlock, HistoryEntry } from '@/lib/analytics/types';
 
@@ -27,6 +27,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const message: string = (body.message ?? '').trim();
+  const sessionId: string = body.sessionId ?? '';
   const intent: string = body.intent ?? '';
   const outputShape: string = body.output_shape ?? 'transcript_analysis';
   const transcriptIntent: string = body.transcript_intent ?? intent;
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
           id: crypto.randomUUID(), message, response: answer.answer_text ?? '',
           blocks, type: 1, filters, timestamp: new Date().toISOString(),
         };
-        appendHistory(email, entry).catch(() => {});
+        if (sessionId) appendToSession(email, sessionId, entry).catch(() => {});
 
         send(controller, { event: 'done' }, encoder);
       } catch (err: any) {

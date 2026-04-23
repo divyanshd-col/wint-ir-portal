@@ -632,12 +632,11 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [agentOptions]            = useState<AgentOption[]>([]);
 
   // Multi-chat state
-  const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string }>>(() =>
-    [{ id: 'chat-1', title: 'New chat' }],
-  );
-  const [activeId, setActiveId] = useState('chat-1');
+  const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string }>>([]);
+  const [activeId, setActiveId] = useState('');
   const [allMessages, setAllMessages] = useState<Record<string, ChatMessage[]>>({});
-  const activeIdRef = useRef(activeId);
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const activeIdRef = useRef('');
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
   const messages = allMessages[activeId] ?? [];
@@ -679,9 +678,24 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     setMinUserMsgs(null);
   };
 
-  function newChat() {
+  // Create a session server-side and return its ID
+  async function createServerSession(title: string): Promise<string> {
+    try {
+      const res = await fetch('/api/analytics/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      const data = await res.json();
+      return data.id ?? crypto.randomUUID();
+    } catch {
+      return crypto.randomUUID();
+    }
+  }
+
+  async function newChat() {
     if (streaming) return;
-    const id = crypto.randomUUID();
+    const id = await createServerSession('New chat');
     setChatSessions(prev => [...prev, { id, title: 'New chat' }]);
     setActiveId(id);
     activeIdRef.current = id;
@@ -698,9 +712,11 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       activeIdRef.current = next.id;
     }
     setAllMessages(prev => { const { [id]: _, ...rest } = prev; return rest; });
+    // Delete server-side (fire and forget)
+    fetch(`/api/analytics/sessions?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
   }
 
-  // Load dispositions + session history on mount
+  // Load dispositions + persistent sessions on mount
   useEffect(() => {
     fetch('/api/analytics/dispositions')
       .then(r => r.json())
@@ -709,20 +725,47 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
 
     fetch('/api/analytics/history')
       .then(r => r.json())
-      .then(d => {
-        if (Array.isArray(d.history) && d.history.length) {
-          // Sort oldest-first so newest is at bottom
-          const sorted = [...d.history].sort(
-            (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+      .then(async (d) => {
+        const sessions: Array<{ id: string; title: string; createdAt: string; messages: any[] }> =
+          Array.isArray(d.sessions) ? d.sessions : [];
+
+        if (sessions.length === 0) {
+          // First time — create a default session
+          const id = await createServerSession('New chat');
+          setChatSessions([{ id, title: 'New chat' }]);
+          setActiveId(id);
+          activeIdRef.current = id;
+        } else {
+          // Restore sessions sorted oldest → newest
+          const sorted = [...sessions].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
           );
-          const loaded: ChatMessage[] = sorted.flatMap((h: any) => [
-            { id: h.id + '-u', role: 'user' as const, content: h.message, blocks: [] },
-            { id: h.id + '-a', role: 'assistant' as const, content: h.response || '', blocks: h.blocks || [] },
-          ]);
-          setMessages(loaded);
+          const tabs = sorted.map(s => ({ id: s.id, title: s.title }));
+          const msgMap: Record<string, ChatMessage[]> = {};
+          for (const s of sorted) {
+            const sortedMsgs = [...s.messages].sort(
+              (a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+            );
+            msgMap[s.id] = sortedMsgs.flatMap((h: any) => [
+              { id: h.id + '-u', role: 'user' as const, content: h.message, blocks: [] },
+              { id: h.id + '-a', role: 'assistant' as const, content: h.response || '', blocks: h.blocks || [] },
+            ]);
+          }
+          setChatSessions(tabs);
+          setAllMessages(msgMap);
+          setActiveId(tabs[tabs.length - 1].id);
+          activeIdRef.current = tabs[tabs.length - 1].id;
         }
+        setSessionsLoaded(true);
       })
-      .catch(() => {});
+      .catch(async () => {
+        // Redis unavailable — use a local fallback session
+        const id = crypto.randomUUID();
+        setChatSessions([{ id, title: 'New chat' }]);
+        setActiveId(id);
+        activeIdRef.current = id;
+        setSessionsLoaded(true);
+      });
   }, []);
 
   // Scroll to bottom when messages change
@@ -754,11 +797,21 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     if (!text.trim() || streaming) return;
 
     // Auto-title the session from the first message sent in it
+    // Auto-title + persist rename on first message
+    const isFirstMsg = (allMessages[activeIdRef.current] ?? []).length === 0;
+    const newTitle = text.slice(0, 36) + (text.length > 36 ? '…' : '');
     setChatSessions(prev => prev.map(s =>
       s.id === activeIdRef.current && s.title === 'New chat'
-        ? { ...s, title: text.slice(0, 36) + (text.length > 36 ? '…' : '') }
+        ? { ...s, title: newTitle }
         : s,
     ));
+    if (isFirstMsg) {
+      fetch('/api/analytics/sessions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: activeIdRef.current, title: newTitle }),
+      }).catch(() => {});
+    }
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
@@ -835,10 +888,11 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       accLogs += 'Planning query…\n';
       setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m));
 
+      const sessionId = activeIdRef.current;
       const planRes = await fetch('/api/analytics/plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, filters: activeFilters, priorContext, maxConversations }),
+        body: JSON.stringify({ message: text, sessionId, filters: activeFilters, priorContext, maxConversations }),
       });
       if (!planRes.ok) throw new Error(planRes.statusText || 'Plan request failed');
       const planData = await planRes.json();
@@ -870,6 +924,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message:           text,
+          sessionId,
           intent:            planData.intent,
           output_shape:      planData.output_shape,
           transcript_intent: planData.transcript_intent,
@@ -888,7 +943,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     } finally {
       setStreaming(false);
     }
-  }, [streaming, dateRange, customFrom, customTo, dispositions, csatLabels, convTypes, activeId]);
+  }, [streaming, dateRange, customFrom, customTo, dispositions, csatLabels, convTypes, activeId, allMessages]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -959,6 +1014,9 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
 
         {/* Chat tabs */}
         <div className="bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5 overflow-x-auto shrink-0">
+          {!sessionsLoaded && (
+            <span className="text-xs text-gray-400 animate-pulse px-1">Loading sessions…</span>
+          )}
           {chatSessions.map(session => (
             <button
               key={session.id}
