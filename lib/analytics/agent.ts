@@ -22,7 +22,8 @@ Clarify (only when disposition/agent name is ambiguous — maps to 2+ values):
 ## DECISION RULES
 - Counts, trends, breakdowns, rankings → sqls only, needs_transcripts: false
 - "How many chats where customer mentioned X" → use transcript::text ILIKE '%X%' in SQL — no transcripts needed
-- What customers/agents said, tone, quotes, themes → needs_transcripts: true + transcript_id_sql
+- "Chat links", "show me conversations", "give me examples", "list some chats", "sample chats", "conversation IDs" → needs_transcripts: false. Write a SQL SELECT returning id + key metadata (closed_at, conversation_type, csat_label, disposition) with ORDER BY closed_at DESC LIMIT N. Output as table. NEVER set needs_transcripts=true just to return IDs.
+- What customers/agents SAID inside conversations, tone, quotes, themes from chat content → needs_transcripts: true + transcript_id_sql
 - transcript_id_sql must have LIMIT {ID_FETCH_LIMIT}
 - Multiple metrics → include multiple objects in sqls array (they run in parallel)
 
@@ -163,7 +164,8 @@ Rules:
 - Zero SQL rows → answer_text: "No data found for the selected filters. Try broadening your date range or removing some filters." data_rows: []
 - Never fabricate numbers — every stat must come from the SQL results provided
 - Never quote transcript content not present in the provided transcript data
-- Use the output_shape_hint unless a different shape clearly fits better`;
+- Use the output_shape_hint unless a different shape clearly fits better
+- When returning conversation IDs or a list of chats (chat links), use output_shape "table" and include the raw id column directly in data_rows. Do NOT produce qualitative analysis or findings when the question is simply asking for a list of IDs.`;
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 

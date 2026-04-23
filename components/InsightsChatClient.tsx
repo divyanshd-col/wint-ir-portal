@@ -804,8 +804,6 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       }
 
       // ── Phase 2: Transcripts + parallel summarise + synthesis (SSE) ────────
-      accLogs += `Fetching ${planData.transcript_ids?.length ?? 0} conversations…\n`;
-      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m));
 
       const insightsRes = await fetch('/api/analytics/insights', {
         method: 'POST',
