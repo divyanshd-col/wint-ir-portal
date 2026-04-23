@@ -73,6 +73,24 @@ agents (id SERIAL PRIMARY KEY, name VARCHAR, team_id INT, status VARCHAR)
 - line_chart: alias date AS "date" (YYYY-MM-DD), metric AS "value"
 - Add LIMIT 500 on all non-aggregate queries (except transcript_id_sql which uses LIMIT {ID_FETCH_LIMIT})
 - Trend bucket: daily if window ≤ 30 days, weekly if 31–90 days
+- For bar_chart with csat_label: always use display names — CASE csat_label WHEN 'good' THEN 'Good' WHEN 'could_be_better' THEN 'Could Be Better' WHEN 'bad' THEN 'Bad' END AS name
+
+## CHART SELECTION — decide output_shape BEFORE writing SQL, then write SQL to match
+
+Has a TIME dimension? (over N days/weeks, trend, daily, over time)
+  → line_chart. GROUP BY closed_at::date (daily) or DATE_TRUNC('week', closed_at) (weekly). Alias date column AS "date", metric AS "value".
+  → For CSAT over time: value = ROUND(COUNT(*) FILTER (WHERE csat_label='good')::numeric / NULLIF(COUNT(*) FILTER (WHERE csat_label IS NOT NULL),0)*100,1) — one row per day.
+  → For IQS over time: value = ROUND(AVG(i.iqs_score),1) — one row per day/week.
+  → NEVER use bar_chart when the question has a time dimension.
+
+No time dimension — comparing categories?
+  → 2–8 fixed categories (agents, dispositions, CSAT labels, parameters) → bar_chart. Alias label AS "name", metric AS "value".
+  → CSAT breakdown (no time): GROUP BY csat_label, show count or %. Use display names (Good / Could Be Better / Bad).
+  → One metric / single answer → single_number.
+  → Multi-column or ranked list with >5 rows → table.
+
+Both time AND category breakdown?
+  → Use line_chart with one metric (e.g. % bad CSAT per day). Keep it simple — one value per date point.
 
 ## JSONB ACCESS PATTERNS
 \`\`\`sql
@@ -199,13 +217,47 @@ coverage: "Analysis based on N conversations." Add a note if the sample may be s
 
 caveats: One sentence on what the summaries cannot tell you (exact phrasing, tone, whether resolutions lasted, edge cases not captured).
 
-## OUTPUT SHAPE GUIDE
+## OUTPUT SHAPE — DECISION TREE (apply this before choosing output_shape)
+
+Step A: Does the question mention time? ("over N days", "per day", "trend", "daily", "over the last X")
+  YES → output_shape = line_chart. data_rows must have {date: "YYYY-MM-DD", value: number}.
+        If the SQL rows have a date column but output_shape_hint says bar_chart, OVERRIDE to line_chart.
+  NO  → go to Step B.
+
+Step B: How many categories?
+  1 number / 1 metric           → single_number.  data_rows: [{label, value}]
+  2–8 fixed categories          → bar_chart.       data_rows: [{name, value}] sorted descending.
+  Multi-column or >8 items      → table.            data_rows: rows match SQL columns.
+  Qualitative / no structure    → insight_summary.  data_rows: []
+
+Step C: Transcript content involved?
+  Themes / what was said        → transcript_analysis.
+  SQL metrics + transcript      → combined_analysis.
+
+## CHART CONTENT RULES
+
+line_chart:
+  - value must be a number (%, count, average). Never use labels as value.
+  - title must say what "value" represents: "% CSAT Good per Day", "Avg IQS per Week"
+  - If data has both good_count and bad_count, pick the most relevant single metric (usually % good)
+
+bar_chart:
+  - Sort descending by value unless question asks otherwise
+  - Use human-readable names: "Good" not "good", "Could Be Better" not "could_be_better"
+  - For CSAT breakdown (no time): show % not raw count when total > 50
+
+single_number:
+  - Always contextualise in answer_text: compare to average, prior period, or expected range
+
+table:
+  - Max 6 columns. Drop columns that add no insight.
+  - Prefer % over raw counts for CSAT/IQS columns when denominator is clear
 
 | output_shape         | Use when                                              | data_rows format                           |
 |----------------------|-------------------------------------------------------|--------------------------------------------|
 | single_number        | One count or metric                                   | [{"label":"...", "value": 123}]           |
 | bar_chart            | Comparison across agents, dispositions, or parameters | [{"name":"...", "value": 123}]            |
-| line_chart           | Trend over time                                       | [{"date":"YYYY-MM-DD", "value": 123}]     |
+| line_chart           | Trend over time — ANY time dimension in question      | [{"date":"YYYY-MM-DD", "value": 123}]     |
 | table                | Multi-column data, ID lists, ranked multi-metric      | rows match SQL columns exactly             |
 | insight_summary      | Qualitative finding with no clean chart structure     | []                                         |
 | transcript_analysis  | What customers/agents said, themes from content       | []                                         |
