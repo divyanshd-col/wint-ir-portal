@@ -240,7 +240,7 @@ export async function getAllScoredConversations(
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */
-export async function getUnscoredConversations(): Promise<ConversationRow[]> {
+export async function getUnscoredConversations(minHoursOld = 12): Promise<ConversationRow[]> {
   return query<ConversationRow>(`
     SELECT c.*
     FROM conversations c
@@ -248,8 +248,21 @@ export async function getUnscoredConversations(): Promise<ConversationRow[]> {
     WHERE s.chat_id IS NULL
       AND c.transcript IS NOT NULL
       AND c.tags IS NOT NULL
-      AND c.closed_at < NOW() - INTERVAL '12 hours'
+      AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
     ORDER BY c.closed_at ASC
     LIMIT 50
-  `);
+  `, [minHoursOld]);
+}
+
+export async function countUnscoredConversations(minHoursOld = 0): Promise<number> {
+  const rows = await query<{ count: string }>(`
+    SELECT COUNT(*) AS count
+    FROM conversations c
+    LEFT JOIN iqs_scores s ON s.chat_id = c.id
+    WHERE s.chat_id IS NULL
+      AND c.transcript IS NOT NULL
+      AND c.tags IS NOT NULL
+      AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
+  `, [minHoursOld]);
+  return parseInt(rows[0]?.count ?? '0', 10);
 }

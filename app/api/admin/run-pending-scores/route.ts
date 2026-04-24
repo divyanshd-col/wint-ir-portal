@@ -1,24 +1,30 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { getUnscoredConversations, getAgentName } from '@/lib/robylon/db';
+import { getUnscoredConversations, countUnscoredConversations, getAgentName } from '@/lib/robylon/db';
 import { executeScoring } from '@/app/api/webhooks/chat/route';
 
-// Scores ONE chat per call — caller loops until remaining === 0.
-// This avoids Vercel's 300s timeout when many chats are pending.
+// Scores ONE chat per call — caller loops until done === true.
+// Uses minHoursOld=0 so manual backfill catches ALL unscored chats,
+// not just those older than 12 h (which is only the cron's safety net).
 export async function POST() {
   const session = await getServerSession(authOptions);
-  if (!(session?.user as any)?.isAdmin) {
+  if (session?.user?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  const convs = await getUnscoredConversations();
+  // Count total remaining BEFORE fetching so the UI can show accurate progress
+  const totalRemaining = await countUnscoredConversations(0);
+  if (totalRemaining === 0) {
+    return NextResponse.json({ ok: true, done: true, remaining: 0, chatId: null });
+  }
+
+  const convs = await getUnscoredConversations(0);
   if (!convs.length) {
     return NextResponse.json({ ok: true, done: true, remaining: 0, chatId: null });
   }
 
   const conv = convs[0];
-  const remaining = convs.length - 1;
   const tags = conv.tags as any;
   const disposition    = tags?.disposition    || '';
   const subDisposition = tags?.sub_disposition || '';
@@ -28,16 +34,16 @@ export async function POST() {
     const scored = await executeScoring(conv, agentName, disposition, subDisposition);
     return NextResponse.json({
       ok: true,
-      done: remaining === 0,
-      remaining,
+      done: totalRemaining <= 1,
+      remaining: Math.max(0, totalRemaining - 1),
       chatId: conv.id,
       iqs: scored?.iqs ?? null,
     });
   } catch (err: any) {
     return NextResponse.json({
       ok: false,
-      done: remaining === 0,
-      remaining,
+      done: totalRemaining <= 1,
+      remaining: Math.max(0, totalRemaining - 1),
       chatId: conv.id,
       error: err.message,
     });
