@@ -30,7 +30,11 @@ export async function appendQualityAlertToSheet(opts: {
       webhookUrl = config.qualityAlertSheetUrl || '';
     } catch {}
   }
-  if (!webhookUrl) return;
+  if (!webhookUrl) {
+    console.log('[quality-sheet] No webhook URL configured — skipping sheet append');
+    return;
+  }
+  console.log(`[quality-sheet] Using webhook URL: ${webhookUrl.slice(0, 60)}…`);
 
   const csatLabel: Record<string, string> = { '5': 'Good', '3': 'CBB', '1': 'Bad' };
 
@@ -48,12 +52,29 @@ export async function appendQualityAlertToSheet(opts: {
   };
 
   try {
-    await fetch(webhookUrl, {
+    // Apps Script web apps redirect POST requests (302). fetch follows the
+    // redirect but converts POST→GET, so doPost never runs. We send with
+    // redirect:'manual' — a 302 means the script received the request and
+    // is processing it. A 200 means it ran synchronously (no redirect).
+    const res = await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      redirect: 'manual',
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify(payload),
     });
-    console.log(`[quality-sheet] Appended row for chat ${opts.chatId}`);
+
+    if (res.status === 200) {
+      const body = await res.text();
+      try {
+        const json = JSON.parse(body);
+        if (json.ok === false) {
+          console.error(`[quality-sheet] Apps Script error for chat ${opts.chatId}:`, json.error);
+          return;
+        }
+      } catch {}
+    }
+
+    console.log(`[quality-sheet] Sent row for chat ${opts.chatId} (status ${res.status})`);
   } catch (err: any) {
     console.error('[quality-sheet] POST to Apps Script failed:', err.message);
   }

@@ -113,7 +113,7 @@ export async function fireQualityAlert(opts: {
     disposition:    opts.disposition,
     subDisposition: opts.subDisposition,
     failedParams,
-  }).catch(() => {});
+  }).catch((err) => console.error('[quality-alert] Sheet append failed:', err?.message));
 }
 
 // ── Call-interaction flag (skip scoring) ────────────────────────────────────

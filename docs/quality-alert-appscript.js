@@ -23,47 +23,76 @@ const HEADERS = [
 
 function doPost(e) {
   try {
-    const data = JSON.parse(e.postData.contents);
-
-    const ss    = SpreadsheetApp.getActiveSpreadsheet();
-    let sheet   = ss.getSheetByName(SHEET_NAME);
-
-    // Create the tab if it doesn't exist yet
-    if (!sheet) {
-      sheet = ss.insertSheet(SHEET_NAME);
+    // Google Apps Script sometimes delivers the body via e.postData.contents
+    // and sometimes via e.parameter after a redirect — handle both.
+    let data;
+    if (e.postData && e.postData.contents) {
+      data = JSON.parse(e.postData.contents);
+    } else if (e.parameter && e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
+    } else {
+      data = e.parameter || {};
     }
 
-    // Write header row on first use
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(HEADERS);
-      sheet.getRange(1, 1, 1, HEADERS.length)
-           .setFontWeight('bold')
-           .setBackground('#f0f0f0');
-      sheet.setFrozenRows(1);
-    }
-
-    sheet.appendRow([
-      data.date           || new Date().toISOString().slice(0, 19).replace('T', ' '),
-      data.chatId         || '',
-      data.agentName      || '',
-      data.contactPhone   || '',
-      data.iqs            || '',
-      data.csat           || '',
-      data.disposition    || '',
-      data.subDisposition || '',
-      data.failedParams   || '',
-      data.reasoning      || '',
-    ]);
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: true }))
-      .setMimeType(ContentService.MimeType.JSON);
-
+    return appendRow(data);
   } catch (err) {
     return ContentService
       .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+// doGet handles the case where Google converts POST→GET during redirect
+function doGet(e) {
+  try {
+    let data;
+    if (e.parameter && e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
+    } else {
+      data = e.parameter || {};
+    }
+    return appendRow(data);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function appendRow(data) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet   = ss.getSheetByName(SHEET_NAME);
+
+  // Create the tab if it doesn't exist yet
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
+
+  // Write header row on first use
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADERS);
+    sheet.getRange(1, 1, 1, HEADERS.length)
+         .setFontWeight('bold')
+         .setBackground('#f0f0f0');
+    sheet.setFrozenRows(1);
+  }
+
+  sheet.appendRow([
+    data.date           || new Date().toISOString().slice(0, 19).replace('T', ' '),
+    data.chatId         || '',
+    data.agentName      || '',
+    data.contactPhone   || '',
+    data.iqs            || '',
+    data.csat           || '',
+    data.disposition    || '',
+    data.subDisposition || '',
+    data.failedParams   || '',
+    data.reasoning      || '',
+  ]);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 // Optional: test it manually in the Apps Script editor
