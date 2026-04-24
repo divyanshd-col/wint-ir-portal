@@ -88,7 +88,8 @@ export async function storeAcquireScoringLock(chatId: string): Promise<boolean> 
       body: JSON.stringify([['SET', `wint_scoring_lock:${chatId}`, '1', 'EX', '600', 'NX']]),
     });
     const data = await res.json();
-    const result = Array.isArray(data.result) ? data.result[0] : data.result;
+    // Upstash pipeline response is an array: [{"result":"OK"}] or [{"result":null}]
+    const result = Array.isArray(data) ? data[0]?.result : data.result;
     return result === 'OK';
   } catch {
     return true; // on KV error, let scoring proceed
