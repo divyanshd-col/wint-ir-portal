@@ -26,10 +26,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Password must be at least 6 characters.' }, { status: 400 });
   }
 
-  const exists = config.users.some(
+  const existingIdx = config.users.findIndex(
     u => (u.email ?? u.username).toLowerCase() === email
   );
-  if (exists) {
+  // Allow existing users who have no password yet to set one (migration)
+  if (existingIdx >= 0 && config.users[existingIdx].password) {
     return NextResponse.json({ error: 'An account with this email already exists.' }, { status: 409 });
   }
 
@@ -44,10 +45,14 @@ export async function POST(req: NextRequest) {
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const updatedConfig = {
-    ...config,
-    users: [...config.users, { username: email, email, password: hashedPassword, isAdmin: false }],
-  };
+  const newUsers = [...config.users];
+  if (existingIdx >= 0) {
+    // Existing user without a password — just set the hash, preserve role/agentName
+    newUsers[existingIdx] = { ...newUsers[existingIdx], password: hashedPassword };
+  } else {
+    newUsers.push({ username: email, email, password: hashedPassword, role: 'agent' });
+  }
+  const updatedConfig = { ...config, users: newUsers };
 
   await writeConfig(updatedConfig);
 

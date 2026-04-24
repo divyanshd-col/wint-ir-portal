@@ -95,6 +95,11 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
   const [pendingAssignments, setPendingAssignments] = useState<Record<string, { tl_name?: string | null; qa_name?: string | null }>>({});
   const [savingAssignments, setSavingAssignments] = useState(false);
+  // Password reset
+  const [resetEmail, setResetEmail]       = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetting, setResetting]         = useState(false);
+  const [resetMsg, setResetMsg]           = useState<{ ok: boolean; text: string } | null>(null);
 
   // ── Integrations state ─────────────────────────────────────────────────────
   const [hasSlackToken, setHasSlackToken] = useState(!!config.hasSlackToken);
@@ -321,6 +326,29 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
     setPendingAssignments({});
     setSavingAssignments(false);
     showToast(failed ? `Saved with ${failed} error(s)` : 'Assignments saved');
+  };
+
+  const resetUserPassword = async () => {
+    if (!resetEmail.trim() || !resetPassword.trim()) return;
+    setResetting(true);
+    setResetMsg(null);
+    try {
+      const res = await fetch('/api/admin/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail.trim(), newPassword: resetPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResetMsg({ ok: true, text: 'Password updated successfully.' });
+        setResetEmail(''); setResetPassword('');
+      } else {
+        setResetMsg({ ok: false, text: data.error || 'Failed to reset password.' });
+      }
+    } catch {
+      setResetMsg({ ok: false, text: 'Network error.' });
+    }
+    setResetting(false);
   };
 
   const deleteUser = async (email: string) => {
@@ -840,12 +868,44 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                   className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
                   {addingUser ? 'Adding…' : '+ Add / Update User'}
                 </button>
-                <span className="text-xs text-gray-400">User signs in via Google — no password needed</span>
+                <span className="text-xs text-gray-400">After adding, use "Reset Password" below to set their initial password.</span>
               </div>
             </div>
           </div>
+
           );
         })()}
+
+        {/* Reset Password — admin only */}
+        {activeSection === 'users' && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">Reset User Password</h3>
+              <p className="text-xs text-gray-500 mt-0.5">Set or reset the password for any portal user.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">User Email</label>
+                <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
+                  placeholder="name@wintwealth.com"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
+                <input type="password" value={resetPassword} onChange={e => setResetPassword(e.target.value)}
+                  placeholder="Min. 6 characters"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+              </div>
+            </div>
+            {resetMsg && (
+              <p className={`text-xs font-medium ${resetMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>{resetMsg.text}</p>
+            )}
+            <button onClick={resetUserPassword} disabled={resetting || !resetEmail.trim() || !resetPassword.trim()}
+              className="px-6 py-2.5 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-700 disabled:opacity-50 transition">
+              {resetting ? 'Saving…' : 'Set Password'}
+            </button>
+          </div>
+        )}
 
         {/* ── TEAM LEADS ── */}
         {activeSection === 'tl' && (
