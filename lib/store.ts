@@ -556,6 +556,20 @@ export async function storeAppendCallSkipped(entry: CallSkippedEntry): Promise<v
   } catch {}
 }
 
+// --- QA Review Status (per-chat review tracking for pending IQS < 80% chats) ---
+
+const QA_REVIEW_PREFIX = 'wint_qa_review:';
+
+export async function storeGetQAReview(chatId: string): Promise<{ reviewedBy: string; reviewedAt: string; reviewNote: string } | null> {
+  const val = await kv_get(`${QA_REVIEW_PREFIX}${chatId}`);
+  if (!val) return null;
+  try { return JSON.parse(val); } catch { return null; }
+}
+
+export async function storeSetQAReview(chatId: string, data: { reviewedBy: string; reviewedAt: string; reviewNote: string }): Promise<void> {
+  await kv_set(`${QA_REVIEW_PREFIX}${chatId}`, JSON.stringify(data));
+}
+
 export async function storeGetCallSkipped(): Promise<string[]> {
   return kv_lrange(CALL_SKIPPED_KEY, 0, -1);
 }

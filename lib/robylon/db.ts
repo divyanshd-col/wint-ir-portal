@@ -183,7 +183,7 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[] } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMax?: number } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
@@ -195,6 +195,10 @@ export async function getAllScoredConversations(
   if (opts.dateTo) {
     params.push(opts.dateTo);
     conditions.push(`c.started_at::date <= $${params.length}`);
+  }
+  if (opts.iqsMax !== undefined) {
+    params.push(opts.iqsMax);
+    conditions.push(`s.iqs_score <= $${params.length}`);
   }
   if (opts.agentName) {
     params.push(opts.agentName);
