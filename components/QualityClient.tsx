@@ -21,12 +21,14 @@ interface LogFilters {
   dateRange: 'today' | 'yesterday' | '1w' | 'custom';
   dateFrom: string;
   dateTo: string;
+  chatId: string;
 }
 
 const DEFAULT_FILTERS: LogFilters = {
   agent: '', minScore: 0, maxScore: 100,
   disposition: '', subDisposition: '', csat: '', type: '',
   dateRange: '1w', dateFrom: '', dateTo: '',
+  chatId: '',
 };
 
 function buildParams(page: number, f: LogFilters): URLSearchParams {
@@ -39,18 +41,22 @@ function buildParams(page: number, f: LogFilters): URLSearchParams {
   if (f.subDisposition) p.set('subTag', f.subDisposition);
   if (f.csat)         p.set('csat', f.csat);
   if (f.type)         p.set('type', f.type);
-  if (f.dateRange === 'today') {
-    const d = new Date().toISOString().slice(0, 10);
-    p.set('dateFrom', d); p.set('dateTo', d);
-  } else if (f.dateRange === 'yesterday') {
-    const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-    p.set('dateFrom', d); p.set('dateTo', d);
-  } else if (f.dateRange === '1w') {
-    p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
-    p.set('dateTo', new Date().toISOString().slice(0, 10));
-  } else if (f.dateRange === 'custom') {
-    if (f.dateFrom) p.set('dateFrom', f.dateFrom);
-    if (f.dateTo)   p.set('dateTo', f.dateTo);
+  if (f.chatId)       p.set('chatId', f.chatId);
+  // Skip date range when searching by chat ID — find the chat regardless of period
+  if (!f.chatId) {
+    if (f.dateRange === 'today') {
+      const d = new Date().toISOString().slice(0, 10);
+      p.set('dateFrom', d); p.set('dateTo', d);
+    } else if (f.dateRange === 'yesterday') {
+      const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      p.set('dateFrom', d); p.set('dateTo', d);
+    } else if (f.dateRange === '1w') {
+      p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
+      p.set('dateTo', new Date().toISOString().slice(0, 10));
+    } else if (f.dateRange === 'custom') {
+      if (f.dateFrom) p.set('dateFrom', f.dateFrom);
+      if (f.dateTo)   p.set('dateTo', f.dateTo);
+    }
   }
   return p;
 }
@@ -1354,8 +1360,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [sortAgentCol, setSortAgentCol] = useState<string>('avgIqs');
   const [sortAgentDir, setSortAgentDir] = useState<'asc'|'desc'>('asc');
 
-  // Score Log — chat ID quick-filter
-  const [chatIdFilter, setChatIdFilter] = useState('');
+  // Score Log — chat ID search (server-side, bypasses date range)
 
   // Score Log / Reports custom date picker visibility
   const [showLogPicker, setShowLogPicker] = useState(false);
@@ -1427,11 +1432,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     });
   }, [entries, sortCol, sortDir]);
 
-  // Chat ID filtered log entries (client-side quick filter)
-  const chatIdFilteredLogEntries = useMemo(() => {
-    if (!chatIdFilter.trim()) return sortedLogEntries;
-    return sortedLogEntries.filter(e => e.chatId.toLowerCase().includes(chatIdFilter.toLowerCase().trim()));
-  }, [sortedLogEntries, chatIdFilter]);
+  // Server already filters by chatId — alias for consistency
+  const chatIdFilteredLogEntries = sortedLogEntries;
 
   // Sorted agent analytics table
   const sortedAgentStats = useMemo(() => {
@@ -2433,12 +2435,21 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {/* Filters */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
                 <div className="flex flex-wrap items-end gap-4">
-                  {/* Chat ID quick filter */}
+                  {/* Chat ID search — server-side, bypasses date range */}
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Chat ID</p>
-                    <input type="text" value={chatIdFilter} onChange={e => setChatIdFilter(e.target.value)}
-                      placeholder="Filter by ID…"
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-32 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700" />
+                    <input
+                      type="text"
+                      value={pendingFilters.chatId}
+                      onChange={e => setPendingFilters(f => ({ ...f, chatId: e.target.value }))}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const f = { ...pendingFilters };
+                          setAppliedFilters(f); setLogPage(0); loadScores(0, f);
+                        }
+                      }}
+                      placeholder="Search by ID… (Enter)"
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700" />
                   </div>
                   {/* Agent */}
                   <div>
@@ -2508,7 +2519,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                       const reset = selfAgentName ? { ...DEFAULT_FILTERS, agent: selfAgentName } : DEFAULT_FILTERS;
                       setPendingFilters(reset);
                       setAppliedFilters(reset);
-                      setChatIdFilter('');
                       setLogPage(0);
                       loadScores(0, reset);
                     }}

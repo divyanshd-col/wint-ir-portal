@@ -119,6 +119,7 @@ export async function GET(req: NextRequest) {
   const dateFrom      = searchParams.get('dateFrom') || '';
   const dateTo        = searchParams.get('dateTo') || '';
   const typeFilter    = searchParams.get('type') || '';
+  const chatIdSearch  = searchParams.get('chatId') || '';
 
   const role = session.user?.role;
 
@@ -143,9 +144,12 @@ export async function GET(req: NextRequest) {
   }
 
   // Push date + agent filters to DB
+  // When searching by chatId, skip date range — find the chat regardless of period
   const dbOpts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[] } = {};
-  if (dateFrom) dbOpts.dateFrom = dateFrom;
-  if (dateTo)   dbOpts.dateTo   = dateTo;
+  if (!chatIdSearch) {
+    if (dateFrom) dbOpts.dateFrom = dateFrom;
+    if (dateTo)   dbOpts.dateTo   = dateTo;
+  }
   if (scopedAgentNames) {
     // Further restrict by the requested agentFilter if one is active
     if (agentFilter) {
@@ -189,6 +193,7 @@ export async function GET(req: NextRequest) {
   } else if (agentFilter) {
     entries = entries.filter(e => e.agentName === agentFilter);
   }
+  if (chatIdSearch) entries = entries.filter(e => String(e.chatId).includes(chatIdSearch.trim()));
   if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
   if (subTagFilter) entries = entries.filter(e => (e.subDisposition || '').toLowerCase() === subTagFilter.toLowerCase());
   if (csatFilter)   entries = entries.filter(e => e.csat === csatFilter);
