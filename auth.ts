@@ -1,6 +1,7 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
+import { isRateLimited } from './lib/rate-limit';
 import type { UserRole } from './next-auth';
 
 const ALLOWED_DOMAIN = 'wintwealth.com';
@@ -13,11 +14,18 @@ export const authOptions: NextAuthOptions = {
         email:    { label: 'Email',    type: 'email'    },
         password: { label: 'Password', type: 'password' },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
 
         const email = credentials.email.toLowerCase().trim();
         if (!email.endsWith(`@${ALLOWED_DOMAIN}`)) return null;
+
+        // Brute-force protection: 10 attempts per IP per 15 minutes
+        const ip =
+          (req as any)?.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
+          (req as any)?.socket?.remoteAddress ||
+          'unknown';
+        if (await isRateLimited(`login:${ip}`, 10, 900)) return null;
 
         const { readConfig } = await import('./lib/config');
         const config = await readConfig();
