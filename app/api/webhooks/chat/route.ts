@@ -27,7 +27,7 @@ import {
   analyzeConversationTiming,
 } from '@/lib/quality';
 import type { TimedMessage } from '@/lib/quality';
-import { storeHasProcessedEvent, storeMarkProcessedEvent } from '@/lib/store';
+import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock } from '@/lib/store';
 import {
   upsertAgent,
   upsertContact,
@@ -160,6 +160,14 @@ export async function executeScoring(
   contactPhone?: string,
 ): Promise<{ chatId: string; iqs: number } | null> {
   const chatId = conv.id;
+
+  // Atomic lock — prevents concurrent duplicate scorings when Robylon fires
+  // multiple CLASSIFICATION_UPDATED events before any LLM call completes.
+  const acquired = await storeAcquireScoringLock(chatId);
+  if (!acquired) {
+    console.log(`[webhook] Scoring lock held for chat ${chatId} — skipping duplicate`);
+    return null;
+  }
 
   // Build transcript from JSONB array or fall back to plain text if stored differently
   let transcriptMessages: any[] = [];

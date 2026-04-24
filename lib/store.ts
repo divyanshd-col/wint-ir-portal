@@ -74,6 +74,27 @@ async function kv_lrange(key: string, start: number, end: number): Promise<strin
   }
 }
 
+// --- Chat scoring lock (SET NX) ---
+// Prevents concurrent duplicate scoring of the same chat when Robylon fires
+// multiple CLASSIFICATION_UPDATED events before the first LLM call completes.
+
+export async function storeAcquireScoringLock(chatId: string): Promise<boolean> {
+  if (!ready()) return true; // allow if KV not configured
+  try {
+    const res = await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      // SET NX EX 600 — only sets if key doesn't exist; returns "OK" or null
+      body: JSON.stringify([['SET', `wint_scoring_lock:${chatId}`, '1', 'EX', '600', 'NX']]),
+    });
+    const data = await res.json();
+    const result = Array.isArray(data.result) ? data.result[0] : data.result;
+    return result === 'OK';
+  } catch {
+    return true; // on KV error, let scoring proceed
+  }
+}
+
 // --- Webhook event_id deduplication ---
 // Prevents the same Robylon webhook event from being processed twice
 // (Robylon retries on timeout — both can arrive before scoring completes).
