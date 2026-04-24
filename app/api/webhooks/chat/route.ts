@@ -590,7 +590,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  console.log('[webhook] Incoming payload:', JSON.stringify(body, null, 2));
+  // Log only non-sensitive metadata — never dump full payload in production
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[webhook] Incoming payload:', JSON.stringify(body, null, 2));
+  } else {
+    console.log(`[webhook] Received event_type=${body.event_type || 'unknown'} chat_id=${body.chat_id || 'n/a'}`);
+  }
 
   // Deduplicate by event_id — Robylon retries on timeout, both can arrive
   // before scoring finishes, resulting in two scores for the same chat.

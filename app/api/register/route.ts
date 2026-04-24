@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { readConfig, writeConfig } from '@/lib/config';
 import { storeGetConfig } from '@/lib/store';
+import { isRateLimited } from '@/lib/rate-limit';
 
 const ALLOWED_DOMAIN = 'wintwealth.com';
 
 export async function POST(req: NextRequest) {
+  // 5 registration attempts per IP per 15 minutes
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (await isRateLimited(`register:${ip}`, 5, 900)) {
+    return NextResponse.json({ error: 'Too many attempts. Please try again later.' }, { status: 429 });
+  }
+
   const config = await readConfig();
 
   if (!config.isConfigured) {
