@@ -64,75 +64,77 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
 
         {/* Nav */}
         <nav className="px-4 py-4 flex-1 overflow-y-auto space-y-1">
-          <button
-            onClick={onNewChat}
-            className="w-full flex items-center gap-3 px-3 min-h-[44px] bg-[#2d9e4f]/20 text-[#2d9e4f] rounded-lg text-sm font-medium hover:bg-[#2d9e4f]/30 transition"
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z"/>
-            </svg>
-            New Chat
-          </button>
 
-          {/* Recent conversations */}
-          {historyEnabled && conversations.length > 0 && (
-            <div className="pt-3">
-              <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider px-3 mb-1.5">Recent</p>
-              <div className="space-y-0.5">
-                {conversations.map(conv => (
-                  <button
-                    key={conv.id}
-                    onClick={() => onRestoreConversation?.(conv)}
-                    className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-white/5 transition group min-h-[44px]"
-                  >
-                    <p className="text-gray-300 text-sm truncate group-hover:text-white transition">{conv.title}</p>
-                    <p className="text-gray-500 text-xs mt-0.5">{formatTimeAgo(conv.timestamp)}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
+          {/* Analytics — pinned to top for admins */}
           {isAdmin && (
-            <div className="pt-2">
-              <Link
-                href="/analytics"
-                className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/analytics' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-              >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M2 12l3-4 3 2 3-5 3 3"/>
-                  <rect x="1" y="1" width="14" height="14" rx="1.5"/>
-                </svg>
-                Analytics
-              </Link>
-            </div>
-          )}
-          {canSeeQuality && (
-            <div className={isAdmin ? '' : 'pt-2'}>
-              <Link
-                href="/quality"
-                className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/quality' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-              >
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
-                </svg>
-                {role === 'agent' ? 'My Quality' : 'Quality'}
-              </Link>
-            </div>
-          )}
-          <div>
             <Link
-              href="/cx"
-              className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/cx' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+              href="/analytics"
+              className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/analytics' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
             >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="1" y="9" width="3" height="6" rx="0.5"/>
-                <rect x="6" y="5" width="3" height="10" rx="0.5"/>
-                <rect x="11" y="1" width="3" height="14" rx="0.5"/>
+                <path d="M2 12l3-4 3 2 3-5 3 3"/>
+                <rect x="1" y="1" width="14" height="14" rx="1.5"/>
               </svg>
-              CX Dashboard
+              Analytics
             </Link>
+          )}
+
+          {canSeeQuality && (
+            <Link
+              href="/quality"
+              className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/quality' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
+              </svg>
+              {role === 'agent' ? 'My Quality' : 'Quality'}
+            </Link>
+          )}
+
+          <Link
+            href="/cx"
+            className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition relative ${pathname === '/cx' ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="1" y="9" width="3" height="6" rx="0.5"/>
+              <rect x="6" y="5" width="3" height="10" rx="0.5"/>
+              <rect x="11" y="1" width="3" height="14" rx="0.5"/>
+            </svg>
+            CX Dashboard
+          </Link>
+
+          {/* Chat — below CX Dashboard */}
+          <div className="pt-2">
+            <button
+              onClick={onNewChat}
+              className="w-full flex items-center gap-3 px-3 min-h-[44px] bg-[#2d9e4f]/20 text-[#2d9e4f] rounded-lg text-sm font-medium hover:bg-[#2d9e4f]/30 transition"
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z"/>
+              </svg>
+              New Chat
+            </button>
+
+            {/* Recent conversations */}
+            {historyEnabled && conversations.length > 0 && (
+              <div className="pt-3">
+                <p className="text-gray-500 text-xs font-semibold uppercase tracking-wider px-3 mb-1.5">Recent</p>
+                <div className="space-y-0.5">
+                  {conversations.map(conv => (
+                    <button
+                      key={conv.id}
+                      onClick={() => onRestoreConversation?.(conv)}
+                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-white/5 transition group min-h-[44px]"
+                    >
+                      <p className="text-gray-300 text-sm truncate group-hover:text-white transition">{conv.title}</p>
+                      <p className="text-gray-500 text-xs mt-0.5">{formatTimeAgo(conv.timestamp)}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
+
         </nav>
 
         {/* Footer */}
