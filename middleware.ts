@@ -8,7 +8,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname === '/setup' ||
-    pathname === '/login'
+    pathname === '/login' ||
+    pathname === '/register'
   ) {
     return NextResponse.next();
   }
