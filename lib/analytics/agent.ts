@@ -420,15 +420,15 @@ export async function runAnalyticsAgent(
   onProgress?.('Planning query…\n');
   let planRaw: string;
   try {
-    planRaw = await geminiGenerate(
+    planRaw = await geminiWithFallback(
       keys,
-      'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: userMessage }] }],
       {
         systemInstruction: { parts: [{ text: plannerPrompt }] },
         config: { thinkingConfig: { thinkingBudget: 1024 } },
       },
-      30_000,
+      22_000,
+      38_000,
     );
   } catch (err: any) {
     return llmError(err);
@@ -523,12 +523,12 @@ export async function runAnalyticsAgent(
 
   let synthRaw: string;
   try {
-    synthRaw = await geminiGenerate(
+    synthRaw = await geminiWithFallback(
       keys,
-      'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: synthesisInput }] }],
       synthExtra,
-      45_000,
+      30_000,
+      52_000,
     );
   } catch (err: any) {
     return llmError(err);
@@ -581,15 +581,15 @@ export async function runPlannerPhase(
 
   let planRaw: string;
   try {
-    planRaw = await geminiGenerate(
+    planRaw = await geminiWithFallback(
       keys,
-      'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: userMessage }] }],
       {
         systemInstruction: { parts: [{ text: plannerPrompt }] },
         config: { thinkingConfig: { thinkingBudget: 1024 } },
       },
-      28_000,
+      22_000,
+      36_000,
     );
   } catch (err: any) {
     return { kind: 'error', message: err?.message ?? 'Planner LLM failed' };
@@ -664,15 +664,39 @@ export async function runSynthesizerPhase(
     synthExtra.config = { thinkingConfig: { thinkingBudget: 0 } };
   }
 
-  const raw = await geminiGenerate(
+  const raw = await geminiWithFallback(
     keys,
-    'gemini-2.5-flash',
     [{ role: 'user', parts: [{ text: synthesisInput }] }],
     synthExtra,
-    40_000,
+    30_000,
+    52_000,
   );
 
   return parseJSON(raw) as AgentFinalAnswer;
+}
+
+// ── Silent model fallback ────────────────────────────────────────────────────
+// Primary: gemini-2.0-flash (faster, lower latency)
+// Fallback: gemini-2.5-flash (only on timeout — fully transparent to the user)
+
+const PRIMARY_MODEL  = 'gemini-3-flash-preview';
+const FALLBACK_MODEL_ANALYTICS = 'gemini-2.5-flash';
+
+async function geminiWithFallback(
+  keys: string[],
+  contents: any[],
+  extra: any,
+  primaryTimeoutMs: number,
+  fallbackTimeoutMs: number,
+): Promise<string> {
+  try {
+    return await geminiGenerate(keys, PRIMARY_MODEL, contents, extra, primaryTimeoutMs);
+  } catch (err: any) {
+    const isTimeout = String(err?.message ?? '').toLowerCase().includes('timeout');
+    if (!isTimeout) throw err;
+    console.warn('[analytics/agent] gemini-3-flash-preview timed out — retrying with gemini-2.5-flash');
+    return await geminiGenerate(keys, FALLBACK_MODEL_ANALYTICS, contents, extra, fallbackTimeoutMs);
+  }
 }
 
 // ── LLM error helper ──────────────────────────────────────────────────────────

@@ -595,7 +595,7 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
               {showTranscript ? 'Hide transcript' : 'Show transcript'}
             </button>
             {canEdit && onEdit && (
-              <button onClick={() => { onClose(); onEdit(entry); }}
+              <button onClick={() => onEdit(entry)}
                 className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">
                 Override
               </button>
@@ -1389,6 +1389,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   // Batch scoring (admin)
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchProgress, setBatchProgress] = useState<{ scored: number; errors: number; remaining: number } | null>(null);
+  const [sheetBackfilling, setSheetBackfilling] = useState(false);
+  const [sheetBackfillResult, setSheetBackfillResult] = useState<{ sent: number; total: number } | null>(null);
 
   // ── Column visibility derived ────────────────────────────────────────────────
   const autoHiddenLogCols = useMemo(() => {
@@ -1569,6 +1571,23 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     }
   };
 
+  const backfillSheet = async () => {
+    setSheetBackfilling(true);
+    setSheetBackfillResult(null);
+    try {
+      const res = await fetch('/api/admin/backfill-sheet', { method: 'POST' });
+      const data = await res.json();
+      setSheetBackfillResult({ sent: data.sent ?? 0, total: data.total ?? 0 });
+      setToast(`Sheet updated: ${data.sent} of ${data.total} failing chats sent`);
+      setTimeout(() => setToast(null), 4000);
+    } catch (err: any) {
+      setToast(`Sheet backfill error: ${err.message}`);
+      setTimeout(() => setToast(null), 4000);
+    } finally {
+      setSheetBackfilling(false);
+    }
+  };
+
   // Apply filters: copy pending → applied, reset to page 0, fetch
   const applyFilters = () => {
     const f = selfAgentName ? { ...pendingFilters, agent: selfAgentName } : pendingFilters;
@@ -1663,6 +1682,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       const data = await res.json();
       const updated: IQSScoreEntry = data.entry || { ...editEntry, ...editForm, updatedAt: new Date().toISOString(), updatedBy: userEmail };
       setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
+      setDetailEntry(prev => prev?.id === editEntry.id ? updated : prev);
       setEditSaved(true);
       setToast('Override saved successfully');
       setTimeout(() => setToast(null), 3000);
@@ -1841,7 +1861,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
       {/* ── Edit/Override Modal ── */}
       {editEntry && editForm && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setEditEntry(null); setEditForm(null); }}>
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setEditEntry(null); setEditForm(null); }}>
           <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
               <div>
@@ -2048,36 +2068,75 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                 )}
               </div>
               {userRole === 'admin' && (
-                <button
-                  onClick={runPendingScores}
-                  disabled={batchRunning}
-                  title="Score all unscored conversations in the DB"
-                  className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition border border-blue-200"
-                >
-                  {batchRunning ? (
-                    <>
-                      <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
-                      {batchProgress ? `${batchProgress.scored} done · ${batchProgress.remaining} left` : 'Starting…'}
-                    </>
-                  ) : batchProgress ? (
-                    <>
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2.5L6 10l-3.5-3.5L1 8l5 5 9-9z"/></svg>
-                      {batchProgress.scored} scored{batchProgress.errors > 0 ? ` · ${batchProgress.errors} errors` : ''}
-                    </>
-                  ) : (
-                    <>
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/></svg>
-                      Score Pending
-                    </>
-                  )}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={runPendingScores}
+                    disabled={batchRunning}
+                    title="Score all unscored conversations in the DB"
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition border border-blue-200"
+                  >
+                    {batchRunning ? (
+                      <>
+                        <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+                        {batchProgress ? `${batchProgress.scored} done · ${batchProgress.remaining} left` : 'Starting…'}
+                      </>
+                    ) : batchProgress ? (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2.5L6 10l-3.5-3.5L1 8l5 5 9-9z"/></svg>
+                        {batchProgress.scored} scored{batchProgress.errors > 0 ? ` · ${batchProgress.errors} errors` : ''}
+                      </>
+                    ) : (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/></svg>
+                        Score Pending
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={backfillSheet}
+                    disabled={sheetBackfilling}
+                    title="Send today's critical-parameter failures to the Google Sheet"
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-50 transition border border-emerald-200"
+                  >
+                    {sheetBackfilling ? (
+                      <>
+                        <svg className="animate-spin w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" strokeOpacity=".25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+                        Sending…
+                      </>
+                    ) : sheetBackfillResult ? (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 2.5L6 10l-3.5-3.5L1 8l5 5 9-9z"/></svg>
+                        {sheetBackfillResult.sent} sent
+                      </>
+                    ) : (
+                      <>
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><path d="M5 7h6M5 10h4"/></svg>
+                        Fill Sheet Today
+                      </>
+                    )}
+                  </button>
+                </div>
               )}
             </div>
           )}
 
-          {/* Score Log tab — period picker */}
+          {/* Score Log tab — period picker + chat ID search */}
           {tab === 'log' && (
             <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
+              {/* Chat ID search — server-side, bypasses date range */}
+              <input
+                type="text"
+                value={pendingFilters.chatId}
+                onChange={e => setPendingFilters(f => ({ ...f, chatId: e.target.value }))}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    const f = { ...pendingFilters };
+                    setAppliedFilters(f); setLogPage(0); loadScores(0, f);
+                  }
+                }}
+                placeholder="Chat ID search…"
+                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700 bg-white"
+              />
               {(['today', 'yesterday', '1w'] as const).map(r => (
                 <button key={r}
                   onClick={() => {
@@ -2435,22 +2494,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {/* Filters */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
                 <div className="flex flex-wrap items-end gap-4">
-                  {/* Chat ID search — server-side, bypasses date range */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Chat ID</p>
-                    <input
-                      type="text"
-                      value={pendingFilters.chatId}
-                      onChange={e => setPendingFilters(f => ({ ...f, chatId: e.target.value }))}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') {
-                          const f = { ...pendingFilters };
-                          setAppliedFilters(f); setLogPage(0); loadScores(0, f);
-                        }
-                      }}
-                      placeholder="Search by ID… (Enter)"
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700" />
-                  </div>
                   {/* Agent */}
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>

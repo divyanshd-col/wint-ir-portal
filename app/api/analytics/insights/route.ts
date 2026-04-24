@@ -84,7 +84,7 @@ export async function POST(req: Request) {
           id: crypto.randomUUID(), message, response: answer.answer_text ?? '',
           blocks, type: 1, filters, timestamp: new Date().toISOString(),
         };
-        if (sessionId) appendToSession(email, sessionId, entry).catch(() => {});
+        if (sessionId) await appendToSession(email, sessionId, entry).catch(() => {});
 
         send(controller, { event: 'done' }, encoder);
       } catch (err: any) {

@@ -11,8 +11,10 @@ export default async function Home() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
-  const username = (session.user?.name || session.user?.email || 'Investor') as string;
   const isAdmin = (session.user as any)?.isAdmin ?? false;
+  if (isAdmin) redirect('/analytics');
+
+  const username = (session.user?.name || session.user?.email || 'Investor') as string;
   const role = (session.user as any)?.role ?? 'agent';
   const historyEnabled = config.conversationHistoryEnabled ?? false;
 

@@ -52,27 +52,21 @@ export async function appendQualityAlertToSheet(opts: {
   };
 
   try {
-    // Apps Script web apps redirect POST requests (302). fetch follows the
-    // redirect but converts POST→GET, so doPost never runs. We send with
-    // redirect:'manual' — a 302 means the script received the request and
-    // is processing it. A 200 means it ran synchronously (no redirect).
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      redirect: 'manual',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify(payload),
-    });
+    // Apps Script web apps process GET requests reliably. POST requests go
+    // through an infrastructure redirect that may drop the body in Node.js.
+    // We encode the payload as a URL parameter so doGet receives it directly.
+    const url = new URL(webhookUrl);
+    url.searchParams.set('payload', JSON.stringify(payload));
 
-    if (res.status === 200) {
-      const body = await res.text();
-      try {
-        const json = JSON.parse(body);
-        if (json.ok === false) {
-          console.error(`[quality-sheet] Apps Script error for chat ${opts.chatId}:`, json.error);
-          return;
-        }
-      } catch {}
-    }
+    const res = await fetch(url.toString(), { redirect: 'follow' });
+    const body = await res.text();
+    try {
+      const json = JSON.parse(body);
+      if (json.ok === false) {
+        console.error(`[quality-sheet] Apps Script error for chat ${opts.chatId}:`, json.error);
+        return;
+      }
+    } catch {}
 
     console.log(`[quality-sheet] Sent row for chat ${opts.chatId} (status ${res.status})`);
   } catch (err: any) {
