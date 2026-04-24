@@ -9,7 +9,8 @@ export async function middleware(req: NextRequest) {
     pathname.startsWith('/_next/') ||
     pathname === '/setup' ||
     pathname === '/login' ||
-    pathname === '/register'
+    pathname === '/register' ||
+    pathname === '/set-password'
   ) {
     return NextResponse.next();
   }

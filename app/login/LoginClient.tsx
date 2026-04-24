@@ -103,6 +103,12 @@ function LoginForm() {
               </a>
             </p>
             <p className="mt-2 text-center text-xs text-gray-400">
+              Already added by an admin?{' '}
+              <a href="/set-password" className="text-[#2d9e4f] hover:underline font-medium">
+                Set your password
+              </a>
+            </p>
+            <p className="mt-2 text-center text-xs text-gray-400">
               Need help?{' '}
               <a href="mailto:ir@wintwealth.com" className="text-[#2d9e4f] hover:underline">
                 ir@wintwealth.com
