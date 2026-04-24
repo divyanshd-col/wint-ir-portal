@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Quality Alert — Apps Script</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; margin: 0; padding: 32px; color: #1a1a1a; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.1); max-width: 860px; margin: 0 auto; overflow: hidden; }
+    .header { padding: 20px 24px; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; }
+    h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    .subtitle { font-size: 12px; color: #888; margin-top: 2px; }
+    .copy-btn { background: #2d9e4f; color: #fff; border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s; }
+    .copy-btn:hover { background: #25883f; }
+    .copy-btn.copied { background: #1a6e32; }
+    pre { margin: 0; padding: 24px; font-size: 13px; line-height: 1.6; overflow-x: auto; background: #fff; }
+    code { font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    .steps { padding: 20px 24px; background: #f9f9f9; border-top: 1px solid #eee; font-size: 13px; color: #555; }
+    .steps strong { color: #1a1a1a; }
+    ol { margin: 8px 0 0; padding-left: 20px; line-height: 2; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div>
+        <h1>Quality Alert — Google Apps Script</h1>
+        <div class="subtitle">Paste into Extensions → Apps Script inside your Google Sheet</div>
+      </div>
+      <button class="copy-btn" onclick="copyCode()">Copy</button>
+    </div>
+    <pre><code id="script">/**
+ * Wint IR Portal — Quality Alert Sheet
+ *
+ * Paste this into Extensions → Apps Script inside your Google Sheet.
+ * Then deploy as a Web App:
+ *   Deploy → New deployment → Web app
+ *   Execute as: Me
+ *   Who has access: Anyone
+ *
+ * Copy the deployment URL and paste it into Settings → Integrations →
+ * Quality Alert Sheet in the portal.
+ *
+ * Columns:
+ *   Date | Chat ID | Agent | Phone | IQS | CSAT | Disposition | Sub-Disposition | Failed Parameters | Reasoning
+ */
+
+const SHEET_NAME = 'Quality Alerts'; // change if your tab is named differently
+
+const HEADERS = [
+  'Date', 'Chat ID', 'Agent', 'Phone', 'IQS', 'CSAT',
+  'Disposition', 'Sub-Disposition', 'Failed Parameters', 'Reasoning',
+];
+
+function doPost(e) {
+  try {
+    // Google Apps Script sometimes delivers the body via e.postData.contents
+    // and sometimes via e.parameter after a redirect — handle both.
+    let data;
+    if (e.postData &amp;&amp; e.postData.contents) {
+      data = JSON.parse(e.postData.contents);
+    } else if (e.parameter &amp;&amp; e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
+    } else {
+      data = e.parameter || {};
+    }
+
+    return appendRow(data);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+// doGet handles the case where Google converts POST→GET during redirect
+function doGet(e) {
+  try {
+    let data;
+    if (e.parameter &amp;&amp; e.parameter.payload) {
+      data = JSON.parse(e.parameter.payload);
+    } else {
+      data = e.parameter || {};
+    }
+    return appendRow(data);
+  } catch (err) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function appendRow(data) {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet   = ss.getSheetByName(SHEET_NAME);
+
+  // Create the tab if it doesn't exist yet
+  if (!sheet) {
+    sheet = ss.insertSheet(SHEET_NAME);
+  }
+
+  // Write header row on first use
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(HEADERS);
+    sheet.getRange(1, 1, 1, HEADERS.length)
+         .setFontWeight('bold')
+         .setBackground('#f0f0f0');
+    sheet.setFrozenRows(1);
+  }
+
+  sheet.appendRow([
+    data.date           || new Date().toISOString().slice(0, 19).replace('T', ' '),
+    data.chatId         || '',
+    data.agentName      || '',
+    data.contactPhone   || '',
+    data.iqs            || '',
+    data.csat           || '',
+    data.disposition    || '',
+    data.subDisposition || '',
+    data.failedParams   || '',
+    data.reasoning      || '',
+  ]);
+
+  return ContentService
+    .createTextOutput(JSON.stringify({ ok: true }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Optional: test it manually in the Apps Script editor
+function testPost() {
+  const mockEvent = {
+    postData: {
+      contents: JSON.stringify({
+        date:           '2026-04-24 12:00:00',
+        chatId:         'TEST-001',
+        agentName:      'Test Agent',
+        contactPhone:   '9876543210',
+        iqs:            '55%',
+        csat:           'Bad',
+        disposition:    'Repayment',
+        subDisposition: 'Delay',
+        failedParams:   'Technically / Legally Incorrect',
+        reasoning:      'Technically / Legally Incorrect: Agent gave wrong maturity date.',
+      }),
+    },
+  };
+  const result = doPost(mockEvent);
+  Logger.log(result.getContent());
+}</code></pre>
+    <div class="steps">
+      <strong>Setup steps</strong>
+      <ol>
+        <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong></li>
+        <li>Replace all existing code with the script above → <strong>Save (Ctrl+S)</strong></li>
+        <li>Click <strong>Deploy → New deployment → Web app</strong></li>
+        <li>Set <em>Execute as</em>: <strong>Me</strong> &nbsp;·&nbsp; <em>Who has access</em>: <strong>Anyone</strong></li>
+        <li>Click <strong>Deploy</strong> → copy the URL ending in <code>/exec</code></li>
+        <li>Paste the URL in <strong>Settings → Integrations → Quality Alert Sheet</strong></li>
+      </ol>
+    </div>
+  </div>
+
+  <script>
+    function copyCode() {
+      // Get the raw JS source (unescape HTML entities)
+      const raw = document.getElementById('script').textContent;
+      navigator.clipboard.writeText(raw).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = '✓ Copied';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
