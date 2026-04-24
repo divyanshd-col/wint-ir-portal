@@ -11,13 +11,13 @@
  * Quality Alert Sheet in the portal.
  *
  * The script appends one row per failing chat. Columns:
- *   Date | Chat ID | Agent | Phone | IQS | CSAT | Disposition | Sub-Disposition | Failed Parameters | Reasoning
+ *   Date | Chat ID | Chat Link | Agent | Phone | IQS | CSAT | Disposition | Sub-Disposition | Failed Parameters | Reasoning
  */
 
 const SHEET_NAME = 'Quality Alerts'; // change if your tab is named differently
 
 const HEADERS = [
-  'Date', 'Chat ID', 'Agent', 'Phone', 'IQS', 'CSAT',
+  'Date', 'Chat ID', 'Chat Link', 'Agent', 'Phone', 'IQS', 'CSAT',
   'Disposition', 'Sub-Disposition', 'Failed Parameters', 'Reasoning',
 ];
 
@@ -42,9 +42,12 @@ function doPost(e) {
       sheet.setFrozenRows(1);
     }
 
+    const newRow = sheet.getLastRow() + 1;
+
     sheet.appendRow([
       data.date           || new Date().toISOString().slice(0, 19).replace('T', ' '),
       data.chatId         || '',
+      data.chatLink       || '',
       data.agentName      || '',
       data.contactPhone   || '',
       data.iqs            || '',
@@ -54,6 +57,13 @@ function doPost(e) {
       data.failedParams   || '',
       data.reasoning      || '',
     ]);
+
+    // Make Chat Link column clickable if a URL was provided
+    if (data.chatLink) {
+      sheet.getRange(newRow, 3).setFormula(
+        `=HYPERLINK("${data.chatLink}","Open Chat")`
+      );
+    }
 
     return ContentService
       .createTextOutput(JSON.stringify({ ok: true }))
@@ -72,7 +82,8 @@ function testPost() {
     postData: {
       contents: JSON.stringify({
         date:           '2026-04-24 12:00:00',
-        chatId:         'TEST-001',
+        chatId:         '123456',
+        chatLink:       'https://app.robylon.ai/unified-inbox/share/123456',
         agentName:      'Test Agent',
         contactPhone:   '9876543210',
         iqs:            '55%',

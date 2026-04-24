@@ -12,6 +12,8 @@
 
 import { readConfig } from './config';
 
+const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
+
 export async function appendQualityAlertToSheet(opts: {
   chatId: string;
   agentName: string;
@@ -33,10 +35,14 @@ export async function appendQualityAlertToSheet(opts: {
   if (!webhookUrl) return;
 
   const csatLabel: Record<string, string> = { '5': 'Good', '3': 'CBB', '1': 'Bad' };
+  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    ? `${ROBYLON_BASE}/${opts.chatId}`
+    : '';
 
   const payload = {
     date:           new Date().toISOString().slice(0, 19).replace('T', ' '),
     chatId:         opts.chatId,
+    chatLink,
     agentName:      opts.agentName || 'Unknown',
     contactPhone:   opts.contactPhone || '',
     iqs:            opts.iqs != null ? `${opts.iqs}%` : '',
