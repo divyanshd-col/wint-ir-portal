@@ -21,7 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { hasCallInteraction, fireQualityAlert, fireCallSkipAlert } from '@/lib/quality-alert';
+import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import {
   IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
@@ -183,14 +183,9 @@ export async function executeScoring(
     return null;
   }
 
-  // ── Call detection — skip scoring, flag to QA ────────────────────────────
+  // ── Call detection — skip scoring silently ──────────────────────────────
   if (hasCallInteraction(transcriptText, conv.tags)) {
-    const tagDisp = (conv.tags as any)?.disposition || '';
-    const reason  = /\bcall\b/i.test(tagDisp)
-      ? `Disposition tagged as: ${tagDisp}`
-      : 'Transcript contains a call interaction or callback request';
     console.log(`[webhook] Skipping scoring for chat ${chatId} — call interaction detected`);
-    fireCallSkipAlert({ chatId, agentName, contactPhone, reason }).catch(() => {});
     return null;
   }
 
