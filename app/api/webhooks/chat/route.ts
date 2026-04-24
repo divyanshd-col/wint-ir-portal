@@ -27,6 +27,7 @@ import {
   analyzeConversationTiming,
 } from '@/lib/quality';
 import type { TimedMessage } from '@/lib/quality';
+import { storeHasProcessedEvent, storeMarkProcessedEvent } from '@/lib/store';
 import {
   upsertAgent,
   upsertContact,
@@ -587,6 +588,17 @@ export async function POST(req: NextRequest) {
   }
 
   console.log('[webhook] Incoming payload:', JSON.stringify(body, null, 2));
+
+  // Deduplicate by event_id — Robylon retries on timeout, both can arrive
+  // before scoring finishes, resulting in two scores for the same chat.
+  const eventId = String(body.event_id || '');
+  if (eventId) {
+    if (await storeHasProcessedEvent(eventId)) {
+      console.log(`[webhook] Duplicate event_id ${eventId} — skipping`);
+      return NextResponse.json({ ok: true, skipped: true, reason: 'duplicate_event_id' });
+    }
+    await storeMarkProcessedEvent(eventId);
+  }
 
   const eventType = String(body.event_type || '');
 

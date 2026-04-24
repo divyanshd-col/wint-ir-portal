@@ -74,6 +74,27 @@ async function kv_lrange(key: string, start: number, end: number): Promise<strin
   }
 }
 
+// --- Webhook event_id deduplication ---
+// Prevents the same Robylon webhook event from being processed twice
+// (Robylon retries on timeout — both can arrive before scoring completes).
+
+export async function storeHasProcessedEvent(eventId: string): Promise<boolean> {
+  const val = await kv_get(`wint_webhook_event:${eventId}`);
+  return val === '1';
+}
+
+export async function storeMarkProcessedEvent(eventId: string): Promise<void> {
+  if (!ready()) return;
+  try {
+    // Expires after 2 h — long enough to catch retries, short enough to not bloat KV
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['SET', `wint_webhook_event:${eventId}`, '1', 'EX', '7200']]),
+    });
+  } catch {}
+}
+
 // --- Quality Slack alert deduplication ---
 // Prevents the same chat from firing a Slack alert more than once
 // (can happen when webhook + manual scoring both run on the same chat).
