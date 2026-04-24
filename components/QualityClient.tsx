@@ -1561,6 +1561,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         else if (data.error) { errors++; }
         setBatchProgress({ scored, errors, remaining: data.remaining ?? 0 });
         if (data.done || (!res.ok && data.remaining === 0)) break;
+        // Small pause between calls to avoid hammering the endpoint
+        await new Promise(r => setTimeout(r, 300));
       }
       setToast(`Scored ${scored} pending chats${errors > 0 ? ` · ${errors} errors` : ''}`);
       if (scored > 0) loadPerfData(perfPeriod, perfDateFrom, perfDateTo);
