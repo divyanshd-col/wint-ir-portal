@@ -273,7 +273,8 @@ table:
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildPlannerPrompt(filters: AnalyticsFilters, dispositions: string[], idFetchLimit: number): string {
+function buildPlannerPrompt(filters: AnalyticsFilters, dispositions: string[], idFetchLimit: number, promptOverride?: string): string {
+  const template = promptOverride?.trim() || PLANNER_PROMPT;
   const today = new Date().toISOString().slice(0, 10);
   const activeFilters = [
     `time_range_start:    ${filters.dateFrom}`,
@@ -289,7 +290,7 @@ function buildPlannerPrompt(filters: AnalyticsFilters, dispositions: string[], i
       : `min_user_messages:   none`,
   ].join('\n');
 
-  return PLANNER_PROMPT
+  return template
     .replace('{TODAY}', today)
     .replace('{ACTIVE_FILTERS}', activeFilters)
     .replace(/{ID_FETCH_LIMIT}/g, String(idFetchLimit))
@@ -411,7 +412,8 @@ export async function runAnalyticsAgent(
   const TRANSCRIPT_CAP = maxConversations > 20 ? 50 : 20;
   const idFetchLimit   = maxConversations;
 
-  const plannerPrompt = buildPlannerPrompt(filters, dispositions, idFetchLimit);
+  const plannerPrompt = buildPlannerPrompt(filters, dispositions, idFetchLimit, config.analyticsPlannerPrompt);
+  const synthesizerPrompt = config.analyticsSynthesizerPrompt?.trim() || SYNTHESIZER_PROMPT;
   const userMessage = priorContext
     ? `PRIOR CONTEXT (previous answer — use to resolve follow-ups):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
     : message;
@@ -515,7 +517,7 @@ export async function runAnalyticsAgent(
 
   // Disable thinking for pure SQL (fast); full thinking when transcripts involved
   const synthExtra: any = {
-    systemInstruction: { parts: [{ text: SYNTHESIZER_PROMPT }] },
+    systemInstruction: { parts: [{ text: synthesizerPrompt }] },
   };
   if (!plan.needs_transcripts) {
     synthExtra.config = { thinkingConfig: { thinkingBudget: 0 } };
@@ -574,7 +576,8 @@ export async function runPlannerPhase(
 ): Promise<PlannerPhaseResult> {
   if (!keys.length) return { kind: 'error', message: 'No LLM API keys configured.' };
 
-  const plannerPrompt = buildPlannerPrompt(filters, dispositions, maxConversations);
+  const config = await readConfig();
+  const plannerPrompt = buildPlannerPrompt(filters, dispositions, maxConversations, config.analyticsPlannerPrompt);
   const userMessage = priorContext
     ? `PRIOR CONTEXT (previous answer):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
     : message;
@@ -647,6 +650,9 @@ export async function runSynthesizerPhase(
   transcriptSummaries: string[],
   keys: string[],
 ): Promise<AgentFinalAnswer> {
+  const config = await readConfig();
+  const synthesizerPrompt = config.analyticsSynthesizerPrompt?.trim() || SYNTHESIZER_PROMPT;
+
   const synthesisInput = JSON.stringify({
     question,
     intent,
@@ -658,7 +664,7 @@ export async function runSynthesizerPhase(
   });
 
   const synthExtra: any = {
-    systemInstruction: { parts: [{ text: SYNTHESIZER_PROMPT }] },
+    systemInstruction: { parts: [{ text: synthesizerPrompt }] },
   };
   if (!transcriptSummaries.length) {
     synthExtra.config = { thinkingConfig: { thinkingBudget: 0 } };

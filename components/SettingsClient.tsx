@@ -16,6 +16,9 @@ interface SafeConfig {
   hasIqsAnthropicKey?: boolean;
   knowledgeBaseUrls?: string[];
   systemPrompt?: string;
+  iqsScoringPrompt?: string;
+  analyticsPlannerPrompt?: string;
+  analyticsSynthesizerPrompt?: string;
   conversationHistoryEnabled?: boolean;
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
@@ -32,10 +35,33 @@ interface User {
 const SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'kb', label: 'Knowledge Base' },
-  { id: 'prompt', label: 'System Prompt' },
+  { id: 'prompt', label: 'Prompts' },
   { id: 'users', label: 'Users' },
   { id: 'tl', label: 'Team Leads' },
   { id: 'integrations', label: 'Integrations' },
+];
+
+const PROMPT_TABS = [
+  {
+    id: 'chat',
+    label: 'Chat Assistant',
+    description: 'Shapes how the AI responds to customer queries in the chat interface. Injected at the start of every conversation.',
+  },
+  {
+    id: 'iqs',
+    label: 'IQS Scoring',
+    description: 'System prompt used when scoring agent conversations. Defines the scoring rubric, parameters, and output format.',
+  },
+  {
+    id: 'planner',
+    label: 'Analytics Planner',
+    description: 'First-pass prompt for the analytics agent. Converts natural-language questions into SQL query plans.',
+  },
+  {
+    id: 'synthesizer',
+    label: 'Analytics Synthesizer',
+    description: 'Second-pass prompt for the analytics agent. Turns SQL results into analytical narratives and charts.',
+  },
 ];
 
 export default function SettingsClient({ config }: { config: SafeConfig }) {
@@ -80,6 +106,20 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   const [systemPrompt, setSystemPrompt] = useState(config.systemPrompt || '');
   const [savingPrompt, setSavingPrompt] = useState(false);
   const [promptSaved, setPromptSaved] = useState(false);
+
+  const [iqsScoringPrompt, setIqsScoringPrompt] = useState(config.iqsScoringPrompt || '');
+  const [savingIqsPrompt, setSavingIqsPrompt] = useState(false);
+  const [iqsPromptSaved, setIqsPromptSaved] = useState(false);
+
+  const [analyticsPlannerPrompt, setAnalyticsPlannerPrompt] = useState(config.analyticsPlannerPrompt || '');
+  const [savingPlannerPrompt, setSavingPlannerPrompt] = useState(false);
+  const [plannerPromptSaved, setPlannerPromptSaved] = useState(false);
+
+  const [analyticsSynthesizerPrompt, setAnalyticsSynthesizerPrompt] = useState(config.analyticsSynthesizerPrompt || '');
+  const [savingSynthesizerPrompt, setSavingSynthesizerPrompt] = useState(false);
+  const [synthesizerPromptSaved, setSynthesizerPromptSaved] = useState(false);
+
+  const [activePromptTab, setActivePromptTab] = useState('chat');
 
   // ── Users state ────────────────────────────────────────────────────────────
   const [users, setUsers] = useState<User[]>([]);
@@ -256,6 +296,39 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
       showToast('System prompt saved');
       setTimeout(() => setPromptSaved(false), 2000);
     } finally { setSavingPrompt(false); }
+  };
+
+  const saveIqsScoringPrompt = async () => {
+    setSavingIqsPrompt(true);
+    setIqsPromptSaved(false);
+    try {
+      await patchConfig({ iqsScoringPrompt });
+      setIqsPromptSaved(true);
+      showToast('IQS scoring prompt saved');
+      setTimeout(() => setIqsPromptSaved(false), 2000);
+    } finally { setSavingIqsPrompt(false); }
+  };
+
+  const saveAnalyticsPlannerPrompt = async () => {
+    setSavingPlannerPrompt(true);
+    setPlannerPromptSaved(false);
+    try {
+      await patchConfig({ analyticsPlannerPrompt });
+      setPlannerPromptSaved(true);
+      showToast('Analytics planner prompt saved');
+      setTimeout(() => setPlannerPromptSaved(false), 2000);
+    } finally { setSavingPlannerPrompt(false); }
+  };
+
+  const saveAnalyticsSynthesizerPrompt = async () => {
+    setSavingSynthesizerPrompt(true);
+    setSynthesizerPromptSaved(false);
+    try {
+      await patchConfig({ analyticsSynthesizerPrompt });
+      setSynthesizerPromptSaved(true);
+      showToast('Analytics synthesizer prompt saved');
+      setTimeout(() => setSynthesizerPromptSaved(false), 2000);
+    } finally { setSavingSynthesizerPrompt(false); }
   };
 
   const addUser = async () => {
@@ -632,31 +705,126 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
           </div>
         )}
 
-        {/* ── SYSTEM PROMPT ── */}
+        {/* ── PROMPTS ── */}
         {activeSection === 'prompt' && (
-          <div className="space-y-8">
-            <h2 className="text-xl font-bold text-gray-900">System Prompt</h2>
-
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-              <div>
-                <h3 className="text-sm font-bold text-gray-900">Custom System Prompt</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Overrides the default prompt. Leave blank to use the built-in default.</p>
-              </div>
-              <textarea
-                value={systemPrompt}
-                onChange={e => setSystemPrompt(e.target.value)}
-                rows={16}
-                placeholder="Leave blank to use the default prompt…"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
-              />
-              <div className="flex items-center gap-3">
-                <button onClick={saveSystemPrompt} disabled={savingPrompt}
-                  className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
-                  {savingPrompt ? 'Saving…' : promptSaved ? '✓ Saved' : 'Save Prompt'}
-                </button>
-                {promptSaved && <span className="text-sm text-emerald-600 font-medium">Saved successfully</span>}
-              </div>
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Prompts</h2>
+              <p className="text-sm text-gray-500 mt-1">Customize any prompt used in the system. Leave blank to use the built-in default.</p>
             </div>
+
+            {/* Tab bar */}
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+              {PROMPT_TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActivePromptTab(tab.id)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    activePromptTab === tab.id
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Chat Assistant */}
+            {activePromptTab === 'chat' && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Chat Assistant</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{PROMPT_TABS[0].description}</p>
+                </div>
+                <textarea
+                  value={systemPrompt}
+                  onChange={e => setSystemPrompt(e.target.value)}
+                  rows={18}
+                  placeholder="Leave blank to use the built-in default prompt…"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                />
+                <div className="flex items-center gap-3">
+                  <button onClick={saveSystemPrompt} disabled={savingPrompt}
+                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {savingPrompt ? 'Saving…' : promptSaved ? '✓ Saved' : 'Save'}
+                  </button>
+                  {!systemPrompt && <span className="text-xs text-gray-400 italic">Using built-in default</span>}
+                </div>
+              </div>
+            )}
+
+            {/* IQS Scoring */}
+            {activePromptTab === 'iqs' && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">IQS Scoring</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{PROMPT_TABS[1].description}</p>
+                </div>
+                <textarea
+                  value={iqsScoringPrompt}
+                  onChange={e => setIqsScoringPrompt(e.target.value)}
+                  rows={18}
+                  placeholder="Leave blank to use the built-in IQS scoring prompt…"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                />
+                <div className="flex items-center gap-3">
+                  <button onClick={saveIqsScoringPrompt} disabled={savingIqsPrompt}
+                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {savingIqsPrompt ? 'Saving…' : iqsPromptSaved ? '✓ Saved' : 'Save'}
+                  </button>
+                  {!iqsScoringPrompt && <span className="text-xs text-gray-400 italic">Using built-in default</span>}
+                </div>
+              </div>
+            )}
+
+            {/* Analytics Planner */}
+            {activePromptTab === 'planner' && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Analytics Planner</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{PROMPT_TABS[2].description}</p>
+                </div>
+                <textarea
+                  value={analyticsPlannerPrompt}
+                  onChange={e => setAnalyticsPlannerPrompt(e.target.value)}
+                  rows={18}
+                  placeholder="Leave blank to use the built-in planner prompt…"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                />
+                <div className="flex items-center gap-3">
+                  <button onClick={saveAnalyticsPlannerPrompt} disabled={savingPlannerPrompt}
+                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {savingPlannerPrompt ? 'Saving…' : plannerPromptSaved ? '✓ Saved' : 'Save'}
+                  </button>
+                  {!analyticsPlannerPrompt && <span className="text-xs text-gray-400 italic">Using built-in default</span>}
+                </div>
+              </div>
+            )}
+
+            {/* Analytics Synthesizer */}
+            {activePromptTab === 'synthesizer' && (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Analytics Synthesizer</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">{PROMPT_TABS[3].description}</p>
+                </div>
+                <textarea
+                  value={analyticsSynthesizerPrompt}
+                  onChange={e => setAnalyticsSynthesizerPrompt(e.target.value)}
+                  rows={18}
+                  placeholder="Leave blank to use the built-in synthesizer prompt…"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                />
+                <div className="flex items-center gap-3">
+                  <button onClick={saveAnalyticsSynthesizerPrompt} disabled={savingSynthesizerPrompt}
+                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {savingSynthesizerPrompt ? 'Saving…' : synthesizerPromptSaved ? '✓ Saved' : 'Save'}
+                  </button>
+                  {!analyticsSynthesizerPrompt && <span className="text-xs text-gray-400 italic">Using built-in default</span>}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
