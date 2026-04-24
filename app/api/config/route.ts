@@ -54,6 +54,7 @@ export async function PATCH(req: NextRequest) {
     ...(body.systemPrompt !== undefined && { systemPrompt: body.systemPrompt }),
     ...(body.conversationHistoryEnabled !== undefined && { conversationHistoryEnabled: body.conversationHistoryEnabled }),
     ...(body.slackUserToken !== undefined && !body.slackUserToken.startsWith('••••') && { slackUserToken: body.slackUserToken }),
+    ...(body.qualityAlertSheetUrl !== undefined && { qualityAlertSheetUrl: body.qualityAlertSheetUrl }),
   };
 
   await writeConfig(updated);

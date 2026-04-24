@@ -1272,9 +1272,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   // Fresh agentName from config (overrides stale JWT value)
   const [selfAgentName, setSelfAgentName] = useState(selfAgentNameProp);
   useEffect(() => {
+    // Only restrict view for agent role — admin/quality/tl see all agents
     fetch('/api/users/me')
       .then(r => r.json())
-      .then(d => { if (d.agentName !== undefined) setSelfAgentName(d.agentName || undefined); })
+      .then(d => { if (d.agentName !== undefined && d.role === 'agent') setSelfAgentName(d.agentName || undefined); })
       .catch(() => {});
   }, []);
 

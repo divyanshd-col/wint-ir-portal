@@ -278,13 +278,16 @@ export async function executeScoring(
   const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
   console.log(`[webhook] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
 
-  // ── Slack alert — deduplicated via KV ────────────────────────────────────────
+  // ── Slack + Sheet alert — deduplicated via KV ────────────────────────────────
   fireQualityAlert({
     chatId,
-    agentName: finalAgentName,
+    agentName:      finalAgentName,
     contactPhone,
-    scores:    parsed.scores    as Record<string, string>,
-    reasoning: parsed.reasoning as Record<string, string>,
+    scores:         parsed.scores    as Record<string, string>,
+    reasoning:      parsed.reasoning as Record<string, string>,
+    iqs:            parsed.iqs,
+    disposition,
+    subDisposition,
   }).catch(() => {});
 
   return { chatId, iqs: parsed.iqs };

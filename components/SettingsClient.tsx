@@ -18,6 +18,7 @@ interface SafeConfig {
   systemPrompt?: string;
   conversationHistoryEnabled?: boolean;
   hasSlackToken?: boolean;
+  qualityAlertSheetUrl?: string;
 }
 
 interface User {
@@ -100,6 +101,10 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   const [slackToken, setSlackToken] = useState('');
   const [savingSlack, setSavingSlack] = useState(false);
   const [slackSaved, setSlackSaved] = useState(false);
+
+  const [qualitySheetUrl, setQualitySheetUrl] = useState(config.qualityAlertSheetUrl || '');
+  const [savingSheet, setSavingSheet] = useState(false);
+  const [sheetSaved, setSheetSaved] = useState(false);
 
   // ── Toast ──────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<string | null>(null);
@@ -225,7 +230,12 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
     setRefreshingKB(true);
     setKbRefreshed(false);
     try {
-      await fetch('/api/kb-refresh', { method: 'POST' });
+      const res = await fetch('/api/kb-refresh', { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast(`Refresh failed: ${data.error || res.statusText}`);
+        return;
+      }
       setKbRefreshed(true);
       showToast('KB cache refreshed');
       setTimeout(() => setKbRefreshed(false), 3000);
@@ -334,6 +344,17 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
       showToast('Slack token saved');
       setTimeout(() => setSlackSaved(false), 2000);
     } finally { setSavingSlack(false); }
+  };
+
+  const saveQualitySheet = async () => {
+    setSavingSheet(true);
+    setSheetSaved(false);
+    try {
+      await patchConfig({ qualityAlertSheetUrl: qualitySheetUrl.trim() });
+      setSheetSaved(true);
+      showToast('Sheet webhook saved');
+      setTimeout(() => setSheetSaved(false), 2000);
+    } finally { setSavingSheet(false); }
   };
 
   function shortLabel(url: string): string {
@@ -895,6 +916,51 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                   </button>
                 </div>
               )}
+            </div>
+
+            {/* ── Quality Alert Sheet ── */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Quality Alert Sheet</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  When a chat fails a critical quality parameter, a row is appended to a Google Sheet alongside the Slack alert.
+                  Uses a Google Apps Script web app — no service account needed.
+                </p>
+              </div>
+              <div className="bg-stone-50 rounded-xl p-3 text-xs text-stone-600 space-y-1 max-w-lg">
+                <p className="font-semibold text-stone-700">Setup (one-time):</p>
+                <ol className="list-decimal list-inside space-y-0.5 text-stone-500">
+                  <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong></li>
+                  <li>Paste the Apps Script from the docs and save</li>
+                  <li>Click <strong>Deploy → New deployment → Web app</strong></li>
+                  <li>Set <em>Execute as</em>: Me · <em>Who has access</em>: Anyone</li>
+                  <li>Copy the deployment URL and paste it below</li>
+                </ol>
+              </div>
+              <div className="space-y-3 max-w-lg">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1">Apps Script deployment URL</label>
+                  <input
+                    type="url"
+                    value={qualitySheetUrl}
+                    onChange={e => setQualitySheetUrl(e.target.value)}
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 font-mono"
+                  />
+                </div>
+                <button
+                  onClick={saveQualitySheet}
+                  disabled={savingSheet || !qualitySheetUrl.trim()}
+                  className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
+                >
+                  {savingSheet ? 'Saving…' : sheetSaved ? '✓ Saved' : 'Save'}
+                </button>
+                {qualitySheetUrl && !sheetSaved && (
+                  <p className="text-xs text-emerald-600 font-medium">
+                    ✓ Active — rows will be appended on every parameter failure alert.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}

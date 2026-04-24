@@ -26,6 +26,7 @@ export interface PortalConfig {
   systemPrompt?: string;
   conversationHistoryEnabled?: boolean;
   slackUserToken?: string;
+  qualityAlertSheetUrl?: string; // Apps Script web app URL for quality alert sheet
   isConfigured: boolean;
   // ── Dedicated IQS / quality-scoring keys (for spend tracking) ──────────────
   iqsGeminiApiKey?: string;    // dedicated Gemini key for all IQS scoring

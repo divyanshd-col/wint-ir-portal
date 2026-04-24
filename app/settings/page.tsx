@@ -28,6 +28,7 @@ export default async function SettingsPage() {
     systemPrompt: config.systemPrompt || '',
     conversationHistoryEnabled: !!config.conversationHistoryEnabled,
     hasSlackToken: !!config.slackUserToken,
+    qualityAlertSheetUrl: config.qualityAlertSheetUrl || '',
   };
 
   return <SettingsClient config={safeConfig} />;

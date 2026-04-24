@@ -9,6 +9,7 @@
 
 import { sendSlackMessage } from './slack';
 import { storeHasQualityAlert, storeMarkQualityAlert } from './store';
+import { appendQualityAlertToSheet } from './quality-sheet';
 
 const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
 
@@ -58,10 +59,13 @@ export async function fireQualityAlert(opts: {
   contactPhone?: string;
   scores: Record<string, string>;
   reasoning: Record<string, string>;
+  iqs?: number;
+  csat?: string;
+  disposition?: string;
+  subDisposition?: string;
 }): Promise<void> {
   const token   = process.env.SLACK_BOT_TOKEN   || '';
   const channel = process.env.QUALITY_SLACK_CHANNEL || '';
-  if (!token || !channel) return;
 
   const failedParams = CRITICAL_PARAMS
     .filter(p => opts.scores?.[p.key] === 'No')
@@ -76,23 +80,40 @@ export async function fireQualityAlert(opts: {
   }
   await storeMarkQualityAlert(opts.chatId);
 
-  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
-    ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
-    : opts.chatId;
+  // ── Slack ─────────────────────────────────────────────────────────────────
+  if (token && channel) {
+    const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+      ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+      : opts.chatId;
 
-  const failLines = failedParams.map(p => `• *${p.label}*\n  ${p.reasoning}`).join('\n');
+    const failLines = failedParams.map(p => `• *${p.label}*\n  ${p.reasoning}`).join('\n');
 
-  const lines = [
-    `⚠️ *Quality Flag — Parameter Failure*`,
-    `*Chat:* ${chatLink}`,
-    opts.contactPhone ? `*Phone:* ${opts.contactPhone}` : null,
-    `*Agent:* ${opts.agentName || 'Unknown'}`,
-    ``,
-    `*Failed parameters:*`,
-    failLines,
-  ].filter((l): l is string => l !== null);
+    const lines = [
+      `⚠️ *Quality Flag — Parameter Failure*`,
+      `*Chat:* ${chatLink}`,
+      opts.contactPhone ? `*Phone:* ${opts.contactPhone}` : null,
+      `*Agent:* ${opts.agentName || 'Unknown'}`,
+      opts.iqs != null ? `*IQS:* ${opts.iqs}%` : null,
+      opts.disposition  ? `*Disposition:* ${opts.disposition}` : null,
+      ``,
+      `*Failed parameters:*`,
+      failLines,
+    ].filter((l): l is string => l !== null);
 
-  sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
+    sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
+  }
+
+  // ── Google Sheet ──────────────────────────────────────────────────────────
+  appendQualityAlertToSheet({
+    chatId:         opts.chatId,
+    agentName:      opts.agentName,
+    contactPhone:   opts.contactPhone,
+    iqs:            opts.iqs,
+    csat:           opts.csat,
+    disposition:    opts.disposition,
+    subDisposition: opts.subDisposition,
+    failedParams,
+  }).catch(() => {});
 }
 
 // ── Call-interaction flag (skip scoring) ────────────────────────────────────
