@@ -31,6 +31,10 @@ export interface PortalConfig {
   // ── Dedicated IQS / quality-scoring keys (for spend tracking) ──────────────
   iqsGeminiApiKey?: string;    // dedicated Gemini key for all IQS scoring
   iqsAnthropicApiKey?: string; // dedicated Anthropic key for IQS scoring (if provider = claude)
+  // ── Editable prompts (empty = use hardcoded default) ────────────────────────
+  iqsScoringPrompt?: string;
+  analyticsPlannerPrompt?: string;
+  analyticsSynthesizerPrompt?: string;
 }
 
 const DEFAULT_CONFIG: PortalConfig = {
