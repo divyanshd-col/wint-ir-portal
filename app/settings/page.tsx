@@ -3,6 +3,9 @@ import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
 import SettingsClient from '@/components/SettingsClient';
+import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/app/api/chat/route';
+import { IQS_SYSTEM_PROMPT } from '@/lib/quality';
+import { PLANNER_PROMPT, SYNTHESIZER_PROMPT } from '@/lib/analytics/agent';
 
 export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
@@ -26,6 +29,13 @@ export default async function SettingsPage() {
     hasIqsAnthropicKey: !!config.iqsAnthropicApiKey,
     knowledgeBaseUrls: config.knowledgeBaseUrls || [],
     systemPrompt: config.systemPrompt || '',
+    iqsScoringPrompt: config.iqsScoringPrompt || '',
+    analyticsPlannerPrompt: config.analyticsPlannerPrompt || '',
+    analyticsSynthesizerPrompt: config.analyticsSynthesizerPrompt || '',
+    defaultChatPrompt: DEFAULT_CHAT_PROCESS_PROMPT,
+    defaultIqsScoringPrompt: IQS_SYSTEM_PROMPT,
+    defaultAnalyticsPlannerPrompt: PLANNER_PROMPT,
+    defaultAnalyticsSynthesizerPrompt: SYNTHESIZER_PROMPT,
     conversationHistoryEnabled: !!config.conversationHistoryEnabled,
     hasSlackToken: !!config.slackUserToken,
     qualityAlertSheetUrl: config.qualityAlertSheetUrl || '',

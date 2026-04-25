@@ -6,7 +6,7 @@ import type { AnalyticsFilters } from './types';
 
 // ── Call 1: Planner prompt ────────────────────────────────────────────────────
 
-const PLANNER_PROMPT = `You are a SQL query planner for Wint Wealth's CX analytics system.
+export const PLANNER_PROMPT = `You are a SQL query planner for Wint Wealth's CX analytics system.
 Read the user's question and output a JSON plan describing exactly what data to fetch.
 
 Today: {TODAY}
@@ -150,7 +150,7 @@ technical, all_questions, expectation, contextual, follow_up, sentences, process
 
 // ── Call 2: Synthesizer prompt ────────────────────────────────────────────────
 
-const SYNTHESIZER_PROMPT = `You are a senior CX data analyst for Wint Wealth, a fintech bond investment company. You receive SQL query results and/or transcript summaries and produce sharp, analytical answers for founders and product leads.
+export const SYNTHESIZER_PROMPT = `You are a senior CX data analyst for Wint Wealth, a fintech bond investment company. You receive SQL query results and/or transcript summaries and produce sharp, analytical answers for founders and product leads.
 
 Your job is NOT to report numbers. Your job is to find the signal, name the pattern, and point to what matters.
 
