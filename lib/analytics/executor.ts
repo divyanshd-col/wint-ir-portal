@@ -4,6 +4,52 @@ import type { AnalyticsFilters, TemplateExtras } from './types';
 
 const QUERY_TIMEOUT_MS = 30_000;
 const ROW_CAP = 10_000;
+const QUERY_CACHE_TTL = 300; // 5 minutes
+
+// ── Redis query cache ─────────────────────────────────────────────────────────
+
+const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+function cacheReady() { return !!(UPSTASH_URL && UPSTASH_TOKEN); }
+
+async function cacheGet(key: string): Promise<string | null> {
+  if (!cacheReady()) return null;
+  try {
+    const res = await fetch(`${UPSTASH_URL}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` }, cache: 'no-store',
+    });
+    return (await res.json()).result ?? null;
+  } catch { return null; }
+}
+
+async function cacheSet(key: string, value: string): Promise<void> {
+  if (!cacheReady()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['SET', key, value, 'EX', String(QUERY_CACHE_TTL)]]),
+    });
+  } catch {}
+}
+
+function isReadQuery(sql: string): boolean {
+  const t = sql.trim().toUpperCase();
+  return t.startsWith('SELECT') || t.startsWith('WITH');
+}
+
+function queryCacheKey(sql: string): string {
+  const normalized = sql.replace(/\s+/g, ' ').trim();
+  return `wint_aq:${normalized}`;
+}
+
+function stripHeavyColumns(rows: any[]): void {
+  for (const row of rows) {
+    delete row.raw_payload;
+    delete row.transcript;
+  }
+}
 
 export interface ExecuteResult {
   rows: any[];
@@ -64,6 +110,18 @@ export async function executeTemplate(
 
 export async function executeRawSQL(sql: string): Promise<{ rows: any[]; rowCount: number; latencyMs: number }> {
   const start = Date.now();
+
+  // Return cached result for read queries (5-min TTL)
+  if (isReadQuery(sql)) {
+    const cached = await cacheGet(queryCacheKey(sql));
+    if (cached) {
+      try {
+        const { rows, rowCount } = JSON.parse(cached);
+        return { rows, rowCount, latencyMs: 0 };
+      } catch {}
+    }
+  }
+
   const rows = await Promise.race([
     query<any>(sql, []),
     new Promise<never>((_, reject) =>
@@ -73,7 +131,18 @@ export async function executeRawSQL(sql: string): Promise<{ rows: any[]; rowCoun
       ),
     ),
   ]);
-  return { rows, rowCount: rows.length, latencyMs: Date.now() - start };
+
+  // Strip heavy columns that should never appear in analytics results
+  stripHeavyColumns(rows);
+
+  const result = { rows, rowCount: rows.length, latencyMs: Date.now() - start };
+
+  // Cache read queries in background — don't await
+  if (isReadQuery(sql)) {
+    cacheSet(queryCacheKey(sql), JSON.stringify({ rows, rowCount: rows.length })).catch(() => {});
+  }
+
+  return result;
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────

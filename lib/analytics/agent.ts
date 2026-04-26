@@ -69,6 +69,8 @@ agents (id SERIAL PRIMARY KEY, name VARCHAR, team_id INT, status VARCHAR)
 - Never count score = null as IQS failure — null = N/A, exclude from denominator
 - Always use csat_label for CSAT filtering, never csat_score
 - Never SELECT contacts.phone
+- NEVER SELECT raw_payload or transcript columns — they are massive blobs. Use (c.raw_payload->'counts'->>'user_message_count')::int for message counts only
+- Always SELECT only the columns needed for the output shape — never SELECT *
 - bar_chart: alias text column AS "name", numeric AS "value"
 - line_chart: alias date AS "date" (YYYY-MM-DD), metric AS "value"
 - Add LIMIT 500 on all non-aggregate queries (except transcript_id_sql which uses LIMIT {ID_FETCH_LIMIT})
