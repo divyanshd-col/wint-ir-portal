@@ -60,6 +60,15 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+
+    async redirect({ url, baseUrl }) {
+      // After sign-in, send admins to /analytics instead of /
+      if (url === baseUrl || url === `${baseUrl}/`) {
+        return `${baseUrl}/analytics`;
+      }
+      // Honour explicit callbackUrl (e.g. signOut → /login)
+      return url.startsWith(baseUrl) ? url : baseUrl;
+    },
   },
   pages: { signIn: '/login' },
   session: { strategy: 'jwt', maxAge: 8 * 60 * 60 },

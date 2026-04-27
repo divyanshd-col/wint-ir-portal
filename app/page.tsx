@@ -12,7 +12,6 @@ export default async function Home() {
   if (!session) redirect('/login');
 
   const isAdmin = (session.user as any)?.isAdmin ?? false;
-  if (isAdmin) redirect('/analytics');
 
   const username = (session.user?.name || session.user?.email || 'Investor') as string;
   const role = (session.user as any)?.role ?? 'agent';
