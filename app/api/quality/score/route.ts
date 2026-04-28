@@ -118,14 +118,15 @@ export async function POST(req: NextRequest) {
     // Slack + Sheet alert — deduplicated via KV (one alert per chat per 24 h)
     fireQualityAlert({
       chatId,
-      agentName:      entry.agentName || agentName,
-      contactPhone:   contactPhone || undefined,
-      scores:         entry.scores    as Record<string, string>,
-      reasoning:      entry.reasoning as Record<string, string>,
-      iqs:            entry.iqs,
-      csat:           csat || undefined,
-      disposition:    typeof tags === 'object' ? (tags as any)?.disposition  : (tags || undefined),
-      subDisposition: typeof tags === 'object' ? (tags as any)?.sub_disposition : undefined,
+      agentName:           entry.agentName || agentName,
+      contactPhone:        contactPhone || undefined,
+      scores:              entry.scores    as Record<string, string>,
+      reasoning:           entry.reasoning as Record<string, string>,
+      iqs:                 entry.iqs,
+      csat:                csat || undefined,
+      disposition:         typeof tags === 'object' ? (tags as any)?.disposition  : (tags || undefined),
+      subDisposition:      typeof tags === 'object' ? (tags as any)?.sub_disposition : undefined,
+      uncertainParameters: entry.uncertainParameters,
     }).catch(() => {});
 
     return NextResponse.json({ ok: true, entry });

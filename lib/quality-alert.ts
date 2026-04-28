@@ -63,6 +63,7 @@ export async function fireQualityAlert(opts: {
   csat?: string;
   disposition?: string;
   subDisposition?: string;
+  uncertainParameters?: Array<{ parameter: string; question: string }>;
 }): Promise<void> {
   const token   = process.env.SLACK_BOT_TOKEN   || '';
   const channel = process.env.QUALITY_SLACK_CHANNEL || '';
@@ -71,7 +72,10 @@ export async function fireQualityAlert(opts: {
     .filter(p => opts.scores?.[p.key] === 'No')
     .map(p => ({ label: p.label, reasoning: opts.reasoning?.[p.key] || 'No reasoning provided' }));
 
-  if (!failedParams.length) return;
+  const hasUncertain = !!(opts.uncertainParameters && opts.uncertainParameters.length > 0);
+
+  // Only alert if there are critical failures OR uncertain parameters needing QA review
+  if (!failedParams.length && !hasUncertain) return;
 
   // Deduplicate — one alert per chat per 24 h
   if (await storeHasQualityAlert(opts.chatId)) {
@@ -86,21 +90,34 @@ export async function fireQualityAlert(opts: {
       ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
       : opts.chatId;
 
-    const failLines = failedParams.map(p => `• *${p.label}*\n  ${p.reasoning}`).join('\n');
+    const title = failedParams.length && hasUncertain
+      ? `⚠️ *Quality Flag — Failures + Needs Review*`
+      : failedParams.length
+      ? `⚠️ *Quality Flag — Parameter Failure*`
+      : `🔍 *Quality Flag — Needs QA Review*`;
 
-    const lines = [
-      `⚠️ *Quality Flag — Parameter Failure*`,
+    const lines: (string | null)[] = [
+      title,
       `*Chat:* ${chatLink}`,
       opts.contactPhone ? `*Phone:* ${opts.contactPhone}` : null,
       `*Agent:* ${opts.agentName || 'Unknown'}`,
       opts.iqs != null ? `*IQS:* ${opts.iqs}%` : null,
       opts.disposition  ? `*Disposition:* ${opts.disposition}` : null,
-      ``,
-      `*Failed parameters:*`,
-      failLines,
-    ].filter((l): l is string => l !== null);
+    ];
 
-    sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
+    if (failedParams.length) {
+      const failLines = failedParams.map(p => `• *${p.label}*\n  ${p.reasoning}`).join('\n');
+      lines.push(``, `*Failed parameters:*`, failLines);
+    }
+
+    if (hasUncertain) {
+      const reviewLines = opts.uncertainParameters!
+        .map(u => `• *${u.parameter}*: ${u.question}`)
+        .join('\n');
+      lines.push(``, `*Needs QA review (bot was uncertain):*`, reviewLines);
+    }
+
+    sendSlackMessage(channel, lines.filter((l): l is string => l !== null).join('\n'), token).catch(() => {});
   }
 
   // ── Google Sheet ──────────────────────────────────────────────────────────

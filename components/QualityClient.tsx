@@ -1379,8 +1379,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [sortAgentCol, setSortAgentCol] = useState<string>('avgIqs');
   const [sortAgentDir, setSortAgentDir] = useState<'asc'|'desc'>('asc');
 
-  // Score Log — filter panel toggle
+  // Score Log — filter panel toggle + needs-review filter
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showOnlyNeedsReview, setShowOnlyNeedsReview] = useState(false);
 
   // Score Log / Reports custom date picker visibility
   const [showLogPicker, setShowLogPicker] = useState(false);
@@ -1454,8 +1455,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     });
   }, [entries, sortCol, sortDir]);
 
-  // Server already filters by chatId — alias for consistency
-  const chatIdFilteredLogEntries = sortedLogEntries;
+  // Apply client-side needs-review filter on top of server-filtered entries
+  const chatIdFilteredLogEntries = useMemo(() =>
+    showOnlyNeedsReview
+      ? sortedLogEntries.filter(e => e.uncertainParameters && e.uncertainParameters.length > 0)
+      : sortedLogEntries,
+  [sortedLogEntries, showOnlyNeedsReview]);
 
   const activeFilterCount = useMemo(() => {
     let n = 0;
@@ -2157,6 +2162,18 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* Score Log tab — Filters button */}
           {tab === 'log' && (
             <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={() => setShowOnlyNeedsReview(v => !v)}
+                className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl font-semibold transition border ${
+                  showOnlyNeedsReview
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : 'bg-white text-amber-600 border-amber-300 hover:bg-amber-50'
+                }`}
+                title="Show only chats needing QA review"
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="8" cy="8" r="7"/><path d="M8 5v3.5M8 11v.5" strokeLinecap="round"/></svg>
+                Needs Review
+              </button>
               <button
                 onClick={() => setShowFilterPanel(v => !v)}
                 className={`relative flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl font-semibold transition border ${

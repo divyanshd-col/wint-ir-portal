@@ -287,13 +287,14 @@ export async function executeScoring(
   // ── Slack + Sheet alert — deduplicated via KV ────────────────────────────────
   fireQualityAlert({
     chatId,
-    agentName:      finalAgentName,
+    agentName:           finalAgentName,
     contactPhone,
-    scores:         parsed.scores    as Record<string, string>,
-    reasoning:      parsed.reasoning as Record<string, string>,
-    iqs:            parsed.iqs,
+    scores:              parsed.scores    as Record<string, string>,
+    reasoning:           parsed.reasoning as Record<string, string>,
+    iqs:                 parsed.iqs,
     disposition,
     subDisposition,
+    uncertainParameters: parsed.uncertainParameters,
   }).catch(() => {});
 
   return { chatId, iqs: parsed.iqs };
