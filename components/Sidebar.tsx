@@ -29,6 +29,7 @@ function formatTimeAgo(ts: number): string {
 
 export default function Sidebar({ username, isAdmin, role, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
   const canSeeQuality = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
+  const canSeeAnalytics = isAdmin || role === 'tl';
   const [open, setOpen] = useState(true); // mobile drawer
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -118,7 +119,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         {/* Nav */}
         <nav className={`py-4 flex-1 overflow-y-auto space-y-1 ${isExpanded ? 'px-4' : 'px-2'}`}>
 
-          {isAdmin && (
+          {canSeeAnalytics && (
             <NavLink href="/analytics" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M2 12l3-4 3 2 3-5 3 3"/><rect x="1" y="1" width="14" height="14" rx="1.5"/>

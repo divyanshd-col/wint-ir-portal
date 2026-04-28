@@ -7,7 +7,7 @@ export default async function AnalyticsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
   const user = session.user as any;
-  if (!user?.isAdmin) redirect('/');
+  if (!user?.isAdmin && user?.role !== 'tl') redirect('/');
 
   return (
     <InsightsChatClient

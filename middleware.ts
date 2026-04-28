@@ -32,9 +32,9 @@ export async function middleware(req: NextRequest) {
     }
   }
 
-  // Analytics: admin only
+  // Analytics: admin and TL
   if (pathname.startsWith('/analytics')) {
-    if (!token.isAdmin) {
+    if (!token.isAdmin && token.role !== 'tl') {
       return NextResponse.redirect(new URL('/', req.url));
     }
   }
