@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
   const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
   const userPrompt = buildScoringPrompt(trimTranscript(transcript), tags, chatId);
+  const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
 
   let rawResponse: string;
   try {
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
       const resp = await client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 2000,
-        system: IQS_SYSTEM_PROMPT,
+        system: iqsSystemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       });
       rawResponse = resp.content[0].type === 'text' ? resp.content[0].text : '';
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
       rawResponse = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',
-        [{ role: 'user', parts: [{ text: IQS_SYSTEM_PROMPT + '\n\n' + userPrompt }] }],
+        [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
         {},
         60000,
       );

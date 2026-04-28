@@ -61,6 +61,7 @@ export interface IQSScoreEntry {
   scoredBy?: string; // email of the quality/admin who scored it
   updatedAt?: string;   // ISO — set on create and on every quality override
   updatedBy?: string;   // email of last editor
+  uncertainParameters?: Array<{ parameter: string; question: string }>;
   // ── Conversation metrics ────────────────────────────────────────────────────
   conversationType?: 'bot' | 'agent' | 'hybrid'; // 'bot' = only Myra responded
   frt?: number;              // seconds: chat assignment → first human agent message
@@ -163,6 +164,28 @@ export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score
 - When in doubt, give the agent the benefit of the doubt → score Yes.
 - A single factual error can cascade into No on multiple parameters.
 - NA parameters are treated as Yes (pass) in the final IQS calculation.
+- **NEVER assume a failure when the transcript is ambiguous.** If you are not certain the agent did something wrong, score NA and flag for QA review.
+
+## WINT WEALTH SPECIFIC POLICIES
+
+### Documents via WhatsApp — NEVER acceptable
+At Wint Wealth, all documents are ONLY shared via email. Agents must NEVER share documents over WhatsApp, even if the customer requests it.
+- If customer asks for documents over WhatsApp and agent redirects them to email → this is **CORRECT behavior**. Do NOT penalize.
+- Failing to redirect a WhatsApp document request to email would be a process violation.
+
+### Call Requests — Always score Call as NA, flag for QA
+If the transcript contains any reference to a customer requesting a call, or a call that needs to happen:
+- Score the **Call** parameter as **NA** (we cannot evaluate calls without the call transcript).
+- Add it to \`uncertain_parameters\` with a specific question, e.g. "Customer requested a call — was a call conducted and handled correctly?"
+- **Never score Call as No** when the only issue is that you cannot see the call interaction. We do not have call transcripts to evaluate.
+
+## HANDLING UNCERTAINTY — CRITICAL RULES
+When you are unsure how to score a parameter because the transcript is ambiguous, incomplete, or missing context:
+1. **Do NOT assume the agent failed.** Benefit of the doubt always goes to the agent.
+2. **Score the parameter as NA.** This counts as a pass in IQS.
+3. **Add it to \`uncertain_parameters\`** with a precise, specific question that a human QA reviewer can answer to determine the correct score.
+4. Score all parameters where you ARE confident as normal (Yes/No/NA as appropriate).
+5. Only add to \`uncertain_parameters\` when your uncertainty would change the score from NA to No if resolved.
 
 ## THE 12 PARAMETERS (ordered by weight)
 
@@ -211,6 +234,7 @@ export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score
 - **Yes**: Call offered/made when appropriate AND handled correctly. OR no call was needed.
 - **No**: Call should have been offered but wasn't. OR call made without asking. OR call summary missing.
 - **NA**: MOST chats — only score Yes or No if a call happened or clearly should have.
+- **IMPORTANT**: If the customer requested a call but you cannot see whether a call took place, score NA and add to \`uncertain_parameters\`. Never penalize an agent for a call you cannot verify.
 
 ### 10. Tags Accuracy (5%)
 Tags are applied by Robylon AI as Disposition (L1) and Sub-disposition (L2), provided in CHAT METADATA.
@@ -266,9 +290,17 @@ Respond with EXACTLY this JSON structure:
   },
   "iqs_score": 85,
   "summary": "1-2 sentence overall assessment",
-  "agentName": "First name of the support agent extracted from the transcript, or empty string if not identifiable"
+  "agentName": "First name of the support agent extracted from the transcript, or empty string if not identifiable",
+  "uncertain_parameters": [
+    { "parameter": "ParameterName", "question": "Specific question for QA to resolve — include exactly what information is needed to score this correctly" }
+  ]
 }
 \`\`\`
+
+Notes on \`uncertain_parameters\`:
+- Include ONLY parameters where uncertainty would change the score from NA to No if the QA provides context.
+- If there are no uncertain parameters, set \`uncertain_parameters\` to an empty array: \`[]\`.
+- Each question must be specific enough that a human QA reviewer who has call recordings and system access can answer it definitively.
 
 CRITICAL: Output ONLY the JSON. No other text before or after.`;
 
@@ -381,6 +413,15 @@ export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScore
   const scores: Record<string, ParamScore> = data.scores || {};
   const iqs = calculateIQS(scores); // always recalculate, never trust LLM's calculation
 
+  // Extract uncertain_parameters — validate structure
+  let uncertainParameters: Array<{ parameter: string; question: string }> | undefined;
+  if (Array.isArray(data.uncertain_parameters) && data.uncertain_parameters.length > 0) {
+    uncertainParameters = data.uncertain_parameters
+      .filter((u: any) => u && typeof u.parameter === 'string' && typeof u.question === 'string')
+      .map((u: any) => ({ parameter: u.parameter, question: u.question }));
+    if ((uncertainParameters as any[]).length === 0) uncertainParameters = undefined;
+  }
+
   return {
     chatId,
     scores,
@@ -388,5 +429,6 @@ export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScore
     iqs,
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
+    ...(uncertainParameters && { uncertainParameters }),
   };
 }

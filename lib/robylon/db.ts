@@ -161,7 +161,12 @@ export async function insertIQSScore(data: {
   iqsScore: number;
   parameters: Record<string, IQSParameterResult>;
   modelVersion: string;
+  uncertainParameters?: Array<{ parameter: string; question: string }>;
 }): Promise<void> {
+  const stored: Record<string, any> = { ...data.parameters };
+  if (data.uncertainParameters && data.uncertainParameters.length > 0) {
+    stored.__uncertain = data.uncertainParameters;
+  }
   await query(`
     INSERT INTO iqs_scores (chat_id, iqs_score, parameters, model_version, scored_at)
     VALUES ($1, $2, $3, $4, NOW())
@@ -170,7 +175,7 @@ export async function insertIQSScore(data: {
       parameters    = EXCLUDED.parameters,
       model_version = EXCLUDED.model_version,
       scored_at     = NOW()
-  `, [data.chatId, data.iqsScore, JSON.stringify(data.parameters), data.modelVersion]);
+  `, [data.chatId, data.iqsScore, JSON.stringify(stored), data.modelVersion]);
 }
 
 /** Update CSAT on conversations table — called from CSAT_SUBMITTED */

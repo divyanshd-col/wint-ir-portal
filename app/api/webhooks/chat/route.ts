@@ -269,6 +269,7 @@ export async function executeScoring(
     iqsScore: parsed.iqs,
     parameters,
     modelVersion,
+    uncertainParameters: parsed.uncertainParameters,
   });
 
   // Update timing on conversation row

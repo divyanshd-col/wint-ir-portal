@@ -71,7 +71,13 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
   const params = row.parameters || {};
   const scores: Record<string, string> = {};
   const reasoning: Record<string, string> = {};
+  let uncertainParameters: Array<{ parameter: string; question: string }> | undefined;
+
   for (const [key, val] of Object.entries(params) as [string, any][]) {
+    if (key === '__uncertain') {
+      if (Array.isArray(val) && val.length > 0) uncertainParameters = val;
+      continue;
+    }
     // Map DB snake_case key → legacy PascalCase; fall back to first-letter capitalize
     const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
     scores[k]    = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
@@ -98,6 +104,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     resolutionTime:  row.resolutionTime ?? undefined,
     disposition:     tags.disposition || '',
     subDisposition:  tags.sub_disposition || '',
+    ...(uncertainParameters && { uncertainParameters }),
   } as IQSScoreEntry;
 }
 

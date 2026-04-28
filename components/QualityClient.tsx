@@ -633,6 +633,25 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
                   <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 leading-relaxed">{entry.summary}</p>
                 </div>
               )}
+              {entry.uncertainParameters && entry.uncertainParameters.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-600 shrink-0"><circle cx="8" cy="8" r="7"/><path d="M8 5v3.5M8 11v.5" strokeLinecap="round"/></svg>
+                    <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Needs QA Review</p>
+                  </div>
+                  <p className="text-[11px] text-amber-700 mb-3 leading-relaxed">
+                    The scoring bot was uncertain about the following parameters. They have been scored NA (benefit of doubt) pending QA review.
+                  </p>
+                  <div className="space-y-2">
+                    {entry.uncertainParameters.map((u, i) => (
+                      <div key={i} className="bg-white rounded-lg px-3 py-2.5 border border-amber-100">
+                        <p className="text-xs font-semibold text-gray-800 mb-0.5">{PARAM_NAMES[u.parameter] ?? u.parameter}</p>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">{u.question}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="text-[10px] text-gray-300">Scored by {(entry.scoredBy || '').split('@')[0]} · {entry.provider}/{entry.model}</p>
             </div>
           </div>
@@ -1360,7 +1379,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [sortAgentCol, setSortAgentCol] = useState<string>('avgIqs');
   const [sortAgentDir, setSortAgentDir] = useState<'asc'|'desc'>('asc');
 
-  // Score Log — chat ID search (server-side, bypasses date range)
+  // Score Log — filter panel toggle
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
 
   // Score Log / Reports custom date picker visibility
   const [showLogPicker, setShowLogPicker] = useState(false);
@@ -1436,6 +1456,18 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // Server already filters by chatId — alias for consistency
   const chatIdFilteredLogEntries = sortedLogEntries;
+
+  const activeFilterCount = useMemo(() => {
+    let n = 0;
+    if (appliedFilters.chatId) n++;
+    if (appliedFilters.dateRange !== '1w') n++;
+    if (appliedFilters.agent && appliedFilters.agent !== selfAgentName) n++;
+    if (appliedFilters.csat) n++;
+    if (appliedFilters.minScore > 0 || appliedFilters.maxScore < 100) n++;
+    if (appliedFilters.disposition) n++;
+    if (appliedFilters.subDisposition) n++;
+    return n;
+  }, [appliedFilters, selfAgentName]);
 
   // Sorted agent analytics table
   const sortedAgentStats = useMemo(() => {
@@ -2122,61 +2154,31 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
             </div>
           )}
 
-          {/* Score Log tab — period picker + chat ID search */}
+          {/* Score Log tab — Filters button */}
           {tab === 'log' && (
-            <div className="flex items-center gap-1.5 ml-auto flex-wrap justify-end">
-              {/* Chat ID search — server-side, bypasses date range */}
-              <input
-                type="text"
-                value={pendingFilters.chatId}
-                onChange={e => setPendingFilters(f => ({ ...f, chatId: e.target.value }))}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') {
-                    const f = { ...pendingFilters };
-                    setAppliedFilters(f); setLogPage(0); loadScores(0, f);
-                  }
-                }}
-                placeholder="Chat ID search…"
-                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700 bg-white"
-              />
-              {(['today', 'yesterday', '1w'] as const).map(r => (
-                <button key={r}
-                  onClick={() => {
-                    const f = { ...pendingFilters, dateRange: r };
-                    setPendingFilters(f); setShowLogPicker(false);
-                    setAppliedFilters(f); setLogPage(0); loadScores(0, f);
-                  }}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
-                    appliedFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}>
-                  {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
-                </button>
-              ))}
-              <div className="relative">
-                <button
-                  onClick={() => { setPendingFilters(f => ({ ...f, dateRange: 'custom' })); setShowLogPicker(v => !v); }}
-                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
-                    appliedFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                  }`}>
-                  {appliedFilters.dateRange === 'custom' && appliedFilters.dateFrom
-                    ? `${appliedFilters.dateFrom.slice(5)} → ${appliedFilters.dateTo?.slice(5) || '…'}`
-                    : 'Custom'}
-                </button>
-                {showLogPicker && (
-                  <div className="absolute right-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 overflow-hidden">
-                    <DateRangePicker
-                      from={pendingFilters.dateFrom} to={pendingFilters.dateTo}
-                      onChange={(from, to) => {
-                        const f = { ...pendingFilters, dateRange: 'custom' as const, dateFrom: from, dateTo: to };
-                        setPendingFilters(f); setAppliedFilters(f); setLogPage(0); loadScores(0, f);
-                      }}
-                      onClose={() => setShowLogPicker(false)}
-                    />
-                  </div>
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={() => setShowFilterPanel(v => !v)}
+                className={`relative flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl font-semibold transition border ${
+                  showFilterPanel
+                    ? 'bg-emerald-600 text-white border-emerald-600'
+                    : activeFilterCount > 0
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                    : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+                }`}
+              >
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M2 4h12M5 8h6M8 12h0" strokeLinecap="round"/>
+                </svg>
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className={`ml-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${showFilterPanel ? 'bg-white text-emerald-700' : 'bg-emerald-600 text-white'}`}>
+                    {activeFilterCount}
+                  </span>
                 )}
-              </div>
+              </button>
               <button onClick={() => loadScores(logPage, appliedFilters)} disabled={logsLoading}
-                className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 disabled:opacity-40 transition font-medium ml-1">
+                className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 disabled:opacity-40 transition font-medium">
                 {logsLoading ? '…' : '↻'}
               </button>
             </div>
@@ -2493,118 +2495,172 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── SCORE LOG TAB ── */}
           {tab === 'log' && (
             <div className="space-y-4 max-w-5xl mx-auto">
-              {/* Filters */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-                <div className="flex flex-wrap items-end gap-4">
-                  {/* Agent */}
+              {/* Collapsible filter panel */}
+              {showFilterPanel && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+                  {/* Row 1: Date Range */}
                   <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
-                    <select value={pendingFilters.agent}
-                      onChange={e => setPendingFilters(f => ({ ...f, agent: e.target.value }))}
-                      disabled={!!selfAgentName}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px] disabled:opacity-60 disabled:cursor-not-allowed">
-                      <option value="">All agents</option>
-                      {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                  </div>
-                  {/* CSAT */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
-                    <select value={pendingFilters.csat}
-                      onChange={e => setPendingFilters(f => ({ ...f, csat: e.target.value }))}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
-                      <option value="">Any</option>
-                      <option value="5">Good</option>
-                      <option value="3">CBB</option>
-                      <option value="1">Bad</option>
-                    </select>
-                  </div>
-                  {/* IQS range */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
-                    <div className="flex items-center gap-2">
-                      <input type="number" min={0} max={100} value={pendingFilters.minScore}
-                        onChange={e => setPendingFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 }))}
-                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
-                      <span className="text-gray-400 text-xs">–</span>
-                      <input type="number" min={0} max={100} value={pendingFilters.maxScore}
-                        onChange={e => setPendingFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 }))}
-                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Date Range</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {(['today', 'yesterday', '1w'] as const).map(r => (
+                        <button key={r}
+                          onClick={() => setPendingFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' }))}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                            pendingFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}>
+                          {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setPendingFilters(f => ({ ...f, dateRange: 'custom' }))}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                          pendingFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}>
+                        Custom
+                      </button>
+                      {pendingFilters.dateRange === 'custom' && (
+                        <div className="flex items-center gap-2 ml-1">
+                          <input type="date" value={pendingFilters.dateFrom}
+                            onChange={e => setPendingFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                          <span className="text-gray-400 text-xs">→</span>
+                          <input type="date" value={pendingFilters.dateTo}
+                            onChange={e => setPendingFilters(f => ({ ...f, dateTo: e.target.value }))}
+                            className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                        </div>
+                      )}
                     </div>
                   </div>
-                  {/* Disposition */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
-                    <select value={pendingFilters.disposition}
-                      onChange={e => setPendingFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' }))}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
-                      <option value="">All</option>
-                      {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  {/* Sub-Disposition */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
-                    <select value={pendingFilters.subDisposition}
-                      onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
-                      <option value="">All</option>
-                      {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                </div>
-                {/* Apply + Columns row */}
-                <div className="flex items-center gap-3 pt-1 border-t border-gray-50">
-                  <button onClick={applyFilters} disabled={logsLoading}
-                    className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
-                    {logsLoading ? 'Loading…' : 'Apply Filters'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const reset = selfAgentName ? { ...DEFAULT_FILTERS, agent: selfAgentName } : DEFAULT_FILTERS;
-                      setPendingFilters(reset);
-                      setAppliedFilters(reset);
-                      setLogPage(0);
-                      loadScores(0, reset);
-                    }}
-                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
-                    Reset
-                  </button>
-                  <div className="relative ml-auto">
-                    <button
-                      onClick={() => setShowColPicker(v => !v)}
-                      className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 transition font-medium"
-                    >
-                      Columns ⚙
-                    </button>
-                    {showColPicker && (
-                      <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-lg rounded-xl z-10 p-3 min-w-[160px]">
-                        {ALL_LOG_COLS.map(col => {
-                          const isVisible = !hiddenCols.has(col) && (!autoHiddenLogCols.has(col) || forcedVisibleCols.has(col));
-                          return (
-                            <label key={col} className="flex items-center gap-2 py-1 cursor-pointer hover:text-gray-900 text-xs text-gray-600">
-                              <input
-                                type="checkbox"
-                                checked={isVisible}
-                                onChange={e => {
-                                  if (e.target.checked) {
-                                    setHiddenCols(prev => { const s = new Set(prev); s.delete(col); return s; });
-                                    setForcedVisibleCols(prev => { const s = new Set(prev); s.add(col); return s; });
-                                  } else {
-                                    setHiddenCols(prev => { const s = new Set(prev); s.add(col); return s; });
-                                    setForcedVisibleCols(prev => { const s = new Set(prev); s.delete(col); return s; });
-                                  }
-                                }}
-                              />
-                              {col}
-                            </label>
-                          );
-                        })}
+
+                  {/* Row 2: Chat ID + Agent + CSAT */}
+                  <div className="flex flex-wrap items-end gap-4">
+                    {/* Chat ID */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Chat ID</p>
+                      <input
+                        type="text"
+                        value={pendingFilters.chatId}
+                        onChange={e => setPendingFilters(f => ({ ...f, chatId: e.target.value }))}
+                        placeholder="Search by Chat ID…"
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-44 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-700 bg-white"
+                      />
+                    </div>
+                    {/* Agent */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
+                      <select value={pendingFilters.agent}
+                        onChange={e => setPendingFilters(f => ({ ...f, agent: e.target.value }))}
+                        disabled={!!selfAgentName}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px] disabled:opacity-60 disabled:cursor-not-allowed">
+                        <option value="">All agents</option>
+                        {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
+                      </select>
+                    </div>
+                    {/* CSAT */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
+                      <select value={pendingFilters.csat}
+                        onChange={e => setPendingFilters(f => ({ ...f, csat: e.target.value }))}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
+                        <option value="">Any</option>
+                        <option value="5">Good</option>
+                        <option value="3">CBB</option>
+                        <option value="1">Bad</option>
+                      </select>
+                    </div>
+                    {/* IQS range */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min={0} max={100} value={pendingFilters.minScore}
+                          onChange={e => setPendingFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 }))}
+                          className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+                        <span className="text-gray-400 text-xs">–</span>
+                        <input type="number" min={0} max={100} value={pendingFilters.maxScore}
+                          onChange={e => setPendingFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 }))}
+                          className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
                       </div>
-                    )}
+                    </div>
+                  </div>
+
+                  {/* Row 3: Disposition + Sub-Disposition */}
+                  <div className="flex flex-wrap items-end gap-4">
+                    {/* Disposition */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+                      <select value={pendingFilters.disposition}
+                        onChange={e => setPendingFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' }))}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
+                        <option value="">All</option>
+                        {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    {/* Sub-Disposition */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+                      <select value={pendingFilters.subDisposition}
+                        onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
+                        <option value="">All</option>
+                        {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Action row */}
+                  <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
+                    <button onClick={() => { applyFilters(); setShowFilterPanel(false); }} disabled={logsLoading}
+                      className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                      {logsLoading ? 'Loading…' : 'Apply Filters'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const reset = selfAgentName ? { ...DEFAULT_FILTERS, agent: selfAgentName } : DEFAULT_FILTERS;
+                        setPendingFilters(reset);
+                        setAppliedFilters(reset);
+                        setLogPage(0);
+                        loadScores(0, reset);
+                        setShowFilterPanel(false);
+                      }}
+                      className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
+                      Reset all
+                    </button>
+                    <div className="relative ml-auto">
+                      <button
+                        onClick={() => setShowColPicker(v => !v)}
+                        className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 transition font-medium"
+                      >
+                        Columns ⚙
+                      </button>
+                      {showColPicker && (
+                        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-lg rounded-xl z-10 p-3 min-w-[160px]">
+                          {ALL_LOG_COLS.map(col => {
+                            const isVisible = !hiddenCols.has(col) && (!autoHiddenLogCols.has(col) || forcedVisibleCols.has(col));
+                            return (
+                              <label key={col} className="flex items-center gap-2 py-1 cursor-pointer hover:text-gray-900 text-xs text-gray-600">
+                                <input
+                                  type="checkbox"
+                                  checked={isVisible}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      setHiddenCols(prev => { const s = new Set(prev); s.delete(col); return s; });
+                                      setForcedVisibleCols(prev => { const s = new Set(prev); s.add(col); return s; });
+                                    } else {
+                                      setHiddenCols(prev => { const s = new Set(prev); s.add(col); return s; });
+                                      setForcedVisibleCols(prev => { const s = new Set(prev); s.delete(col); return s; });
+                                    }
+                                  }}
+                                />
+                                {col}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {logsLoading && (
                 <div className="flex items-center justify-center h-40 text-gray-400 text-sm animate-pulse">Loading…</div>
@@ -2679,7 +2735,19 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                             >
                               {/* Fix 2 — render only visible columns */}
                               {visibleLogCols.map(col => {
-                                if (col === 'Agent') return <td key={col} className="px-3 py-2.5 font-semibold text-gray-900">{e.agentName || '—'}</td>;
+                                if (col === 'Agent') return (
+                                  <td key={col} className="px-3 py-2.5">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-gray-900">{e.agentName || '—'}</span>
+                                      {e.uncertainParameters && e.uncertainParameters.length > 0 && (
+                                        <span title={`${e.uncertainParameters.length} param(s) need QA review`}
+                                          className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-amber-400 text-white text-[9px] font-bold shrink-0">
+                                          ?
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+                                );
                                 if (col === 'Chat ID') return <td key={col} className="px-3 py-2.5"><ChatLink chatId={e.chatId} className="text-xs" /></td>;
                                 if (col === 'Mobile') return <td key={col} className="px-3 py-2.5 text-gray-600 tabular-nums">{(e as any).mobileNumber || <span className="text-gray-300">—</span>}</td>;
                                 if (col === 'CSAT') return <td key={col} className="px-3 py-2.5">
