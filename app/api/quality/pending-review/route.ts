@@ -32,7 +32,7 @@ export async function GET(_req: NextRequest) {
     scopedAgentNames = await getAgentNamesByQA(selfAgentName);
   }
 
-  const dbOpts: Parameters<typeof getAllScoredConversations>[1] = { iqsMax: 79 };
+  const dbOpts: Parameters<typeof getAllScoredConversations>[1] = { iqsMax: 79, includeUncertain: true };
   if (scopedAgentNames !== null) dbOpts.agentNames = scopedAgentNames;
 
   let rows: any[] = [];
@@ -60,17 +60,26 @@ export async function GET(_req: NextRequest) {
   const reviewMap: Record<string, any> = {};
   chatIds.forEach((id: string, i: number) => { if (reviews[i]) reviewMap[id] = reviews[i]; });
 
-  const items = rows.map((row: any) => ({
-    chatId: String(row.chatId),
-    agentName: row.agentName || '',
-    iqs: row.iqs,
-    scoredAt: row.scoredAt,
-    date: row.date ? String(row.date).slice(0, 10) : '',
-    flag: flagsByChat[String(row.chatId)] || null,
-    qaStatus: reviewMap[String(row.chatId)] || null,
-  }));
+  const items = rows.map((row: any) => {
+    const parameters = row.parameters || {};
+    const uncertain = Array.isArray(parameters.__uncertain) && parameters.__uncertain.length > 0
+      ? parameters.__uncertain as Array<{ parameter: string; question: string }>
+      : undefined;
 
-  return NextResponse.json({ items });
+    return {
+      chatId: String(row.chatId),
+      agentName: row.agentName || '',
+      iqs: row.iqs,
+      scoredAt: row.scoredAt,
+      date: row.date ? String(row.date).slice(0, 10) : '',
+      flag: flagsByChat[String(row.chatId)] || null,
+      qaStatus: reviewMap[String(row.chatId)] || null,
+      ...(uncertain && { uncertainParameters: uncertain }),
+    };
+  });
+
+  const uncertainCount = items.filter(i => !!(i as any).uncertainParameters && !(i as any).qaStatus).length;
+  return NextResponse.json({ items, uncertainCount });
 }
 
 export async function PATCH(req: NextRequest) {

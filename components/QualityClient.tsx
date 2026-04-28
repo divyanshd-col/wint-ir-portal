@@ -994,10 +994,11 @@ interface PendingReviewItem {
   chatId: string; agentName: string; iqs: number; scoredAt: string; date: string;
   flag?: IQSFlagData | null;
   qaStatus?: { reviewedBy: string; reviewedAt: string; reviewNote: string } | null;
+  uncertainParameters?: Array<{ parameter: string; question: string }>;
 }
 
 function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
-  const [filter, setFilter] = useState<'all' | 'challenged'>('all');
+  const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
   const [items, setItems] = useState<PendingReviewItem[]>([]);
@@ -1091,10 +1092,12 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   // Derived filtered + sectioned lists
   let filtered = items;
   if (filter === 'challenged') filtered = filtered.filter(i => !!i.flag && i.flag.status === 'pending');
+  else if (filter === 'uncertain') filtered = filtered.filter(i => !!(i.uncertainParameters && i.uncertainParameters.length > 0));
   if (chatIdSearch) filtered = filtered.filter(i => i.chatId.toLowerCase().includes(chatIdSearch.toLowerCase()));
   const pendingItems  = filtered.filter(i => !i.qaStatus).sort((a, b) => new Date(b.scoredAt).getTime() - new Date(a.scoredAt).getTime());
   const reviewedItems = filtered.filter(i => !!i.qaStatus).sort((a, b) => new Date(b.qaStatus!.reviewedAt).getTime() - new Date(a.qaStatus!.reviewedAt).getTime());
   const challengedCount = items.filter(i => i.flag?.status === 'pending').length;
+  const uncertainCount  = items.filter(i => !!(i.uncertainParameters && i.uncertainParameters.length > 0) && !i.qaStatus).length;
 
   if (loading) return (
     <div className="flex items-center justify-center h-48 text-gray-400 gap-2 text-sm">
@@ -1105,17 +1108,18 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   if (loadError) return <p className="text-sm text-red-500 text-center py-12">{loadError}</p>;
 
   const renderItem = (item: PendingReviewItem) => {
-    const isExpanded  = expandedId === item.chatId;
-    const isReviewed  = !!item.qaStatus;
-    const hasFlag     = !!item.flag && item.flag.status === 'pending';
-    const flagId      = item.flag?.id;
-    const thread      = flagId ? (threads[flagId] || []) : [];
-    const txData      = transcripts[item.chatId];
+    const isExpanded   = expandedId === item.chatId;
+    const isReviewed   = !!item.qaStatus;
+    const hasFlag      = !!item.flag && item.flag.status === 'pending';
+    const hasUncertain = !!(item.uncertainParameters && item.uncertainParameters.length > 0);
+    const flagId       = item.flag?.id;
+    const thread       = flagId ? (threads[flagId] || []) : [];
+    const txData       = transcripts[item.chatId];
+
+    const borderColor = hasFlag ? 'border-blue-200' : hasUncertain && !isReviewed ? 'border-amber-200' : isReviewed ? 'border-gray-100' : 'border-orange-200';
 
     return (
-      <div key={item.chatId} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${
-        hasFlag ? 'border-blue-200' : isReviewed ? 'border-gray-100' : 'border-amber-200'
-      }`}>
+      <div key={item.chatId} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${borderColor}`}>
         {/* Row header */}
         <div className="px-5 py-4 flex items-center gap-4 cursor-pointer hover:bg-gray-50/40 transition"
           onClick={() => expand(item.chatId, flagId)}>
@@ -1125,9 +1129,10 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
               <span className="text-sm font-semibold text-gray-800">{item.agentName || 'Unknown'}</span>
               <ChatLink chatId={item.chatId} className="text-xs" />
               {hasFlag && <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Challenged</span>}
+              {hasUncertain && <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Needs Review</span>}
               {isReviewed
                 ? <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Reviewed</span>
-                : <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Pending</span>}
+                : <span className="text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">Pending</span>}
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
               {item.date || item.scoredAt?.slice(0, 10)}
@@ -1138,11 +1143,28 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
             className={`shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
         </div>
 
-        {/* Expanded: challenge details + transcript side-by-side */}
+        {/* Expanded: details + transcript side-by-side */}
         {isExpanded && (
           <div className="border-t border-gray-100 flex divide-x divide-gray-100" style={{ minHeight: 180, maxHeight: 480 }}>
-            {/* Left: challenge info + review action */}
+            {/* Left: challenge info + uncertain params + review action */}
             <div className="w-[38%] shrink-0 overflow-y-auto p-4 space-y-3">
+              {/* Uncertain parameters section */}
+              {hasUncertain && (
+                <div>
+                  <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-2">Needs QA Review</p>
+                  <p className="text-[11px] text-gray-500 mb-2 leading-relaxed">
+                    The scoring bot was uncertain about these parameters. Review the transcript and override scores as needed.
+                  </p>
+                  <div className="space-y-2">
+                    {item.uncertainParameters!.map((u, i) => (
+                      <div key={i} className="bg-amber-50 rounded-xl px-3 py-2 border border-amber-100">
+                        <p className="text-xs font-semibold text-gray-800 mb-0.5">{PARAM_NAMES[u.parameter] ?? u.parameter}</p>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">{u.question}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {item.flag && (
                 <div>
                   <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2">IR Challenge</p>
@@ -1243,13 +1265,18 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-[160px]">
           <h2 className="text-sm font-bold text-gray-900">Chats Pending Review</h2>
-          <p className="text-xs text-gray-400 mt-0.5">IQS &lt; 80% — scoped to your agents</p>
+          <p className="text-xs text-gray-400 mt-0.5">IQS &lt; 80% or needs bot review — scoped to your agents</p>
         </div>
-        {/* All / Challenged filter */}
+        {/* All / Needs Review / Challenged filter */}
         <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
           <button onClick={() => setFilter('all')}
             className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${filter === 'all' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-            All Low IQS
+            All
+          </button>
+          <button onClick={() => setFilter('uncertain')}
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition ${filter === 'uncertain' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+            Needs Review
+            {uncertainCount > 0 && <span className="bg-amber-100 text-amber-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{uncertainCount}</span>}
           </button>
           <button onClick={() => setFilter('challenged')}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition ${filter === 'challenged' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -1673,11 +1700,15 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       : DEFAULT_FILTERS;
     if (initialAgent) setPendingFilters(startFilters);
     loadScores(0, startFilters);
-    // Load pending challenge count for nav badge
-    fetch('/api/quality/flag')
-      .then(r => r.json())
-      .then(d => { if (Array.isArray(d.flags)) setChallengeCount(d.flags.filter((f: any) => f.status === 'pending').length); })
-      .catch(() => {});
+    // Load pending badge count: challenged + uncertain-unreviewed
+    Promise.all([
+      fetch('/api/quality/flag').then(r => r.json()).catch(() => ({ flags: [] })),
+      fetch('/api/quality/pending-review').then(r => r.json()).catch(() => ({ uncertainCount: 0 })),
+    ]).then(([flagData, pendingData]) => {
+      const challenged = Array.isArray(flagData.flags) ? flagData.flags.filter((f: any) => f.status === 'pending').length : 0;
+      const uncertain  = pendingData.uncertainCount ?? 0;
+      setChallengeCount(challenged + uncertain);
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
