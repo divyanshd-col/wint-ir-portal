@@ -47,15 +47,14 @@ export async function POST(req: Request) {
     async start(controller) {
       const t0 = Date.now();
       try {
-        // Disposition list for agent context
-        const dispositionPayload = await getDispositions();
-        const dispositionNames = dispositionPayload.dispositions.map(d => d.disposition);
+        // Disposition tree for agent context
+        const { dispositions: dispositionTree } = await getDispositions();
 
         // Run agent loop — stream progress as log events (separate from answer)
         const result = await runAnalyticsAgent(
           message,
           barFilters,
-          dispositionNames,
+          dispositionTree,
           priorContext,
           (update) => send(controller, { event: 'log', delta: update }, encoder),
           maxConversations,

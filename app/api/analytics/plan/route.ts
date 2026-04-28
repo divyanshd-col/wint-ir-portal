@@ -45,9 +45,8 @@ export async function POST(req: Request) {
   const keys = getOrderedGeminiKeys(config);
 
   const { dispositions: dispositionPayload } = await getDispositions();
-  const dispositionNames = dispositionPayload.map((d: any) => d.disposition);
 
-  const planResult = await runPlannerPhase(message, filters, dispositionNames, keys, priorContext, maxConversations);
+  const planResult = await runPlannerPhase(message, filters, dispositionPayload, keys, priorContext, maxConversations);
 
   if (planResult.kind === 'clarify') {
     return NextResponse.json({ status: 'clarify', question: planResult.question });

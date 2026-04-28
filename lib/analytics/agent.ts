@@ -3,6 +3,7 @@ import { readConfig } from '@/lib/config';
 import { executeRawSQL } from './executor';
 import { readTranscripts } from './transcript-reader';
 import type { AnalyticsFilters } from './types';
+import type { DispositionTree } from './dispositions';
 
 // ── Call 1: Planner prompt ────────────────────────────────────────────────────
 
@@ -144,7 +145,10 @@ INNER JOIN teams t ON t.id = c.team_id AND t.type = 'regular'  -- Regular CX onl
 -- omit entirely if team = all
 \`\`\`
 
-## DISPOSITIONS (match user input to exact strings, case-sensitive)
+## DISPOSITIONS (exact strings, case-sensitive — always use these verbatim in SQL WHERE clauses)
+Each line is a top-level disposition. Indented └─ lines are its sub-dispositions stored in tags->>'sub_disposition'.
+When the user asks about a broad category (e.g. "withdrawal issues"), match ALL its sub-dispositions with OR clauses or use ILIKE.
+Never invent disposition strings — only use values listed here.
 {DISPOSITION_LIST}
 
 ## IQS PARAMETERS
@@ -275,7 +279,17 @@ table:
 
 // ── Prompt builder ────────────────────────────────────────────────────────────
 
-function buildPlannerPrompt(filters: AnalyticsFilters, dispositions: string[], idFetchLimit: number, promptOverride?: string): string {
+function formatDispositionTree(dispositions: DispositionTree[]): string {
+  if (!dispositions.length) return '(none loaded — treat all disposition strings as valid)';
+  return dispositions.map(d => {
+    const subs = d.subDispositions.length
+      ? '\n' + d.subDispositions.map(s => `  └─ ${s}`).join('\n')
+      : '';
+    return `${d.disposition}${subs}`;
+  }).join('\n');
+}
+
+function buildPlannerPrompt(filters: AnalyticsFilters, dispositions: DispositionTree[], idFetchLimit: number, promptOverride?: string): string {
   const template = promptOverride?.trim() || PLANNER_PROMPT;
   const today = new Date().toISOString().slice(0, 10);
   const activeFilters = [
@@ -296,7 +310,7 @@ function buildPlannerPrompt(filters: AnalyticsFilters, dispositions: string[], i
     .replace('{TODAY}', today)
     .replace('{ACTIVE_FILTERS}', activeFilters)
     .replace(/{ID_FETCH_LIMIT}/g, String(idFetchLimit))
-    .replace('{DISPOSITION_LIST}', dispositions.length ? dispositions.join(', ') : '(none loaded — treat all disposition strings as valid)');
+    .replace('{DISPOSITION_LIST}', formatDispositionTree(dispositions));
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -396,7 +410,7 @@ function parseJSON(raw: string): any {
 export async function runAnalyticsAgent(
   message: string,
   filters: AnalyticsFilters,
-  dispositions: string[],
+  dispositions: DispositionTree[],
   priorContext?: string,
   onProgress?: (update: string) => void,
   maxConversations = 60,
@@ -571,7 +585,7 @@ export type PlannerPhaseResult =
 export async function runPlannerPhase(
   message: string,
   filters: AnalyticsFilters,
-  dispositions: string[],
+  dispositions: DispositionTree[],
   keys: string[],
   priorContext?: string,
   maxConversations = 100,
