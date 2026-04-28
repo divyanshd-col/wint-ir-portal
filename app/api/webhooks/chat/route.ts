@@ -233,7 +233,7 @@ export async function executeScoring(
     console.warn('[webhook] KB fetch failed, scoring without context:', err.message);
   }
 
-  const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition);
+  const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition, timing.conversationType);
   const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
 
   let rawResponse: string;
@@ -255,7 +255,7 @@ export async function executeScoring(
     throw new Error('No LLM API key configured');
   }
 
-  const parsed = parseScoringResponse(rawResponse, chatId);
+  const parsed = parseScoringResponse(rawResponse, chatId, timing.conversationType);
   const modelVersion = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
 
   // Convert ParamScore → IQSParameterResult for PostgreSQL storage

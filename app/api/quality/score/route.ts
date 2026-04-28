@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
     csat = '',
     slackUrl = '',
     contactPhone = '',
+    conversationType = '',
   } = body;
 
   if (!transcript?.trim()) {
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
   const geminiKeys   = getIQSGeminiKeys(config);
   const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
-  const userPrompt = buildScoringPrompt(trimTranscript(transcript), tags, chatId);
+  const userPrompt = buildScoringPrompt(trimTranscript(transcript), tags, chatId, '', '', '', conversationType || undefined);
   const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
 
   let rawResponse: string;
@@ -92,7 +93,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const parsed = parseScoringResponse(rawResponse, chatId || `chat_${Date.now()}`);
+    const parsed = parseScoringResponse(rawResponse, chatId || `chat_${Date.now()}`, conversationType || undefined);
 
     const now = new Date().toISOString();
     const entry: IQSScoreEntry = {

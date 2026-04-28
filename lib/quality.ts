@@ -344,13 +344,16 @@ export function trimTranscript(transcript: string, maxChars = 5000): string {
   return `${head}\n[… transcript trimmed …]\n${tail}`;
 }
 
-export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = '', kbContext = '', subDisposition = ''): string {
+export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = '', kbContext = '', subDisposition = '', conversationType?: string): string {
+  const botNote = conversationType === 'bot'
+    ? '\n- Conversation type: bot (Myra) — Process parameter MUST be scored as Yes. Myra always follows process by definition. Do not evaluate process for bot chats.'
+    : '';
   return `Score the following customer support chat transcript.
 
 ## CHAT METADATA
 - Chat ID: ${chatId}
 - Disposition (L1): ${tags || 'none'}
-- Sub-disposition (L2): ${subDisposition || 'none'}
+- Sub-disposition (L2): ${subDisposition || 'none'}${botNote}
 ${kbContext ? `
 ## WINT KNOWLEDGE BASE REFERENCE
 Use these excerpts from Wint's internal KB to evaluate whether the agent's responses are technically correct per Wint's policies. Pay close attention when scoring the "Technical" parameter.
@@ -408,9 +411,17 @@ function robustJsonParse(raw: string): any {
   throw new Error(`Cannot parse LLM scoring response: ${jsonStr.slice(0, 200)}`);
 }
 
-export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> & { extractedAgentName?: string } {
+export function parseScoringResponse(raw: string, chatId: string, conversationType?: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> & { extractedAgentName?: string } {
   const data = robustJsonParse(raw);
   const scores: Record<string, ParamScore> = data.scores || {};
+  const reasoning: Record<string, string> = data.reasoning || {};
+
+  // Bot chats (Myra) always pass Process — she follows process by definition
+  if (conversationType === 'bot') {
+    scores['Process'] = 'Yes';
+    reasoning['Process'] = 'Bot-handled chat — Myra follows process by definition.';
+  }
+
   const iqs = calculateIQS(scores); // always recalculate, never trust LLM's calculation
 
   // Extract uncertain_parameters — validate structure
@@ -425,7 +436,7 @@ export function parseScoringResponse(raw: string, chatId: string): Omit<IQSScore
   return {
     chatId,
     scores,
-    reasoning: data.reasoning || {},
+    reasoning,
     iqs,
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
