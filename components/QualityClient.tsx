@@ -957,19 +957,28 @@ function AgentCard({
 }
 
 // ── Nav Item ──────────────────────────────────────────────────────────────────
-function NavItem({ icon, label, active, badge, onClick }: {
-  icon: React.ReactNode; label: string; active: boolean; badge?: number; onClick: () => void;
+function NavItem({ icon, label, active, badge, onClick, collapsed }: {
+  icon: React.ReactNode; label: string; active: boolean; badge?: number; onClick: () => void; collapsed?: boolean;
 }) {
   return (
-    <button onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+    <button onClick={onClick} title={collapsed ? label : undefined}
+      className={`w-full flex items-center gap-3 rounded-xl text-sm font-medium transition-all ${
+        collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5'
+      } ${
         active
           ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
           : 'text-slate-400 hover:text-white hover:bg-white/8'
       }`}>
-      <span className="shrink-0">{icon}</span>
-      <span className="flex-1 text-left">{label}</span>
-      {badge !== undefined && badge > 0 && (
+      <span className="relative shrink-0">
+        {icon}
+        {collapsed && badge !== undefined && badge > 0 && (
+          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-red-500 text-white text-[8px] font-bold rounded-full flex items-center justify-center leading-none">
+            {badge > 9 ? '9+' : badge}
+          </span>
+        )}
+      </span>
+      {!collapsed && <span className="flex-1 text-left">{label}</span>}
+      {!collapsed && badge !== undefined && badge > 0 && (
         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-white/20 text-white' : 'bg-slate-700 text-slate-300'}`}>
           {badge > 999 ? '999+' : badge}
         </span>
@@ -995,6 +1004,8 @@ interface PendingReviewItem {
   flag?: IQSFlagData | null;
   qaStatus?: { reviewedBy: string; reviewedAt: string; reviewNote: string } | null;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
+  scores?: Record<string, string>;
+  reasoning?: Record<string, string>;
 }
 
 function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
@@ -1116,20 +1127,22 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
     const thread       = flagId ? (threads[flagId] || []) : [];
     const txData       = transcripts[item.chatId];
 
-    const borderColor = hasFlag ? 'border-blue-200' : hasUncertain && !isReviewed ? 'border-amber-200' : isReviewed ? 'border-gray-100' : 'border-orange-200';
+    const failedParams = PARAM_ORDER.filter(p => item.scores?.[p] === 'No');
+    const borderColor  = hasFlag ? 'border-blue-200' : hasUncertain && !isReviewed ? 'border-amber-200' : isReviewed ? 'border-gray-100' : 'border-orange-200';
 
     return (
       <div key={item.chatId} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${borderColor}`}>
         {/* Row header */}
         <div className="px-5 py-4 flex items-center gap-4 cursor-pointer hover:bg-gray-50/40 transition"
           onClick={() => expand(item.chatId, flagId)}>
-          <IQSRing iqs={item.iqs} size={40} />
+          <IQSRing iqs={item.iqs} size={44} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-semibold text-gray-800">{item.agentName || 'Unknown'}</span>
               <ChatLink chatId={item.chatId} className="text-xs" />
-              {hasFlag && <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Challenged</span>}
+              {hasFlag      && <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">Challenged</span>}
               {hasUncertain && <span className="text-[10px] font-bold bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full">Needs Review</span>}
+              {failedParams.length > 0 && <span className="text-[10px] font-bold bg-red-50 text-red-600 px-2 py-0.5 rounded-full">{failedParams.length} fail{failedParams.length > 1 ? 's' : ''}</span>}
               {isReviewed
                 ? <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full">Reviewed</span>
                 : <span className="text-[10px] font-bold bg-orange-50 text-orange-600 px-2 py-0.5 rounded-full">Pending</span>}
@@ -1145,46 +1158,64 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 
         {/* Expanded: details + transcript side-by-side */}
         {isExpanded && (
-          <div className="border-t border-gray-100 flex divide-x divide-gray-100" style={{ minHeight: 180, maxHeight: 480 }}>
-            {/* Left: challenge info + uncertain params + review action */}
-            <div className="w-[38%] shrink-0 overflow-y-auto p-4 space-y-3">
-              {/* Uncertain parameters section */}
-              {hasUncertain && (
-                <div>
-                  <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest mb-2">Needs QA Review</p>
-                  <p className="text-[11px] text-gray-500 mb-2 leading-relaxed">
-                    The scoring bot was uncertain about these parameters. Review the transcript and override scores as needed.
-                  </p>
-                  <div className="space-y-2">
-                    {item.uncertainParameters!.map((u, i) => (
-                      <div key={i} className="bg-amber-50 rounded-xl px-3 py-2 border border-amber-100">
-                        <p className="text-xs font-semibold text-gray-800 mb-0.5">{PARAM_NAMES[u.parameter] ?? u.parameter}</p>
-                        <p className="text-[11px] text-gray-600 leading-relaxed">{u.question}</p>
+          <div className="border-t border-gray-100 flex divide-x divide-gray-100" style={{ maxHeight: 560, minHeight: 220 }}>
+            {/* Left panel: scores + actions */}
+            <div className="w-[42%] shrink-0 overflow-y-auto flex flex-col">
+              {/* IQS parameter breakdown */}
+              {item.scores && Object.keys(item.scores).length > 0 && (
+                <div className="p-4 space-y-1">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Parameter Scores</p>
+                  {PARAM_ORDER.map(p => {
+                    const val = item.scores![p] as string | undefined;
+                    const reason = item.reasoning?.[p];
+                    const isFail = val === 'No';
+                    const isUnc  = !!(item.uncertainParameters?.some(u => u.parameter === p));
+                    return (
+                      <div key={p} className={`rounded-xl px-3 py-2 ${isFail ? 'bg-red-50 border border-red-100' : isUnc ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                            val === 'Yes' ? 'bg-emerald-100 text-emerald-700'
+                            : val === 'No' ? 'bg-red-100 text-red-700'
+                            : isUnc ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-200 text-gray-500'
+                          }`}>{isUnc && val === 'NA' ? '?' : (val || 'NA')}</span>
+                          <span className="text-xs font-medium text-gray-700 flex-1 leading-tight">{PARAM_NAMES[p]}</span>
+                          <span className="text-[10px] text-gray-400 shrink-0">{Math.round(WEIGHTS[p] * 100)}%</span>
+                        </div>
+                        {isFail && reason && (
+                          <p className="text-[11px] text-red-700/80 mt-1.5 ml-7 leading-relaxed">{reason}</p>
+                        )}
+                        {isUnc && (
+                          <p className="text-[11px] text-amber-700/80 mt-1.5 ml-7 leading-relaxed">
+                            {item.uncertainParameters!.find(u => u.parameter === p)?.question}
+                          </p>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
+
+              {/* Challenge thread */}
               {item.flag && (
-                <div>
-                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-2">IR Challenge</p>
+                <div className="px-4 pb-3 space-y-2">
+                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest mb-1.5">IR Challenge</p>
                   {item.flag.challengedParams && item.flag.challengedParams.length > 0 && (
-                    <div className="space-y-1.5 mb-2">
+                    <div className="space-y-1 mb-1">
                       {item.flag.challengedParams.map(cp => (
-                        <div key={cp.param}>
+                        <div key={cp.param} className="bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
                           <span className="text-xs font-semibold text-gray-700">{PARAM_NAMES[cp.param] || cp.param}</span>
-                          {cp.note && <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{cp.note}</p>}
+                          {cp.note && <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{cp.note}</p>}
                         </div>
                       ))}
                     </div>
                   )}
                   {item.flag.agentNote && (
-                    <p className="text-xs text-gray-600 bg-blue-50 rounded-xl px-3 py-2 leading-relaxed mb-2">{item.flag.agentNote}</p>
+                    <p className="text-xs text-gray-600 bg-blue-50 rounded-xl px-3 py-2 leading-relaxed">{item.flag.agentNote}</p>
                   )}
-                  {/* Thread */}
                   {threadLoading[flagId!] && <p className="text-xs text-gray-400">Loading…</p>}
                   {thread.length > 0 && (
-                    <div className="space-y-2 mb-2">
+                    <div className="space-y-2">
                       {thread.map(c => {
                         const isQa = ['quality','admin','tl'].includes(c.role);
                         return (
@@ -1200,7 +1231,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
                     </div>
                   )}
                   {flagId && (
-                    <div className="flex gap-1.5 mb-1">
+                    <div className="flex gap-1.5">
                       <input type="text" value={replyText[flagId] || ''}
                         onChange={e => setReplyText(r => ({ ...r, [flagId!]: e.target.value }))}
                         onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(flagId); } }}
@@ -1211,25 +1242,27 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
                   )}
                 </div>
               )}
-              {/* Review action */}
-              {canReview && !isReviewed && (
-                <div className="border-t border-gray-100 pt-3">
-                  <input type="text" value={reviewNotes[item.chatId] || ''} onChange={e => setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
-                    placeholder="Review note (optional)…" className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 mb-2" />
-                  <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
-                    className="w-full px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
-                    {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
-                  </button>
-                </div>
-              )}
-              {isReviewed && (
-                <div className="border-t border-gray-100 pt-3 text-center">
-                  <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
-                    ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
-                  </span>
-                  {item.qaStatus?.reviewNote && <p className="text-xs text-gray-500 mt-2">{item.qaStatus.reviewNote}</p>}
-                </div>
-              )}
+
+              {/* Review action — sticky at bottom */}
+              <div className="mt-auto border-t border-gray-100 p-4">
+                {canReview && !isReviewed ? (
+                  <>
+                    <input type="text" value={reviewNotes[item.chatId] || ''} onChange={e => setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
+                      placeholder="Review note (optional)…" className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 mb-2" />
+                    <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
+                      className="w-full px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
+                      {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
+                    </button>
+                  </>
+                ) : isReviewed ? (
+                  <div className="text-center">
+                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
+                      ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
+                    </span>
+                    {item.qaStatus?.reviewNote && <p className="text-xs text-gray-500 mt-2">{item.qaStatus.reviewNote}</p>}
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {/* Right: transcript */}
@@ -1409,6 +1442,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   // Score Log — filter panel toggle + needs-review filter
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showOnlyNeedsReview, setShowOnlyNeedsReview] = useState(false);
+
+  // Sidebar collapse state
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
 
   // Score Log / Reports custom date picker visibility
   const [showLogPicker, setShowLogPicker] = useState(false);
@@ -2053,35 +2089,48 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         </div>
       )}
 
-      {/* ── Left Panel ── */}
-      <aside className="w-64 shrink-0 bg-[#111827] flex flex-col h-full">
-        {/* Logo */}
-        <div className="px-4 py-4 border-b border-white/10">
-          <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
-            Back to chat
-          </Link>
-          <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/wint-logo.png" alt="Wint" width={64} height={22} className="object-contain block" />
-          </div>
-          <p className="text-slate-500 text-[10px] mt-1.5 font-semibold uppercase tracking-wider">Quality Intelligence</p>
+      {/* ── Left Panel — hover-expand ── */}
+      <aside
+        onMouseEnter={() => setSidebarExpanded(true)}
+        onMouseLeave={() => setSidebarExpanded(false)}
+        className={`shrink-0 bg-[#111827] flex flex-col h-full transition-all duration-200 overflow-hidden ${sidebarExpanded ? 'w-60' : 'w-14'}`}
+      >
+        {/* Logo / header */}
+        <div className={`border-b border-white/10 flex flex-col ${sidebarExpanded ? 'px-4 py-4' : 'px-2 py-4 items-center'}`}>
+          {sidebarExpanded ? (
+            <>
+              <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
+                Back to chat
+              </Link>
+              <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/wint-logo.png" alt="Wint" width={64} height={22} className="object-contain block" />
+              </div>
+              <p className="text-slate-500 text-[10px] mt-1.5 font-semibold uppercase tracking-wider">Quality Intelligence</p>
+            </>
+          ) : (
+            <Link href="/" title="Back to chat"
+              className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-white transition rounded-lg hover:bg-white/10">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
+            </Link>
+          )}
         </div>
 
         {/* Nav */}
-        <nav className="px-3 py-4 flex-1 space-y-1">
+        <nav className={`py-4 flex-1 space-y-1 ${sidebarExpanded ? 'px-3' : 'px-2'}`}>
           <NavItem icon={icons.performance} label="Performance" active={tab === 'performance'}
-            onClick={() => switchTab('performance')} />
+            collapsed={!sidebarExpanded} onClick={() => switchTab('performance')} />
           <NavItem icon={icons.log} label="Score Log" active={tab === 'log'}
-            onClick={() => switchTab('log')} />
+            collapsed={!sidebarExpanded} onClick={() => switchTab('log')} />
           {!selfAgentName && (
             <NavItem icon={icons.upload} label="Upload & Score" active={tab === 'upload'}
-              onClick={() => switchTab('upload')} />
+              collapsed={!sidebarExpanded} onClick={() => switchTab('upload')} />
           )}
           <NavItem icon={icons.reports} label="Reports" active={tab === 'reports'}
-            onClick={() => setTab('reports')} />
+            collapsed={!sidebarExpanded} onClick={() => setTab('reports')} />
           <NavItem icon={icons.challenges} label="Chats Pending" active={tab === 'pending'}
-            badge={challengeCount} onClick={() => setTab('pending')} />
+            collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => setTab('pending')} />
         </nav>
 
       </aside>

@@ -62,9 +62,19 @@ export async function GET(_req: NextRequest) {
 
   const items = rows.map((row: any) => {
     const parameters = row.parameters || {};
-    const uncertain = Array.isArray(parameters.__uncertain) && parameters.__uncertain.length > 0
-      ? parameters.__uncertain as Array<{ parameter: string; question: string }>
-      : undefined;
+    const scores: Record<string, string> = {};
+    const reasoning: Record<string, string> = {};
+    let uncertain: Array<{ parameter: string; question: string }> | undefined;
+
+    for (const [key, val] of Object.entries(parameters) as [string, any][]) {
+      if (key === '__uncertain') {
+        if (Array.isArray(val) && val.length > 0) uncertain = val;
+        continue;
+      }
+      const k = key.charAt(0).toUpperCase() + key.slice(1);
+      scores[k]    = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
+      reasoning[k] = val?.reasoning || '';
+    }
 
     return {
       chatId: String(row.chatId),
@@ -74,6 +84,8 @@ export async function GET(_req: NextRequest) {
       date: row.date ? String(row.date).slice(0, 10) : '',
       flag: flagsByChat[String(row.chatId)] || null,
       qaStatus: reviewMap[String(row.chatId)] || null,
+      scores,
+      reasoning,
       ...(uncertain && { uncertainParameters: uncertain }),
     };
   });
