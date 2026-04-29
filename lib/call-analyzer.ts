@@ -112,21 +112,29 @@ export async function uploadAudioToGemini(
   apiKey: string,
   onProgress?: (msg: string) => void,
 ): Promise<string> {
-  onProgress?.('Uploading audio to Gemini…');
+  const fileSizeMB = (audioBuffer.length / 1024 / 1024).toFixed(1);
+  onProgress?.(`Uploading audio to Gemini File API… (${fileSizeMB} MB, ${mimeType})`);
 
   // Step 1: Initiate resumable upload
-  const initRes = await fetch(`${GEMINI_UPLOAD_BASE}?uploadType=resumable&key=${apiKey}`, {
-    method: 'POST',
-    headers: {
-      'X-Goog-Upload-Protocol': 'resumable',
-      'X-Goog-Upload-Command': 'start',
-      'X-Goog-Upload-Header-Content-Length': String(audioBuffer.length),
-      'X-Goog-Upload-Header-Content-Type': mimeType,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ file: { display_name: fileName } }),
-  });
+  onProgress?.('Step 1/2: Initiating resumable upload session…');
+  let initRes: Response;
+  try {
+    initRes = await fetch(`${GEMINI_UPLOAD_BASE}?uploadType=resumable&key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'X-Goog-Upload-Protocol': 'resumable',
+        'X-Goog-Upload-Command': 'start',
+        'X-Goog-Upload-Header-Content-Length': String(audioBuffer.length),
+        'X-Goog-Upload-Header-Content-Type': mimeType,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ file: { display_name: fileName } }),
+    });
+  } catch (err: any) {
+    throw new Error(`Gemini File API init network error: ${err.message}`);
+  }
 
+  onProgress?.(`Upload session response: HTTP ${initRes.status}`);
   if (!initRes.ok) {
     const text = await initRes.text();
     throw new Error(`Gemini File API init failed (${initRes.status}): ${text.slice(0, 200)}`);
@@ -134,19 +142,35 @@ export async function uploadAudioToGemini(
 
   const uploadUrl = initRes.headers.get('x-goog-upload-url');
   if (!uploadUrl) throw new Error('No upload URL returned from Gemini File API');
+  onProgress?.('Upload session created — starting byte transfer…');
 
-  // Step 2: Upload the bytes
-  const uploadRes = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'X-Goog-Upload-Command': 'upload, finalize',
-      'X-Goog-Upload-Offset': '0',
-      'Content-Type': mimeType,
-      'Content-Length': String(audioBuffer.length),
-    },
-    body: audioBuffer as unknown as BodyInit,
-  });
+  // Step 2: Upload the bytes — convert Buffer to Uint8Array for Node.js fetch compat
+  const uint8 = new Uint8Array(audioBuffer.buffer, audioBuffer.byteOffset, audioBuffer.byteLength);
+  onProgress?.(`Step 2/2: Sending ${fileSizeMB} MB to Gemini (timeout: 120s)…`);
+  const uploadStart = Date.now();
+  let uploadRes: Response;
+  try {
+    const uploadController = new AbortController();
+    const uploadTimer = setTimeout(() => uploadController.abort(), 120_000);
+    uploadRes = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        'X-Goog-Upload-Command': 'upload, finalize',
+        'X-Goog-Upload-Offset': '0',
+        'Content-Type': mimeType,
+        'Content-Length': String(audioBuffer.length),
+      },
+      body: uint8 as unknown as BodyInit,
+      signal: uploadController.signal,
+    });
+    clearTimeout(uploadTimer);
+    onProgress?.(`Byte transfer completed in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s`);
+  } catch (err: any) {
+    const elapsed = ((Date.now() - uploadStart) / 1000).toFixed(1);
+    throw new Error(`Gemini File API upload failed after ${elapsed}s: ${err.message}`);
+  }
 
+  onProgress?.(`Byte transfer response: HTTP ${uploadRes.status}`);
   if (!uploadRes.ok) {
     const text = await uploadRes.text();
     throw new Error(`Gemini File API upload failed (${uploadRes.status}): ${text.slice(0, 200)}`);
@@ -154,9 +178,10 @@ export async function uploadAudioToGemini(
 
   const fileData = await uploadRes.json();
   const fileUri = fileData?.file?.uri;
-  if (!fileUri) throw new Error('No file URI returned from Gemini File API');
+  onProgress?.(`File API response: uri=${fileUri ?? 'MISSING'}, state=${fileData?.file?.state ?? 'unknown'}`);
+  if (!fileUri) throw new Error(`No file URI returned. Full response: ${JSON.stringify(fileData).slice(0, 300)}`);
 
-  onProgress?.(`Audio uploaded (${(audioBuffer.length / 1024 / 1024).toFixed(1)} MB)`);
+  onProgress?.(`Audio uploaded successfully (${fileSizeMB} MB) → ${fileUri.slice(0, 60)}…`);
   return fileUri;
 }
 
@@ -446,26 +471,33 @@ export async function analyzeCall(opts: {
   // ── Pass 1: Structure extraction ──────────────────────────────────────────
   let pass1: Pass1Result | null = null;
   for (let attempt = 1; attempt <= 2; attempt++) {
-    onProgress?.(`Pass 1 (structure extraction)${attempt > 1 ? ' — retry' : ''}…`);
+    onProgress?.(`Pass 1 — structure extraction${attempt > 1 ? ' (retry)' : ''}… sending audio to Gemini`);
+    const p1Start = Date.now();
     try {
       const raw = await geminiGenerate(apiKey, PASS1_PROMPT, fileUri, mimeType, 90_000);
+      onProgress?.(`Pass 1 — Gemini responded in ${((Date.now() - p1Start) / 1000).toFixed(1)}s, parsing JSON…`);
       const data = extractJson(raw);
       pass1 = validatePass1(data, attempt);
-      onProgress?.(`Pass 1 complete — ${pass1.events.length} events, ${pass1.duration_seconds}s`);
+      onProgress?.(`Pass 1 complete — ${pass1.events.length} events, duration=${pass1.duration_seconds}s`);
       break;
     } catch (err: any) {
-      onProgress?.(`Pass 1 error: ${err.message}`);
+      onProgress?.(`Pass 1 error (attempt ${attempt}): ${err.message}`);
       if (attempt === 2) throw new Error(`Pass 1 failed after 2 attempts: ${err.message}`);
+      onProgress?.('Retrying Pass 1 in 3 seconds…');
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
   if (!pass1) throw new Error('Pass 1 did not produce a result');
 
   // ── Pass 2: Transcription + analysis ─────────────────────────────────────
-  onProgress?.('Pass 2 (transcription + analysis)…');
+  onProgress?.('Pass 2 — transcription + analysis, sending audio + structure to Gemini…');
   const pass2Prompt = buildPass2Prompt(pass1);
+  onProgress?.(`Pass 2 prompt built (${(pass2Prompt.length / 1000).toFixed(1)}k chars)`);
+  const p2Start = Date.now();
   let pass2Raw: string;
   try {
     pass2Raw = await geminiGenerate(apiKey, pass2Prompt, fileUri, mimeType, 180_000);
+    onProgress?.(`Pass 2 — Gemini responded in ${((Date.now() - p2Start) / 1000).toFixed(1)}s, parsing JSON…`);
   } catch (err: any) {
     throw new Error(`Pass 2 LLM error: ${err.message}`);
   }
@@ -473,7 +505,9 @@ export async function analyzeCall(opts: {
   let pass2: any;
   try {
     pass2 = extractJson(pass2Raw);
+    onProgress?.(`Pass 2 parsed — ${pass2?.segments?.length ?? 0} segments`);
   } catch (err: any) {
+    onProgress?.(`Pass 2 raw output (first 300 chars): ${pass2Raw.slice(0, 300)}`);
     throw new Error(`Pass 2 JSON parse failed: ${err.message}`);
   }
 
