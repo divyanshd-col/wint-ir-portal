@@ -579,13 +579,14 @@ export async function runAnalyticsAgent(
 
 export interface SqlResult {
   intent: string;
+  sql?: string;
   rows: any[];
   row_count: number;
   error: string | null;
 }
 
 export type PlannerPhaseResult =
-  | { kind: 'plan'; intent: string; sql_results: SqlResult[]; needs_transcripts: boolean; transcript_intent: string | null; output_shape: string; transcript_ids: string[] }
+  | { kind: 'plan'; intent: string; plan_intent: string; sql_results: SqlResult[]; needs_transcripts: boolean; transcript_intent: string | null; transcript_id_sql?: string; output_shape: string; transcript_ids: string[] }
   | { kind: 'clarify'; question: string }
   | { kind: 'error'; message: string };
 
@@ -636,19 +637,21 @@ export async function runPlannerPhase(
     (plan.sqls ?? []).map(async (q) => {
       try {
         const r = await executeRawSQL(q.sql);
-        return { intent: q.intent, rows: r.rows, row_count: r.rowCount, error: null };
+        return { intent: q.intent, sql: q.sql, rows: r.rows, row_count: r.rowCount, error: null };
       } catch (err: any) {
-        return { intent: q.intent, rows: [], row_count: 0, error: err.message };
+        return { intent: q.intent, sql: q.sql, rows: [], row_count: 0, error: err.message };
       }
     }),
   );
 
   let transcript_ids: string[] = [];
-  if (plan.needs_transcripts && plan.transcript_id_sql) {
+  const patchedTranscriptSql = plan.transcript_id_sql
+    ? plan.transcript_id_sql.replace(/\bLIMIT\s+\d+/i, `LIMIT ${maxConversations}`)
+    : undefined;
+
+  if (plan.needs_transcripts && patchedTranscriptSql) {
     try {
-      // Patch the LLM-generated LIMIT to match what the user actually requested
-      const patchedSql = plan.transcript_id_sql.replace(/\bLIMIT\s+\d+/i, `LIMIT ${maxConversations}`);
-      const idResult = await executeRawSQL(patchedSql);
+      const idResult = await executeRawSQL(patchedTranscriptSql);
       transcript_ids = idResult.rows
         .map((r: any) => r.id ?? r[Object.keys(r)[0]])
         .filter(Boolean)
@@ -659,9 +662,11 @@ export async function runPlannerPhase(
   return {
     kind: 'plan',
     intent: plan.intent,
+    plan_intent: plan.intent,
     sql_results,
     needs_transcripts: plan.needs_transcripts,
     transcript_intent: plan.transcript_intent,
+    transcript_id_sql: patchedTranscriptSql,
     output_shape: plan.output_shape,
     transcript_ids,
   };

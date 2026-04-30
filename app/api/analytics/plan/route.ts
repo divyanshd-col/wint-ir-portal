@@ -90,8 +90,10 @@ export async function POST(req: Request) {
   return NextResponse.json({
     status: 'needs_transcripts',
     intent: planResult.intent,
+    plan_intent: planResult.plan_intent,
     output_shape: planResult.output_shape,
     transcript_intent: planResult.transcript_intent,
+    transcript_id_sql: planResult.transcript_id_sql,
     transcript_ids: planResult.transcript_ids,
     sql_results: planResult.sql_results,
   });

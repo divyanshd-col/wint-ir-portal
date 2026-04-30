@@ -185,7 +185,7 @@ function renderMarkdown(text: string): React.ReactNode {
 // ── Thought process (collapsible logs) ───────────────────────────────────────
 
 function ThoughtProcess({ logs, isStreaming }: { logs?: string; isStreaming?: boolean }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   if (!logs && !isStreaming) return null;
   return (
     <div className="mb-3">
@@ -210,11 +210,11 @@ function ThoughtProcess({ logs, isStreaming }: { logs?: string; isStreaming?: bo
             Working…
           </span>
         ) : (
-          <span>Thought process</span>
+          <span>Query plan &amp; SQL {open ? '(click to collapse)' : '(click to expand)'}</span>
         )}
       </button>
       {open && logs && (
-        <div className="mt-2 font-mono text-[11px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 whitespace-pre-wrap leading-relaxed border border-gray-100 max-h-80 overflow-y-auto">
+        <div className="mt-2 font-mono text-[11px] text-gray-500 bg-gray-50 rounded-xl px-3 py-2.5 whitespace-pre-wrap leading-relaxed border border-gray-100 max-h-[480px] overflow-y-auto">
           {logs}
         </div>
       )}
@@ -934,6 +934,24 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       if (sqlContext) {
         setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, sqlContext } : m));
       }
+
+      // ── Build rich thought-process log from plan data ─────────────────────
+      if (planData.plan_intent) {
+        accLogs += `\nPlan: ${planData.plan_intent}\n`;
+      }
+      for (const q of (planData.sql_results as any[] ?? [])) {
+        accLogs += `\n── Query: ${q.intent} ──\n${q.sql ?? ''}\n`;
+        if (q.error) {
+          accLogs += `✗ Error: ${q.error}\n`;
+        } else {
+          const preview = (q.rows as any[] ?? []).slice(0, 3).map((r: any) => JSON.stringify(r)).join('\n');
+          accLogs += `→ ${q.row_count} row${q.row_count !== 1 ? 's' : ''} returned${preview ? `\n${preview}` : ''}\n`;
+        }
+      }
+      if (planData.transcript_id_sql) {
+        accLogs += `\n── Conversation fetch query ──\n${planData.transcript_id_sql}\n→ ${(planData.transcript_ids as any[] ?? []).length} conversations selected\n`;
+      }
+      setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, logs: accLogs } : m));
 
       // SQL-only question — answer already complete from phase 1
       if (planData.status === 'complete') {
