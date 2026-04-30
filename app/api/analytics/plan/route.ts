@@ -60,7 +60,7 @@ export async function POST(req: Request) {
     try {
       const answer = await runSynthesizerPhase(
         message, planResult.intent, planResult.output_shape,
-        planResult.sql_results, [], keys,
+        planResult.sql_results, [], keys, priorContext,
       );
       const blocks: InsightBlock[] = formatAgentResult(answer);
 

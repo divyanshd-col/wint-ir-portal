@@ -31,9 +31,11 @@ export async function POST(req: Request) {
   const intent: string = body.intent ?? '';
   const outputShape: string = body.output_shape ?? 'transcript_analysis';
   const transcriptIntent: string = body.transcript_intent ?? intent;
-  const transcriptIds: string[] = (body.transcript_ids ?? []).slice(0, 100);
+  const maxConversations: number = typeof body.maxConversations === 'number' && body.maxConversations > 0 ? body.maxConversations : 100;
+  const transcriptIds: string[] = (body.transcript_ids ?? []).slice(0, maxConversations);
   const sqlResults: SqlResult[] = body.sql_results ?? [];
   const filters: AnalyticsFilters = body.filters ?? {} as AnalyticsFilters;
+  const priorContext: string | undefined = body.priorContext || undefined;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
 
         send(controller, { event: 'log', delta: 'Synthesising answer…\n' }, encoder);
 
-        const answer = await runSynthesizerPhase(message, intent, outputShape, sqlResults, summaries, keys);
+        const answer = await runSynthesizerPhase(message, intent, outputShape, sqlResults, summaries, keys, priorContext);
 
         if (answer.answer_text) {
           send(controller, { event: 'text', delta: answer.answer_text }, encoder);

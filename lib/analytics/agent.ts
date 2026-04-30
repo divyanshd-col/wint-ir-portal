@@ -161,6 +161,9 @@ export const SYNTHESIZER_PROMPT = `You are a senior CX data analyst for Wint Wea
 
 Your job is NOT to report numbers. Your job is to find the signal, name the pattern, and point to what matters.
 
+## CONVERSATION CONTEXT
+If conversation_history is provided, use it to understand follow-up questions. Reference prior findings naturally ("Building on the CSAT breakdown earlier...", "As noted, Bond Maturity drives 38% of bad CSAT — drilling into that..."). Never repeat what was already answered unless the user explicitly asks for a recap.
+
 Output ONLY this JSON — no markdown, no prose outside the JSON:
 {
   "action": "final_answer",
@@ -432,7 +435,7 @@ export async function runAnalyticsAgent(
   const plannerPrompt = buildPlannerPrompt(filters, dispositions, idFetchLimit, config.analyticsPlannerPrompt);
   const synthesizerPrompt = config.analyticsSynthesizerPrompt?.trim() || SYNTHESIZER_PROMPT;
   const userMessage = priorContext
-    ? `PRIOR CONTEXT (previous answer — use to resolve follow-ups):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
+    ? `CONVERSATION HISTORY (use to resolve follow-ups and avoid re-fetching already-known data):\n${priorContext.slice(0, 3000)}\n\nCURRENT QUESTION: ${message}`
     : message;
 
   // ── Call 1: Planner ─────────────────────────────────────────────────────────
@@ -597,7 +600,7 @@ export async function runPlannerPhase(
   const config = await readConfig();
   const plannerPrompt = buildPlannerPrompt(filters, dispositions, maxConversations, config.analyticsPlannerPrompt);
   const userMessage = priorContext
-    ? `PRIOR CONTEXT (previous answer):\n${priorContext.slice(0, 500)}\n\nQUESTION: ${message}`
+    ? `CONVERSATION HISTORY (use to resolve follow-ups and avoid re-fetching already-known data):\n${priorContext.slice(0, 3000)}\n\nCURRENT QUESTION: ${message}`
     : message;
 
   let planRaw: string;
@@ -669,11 +672,13 @@ export async function runSynthesizerPhase(
   sqlResults: SqlResult[],
   transcriptSummaries: string[],
   keys: string[],
+  priorContext?: string,
 ): Promise<AgentFinalAnswer> {
   const config = await readConfig();
   const synthesizerPrompt = config.analyticsSynthesizerPrompt?.trim() || SYNTHESIZER_PROMPT;
 
   const synthesisInput = JSON.stringify({
+    conversation_history: priorContext || null,
     question,
     intent,
     output_shape_hint: outputShapeHint,

@@ -841,9 +841,22 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     let accLogs = '';
     const accBlocks: InsightBlock[] = [];
 
+    // Build structured conversation history from the last 4 turns (user+assistant pairs)
     const priorContext = (() => {
-      const assistantMsgs = messages.filter(m => m.role === 'assistant' && m.content);
-      return assistantMsgs.length ? assistantMsgs[assistantMsgs.length - 1].content : undefined;
+      const history: string[] = [];
+      let charBudget = 3000;
+      // Walk messages newest-first, collect up to 4 Q&A pairs
+      for (let i = messages.length - 1; i >= 0 && history.length < 8; i--) {
+        const m = messages[i];
+        if (!m.content) continue;
+        const prefix = m.role === 'user' ? 'User' : 'Answer';
+        const snippet = m.content.slice(0, 500);
+        const line = `${prefix}: ${snippet}`;
+        if (charBudget - line.length < 0) break;
+        charBudget -= line.length;
+        history.unshift(line);
+      }
+      return history.length ? history.join('\n\n') : undefined;
     })();
 
     const activeFilters = buildFilters();
@@ -936,6 +949,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
           sql_results:       planData.sql_results,
           filters:           activeFilters,
           maxConversations,
+          priorContext,
         }),
       });
       if (!insightsRes.ok) throw new Error(insightsRes.statusText || 'Insights request failed');
