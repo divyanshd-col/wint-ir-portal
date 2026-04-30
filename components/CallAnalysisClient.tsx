@@ -82,22 +82,56 @@ export default function CallAnalysisClient({ username, role, isAdmin }: Props) {
     setFileName(file.name);
     setPhase('uploading');
 
-    const form = new FormData();
-    form.append('audio', file);
-
     try {
-      const res = await fetch('/api/call-analysis', { method: 'POST', body: form });
+      // ── Step 1: Get upload URL from server (tiny request, under 1KB) ────────
+      addLog(`Getting upload URL for ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB)…`);
+      const initRes = await fetch('/api/call-analysis/init', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, fileSize: file.size }),
+      });
+      if (!initRes.ok) {
+        const { error } = await initRes.json().catch(() => ({ error: 'Init failed' }));
+        throw new Error(error ?? 'Could not get upload URL');
+      }
+      const { uploadUrl, mimeType } = await initRes.json();
+      addLog(`Upload URL obtained — uploading ${(file.size / 1024 / 1024).toFixed(1)} MB directly to Gemini…`);
 
-      if (!res.ok || !res.body) {
-        const text = await res.text().catch(() => '');
-        let msg = 'Request failed';
+      // ── Step 2: Browser uploads file bytes directly to Gemini (no Vercel limit) ──
+      const uploadStart = Date.now();
+      const uploadRes = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'X-Goog-Upload-Command': 'upload, finalize',
+          'X-Goog-Upload-Offset': '0',
+          'Content-Type': mimeType,
+          'Content-Length': String(file.size),
+        },
+        body: file,
+      });
+      if (!uploadRes.ok) {
+        const text = await uploadRes.text().catch(() => '');
+        throw new Error(`Gemini upload failed (${uploadRes.status}): ${text.slice(0, 200)}`);
+      }
+      const uploadData = await uploadRes.json();
+      const fileUri = uploadData?.file?.uri;
+      if (!fileUri) throw new Error(`No file URI in Gemini response: ${JSON.stringify(uploadData).slice(0, 200)}`);
+      addLog(`Upload complete in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s — starting analysis…`);
+
+      // ── Step 3: Run two-pass analysis (SSE stream) ────────────────────────
+      const runRes = await fetch('/api/call-analysis/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileUri, fileName: file.name, mimeType }),
+      });
+      if (!runRes.ok || !runRes.body) {
+        const text = await runRes.text().catch(() => '');
+        let msg = 'Analysis request failed';
         try { msg = JSON.parse(text).error ?? msg; } catch {}
-        setError(msg);
-        setPhase('error');
-        return;
+        throw new Error(msg);
       }
 
-      const reader  = res.body.getReader();
+      const reader  = runRes.body.getReader();
       const decoder = new TextDecoder();
       let buffer    = '';
 

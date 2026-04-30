@@ -448,25 +448,17 @@ function computeSummary(segments: OutputSegment[]): CallAnalysisResult['summary'
   };
 }
 
-// ── Main entry point ──────────────────────────────────────────────────────────
+// ── URI-based entry point (browser uploads directly to Gemini) ───────────────
 
-export async function analyzeCall(opts: {
-  audioBuffer: Buffer;
+export async function analyzeCallFromUri(opts: {
+  fileUri: string;
   fileName: string;
+  mimeType: string;
   apiKey: string;
   onProgress?: (msg: string) => void;
 }): Promise<CallAnalysisResult> {
-  const { audioBuffer, fileName, apiKey, onProgress } = opts;
-
-  const ext = fileName.split('.').pop()?.toLowerCase() ?? 'mp3';
-  const mimeType = MIME_MAP[ext] ?? 'audio/mpeg';
-
-  if (audioBuffer.length > 500 * 1024 * 1024) {
-    onProgress?.('Warning: file is >500MB — analysis may be slow');
-  }
-
-  // ── Upload once ───────────────────────────────────────────────────────────
-  const fileUri = await uploadAudioToGemini(audioBuffer, mimeType, fileName, apiKey, onProgress);
+  const { fileUri, fileName, mimeType, apiKey, onProgress } = opts;
+  onProgress?.(`Starting analysis — file already uploaded, URI: ${fileUri.slice(0, 60)}…`);
 
   // ── Pass 1: Structure extraction ──────────────────────────────────────────
   let pass1: Pass1Result | null = null;
@@ -512,7 +504,6 @@ export async function analyzeCall(opts: {
   }
 
   onProgress?.('Building final result…');
-
   const segments: OutputSegment[] = pass2.segments ?? [];
   const summary = computeSummary(segments);
 
