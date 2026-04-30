@@ -40,6 +40,7 @@ export async function POST() {
     const fromPayload = await query(`
       UPDATE conversations c
       SET phone_number = COALESCE(
+        NULLIF(c.raw_payload->'requester_info'->>'phone_number', ''),
         NULLIF(c.raw_payload->>'user_phone',      ''),
         NULLIF(c.raw_payload->>'customer_phone',  ''),
         NULLIF(c.raw_payload->>'phone_number',    ''),
@@ -52,6 +53,7 @@ export async function POST() {
       WHERE c.phone_number IS NULL
         AND c.raw_payload IS NOT NULL
         AND COALESCE(
+          NULLIF(c.raw_payload->'requester_info'->>'phone_number', ''),
           NULLIF(c.raw_payload->>'user_phone',      ''),
           NULLIF(c.raw_payload->>'customer_phone',  ''),
           NULLIF(c.raw_payload->>'phone_number',    ''),

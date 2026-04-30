@@ -317,6 +317,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
 
   // Extract mobile/phone number
   const mobileNumber: string | undefined =
+    body.requester_info?.phone_number ||
     body.data?.user_phone      || body.data?.customer_phone ||
     body.data?.phone_number    || body.data?.mobile         ||
     body.user_phone            || body.customer_phone       ||
