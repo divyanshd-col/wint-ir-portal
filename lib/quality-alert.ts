@@ -72,8 +72,10 @@ export async function fireQualityAlert(opts: {
     .filter(p => opts.scores?.[p.key] === 'No')
     .map(p => ({ label: p.label, reasoning: opts.reasoning?.[p.key] || 'No reasoning provided' }));
 
-  // Only Slack-alert on critical parameter failures — uncertain chats are handled via the Pending tab
-  if (!failedParams.length) return;
+  const hasUncertain = !!(opts.uncertainParameters && opts.uncertainParameters.length > 0);
+
+  // Nothing to report at all — skip everything
+  if (!failedParams.length && !hasUncertain) return;
 
   // Deduplicate — one alert per chat per 24 h
   if (await storeHasQualityAlert(opts.chatId)) {
@@ -82,8 +84,8 @@ export async function fireQualityAlert(opts: {
   }
   await storeMarkQualityAlert(opts.chatId);
 
-  // ── Slack ─────────────────────────────────────────────────────────────────
-  if (token && channel) {
+  // ── Slack — critical failures only (uncertain chats surface via Pending tab) ──
+  if (failedParams.length && token && channel) {
     const chatLink = /^\d+$/.test((opts.chatId || '').trim())
       ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
       : opts.chatId;
@@ -105,7 +107,11 @@ export async function fireQualityAlert(opts: {
     sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
   }
 
-  // ── Google Sheet ──────────────────────────────────────────────────────────
+  // ── Google Sheet — critical failures + uncertain chats ────────────────────
+  const sheetParams = failedParams.length
+    ? failedParams
+    : (opts.uncertainParameters ?? []).map(u => ({ label: u.parameter, reasoning: `Needs QA review: ${u.question}` }));
+
   appendQualityAlertToSheet({
     chatId:         opts.chatId,
     agentName:      opts.agentName,
@@ -114,7 +120,7 @@ export async function fireQualityAlert(opts: {
     csat:           opts.csat,
     disposition:    opts.disposition,
     subDisposition: opts.subDisposition,
-    failedParams,
+    failedParams:   sheetParams,
   }).catch((err) => console.error('[quality-alert] Sheet append failed:', err?.message));
 }
 
