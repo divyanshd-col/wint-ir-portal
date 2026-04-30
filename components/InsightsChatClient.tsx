@@ -943,7 +943,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     } finally {
       setStreaming(false);
     }
-  }, [streaming, dateRange, customFrom, customTo, dispositions, csatLabels, convTypes, activeId, allMessages]);
+  }, [streaming, dateRange, customFrom, customTo, dispositions, csatLabels, convTypes, activeId, allMessages, maxConversations]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
