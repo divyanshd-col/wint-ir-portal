@@ -488,7 +488,8 @@ export async function runAnalyticsAgent(
   if (plan.needs_transcripts && plan.transcript_id_sql) {
     onProgress?.('Fetching transcript IDs…\n');
     try {
-      const idResult = await executeRawSQL(plan.transcript_id_sql);
+      const patchedIdSql = plan.transcript_id_sql.replace(/\bLIMIT\s+\d+/i, `LIMIT ${idFetchLimit}`);
+      const idResult = await executeRawSQL(patchedIdSql);
       const ids: string[] = idResult.rows
         .map((r: any) => r.id ?? r[Object.keys(r)[0]])
         .filter(Boolean)
@@ -639,7 +640,9 @@ export async function runPlannerPhase(
   let transcript_ids: string[] = [];
   if (plan.needs_transcripts && plan.transcript_id_sql) {
     try {
-      const idResult = await executeRawSQL(plan.transcript_id_sql);
+      // Patch the LLM-generated LIMIT to match what the user actually requested
+      const patchedSql = plan.transcript_id_sql.replace(/\bLIMIT\s+\d+/i, `LIMIT ${maxConversations}`);
+      const idResult = await executeRawSQL(patchedSql);
       transcript_ids = idResult.rows
         .map((r: any) => r.id ?? r[Object.keys(r)[0]])
         .filter(Boolean)

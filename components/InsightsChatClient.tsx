@@ -655,6 +655,8 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [maxConversations, setMaxConversations] = useState(() => {
     try { return parseInt(localStorage.getItem('wint_max_conversations') || '60') || 60; } catch { return 60; }
   });
+  const [maxConvDraft, setMaxConvDraft] = useState<string | null>(null);
+  const [maxConvSaved, setMaxConvSaved] = useState(false);
 
   const bottomRef     = useRef<HTMLDivElement>(null);
   const inputRef      = useRef<HTMLTextAreaElement>(null);
@@ -1250,19 +1252,34 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
                       type="number"
                       min={1}
                       max={2000}
-                      value={maxConversations}
-                      onChange={e => {
-                        const v = Math.max(1, parseInt(e.target.value) || 1);
-                        setMaxConversations(v);
-                        try { localStorage.setItem('wint_max_conversations', String(v)); } catch {}
+                      value={maxConvDraft ?? maxConversations}
+                      onChange={e => { setMaxConvDraft(e.target.value); setMaxConvSaved(false); }}
+                      onBlur={() => {
+                        if (maxConvDraft === null) return;
+                        const v = Math.max(1, parseInt(maxConvDraft) || 1);
+                        setMaxConvDraft(String(v));
                       }}
                       className={`w-16 text-[11px] text-center border rounded px-1 py-0.5 outline-none focus:border-emerald-400 transition-colors ${
-                        maxConversations > 60
+                        (maxConvDraft != null ? parseInt(maxConvDraft) : maxConversations) > 60
                           ? 'border-amber-300 bg-amber-50 text-amber-700'
                           : 'border-gray-200 bg-gray-50 text-gray-600'
                       }`}
                       title="Number of conversations to read transcripts for. Higher = slower but more thorough."
                     />
+                    <button
+                      onClick={() => {
+                        const v = Math.max(1, parseInt(maxConvDraft ?? String(maxConversations)) || 1);
+                        setMaxConversations(v);
+                        setMaxConvDraft(null);
+                        setMaxConvSaved(true);
+                        setTimeout(() => setMaxConvSaved(false), 2000);
+                        try { localStorage.setItem('wint_max_conversations', String(v)); } catch {}
+                      }}
+                      className="text-[11px] px-1.5 py-0.5 rounded border border-emerald-400 text-emerald-600 hover:bg-emerald-50 transition-colors"
+                      title="Save max chats value"
+                    >
+                      {maxConvSaved ? '✓' : 'Save'}
+                    </button>
                   </label>
                 </div>
                 <button
