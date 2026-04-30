@@ -200,6 +200,12 @@ The KB mentions "Skip Instalment" as an option before cancellation, but this is 
 - If the customer never requested a call AND the agent calls without any business reason → this IS a process violation (score Process No and note it clearly).
 - When you cannot determine whether a call happened at all, score Call as NA and add to \`uncertain_parameters\`.
 
+### Internal Notes, Slack Links, and Internal References
+Transcripts sometimes contain internal Slack links, internal tool URLs, internal notes, or references to internal systems (e.g. Finder links, Slack thread URLs, internal escalation notes).
+- These are **internal agent notes** — they are NOT sent to the customer and are not part of the customer-facing response.
+- Do NOT penalize any parameter (Technical, Process, Sentences, Grammar, etc.) based on the presence of internal links or notes.
+- Evaluate the agent only on what they communicated to the customer, not on internal working notes visible in the transcript.
+
 ### Call Requests — Always score Call as NA, flag for QA
 If the transcript contains any reference to a customer requesting a call, or a call that needs to happen:
 - Score the **Call** parameter as **NA** (we cannot evaluate calls without the call transcript).
