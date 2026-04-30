@@ -17,6 +17,7 @@ interface ChatMessage {
   blocks: InsightBlock[];
   logs?: string;
   loading?: boolean;
+  sqlContext?: string;  // SQL intents from plan phase — included in history for follow-up anchoring
 }
 
 interface DispositionTree { disposition: string; subDispositions: string[] }
@@ -842,16 +843,20 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     const accBlocks: InsightBlock[] = [];
 
     // Build structured conversation history from the last 4 turns (user+assistant pairs)
+    // Includes SQL intents so the planner can anchor follow-up queries to the same filters
     const priorContext = (() => {
       const history: string[] = [];
       let charBudget = 3000;
-      // Walk messages newest-first, collect up to 4 Q&A pairs
       for (let i = messages.length - 1; i >= 0 && history.length < 8; i--) {
         const m = messages[i];
         if (!m.content) continue;
-        const prefix = m.role === 'user' ? 'User' : 'Answer';
-        const snippet = m.content.slice(0, 500);
-        const line = `${prefix}: ${snippet}`;
+        let line: string;
+        if (m.role === 'user') {
+          line = `User: ${m.content.slice(0, 400)}`;
+        } else {
+          const sqlPart = m.sqlContext ? `[SQL ran: ${m.sqlContext}]\n` : '';
+          line = `Answer: ${sqlPart}${m.content.slice(0, 400)}`;
+        }
         if (charBudget - line.length < 0) break;
         charBudget -= line.length;
         history.unshift(line);
@@ -921,6 +926,13 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       }
       if (planData.status === 'error') {
         throw new Error(planData.message ?? 'Plan failed');
+      }
+
+      // Attach SQL context to the assistant message so follow-up queries can anchor to the same filters
+      const sqlContext = (planData.sql_results as any[] ?? [])
+        .map((r: any) => r.intent).filter(Boolean).join(' | ');
+      if (sqlContext) {
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, sqlContext } : m));
       }
 
       // SQL-only question — answer already complete from phase 1

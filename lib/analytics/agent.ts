@@ -41,7 +41,7 @@ Clarify (only when disposition/agent name is ambiguous — maps to 2+ values):
 \`\`\`sql
 conversations (
   id                  VARCHAR(100) PRIMARY KEY,
-  contact_id          BIGINT,            -- never SELECT phone from contacts
+  contact_id          BIGINT,
   team_id             INTEGER,
   agent_id            INTEGER,
   conversation_type   VARCHAR,           -- 'bot' | 'agent' | 'hybrid'
@@ -52,7 +52,7 @@ conversations (
   frt_seconds         INTEGER,
   bot_to_team_seconds INTEGER,
   resolution_seconds  INTEGER,
-  phone_number        VARCHAR(30),           -- customer phone (never expose raw digits in output)
+  phone_number        VARCHAR(30),           -- customer phone; SELECT when user asks for phone/contact info
   raw_payload         JSONB
 )
 iqs_scores (
@@ -73,6 +73,8 @@ agents (id SERIAL PRIMARY KEY, name VARCHAR, team_id INT, status VARCHAR)
 - Never SELECT contacts.phone
 - NEVER SELECT raw_payload or transcript columns — they are massive blobs. Use (c.raw_payload->'counts'->>'user_message_count')::int for message counts only
 - Always SELECT only the columns needed for the output shape — never SELECT *
+- For unique user/phone counts: use COUNT(DISTINCT c.phone_number) directly on conversations — never JOIN contacts for counts
+- FOLLOW-UP QUERIES: when the user references a specific count or set from the conversation history (e.g. "those 340 conversations", "out of those"), reproduce the EXACT same WHERE clause — same date range, same sub_disposition, same filters. Do not widen or change the scope unless the user explicitly asks.
 - bar_chart: alias text column AS "name", numeric AS "value"
 - line_chart: alias date AS "date" (YYYY-MM-DD), metric AS "value"
 - Add LIMIT 500 on all non-aggregate queries (except transcript_id_sql which uses LIMIT {ID_FETCH_LIMIT})
