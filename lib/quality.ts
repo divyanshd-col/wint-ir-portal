@@ -173,6 +173,33 @@ At Wint Wealth, all documents are ONLY shared via email. Agents must NEVER share
 - If customer asks for documents over WhatsApp and agent redirects them to email → this is **CORRECT behavior**. Do NOT penalize.
 - Failing to redirect a WhatsApp document request to email would be a process violation.
 
+### Form 15G/H and Form 121
+Form 121 is the current TDS declaration form and has replaced Form 15G/H for new submissions.
+- For many NBFCs, Wint Wealth supports the form submission process directly through the app.
+- For some entities, the form must be submitted directly with that entity — NOT through Wint Wealth. When an agent tells a customer to submit the form directly with the entity, they are **CORRECT**. Do NOT penalize for this guidance.
+- Never mark Technical as No simply because an agent directed a customer to submit a form directly with the entity rather than through the Wint app.
+
+### Settlement Timelines — CORRECT timelines to use for evaluation
+Agents quoting any of the following timelines are technically correct. Do NOT penalize:
+- **First investment / first payment**: T+3 working days settlement.
+- **All subsequent investments**: T+1 working days settlement.
+- Working days = Monday to Friday only. Saturdays and Sundays do NOT count.
+- An agent quoting T+3 for a first investment or T+1 for a regular investment is giving accurate information. Only mark Technical as No if they quote a materially different timeline that contradicts these rules.
+
+### Internal Tool Checks (Finder / KB) — AI cannot verify
+The AI scorer cannot see whether an agent checked Finder, order status, or account state before responding. Therefore:
+- **Do NOT assume the agent skipped an internal check** — you have no evidence of this.
+- Only mark Process as No if the agent's visible response directly contradicts what an internal check would have shown (e.g. agent says repayment not processed but transcript shows it was credited).
+- The fact that a response could have been improved by a tool check is NOT sufficient to fail Process.
+
+### Skip Instalment before Cancellation — Not mandatory
+The KB mentions "Skip Instalment" as an option before cancellation, but this is **not a mandatory step**. An agent proceeding directly to cancellation without first offering "Skip Instalment" is NOT a process failure. Do not penalize.
+
+### Calls — Only a violation if no prior customer request
+- If the customer explicitly requested a call anywhere in the chat transcript → agent initiating a call is **CORRECT**. Do NOT penalize.
+- If the customer never requested a call AND the agent calls without any business reason → this IS a process violation (score Process No and note it clearly).
+- When you cannot determine whether a call happened at all, score Call as NA and add to \`uncertain_parameters\`.
+
 ### Call Requests — Always score Call as NA, flag for QA
 If the transcript contains any reference to a customer requesting a call, or a call that needs to happen:
 - Score the **Call** parameter as **NA** (we cannot evaluate calls without the call transcript).
@@ -221,9 +248,10 @@ When you are unsure how to score a parameter because the transcript is ambiguous
 - **NA**: Very rare. Bar is VERY high.
 
 ### 7. Process-wise (5%)
-- **Yes**: Agent followed correct workflow. ASSUME agent did internal checks unless their output CONTRADICTS what the check would show.
-- **No**: Only on CLEAR, PROVABLE violations: contradicts Finder output, 4-5+ hour gap with zero communication, called customer without asking AND no call summary.
+- **Yes**: Agent followed correct workflow. ALWAYS ASSUME agent did internal checks (Finder, order status, account state) unless their visible response directly CONTRADICTS what such a check would have shown.
+- **No**: Only on CLEAR, PROVABLE violations visible in the transcript: agent's statement directly contradicts Finder data, 4-5+ hour gap with zero communication, agent calls without any customer request and no business reason.
 - **NA**: Very rare.
+- **CRITICAL**: You cannot see whether an agent used Finder or checked internal tools. Never fail Process on the assumption that a check was skipped — only fail if the output proves it.
 
 ### 8. First Response & Opening (5%)
 - **Yes**: Greeting is a SEPARATE message. Contains: (1) Hi/Hello, (2) agent name + Wint Wealth, (3) offer to help OR acknowledgment of specific query.
@@ -232,9 +260,9 @@ When you are unsure how to score a parameter because the transcript is ambiguous
 
 ### 9. Call (when required) (5%)
 - **Yes**: Call offered/made when appropriate AND handled correctly. OR no call was needed.
-- **No**: Call should have been offered but wasn't. OR call made without asking. OR call summary missing.
-- **NA**: MOST chats — only score Yes or No if a call happened or clearly should have.
-- **IMPORTANT**: If the customer requested a call but you cannot see whether a call took place, score NA and add to \`uncertain_parameters\`. Never penalize an agent for a call you cannot verify.
+- **No**: Agent initiated a call with NO prior customer request AND no clear business reason for it. (See Calls policy above.)
+- **NA**: MOST chats. If the customer requested a call but you cannot see whether a call took place → NA + \`uncertain_parameters\`. If the customer requested a call and the agent called → NA (can't evaluate without call transcript).
+- **IMPORTANT**: If a customer requested a call anywhere in the transcript, agent calling is NOT a violation — score NA.
 
 ### 10. Tags Accuracy (5%)
 Tags are applied by Robylon AI as Disposition (L1) and Sub-disposition (L2), provided in CHAT METADATA.
