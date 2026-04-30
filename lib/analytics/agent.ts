@@ -52,6 +52,7 @@ conversations (
   frt_seconds         INTEGER,
   bot_to_team_seconds INTEGER,
   resolution_seconds  INTEGER,
+  phone_number        VARCHAR(30),           -- customer phone (never expose raw digits in output)
   raw_payload         JSONB
 )
 iqs_scores (

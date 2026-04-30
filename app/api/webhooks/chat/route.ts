@@ -394,6 +394,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     resolutionSeconds: timing.resolutionTime ?? null,
     rawPayload: body,
     webhookTrigger: 'TICKET_CLOSED',
+    phoneNumber: mobileNumber ?? null,
   });
 
   // Check if tags already stored (from a prior CLASSIFICATION_UPDATED)

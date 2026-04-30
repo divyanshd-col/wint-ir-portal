@@ -79,14 +79,15 @@ export async function upsertConversation(data: {
   resolutionSeconds?: number | null;
   rawPayload?: any;
   webhookTrigger?: string;
+  phoneNumber?: string | null;
 }): Promise<void> {
   await query(`
     INSERT INTO conversations (
       id, contact_id, agent_id, conversation_type,
       started_at, closed_at, transcript, tags,
       frt_seconds, bot_to_team_seconds, resolution_seconds,
-      raw_payload, webhook_trigger, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
+      raw_payload, webhook_trigger, phone_number, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
     ON CONFLICT (id) DO UPDATE SET
       contact_id          = COALESCE(EXCLUDED.contact_id, conversations.contact_id),
       agent_id            = COALESCE(EXCLUDED.agent_id, conversations.agent_id),
@@ -100,6 +101,7 @@ export async function upsertConversation(data: {
       resolution_seconds  = COALESCE(EXCLUDED.resolution_seconds, conversations.resolution_seconds),
       raw_payload         = COALESCE(EXCLUDED.raw_payload, conversations.raw_payload),
       webhook_trigger     = COALESCE(EXCLUDED.webhook_trigger, conversations.webhook_trigger),
+      phone_number        = COALESCE(EXCLUDED.phone_number, conversations.phone_number),
       updated_at          = NOW()
   `, [
     data.id,
@@ -115,6 +117,7 @@ export async function upsertConversation(data: {
     data.resolutionSeconds ?? null,
     data.rawPayload ? JSON.stringify(data.rawPayload) : null,
     data.webhookTrigger ?? null,
+    data.phoneNumber ?? null,
   ]);
 }
 
