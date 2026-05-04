@@ -2099,7 +2099,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <div className={`border-b border-white/10 flex flex-col ${sidebarExpanded ? 'px-4 py-4' : 'px-2 py-4 items-center'}`}>
           {sidebarExpanded ? (
             <>
-              <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
+              <Link href="/chat" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
                 Back to chat
               </Link>
@@ -2110,7 +2110,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               <p className="text-slate-500 text-[10px] mt-1.5 font-semibold uppercase tracking-wider">Quality Intelligence</p>
             </>
           ) : (
-            <Link href="/" title="Back to chat"
+            <Link href="/chat" title="Back to chat"
               className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-white transition rounded-lg hover:bg-white/10">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
             </Link>

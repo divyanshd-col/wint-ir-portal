@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
 import HomeClient from '@/components/HomeClient';
 
-export default async function Home() {
+export default async function ChatPage() {
   const config = await readConfig();
   if (!config.isConfigured) redirect('/setup');
 
@@ -12,9 +12,6 @@ export default async function Home() {
   if (!session) redirect('/login');
 
   const isAdmin = (session.user as any)?.isAdmin ?? false;
-
-  if (isAdmin) redirect('/analytics');
-
   const username = (session.user?.name || session.user?.email || 'Investor') as string;
   const role = (session.user as any)?.role ?? 'agent';
   const historyEnabled = config.conversationHistoryEnabled ?? false;

@@ -453,7 +453,7 @@ export default function AnalyticsClient() {
       {/* ── Header ── */}
       <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3 min-w-0">
-          <Link href="/" className="text-gray-400 hover:text-gray-600 transition shrink-0">
+          <Link href="/chat" className="text-gray-400 hover:text-gray-600 transition shrink-0">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4L6 9l5 5"/></svg>
           </Link>
           <div className="min-w-0">

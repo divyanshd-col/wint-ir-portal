@@ -684,7 +684,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
       {/* ── Left sidebar ── */}
       <aside className="w-64 shrink-0 bg-[#111827] flex flex-col h-full">
         <div className="px-4 py-4 border-b border-white/10">
-          <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
+          <Link href="/chat" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5"/></svg>
             Back to chat
           </Link>

@@ -43,7 +43,7 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
     <aside className="w-64 bg-[#1a1a1a] flex-col shrink-0 hidden lg:flex h-screen sticky top-0">
       {/* Logo */}
       <div className="px-5 py-4 border-b border-white/10">
-        <Link href="/">
+        <Link href="/chat">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
             <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
@@ -57,7 +57,7 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
       {/* Nav */}
       <nav className="px-4 py-4 flex-1 overflow-y-auto space-y-1">
         <NavLink
-          href="/"
+          href="/chat"
           label="Chat"
           icon={
             <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">

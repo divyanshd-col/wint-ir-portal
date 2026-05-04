@@ -511,7 +511,7 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
       {/* Left nav */}
       <aside className="w-56 shrink-0 bg-white border-r border-gray-100 flex flex-col sticky top-0 h-screen">
         <div className="px-5 py-5 border-b border-gray-100">
-          <a href="/" className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition text-xs font-medium mb-4">
+          <a href="/chat" className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition text-xs font-medium mb-4">
             <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
             Back to chat
           </a>
