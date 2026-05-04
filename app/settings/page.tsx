@@ -11,7 +11,7 @@ export default async function SettingsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
   const role = (session.user as any)?.role;
-  if (role !== 'admin') redirect('/');
+  const isAdmin = role === 'admin';
 
   const config = await readConfig();
   // Strip actual key values — only pass presence flags to client
@@ -41,5 +41,5 @@ export default async function SettingsPage() {
     qualityAlertSheetUrl: config.qualityAlertSheetUrl || '',
   };
 
-  return <SettingsClient config={safeConfig} />;
+  return <SettingsClient config={safeConfig} isAdmin={isAdmin} />;
 }

@@ -36,7 +36,7 @@ interface User {
   isAdmin?: boolean;
 }
 
-const SECTIONS = [
+const ADMIN_SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'kb', label: 'Knowledge Base' },
   { id: 'prompt', label: 'Prompts' },
@@ -44,6 +44,7 @@ const SECTIONS = [
   { id: 'tl', label: 'Team Leads' },
   { id: 'integrations', label: 'Integrations' },
 ];
+const SECURITY_SECTION = { id: 'security', label: 'Security' };
 
 const PROMPT_TABS = [
   {
@@ -68,8 +69,9 @@ const PROMPT_TABS = [
   },
 ];
 
-export default function SettingsClient({ config }: { config: SafeConfig }) {
-  const [activeSection, setActiveSection] = useState('general');
+export default function SettingsClient({ config, isAdmin = false }: { config: SafeConfig; isAdmin?: boolean }) {
+  const SECTIONS = isAdmin ? [...ADMIN_SECTIONS, SECURITY_SECTION] : [SECURITY_SECTION];
+  const [activeSection, setActiveSection] = useState(isAdmin ? 'general' : 'security');
 
   // ── General state ──────────────────────────────────────────────────────────
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'claude'>((config.llmProvider as any) || 'gemini');
@@ -158,6 +160,13 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   const [qualitySheetUrl, setQualitySheetUrl] = useState(config.qualityAlertSheetUrl || '');
   const [savingSheet, setSavingSheet] = useState(false);
   const [sheetSaved, setSheetSaved] = useState(false);
+
+  // ── Password change state ──────────────────────────────────────────────────
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordMsg, setPasswordMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   // ── Toast ──────────────────────────────────────────────────────────────────
   const [toast, setToast] = useState<string | null>(null);
@@ -498,6 +507,31 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
     } finally { setSavingSheet(false); }
   };
 
+  const changePassword = async () => {
+    setPasswordMsg(null);
+    if (newPassword !== confirmPassword) {
+      setPasswordMsg({ ok: false, text: 'New passwords do not match' });
+      return;
+    }
+    setChangingPassword(true);
+    try {
+      const res = await fetch('/api/users/me/password', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPasswordMsg({ ok: true, text: 'Password updated successfully' });
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        setPasswordMsg({ ok: false, text: data.error || 'Failed to update password' });
+      }
+    } finally { setChangingPassword(false); }
+  };
+
   function shortLabel(url: string): string {
     try {
       const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
@@ -516,7 +550,7 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
             Back to chat
           </a>
           <h1 className="text-base font-bold text-gray-900">Settings</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Admin only</p>
+          {isAdmin && <p className="text-xs text-gray-400 mt-0.5">Admin</p>}
         </div>
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           {SECTIONS.map(s => (
@@ -1261,6 +1295,60 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
                   </p>
                 )}
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SECURITY ── */}
+        {activeSection === 'security' && (
+          <div className="space-y-8">
+            <h2 className="text-xl font-bold text-gray-900">Security</h2>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5 max-w-md">
+              <h3 className="text-sm font-bold text-gray-900">Change Password</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Current Password</label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={e => setCurrentPassword(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                    placeholder="Enter current password"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                    placeholder="At least 8 characters"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Confirm New Password</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                    placeholder="Repeat new password"
+                  />
+                </div>
+              </div>
+              {passwordMsg && (
+                <p className={`text-sm font-medium ${passwordMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {passwordMsg.text}
+                </p>
+              )}
+              <button
+                onClick={changePassword}
+                disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+                className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
+              >
+                {changingPassword ? 'Saving…' : 'Update Password'}
+              </button>
             </div>
           </div>
         )}
