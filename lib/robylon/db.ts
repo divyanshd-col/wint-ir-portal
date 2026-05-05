@@ -268,6 +268,32 @@ export async function getUnscoredConversations(minHoursOld = 12): Promise<Conver
   `, [minHoursOld]);
 }
 
+/**
+ * Find a chat conversation matching a phone number on a given date.
+ * Uses last-10-digit suffix matching so country-code variations (91xxxxxxxxxx vs xxxxxxxxxx) still match.
+ * Returns the conversation closed closest to the given time, or null if none found.
+ */
+export async function findConversationByPhoneAndDate(
+  phone: string,
+  date: string, // 'YYYY-MM-DD'
+): Promise<ConversationRow | null> {
+  const last10 = phone.replace(/\D/g, '').slice(-10);
+  if (!last10) return null;
+  const rows = await query<ConversationRow>(`
+    SELECT c.*
+    FROM conversations c
+    LEFT JOIN contacts ct ON ct.id = c.contact_id
+    WHERE (
+      RIGHT(COALESCE(c.phone_number, ''), 10) = $1
+      OR RIGHT(COALESCE(ct.phone, ''), 10) = $1
+    )
+    AND c.closed_at::date = $2::date
+    ORDER BY c.closed_at DESC
+    LIMIT 1
+  `, [last10, date]);
+  return rows[0] ?? null;
+}
+
 export async function countUnscoredConversations(minHoursOld = 0): Promise<number> {
   const rows = await query<{ count: string }>(`
     SELECT COUNT(*) AS count

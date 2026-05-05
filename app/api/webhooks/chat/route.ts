@@ -37,6 +37,7 @@ import {
   getConversation,
   isScored,
   insertIQSScore,
+  findConversationByPhoneAndDate,
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
@@ -489,6 +490,63 @@ async function handleCsatEvent(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat: normalised.score });
 }
 
+// ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
+// Maps a voice call to an existing chat conversation by matching phone number
+// (last 10 digits) + call date. Attaches voice call data to the conversation's
+// raw_payload without overwriting the chat transcript or IQS score.
+async function handleVoiceCallComplete(body: any): Promise<NextResponse> {
+  const rawPhone = String(
+    body.data?.phone_number || body.requester_info?.phone_number || ''
+  ).replace(/\D/g, '');
+
+  const callEndedAt = body.data?.ended_at || body.created_at || '';
+  const callDate = callEndedAt
+    ? callEndedAt.split('T')[0]
+    : new Date().toISOString().split('T')[0];
+
+  if (!rawPhone) {
+    console.log('[webhook] CC_VOICE_CALL_COMPLETE — no phone number in payload');
+    return NextResponse.json({ ok: true, matched: false, reason: 'No phone number in payload' });
+  }
+
+  const matched = await findConversationByPhoneAndDate(rawPhone, callDate);
+
+  if (!matched) {
+    console.log(`[webhook] CC_VOICE_CALL_COMPLETE — no chat found for phone ...${rawPhone.slice(-10)} on ${callDate}`);
+    return NextResponse.json({ ok: true, matched: false, phone_suffix: rawPhone.slice(-10), date: callDate });
+  }
+
+  // Attach voice call data to the existing conversation.
+  // raw_payload is updated; transcript/tags/scores are left untouched (COALESCE keeps them).
+  await upsertConversation({
+    id: matched.id,
+    rawPayload: {
+      _voice_call: {
+        ticket_id:      body.ticket_id,
+        call_status:    body.data?.call_status,
+        call_duration:  body.data?.call_duration,
+        recording_url:  body.data?.recording_url,
+        started_at:     body.data?.started_at,
+        ended_at:       body.data?.ended_at,
+        handled_by:     body.handled_by,
+        transcript:     body.data?.transcript,
+      },
+      _original_event: body,
+    },
+    webhookTrigger: 'CC_VOICE_CALL_COMPLETE',
+  });
+
+  console.log(`[webhook] CC_VOICE_CALL_COMPLETE — linked to chat ${matched.id} (phone ...${rawPhone.slice(-10)}, date ${callDate}, recording: ${body.data?.recording_url ?? 'none'})`);
+  return NextResponse.json({
+    ok: true,
+    matched: true,
+    chat_id: matched.id,
+    phone_suffix: rawPhone.slice(-10),
+    date: callDate,
+    recording_url: body.data?.recording_url ?? null,
+  });
+}
+
 // ── Handler: legacy flat payload (backward compat) ────────────────────────────
 async function handleLegacyPayload(body: any): Promise<NextResponse> {
   const {
@@ -615,8 +673,9 @@ export async function POST(req: NextRequest) {
 
   const eventType = String(body.event_type || '');
 
-  if (eventType === 'TICKET_CLOSED')          return handleTicketClosed(body);
-  if (eventType === 'CLASSIFICATION_UPDATED') return handleClassificationUpdated(body);
-  if (eventType === 'CSAT_SUBMITTED')         return handleCsatEvent(body);
+  if (eventType === 'TICKET_CLOSED')           return handleTicketClosed(body);
+  if (eventType === 'CLASSIFICATION_UPDATED')  return handleClassificationUpdated(body);
+  if (eventType === 'CSAT_SUBMITTED')          return handleCsatEvent(body);
+  if (eventType === 'CC_VOICE_CALL_COMPLETE')  return handleVoiceCallComplete(body);
   return handleLegacyPayload(body);
 }
