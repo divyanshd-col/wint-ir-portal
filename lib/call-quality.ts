@@ -1,49 +1,72 @@
 /**
  * Call quality scoring — types, weights, prompts, and helpers.
- * Mirrors lib/quality.ts but adapted for voice call transcripts.
+ * Parameters sourced from "CHATS CSAT/IQS Metrics (NEW)" spec sheet.
+ * Call and chat are scored 100% independently against their own transcripts.
  */
 
-// ── Parameter weights ─────────────────────────────────────────────────────────
+// ── Parameter weights (must sum to 1.0) ──────────────────────────────────────
+
 export const CALL_WEIGHTS: Record<string, number> = {
-  Technical:    0.20,
-  AllQuestions: 0.10,
-  Expectation:  0.10,
-  Tone:         0.10,
-  Interruptions:0.10,
-  DeadAir:      0.10,
-  Contextual:   0.05,
-  FollowUp:     0.05,
-  Process:      0.05,
-  Opening:      0.05,
-  Empathy:      0.05,
-  Language:     0.05,
+  TechnicalLegal: 0.20, // Technically / Legal-wise
+  AllQuestions:   0.10, // All Questions Answered
+  ProcessWise:    0.05, // Process-wise
+  Opening:        0.05, // First Response & Opening
+  OnCall:         0.05, // Going on a call (when required)
+  Contextual:     0.10, // Contextual & Personal Answers
+  Tags:           0.05, // Tags Accuracy
+  Expectation:    0.10, // Expectation Setting
+  Sentences:      0.10, // Sentences (simple to understand)
+  Grammar:        0.05, // Grammatically & Structurally correct
+  Empathy:        0.05, // Empathy
+  FollowUp:       0.10, // Personalised Follow-up & Closing
 };
 
 export const CALL_PARAM_NAMES: Record<string, string> = {
-  Technical:    'Technically / Legally Correct',
-  AllQuestions: 'All Questions Answered',
-  Expectation:  'Expectation Setting',
-  Tone:         'Tone & Communication',
-  Interruptions:'Interruptions',
-  DeadAir:      'Dead Air Handling',
-  Contextual:   'Contextual & Personal',
-  FollowUp:     'Follow-up & Closing',
-  Process:      'Process-wise',
-  Opening:      'Opening & Self-Introduction',
-  Empathy:      'Empathy',
-  Language:     'Language Handling',
+  TechnicalLegal: 'Technically / Legal-wise',
+  AllQuestions:   'All Questions Answered',
+  ProcessWise:    'Process-wise',
+  Opening:        'First Response & Opening',
+  OnCall:         'Going on a call (when required)',
+  Contextual:     'Contextual & Personal Answers',
+  Tags:           'Tags Accuracy',
+  Expectation:    'Expectation Setting',
+  Sentences:      'Sentences (simple to understand)',
+  Grammar:        'Grammatically & Structurally correct',
+  Empathy:        'Empathy',
+  FollowUp:       'Personalised Follow-up & Closing',
+};
+
+// Grouped for display (mirrors the spec sheet)
+export const CALL_PARAM_GROUPS: Record<string, { label: string; keys: string[] }> = {
+  technical: {
+    label: 'Technical Answer (35%)',
+    keys: ['TechnicalLegal', 'AllQuestions', 'ProcessWise'],
+  },
+  process: {
+    label: 'Process Knowledge (35%)',
+    keys: ['Opening', 'OnCall', 'Contextual', 'Tags', 'Expectation'],
+  },
+  grammar: {
+    label: 'Grammar & Sentence Framing / Tone (15%)',
+    keys: ['Sentences', 'Grammar'],
+  },
+  extra: {
+    label: 'Going an Extra Mile (15%)',
+    keys: ['Empathy', 'FollowUp'],
+  },
 };
 
 export const CALL_PARAM_ORDER = [
-  'Technical', 'AllQuestions', 'Expectation', 'Tone',
-  'Interruptions', 'DeadAir', 'Contextual', 'FollowUp',
-  'Process', 'Opening', 'Empathy', 'Language',
+  'TechnicalLegal', 'AllQuestions', 'ProcessWise',
+  'Opening', 'OnCall', 'Contextual', 'Tags', 'Expectation',
+  'Sentences', 'Grammar',
+  'Empathy', 'FollowUp',
 ];
 
 export type CallParamScore = 'Yes' | 'No' | 'NA';
 
 export interface CallIQSScoreEntry {
-  callId: string;
+  callId?: string;
   chatId?: string | null;
   agentName: string;
   calledAt?: string;
@@ -62,20 +85,20 @@ export interface CallIQSScoreEntry {
 
 export interface CallSegment {
   type: 'speech' | 'interruption' | 'dead_air';
-  // speech fields
+  // speech
   speaker?: string;
   text?: string;
   translated?: boolean;
-  // interruption fields
+  // interruption
   interrupted_speaker?: string;
   interrupted_by?: string;
   words_spoken?: number;
-  // dead_air fields
+  // dead_air
   duration?: string;
   resumed_by?: string;
 }
 
-// ── IQS calculation ───────────────────────────────────────────────────────────
+// ── IQS calculation (same formula as lib/quality.ts calculateIQS) ────────────
 export function calculateCallIQS(scores: Record<string, CallParamScore>): number {
   let total = 0;
   for (const [param, weight] of Object.entries(CALL_WEIGHTS)) {
@@ -85,67 +108,12 @@ export function calculateCallIQS(scores: Record<string, CallParamScore>): number
   return Math.round(total * 100);
 }
 
-// ── Score Interruptions + DeadAir deterministically from segment counts ───────
-export function scoreAutomaticParams(
-  interruptionCount: number,
-  deadAirCount: number,
-): { scores: Pick<Record<string, CallParamScore>, 'Interruptions' | 'DeadAir'>; reasoning: Pick<Record<string, string>, 'Interruptions' | 'DeadAir'> } {
-  const interruptionScore: CallParamScore = interruptionCount <= 2 ? 'Yes' : 'No';
-  const deadAirScore: CallParamScore = deadAirCount === 0 ? 'Yes' : deadAirCount <= 1 ? 'NA' : 'No';
-
-  return {
-    scores: {
-      Interruptions: interruptionScore,
-      DeadAir: deadAirScore,
-    },
-    reasoning: {
-      Interruptions: interruptionCount <= 2
-        ? `${interruptionCount} interruption(s) detected — within acceptable threshold.`
-        : `${interruptionCount} interruptions detected — IR executive was cut off multiple times before completing sentences.`,
-      DeadAir: deadAirCount === 0
-        ? 'No dead air detected.'
-        : deadAirCount === 1
-        ? '1 instance of dead air — borderline, scored NA.'
-        : `${deadAirCount} instances of dead air detected — call had notable silences that affected flow.`,
-    },
-  };
-}
-
-// ── Transcription prompt ──────────────────────────────────────────────────────
-export const CALL_TRANSCRIPTION_PROMPT = `Transcribe this IR (Investor Relations) call recording from Wint Wealth.
-
-## SPEAKER IDENTIFICATION
-- IR EXECUTIVE: the person who introduces themselves and mentions "Wint Wealth"
-- INVESTOR: the other speaker (the customer/investor)
-
-## TRANSCRIPTION RULES
-1. Transcribe every word verbatim — do not paraphrase or skip anything
-2. Overlapping speech (both talking at once): capture both speakers in separate consecutive segments
-3. For non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.): translate to fluent English in the "text" field and set "translated": true
-4. If a speaker is cut off before finishing ~10 words, insert an interruption flag BEFORE the next speaker's segment
-5. If there is silence ≥ 2 seconds, insert a dead_air flag with estimated duration and who resumed
-
-## OUTPUT FORMAT
-Respond with ONLY this JSON — no other text:
-{
-  "language": "e.g. Tamil + English",
-  "segments": [
-    {"type": "speech", "speaker": "INVESTOR", "text": "Hello?", "translated": false},
-    {"type": "dead_air", "duration": "~3 seconds", "resumed_by": "IR EXECUTIVE"},
-    {"type": "speech", "speaker": "IR EXECUTIVE", "text": "Hi, this is Priya from Wint Wealth.", "translated": false},
-    {"type": "interruption", "interrupted_speaker": "IR EXECUTIVE", "interrupted_by": "INVESTOR", "words_spoken": 5},
-    {"type": "speech", "speaker": "INVESTOR", "text": "Sorry, what was the bond name?", "translated": false}
-  ]
-}
-
-CRITICAL: Output ONLY the JSON. No markdown fences, no preamble, no explanation.`;
-
-// ── Build text transcript from segments (for IQS scoring prompt) ──────────────
+// ── Build readable text from segments (for LLM scoring input) ────────────────
 export function segmentsToText(segments: CallSegment[]): string {
   const lines: string[] = [];
   for (const seg of segments) {
     if (seg.type === 'speech') {
-      lines.push(`${seg.speaker}: ${seg.text}${seg.translated ? ' [translated]' : ''}`);
+      lines.push(`${seg.speaker}: ${seg.text}${seg.translated ? ' [translated from regional language]' : ''}`);
     } else if (seg.type === 'interruption') {
       lines.push(`[INTERRUPTION: ${seg.interrupted_speaker} cut off by ${seg.interrupted_by} after ${seg.words_spoken ?? '?'} words]`);
     } else if (seg.type === 'dead_air') {
@@ -155,176 +123,200 @@ export function segmentsToText(segments: CallSegment[]): string {
   return lines.join('\n');
 }
 
-// ── Call IQS scoring prompt ───────────────────────────────────────────────────
-export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality evaluator. You score IR (Investor Relations) call transcripts across 10 parameters (Interruptions and Dead Air are scored separately from counts — do NOT include them in your output).
+// ── Transcription prompt (audio → segment JSON) ───────────────────────────────
+export const CALL_TRANSCRIPTION_PROMPT = `Transcribe this IR (Investor Relations) call recording from Wint Wealth.
+
+## SPEAKER IDENTIFICATION
+- IR EXECUTIVE: the person who introduces themselves and says "Wint Wealth"
+- INVESTOR: the other speaker (the customer / investor)
+
+## RULES
+1. Transcribe every word verbatim — do not skip, summarise, or paraphrase
+2. Overlapping speech: capture both speakers in separate consecutive segments
+3. Non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.): translate to fluent English in the "text" field and set "translated": true
+4. Interruption: if a speaker is cut off mid-sentence (fewer than ~10 words spoken), insert an interruption object BEFORE the next speaker's segment
+5. Dead air: if there is silence ≥ 2 seconds, insert a dead_air object with estimated duration and who resumed
+
+## OUTPUT — respond with ONLY this JSON, no other text:
+{
+  "language": "e.g. Tamil + English",
+  "segments": [
+    {"type": "speech", "speaker": "INVESTOR", "text": "Hello?", "translated": false},
+    {"type": "dead_air", "duration": "~3 seconds", "resumed_by": "IR EXECUTIVE"},
+    {"type": "speech", "speaker": "IR EXECUTIVE", "text": "Hi, this is Priya from Wint Wealth.", "translated": false},
+    {"type": "interruption", "interrupted_speaker": "IR EXECUTIVE", "interrupted_by": "INVESTOR", "words_spoken": 5},
+    {"type": "speech", "speaker": "INVESTOR", "text": "Sorry, what was the bond name?", "translated": false}
+  ]
+}`;
+
+// ── Call IQS scoring system prompt ───────────────────────────────────────────
+export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality evaluator. You score IR (Investor Relations) voice call transcripts across 12 parameters grouped into 4 attributes.
+
+The IR EXECUTIVE is the Wint Wealth agent. The INVESTOR is the customer.
 
 ## SCORING PHILOSOPHY
-- Catch DEFINITIVE FAILURES, not imperfections. When in doubt, score Yes.
-- NA parameters count as Yes (pass) in the final IQS calculation.
-- Never assume failure when the transcript is ambiguous — give the agent benefit of the doubt.
-- Interruptions and DeadAir will be computed from segment counts automatically — do NOT include them in your scores or reasoning.
+- Catch DEFINITIVE failures, not minor imperfections. When in doubt, score Yes.
+- NA counts as Yes (pass) in the final IQS calculation.
+- Never penalise an agent for something the transcript does not clearly show.
+- You will receive the CALL TRANSCRIPT (what you score) and optionally a WHATSAPP CHAT TRANSCRIPT (context only — do not score it, use it to understand what the investor raised before the call).
 
-## WINT WEALTH SPECIFIC POLICIES
-- The IR EXECUTIVE is the Wint Wealth agent. The INVESTOR is the customer.
-- The IR executive should introduce themselves by name and mention "Wint Wealth" at the start.
-- All product information must align with Wint Wealth's bond/investment offerings.
+---
 
-## THE 10 PARAMETERS YOU MUST SCORE
+## ATTRIBUTE 1: Technical Answer (35% total)
 
-### 1. Technically / Legally Correct (20%)
-- Yes: Information given is factually accurate per Wint Wealth products (bonds, yields, process).
-- No: Clear factual error about product details, returns, timelines, or legal requirements.
-- NA: No substantive information exchanged.
+### 1. Technically / Legal-wise (20%)
+- Yes: All product information is factually correct — bond name, yield, tenure, payout, taxation, lock-in, redemption process — per Wint Wealth's offerings.
+- No: Agent gave a clear factual error about product details, returns, timelines, or legal requirements.
+- NA: No substantive product information was exchanged.
 
 ### 2. All Questions Answered (10%)
-- Yes: Every investor question was addressed or explicitly deferred with a reason.
-- No: An investor question was ignored or redirected without answering.
+- Yes: Every question the investor asked was addressed directly, or explicitly deferred with a reason ("I'll send you an email", "let me check and call back").
+- No: An investor question was ignored, redirected without answering, or left hanging.
 - NA: Very rare.
 
-### 3. Expectation Setting (10%)
-- Yes: Agent provided specific timelines, next steps, or commitments.
-- No: Investor asked when/how long and got no specific answer. OR promise made without timeline.
+### 3. Process-wise (5%)
+- Yes: Agent followed the correct Wint Wealth workflow — correct escalation, correct next steps advised, no process shortcuts.
+- No: Clear, provable process violation — wrong step advised, told investor to do something they shouldn't, or contradicted standard Wint process.
 - NA: Very rare.
 
-### 4. Tone & Communication (10%)
-- Yes: Professional, clear, polite tone throughout the call.
-- No: Rude, dismissive, excessively casual, or confusing communication.
+---
+
+## ATTRIBUTE 2: Process Knowledge (35% total)
+
+### 4. First Response & Opening (5%)
+- Yes: Agent introduced themselves by name AND mentioned "Wint Wealth" at or near the start of the call.
+- No: No introduction, OR agent name missing, OR "Wint Wealth" not mentioned.
 - NA: Very rare.
 
-### 5. Contextual & Personal (5%)
-- Yes: Agent referenced investor-specific details (bond name, amount, dates, account).
-- No: Generic response that could apply to any investor.
+### 5. Going on a call — when required (5%)
+- Yes: A call was needed and the agent handled it correctly OR a call was not required (score NA when irrelevant).
+- No: A call was clearly needed (customer was distressed, issue complex) but agent did not offer/conduct one. OR call was handled incorrectly.
+- NA: MOST calls — score NA unless there was a clear failure or clear need.
+
+### 6. Contextual & Personal Answers (10%)
+- Yes: Agent referenced investor-specific details — their bond name, investment amount, maturity date, account number, or specific situation.
+- No: Generic answer that could apply to any investor — no personalisation, no specific details.
 - NA: Very rare.
 
-### 6. Follow-up & Closing (5%)
-- Yes: Call ended with clear next steps, commitment to follow up, or warm sign-off.
-- No: Call ended abruptly or with no clarity on next steps.
+### 7. Tags Accuracy (5%)
+- Yes: The disposition (L1) and sub-disposition (L2) tags visible in metadata accurately reflect the call's main topic.
+- No: Tags are wrong or mismatched — e.g. tagged "Referral" but call is about payout delay.
+- NA: No tag data available — score NA.
+
+### 8. Expectation Setting (10%)
+- Yes: Agent gave a specific timeline, next step, or commitment: "credited within 7 working days", "I'll email you by 5 PM today".
+- No: Investor asked when/how long and got no specific answer. OR agent made a promise without a timeframe.
+- NA: No timeline-sensitive question was asked.
+
+---
+
+## ATTRIBUTE 3: Grammar & Sentence Framing / Tone (15% total)
+
+### 9. Sentences — simple to understand (10%)
+- Yes: Language is clear, simple, and free of jargon the investor would not understand. Short sentences. Easy to follow.
+- No: Confusing language, excessive jargon, run-on sentences, or investor had to ask for clarification repeatedly.
 - NA: Very rare.
 
-### 7. Process-wise (5%)
-- Yes: Agent followed correct escalation/information workflow.
-- No: Clear process violation — wrong info given, incorrect step advised.
+### 10. Grammatically & Structurally correct (5%)
+- Yes: Responses are grammatically complete. No broken sentences, no missing words, no unintelligible fragments.
+- No: Repeated incomplete sentences, missing conjunctions, or structurally broken responses that confused the investor.
+- NA: Very rare. Minor slips are acceptable.
+
+---
+
+## ATTRIBUTE 4: Going an Extra Mile (15% total)
+
+### 11. Empathy (5%)
+- Yes: At least one genuine empathy expression — "I understand your concern", "I'm sorry for the inconvenience", "I can see why that would be frustrating".
+- No: No empathy anywhere in the call, OR passive/dismissive language used.
+- NA: Very rare. Bar is low — even one genuine expression passes.
+
+### 12. Personalised Follow-up & Closing (10%)
+- Yes: Call ended with a clear personalised follow-up action + warm sign-off. E.g. "I'll send you the statement by EOD and follow up tomorrow, take care!"
+- No: Generic closing ("is there anything else?") with no personalised next step. OR abrupt hang-up. OR no closing at all.
 - NA: Very rare.
 
-### 8. Opening & Self-Introduction (5%)
-- Yes: Agent introduced themselves by name AND mentioned "Wint Wealth" at the start.
-- No: No introduction, OR missing name, OR missing "Wint Wealth".
-- NA: Very rare.
-
-### 9. Empathy (5%)
-- Yes: At least one genuine empathy expression — acknowledgment of concern, apology for inconvenience, etc.
-- No: No empathy at all, OR passive/dismissive language.
-- NA: Very rare.
-
-### 10. Language Handling (5%)
-- Yes: Code-switching was handled smoothly; investor understood responses regardless of language mix.
-- No: Language confusion caused miscommunication; investor had to repeat due to language barrier.
-- NA: Call was in a single language with no code-switching.
+---
 
 ## OUTPUT FORMAT
-Respond with EXACTLY this JSON (10 parameters only — no Interruptions, no DeadAir):
+Respond with EXACTLY this JSON — no other text:
 \`\`\`json
 {
   "scores": {
-    "Technical": "Yes|No|NA",
-    "AllQuestions": "Yes|No|NA",
-    "Expectation": "Yes|No|NA",
-    "Tone": "Yes|No|NA",
-    "Contextual": "Yes|No|NA",
-    "FollowUp": "Yes|No|NA",
-    "Process": "Yes|No|NA",
-    "Opening": "Yes|No|NA",
-    "Empathy": "Yes|No|NA",
-    "Language": "Yes|No|NA"
+    "TechnicalLegal": "Yes|No|NA",
+    "AllQuestions":   "Yes|No|NA",
+    "ProcessWise":    "Yes|No|NA",
+    "Opening":        "Yes|No|NA",
+    "OnCall":         "Yes|No|NA",
+    "Contextual":     "Yes|No|NA",
+    "Tags":           "Yes|No|NA",
+    "Expectation":    "Yes|No|NA",
+    "Sentences":      "Yes|No|NA",
+    "Grammar":        "Yes|No|NA",
+    "Empathy":        "Yes|No|NA",
+    "FollowUp":       "Yes|No|NA"
   },
   "reasoning": {
-    "Technical": "brief reason",
-    "AllQuestions": "brief reason",
-    "Expectation": "brief reason",
-    "Tone": "brief reason",
-    "Contextual": "brief reason",
-    "FollowUp": "brief reason",
-    "Process": "brief reason",
-    "Opening": "brief reason",
-    "Empathy": "brief reason",
-    "Language": "brief reason"
+    "TechnicalLegal": "brief reason",
+    "AllQuestions":   "brief reason",
+    "ProcessWise":    "brief reason",
+    "Opening":        "brief reason",
+    "OnCall":         "brief reason",
+    "Contextual":     "brief reason",
+    "Tags":           "brief reason",
+    "Expectation":    "brief reason",
+    "Sentences":      "brief reason",
+    "Grammar":        "brief reason",
+    "Empathy":        "brief reason",
+    "FollowUp":       "brief reason"
   },
   "iqs_score": 85,
-  "summary": "1-2 sentence overall assessment"
+  "summary": "1-2 sentence overall assessment of the call"
 }
 \`\`\`
 CRITICAL: Output ONLY the JSON.`;
 
+// ── Build scoring prompt (call transcript + optional chat context) ─────────────
 export function buildCallScoringPrompt(
-  transcriptText: string,
+  callTranscriptText: string,
+  chatTranscriptText: string,
   callId: string,
   interruptionCount: number,
   deadAirCount: number,
   kbContext = '',
 ): string {
-  return `Score the following Wint Wealth IR call transcript.
+  return `Score the following Wint Wealth IR call.
 
 ## CALL METADATA
 - Call ID: ${callId}
-- Interruptions detected: ${interruptionCount}
+- Interruptions detected in call: ${interruptionCount}
 - Dead air instances detected: ${deadAirCount}
 ${kbContext ? `
 ## WINT KNOWLEDGE BASE REFERENCE
-Use these excerpts to evaluate whether the IR executive's information is technically correct.
+Use these KB excerpts to verify whether the IR executive's product information is correct.
 
-${kbContext}` : ''}
+${kbContext}
+` : ''}
+## CALL TRANSCRIPT — score this
+${callTranscriptText}
+${chatTranscriptText ? `
+## WHATSAPP CHAT CONTEXT — reference only, do NOT score this
+The investor had this WhatsApp conversation before the call. Use it to understand
+what issues were raised and check whether the call addressed them.
 
-## CALL TRANSCRIPT
-${transcriptText}
-
-Score this call across the 10 parameters. Output ONLY the JSON.`;
+${chatTranscriptText}
+` : ''}
+Score this call across all 12 parameters. Output ONLY the JSON.`;
 }
 
-// ── Parse call scoring response ───────────────────────────────────────────────
-function robustJsonParse(raw: string): any {
-  let jsonStr = raw.trim();
-  const block = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (block) jsonStr = block[1].trim();
-  else {
-    const start = jsonStr.indexOf('{');
-    const end = jsonStr.lastIndexOf('}');
-    if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1);
-  }
-  try { return JSON.parse(jsonStr); } catch {}
-  try {
-    return JSON.parse(jsonStr.replace(/("(?:[^"\\]|\\.)*")/g, m =>
-      m.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t')));
-  } catch {}
-  throw new Error(`Cannot parse call scoring response: ${jsonStr.slice(0, 200)}`);
-}
-
-export function parseCallScoringResponse(
-  raw: string,
-  interruptionCount: number,
-  deadAirCount: number,
-): { scores: Record<string, CallParamScore>; reasoning: Record<string, string>; iqs: number; summary: string } {
-  const data = robustJsonParse(raw);
-  const llmScores: Record<string, CallParamScore> = data.scores || {};
-  const reasoning: Record<string, string> = data.reasoning || {};
-
-  // Merge in deterministically-scored params
-  const auto = scoreAutomaticParams(interruptionCount, deadAirCount);
-  const scores: Record<string, CallParamScore> = { ...llmScores, ...auto.scores };
-  Object.assign(reasoning, auto.reasoning);
-
-  const iqs = calculateCallIQS(scores);
-
-  return { scores, reasoning, iqs, summary: data.summary || '' };
-}
-
-// ── Parse transcription JSON from Gemini ──────────────────────────────────────
+// ── Parse Gemini transcription response ───────────────────────────────────────
 export function parseTranscriptionResponse(raw: string): { language: string; segments: CallSegment[] } {
   let jsonStr = raw.trim();
   const block = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (block) jsonStr = block[1].trim();
   else {
     const start = jsonStr.indexOf('{');
-    const end = jsonStr.lastIndexOf('}');
+    const end   = jsonStr.lastIndexOf('}');
     if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1);
   }
   try {
@@ -336,4 +328,38 @@ export function parseTranscriptionResponse(raw: string): { language: string; seg
   } catch {
     return { language: 'English', segments: [] };
   }
+}
+
+// ── Parse call IQS scoring response ──────────────────────────────────────────
+function robustJsonParse(raw: string): any {
+  let jsonStr = raw.trim();
+  const block = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (block) jsonStr = block[1].trim();
+  else {
+    const start = jsonStr.indexOf('{');
+    const end   = jsonStr.lastIndexOf('}');
+    if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1);
+  }
+  try { return JSON.parse(jsonStr); } catch {}
+  try {
+    return JSON.parse(
+      jsonStr.replace(/("(?:[^"\\]|\\.)*")/g, m =>
+        m.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t'),
+      ),
+    );
+  } catch {}
+  throw new Error(`Cannot parse call scoring response: ${jsonStr.slice(0, 200)}`);
+}
+
+export function parseCallScoringResponse(raw: string): {
+  scores: Record<string, CallParamScore>;
+  reasoning: Record<string, string>;
+  iqs: number;
+  summary: string;
+} {
+  const data = robustJsonParse(raw);
+  const scores: Record<string, CallParamScore>   = data.scores   || {};
+  const reasoning: Record<string, string>         = data.reasoning || {};
+  const iqs = calculateCallIQS(scores); // always recalculate, never trust LLM's number
+  return { scores, reasoning, iqs, summary: data.summary || '' };
 }

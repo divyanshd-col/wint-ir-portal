@@ -27,6 +27,13 @@ import {
   analyzeConversationTiming,
 } from '@/lib/quality';
 import type { TimedMessage } from '@/lib/quality';
+import {
+  CALL_IQS_SYSTEM_PROMPT,
+  buildCallScoringPrompt,
+  parseCallScoringResponse,
+  segmentsToText,
+} from '@/lib/call-quality';
+import type { CallParamScore } from '@/lib/call-quality';
 import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock } from '@/lib/store';
 import {
   upsertAgent,
@@ -37,6 +44,11 @@ import {
   getConversation,
   isScored,
   insertIQSScore,
+  updateCallIQSScore,
+  getUnlinkedCallsForContact,
+  linkCallToChat,
+  getLinkedUnscoredCallsForChat,
+  updateCallRecordingStatus,
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
@@ -149,6 +161,95 @@ function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult
     score: score === 'Yes' ? true : score === 'No' ? false : null,
     reasoning,
   };
+}
+
+// ── Call IQS scoring for calls linked to a chat ───────────────────────────────
+async function scoreLinkedCallsForChat(
+  chatId: string,
+  chatTranscriptText: string,
+  disposition: string,
+  subDisposition: string,
+  config: any,
+): Promise<void> {
+  const calls = await getLinkedUnscoredCallsForChat(chatId);
+  if (!calls.length) return;
+
+  const geminiKeys = getIQSGeminiKeys(config);
+  if (!geminiKeys.length) return;
+
+  let kbContext = '';
+  try {
+    const searchQuery = disposition ? `${disposition} ${subDisposition}`.trim() : '';
+    if (searchQuery) {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
+      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+    }
+  } catch {}
+
+  for (const call of calls) {
+    const segments = Array.isArray(call.transcript) ? call.transcript : [];
+    const callText  = segmentsToText(segments);
+    if (!callText) {
+      await updateCallRecordingStatus(call.id, 'scored');
+      continue;
+    }
+
+    const scoringPrompt = buildCallScoringPrompt(
+      callText,
+      chatTranscriptText,
+      call.id,
+      call.interruption_count ?? 0,
+      call.dead_air_count ?? 0,
+      kbContext,
+    );
+
+    try {
+      const raw = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [{ text: CALL_IQS_SYSTEM_PROMPT + '\n\n' + scoringPrompt }] }],
+        {},
+        60_000,
+      );
+
+      const { scores, reasoning, iqs } = parseCallScoringResponse(raw);
+      const parameters: Record<string, IQSParameterResult> = {};
+      for (const [key, val] of Object.entries(scores)) {
+        parameters[key] = {
+          score: val === 'Yes' ? true : val === 'No' ? false : null,
+          reasoning: reasoning[key] || '',
+        };
+      }
+
+      await updateCallIQSScore({ chatId, callIqsScore: iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
+      await updateCallRecordingStatus(call.id, 'scored');
+      console.log(`[webhook] Scored call ${call.id} → IQS ${iqs} for chat ${chatId}`);
+    } catch (err: any) {
+      console.error(`[webhook] Call IQS scoring failed for call ${call.id}:`, err.message);
+    }
+  }
+}
+
+// ── Link unscored calls to a chat, then score them if disposition is known ────
+async function linkAndScoreCallsForChat(
+  chatId: string,
+  contactId: number,
+  closedAt: string,
+  chatTranscriptText: string,
+  disposition: string,
+  subDisposition: string,
+  config: any,
+): Promise<void> {
+  const unlinked = await getUnlinkedCallsForContact(contactId, closedAt);
+  if (!unlinked.length) return;
+
+  await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
+  console.log(`[webhook] Linked ${unlinked.length} call(s) to chat ${chatId}`);
+
+  if (disposition) {
+    await scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config);
+  }
 }
 
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
@@ -399,16 +500,44 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   // Check if tags already stored (from a prior CLASSIFICATION_UPDATED)
   const existingConv = await getConversation(chatId);
   const hasTags = !!(existingConv?.tags);
+  const config = await readConfig();
 
-  if (hasTags && existingConv) {
-    const tags = existingConv.tags as any;
-    const scored = await executeScoring(
-      existingConv,
-      effectiveWebhookAgent,
-      tags?.disposition || '',
-      tags?.sub_disposition || '',
-      mobileNumber,
+  const disposition    = hasTags ? (existingConv!.tags as any)?.disposition    || '' : '';
+  const subDisposition = hasTags ? (existingConv!.tags as any)?.sub_disposition || '' : '';
+
+  // Always: link any pending_link calls for this contact to this chat (now that we have chatId + closedAt).
+  // Score them in parallel with chat scoring if tags are already available.
+  if (contactId && convEnded) {
+    const callLinkPromise = linkAndScoreCallsForChat(
+      chatId,
+      contactId,
+      convEnded,
+      transcriptText,
+      disposition,
+      subDisposition,
+      config,
     );
+
+    if (hasTags && existingConv) {
+      const [scoredResult] = await Promise.allSettled([
+        executeScoring(existingConv, effectiveWebhookAgent, disposition, subDisposition, mobileNumber),
+        callLinkPromise,
+      ]);
+      const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
+      if (scored) {
+        return NextResponse.json({
+          ok: true, chat_id: chatId, iqs: scored.iqs, agent: effectiveWebhookAgent,
+          conversation_type: timing.conversationType,
+          frt_secs: timing.frt, b_to_t_secs: timing.botToTeamSecs,
+          resolution_secs: timing.resolutionTime,
+        });
+      }
+    } else {
+      // No tags yet — link calls now; scoring fires at CLASSIFICATION_UPDATED
+      callLinkPromise.catch(err => console.error('[webhook] Call link error:', err));
+    }
+  } else if (hasTags && existingConv) {
+    const scored = await executeScoring(existingConv, effectiveWebhookAgent, disposition, subDisposition, mobileNumber);
     if (scored) {
       return NextResponse.json({
         ok: true, chat_id: chatId, iqs: scored.iqs, agent: effectiveWebhookAgent,
@@ -456,7 +585,19 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
       ? (await import('@/lib/robylon/db').then(m => m.getAgentName(agentId)))
       : '';
 
-    const scored = await executeScoring(conv, agentName, disposition, subDisposition);
+    // Build chat transcript text for call scoring context
+    let chatTranscriptText = '';
+    const transcriptMessages = Array.isArray(conv.transcript) ? conv.transcript
+      : Array.isArray((conv.transcript as any)?.messages) ? (conv.transcript as any).messages : [];
+    chatTranscriptText = transcriptFromJsonb(transcriptMessages);
+
+    const config = await readConfig();
+    const [scoredResult] = await Promise.allSettled([
+      executeScoring(conv, agentName, disposition, subDisposition),
+      scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config),
+    ]);
+
+    const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
     if (scored) {
       return NextResponse.json({
         ok: true, chat_id: chatId, iqs: scored.iqs,

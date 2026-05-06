@@ -352,23 +352,74 @@ export async function getCallRecording(callId: string): Promise<CallRecordingRow
   return rows[0] ?? null;
 }
 
-export async function insertCallIQSScore(data: {
-  callId: string;
-  iqsScore: number;
-  parameters: Record<string, IQSParameterResult>;
-  modelVersion: string;
+/** Upsert call IQS scores into iqs_scores keyed by chat_id.
+ *  Safe to call before or after the chat IQS row is created — ON CONFLICT merges. */
+export async function updateCallIQSScore(data: {
+  chatId: string;
+  callIqsScore: number;
+  callParameters: Record<string, IQSParameterResult>;
+  callModelVersion: string;
 }): Promise<void> {
   await query(`
-    INSERT INTO call_iqs_scores (call_id, iqs_score, parameters, model_version, scored_at)
-    VALUES ($1, $2, $3, $4, NOW())
-    ON CONFLICT (call_id) DO UPDATE SET
-      iqs_score     = EXCLUDED.iqs_score,
-      parameters    = EXCLUDED.parameters,
-      model_version = EXCLUDED.model_version,
-      scored_at     = NOW()
-  `, [data.callId, data.iqsScore, JSON.stringify(data.parameters), data.modelVersion]);
+    INSERT INTO iqs_scores (chat_id, call_iqs_score, call_parameters, call_model_version, call_scored_at)
+    VALUES ($4, $1, $2, $3, NOW())
+    ON CONFLICT (chat_id) DO UPDATE SET
+      call_iqs_score     = EXCLUDED.call_iqs_score,
+      call_parameters    = EXCLUDED.call_parameters,
+      call_model_version = EXCLUDED.call_model_version,
+      call_scored_at     = NOW()
+  `, [data.callIqsScore, JSON.stringify(data.callParameters), data.callModelVersion, data.chatId]);
+}
 
-  await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [data.callId]);
+/** Get call recording by the linked chat_id. */
+export async function getCallRecordingByChatId(chatId: string): Promise<CallRecordingRow | null> {
+  const rows = await query<CallRecordingRow>(
+    `SELECT * FROM call_recordings WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    [chatId],
+  );
+  return rows[0] ?? null;
+}
+
+/** Find call recordings for a contact that have not yet been linked to a chat.
+ *  Since one phone = one active chat at a time, all unlinked calls with
+ *  called_at <= closedAt belong to this chat. */
+export async function getUnlinkedCallsForContact(
+  contactId: number,
+  closedAt: string,
+): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(`
+    SELECT * FROM call_recordings
+    WHERE contact_id = $1
+      AND chat_id IS NULL
+      AND called_at <= $2::timestamptz
+    ORDER BY called_at ASC
+  `, [contactId, closedAt]);
+}
+
+/** Backfill chat_id and advance status to 'linked' on a call recording. */
+export async function linkCallToChat(callId: string, chatId: string): Promise<void> {
+  await query(
+    `UPDATE call_recordings
+     SET chat_id = $1, status = 'linked', updated_at = NOW()
+     WHERE id = $2`,
+    [chatId, callId],
+  );
+}
+
+/** Update only the status field on a call recording (e.g. 'scored'). */
+export async function updateCallRecordingStatus(id: string, status: string): Promise<void> {
+  await query(
+    `UPDATE call_recordings SET status = $1, updated_at = NOW() WHERE id = $2`,
+    [status, id],
+  );
+}
+
+/** Return all call recordings for a chat that are linked but not yet scored. */
+export async function getLinkedUnscoredCallsForChat(chatId: string): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(
+    `SELECT * FROM call_recordings WHERE chat_id = $1 AND status = 'linked' ORDER BY called_at ASC`,
+    [chatId],
+  );
 }
 
 export async function getAllScoredCalls(opts: {
@@ -381,7 +432,8 @@ export async function getAllScoredCalls(opts: {
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
-  const conditions: string[] = ['s.call_id IS NOT NULL'];
+  // Join call_recordings → iqs_scores (via chat_id) — call_iqs_score must exist
+  const conditions: string[] = ['s.call_iqs_score IS NOT NULL'];
   const params: any[] = [];
 
   if (opts.dateFrom) {
@@ -394,11 +446,11 @@ export async function getAllScoredCalls(opts: {
   }
   if (opts.minScore !== undefined) {
     params.push(opts.minScore);
-    conditions.push(`s.iqs_score >= $${params.length}`);
+    conditions.push(`s.call_iqs_score >= $${params.length}`);
   }
   if (opts.maxScore !== undefined) {
     params.push(opts.maxScore);
-    conditions.push(`s.iqs_score <= $${params.length}`);
+    conditions.push(`s.call_iqs_score <= $${params.length}`);
   }
   if (opts.agentName) {
     params.push(opts.agentName);
@@ -415,34 +467,34 @@ export async function getAllScoredCalls(opts: {
   const countRows = await query<{ count: string }>(`
     SELECT COUNT(*) AS count
     FROM call_recordings r
-    LEFT JOIN call_iqs_scores s ON s.call_id = r.id
+    JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN agents a ON a.id = r.agent_id
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
 
-  const page = opts.page ?? 0;
+  const page     = opts.page ?? 0;
   const pageSize = opts.pageSize ?? 50;
   const offsetVal = page * pageSize;
   params.push(pageSize, offsetVal);
 
   const rows = await query(`
     SELECT
-      r.id                  AS "callId",
-      r.chat_id             AS "chatId",
-      r.called_at           AS "calledAt",
-      r.called_at::date     AS "date",
-      r.duration_seconds    AS "durationSeconds",
+      r.id                   AS "callId",
+      r.chat_id              AS "chatId",
+      r.called_at            AS "calledAt",
+      r.called_at::date      AS "date",
+      r.duration_seconds     AS "durationSeconds",
       r.language,
-      r.interruption_count  AS "interruptionCount",
-      r.dead_air_count      AS "deadAirCount",
-      a.name                AS "agentName",
-      s.iqs_score           AS "iqs",
-      s.parameters,
-      s.model_version       AS "modelVersion",
-      s.scored_at           AS "scoredAt"
+      r.interruption_count   AS "interruptionCount",
+      r.dead_air_count       AS "deadAirCount",
+      a.name                 AS "agentName",
+      s.call_iqs_score       AS "iqs",
+      s.call_parameters      AS "parameters",
+      s.call_model_version   AS "modelVersion",
+      s.call_scored_at       AS "scoredAt"
     FROM call_recordings r
-    LEFT JOIN call_iqs_scores s ON s.call_id = r.id
+    JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN agents a ON a.id = r.agent_id
     ${where}
     ORDER BY r.called_at DESC
