@@ -632,6 +632,8 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [dispTrees, setDispTrees] = useState<DispositionTree[]>([]);
   const [agentOptions]            = useState<AgentOption[]>([]);
 
+  const [exporting, setExporting] = useState(false);
+
   // Multi-chat state
   const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string }>>([]);
   const [activeId, setActiveId] = useState('');
@@ -796,6 +798,32 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       agentIds: [],
       minUserMessages: minUserMsgs,
     };
+  }
+
+  async function downloadTranscripts() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const res = await fetch('/api/analytics/export-transcripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filters: buildFilters() }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const cd = res.headers.get('content-disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? 'transcripts.xlsx';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('Export failed: ' + err.message);
+    } finally {
+      setExporting(false);
+    }
   }
 
   const sendMessage = useCallback(async (text: string) => {
@@ -1170,6 +1198,30 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
               />
               <span className="text-[11px] text-gray-400 whitespace-nowrap">user msgs</span>
             </div>
+
+            <div className="w-px h-5 bg-gray-200 mx-0.5" />
+
+            {/* Download transcripts */}
+            <button
+              onClick={downloadTranscripts}
+              disabled={exporting}
+              title="Download transcripts matching current filters as Excel"
+              className="flex items-center gap-1.5 h-7 px-3 text-[11px] border border-gray-200 rounded-lg bg-white text-gray-600 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors font-medium shrink-0"
+            >
+              {exporting ? (
+                <>
+                  <span className="w-3 h-3 border border-gray-400 border-t-emerald-600 rounded-full animate-spin" />
+                  Exporting…
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                  </svg>
+                  Download Transcripts
+                </>
+              )}
+            </button>
           </div>
         </div>
 

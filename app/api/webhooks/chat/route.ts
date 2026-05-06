@@ -653,8 +653,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  // Log only non-sensitive metadata — never dump full payload in production
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' || process.env.WEBHOOK_LOG_PAYLOAD === 'true') {
     console.log('[webhook] Incoming payload:', JSON.stringify(body, null, 2));
   } else {
     console.log(`[webhook] Received event_type=${body.event_type || 'unknown'} chat_id=${body.chat_id || 'n/a'}`);
