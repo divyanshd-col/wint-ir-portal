@@ -277,3 +277,68 @@ export async function countUnscoredConversations(minHoursOld = 0): Promise<numbe
   `, [minHoursOld]);
   return parseInt(rows[0]?.count ?? '0', 10);
 }
+
+// ── Call IQS helpers ──────────────────────────────────────────────────────────
+
+/** Write call IQS scores back into the iqs_scores row for the same chat_id. */
+export async function updateCallIQSScore(data: {
+  chatId: string;
+  callIqsScore: number;
+  callParameters: Record<string, IQSParameterResult>;
+  callModelVersion: string;
+}): Promise<void> {
+  await query(`
+    UPDATE iqs_scores
+    SET call_iqs_score     = $1,
+        call_parameters    = $2,
+        call_model_version = $3,
+        call_scored_at     = NOW()
+    WHERE chat_id = $4
+  `, [data.callIqsScore, JSON.stringify(data.callParameters), data.callModelVersion, data.chatId]);
+}
+
+/** Get all scored call recordings (joined to iqs_scores for call IQS columns). */
+export async function getAllScoredCalls(
+  limit = 0,
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[] } = {},
+): Promise<any[]> {
+  const conditions: string[] = ['s.call_iqs_score IS NOT NULL'];
+  const params: any[] = [];
+
+  if (opts.dateFrom) {
+    params.push(opts.dateFrom);
+    conditions.push(`r.called_at::date >= $${params.length}`);
+  }
+  if (opts.dateTo) {
+    params.push(opts.dateTo);
+    conditions.push(`r.called_at::date <= $${params.length}`);
+  }
+  if (opts.agentName) {
+    params.push(opts.agentName);
+    conditions.push(`a.name = $${params.length}`);
+  } else if (opts.agentNames && opts.agentNames.length > 0) {
+    params.push(opts.agentNames);
+    conditions.push(`a.name = ANY($${params.length})`);
+  } else if (opts.agentNames && opts.agentNames.length === 0) {
+    conditions.push(`1=0`);
+  }
+
+  const where    = `WHERE ${conditions.join(' AND ')}`;
+  const limitSql = limit > 0 ? `LIMIT ${limit}` : '';
+
+  return query(`
+    SELECT
+      r.*,
+      s.call_iqs_score     AS "callIqs",
+      s.call_parameters    AS "callParameters",
+      s.call_model_version AS "callModelVersion",
+      s.call_scored_at     AS "callScoredAt",
+      a.name               AS "agentName"
+    FROM call_recordings r
+    LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
+    LEFT JOIN agents a ON a.id = r.agent_id
+    ${where}
+    ORDER BY r.called_at DESC
+    ${limitSql}
+  `, params);
+}
