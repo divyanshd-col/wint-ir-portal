@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
+import CallQualityClient from '@/components/CallQualityClient';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -465,7 +466,7 @@ function buildParams(page: number, f: LogFilters) {
 interface Props { userEmail: string; selfAgentName?: string; }
 
 export default function AgentQualityClient({ userEmail, selfAgentName }: Props) {
-  const [tab, setTab] = useState<'performance' | 'log'>('performance');
+  const [tab, setTab] = useState<'performance' | 'log' | 'calls'>('performance');
 
   // Performance state
   const [perfPeriod, setPerfPeriod] = useState<'today'|'7d'|'30d'|'all'>('30d');
@@ -661,6 +662,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
   const icons = {
     performance: <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M2 12l3-4 3 2 3-5 3 3"/><rect x="1" y="1" width="14" height="14" rx="1.5"/></svg>,
     log: <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="2" y="2" width="12" height="12" rx="1.5"/><path d="M5 6h6M5 8.5h4M5 11h3"/></svg>,
+    calls: <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M3 3.5c0 5.5 4 9.5 9.5 9.5l1-2.5-2.5-1-1 1c-1.5-.5-3-2-3.5-3.5l1-1-1-2.5L3 3.5z"/></svg>,
   };
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -698,6 +700,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
         <nav className="px-3 py-4 flex-1 space-y-1">
           <NavItem icon={icons.performance} label="Performance" active={tab === 'performance'} onClick={() => switchTab('performance')} />
           <NavItem icon={icons.log} label="Score Log" active={tab === 'log'} onClick={() => switchTab('log')} />
+          <NavItem icon={icons.calls} label="My Calls" active={tab === 'calls'} onClick={() => setTab('calls')} />
         </nav>
 
         {/* Agent identity */}
@@ -1068,6 +1071,13 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
                   )}
                 </>
               )}
+            </div>
+          )}
+
+          {/* ── MY CALLS TAB ── */}
+          {tab === 'calls' && (
+            <div className="p-6 overflow-y-auto flex-1">
+              <CallQualityClient selfAgentName={selfAgentName} agentOnly />
             </div>
           )}
 

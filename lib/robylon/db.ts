@@ -277,3 +277,177 @@ export async function countUnscoredConversations(minHoursOld = 0): Promise<numbe
   `, [minHoursOld]);
   return parseInt(rows[0]?.count ?? '0', 10);
 }
+
+// ── Call recording helpers ────────────────────────────────────────────────────
+
+export interface CallRecordingRow {
+  id: string;
+  chat_id: string | null;
+  agent_id: number | null;
+  contact_id: number | null;
+  recording_url: string | null;
+  duration_seconds: number | null;
+  called_at: string | null;
+  language: string | null;
+  transcript: any;
+  interruption_count: number;
+  dead_air_count: number;
+  status: string;
+}
+
+export async function insertCallRecording(data: {
+  id: string;
+  chatId?: string | null;
+  agentId?: number | null;
+  contactId?: number | null;
+  recordingUrl?: string | null;
+  durationSeconds?: number | null;
+  calledAt?: string | null;
+  language?: string | null;
+  transcript?: any;
+}): Promise<void> {
+  await query(`
+    INSERT INTO call_recordings (
+      id, chat_id, agent_id, contact_id, recording_url,
+      duration_seconds, called_at, language, transcript, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transcribed')
+    ON CONFLICT (id) DO UPDATE SET
+      chat_id          = COALESCE(EXCLUDED.chat_id, call_recordings.chat_id),
+      agent_id         = COALESCE(EXCLUDED.agent_id, call_recordings.agent_id),
+      contact_id       = COALESCE(EXCLUDED.contact_id, call_recordings.contact_id),
+      recording_url    = COALESCE(EXCLUDED.recording_url, call_recordings.recording_url),
+      duration_seconds = COALESCE(EXCLUDED.duration_seconds, call_recordings.duration_seconds),
+      called_at        = COALESCE(EXCLUDED.called_at, call_recordings.called_at),
+      language         = COALESCE(EXCLUDED.language, call_recordings.language),
+      transcript       = COALESCE(EXCLUDED.transcript, call_recordings.transcript),
+      updated_at       = NOW()
+  `, [
+    data.id,
+    data.chatId ?? null,
+    data.agentId ?? null,
+    data.contactId ?? null,
+    data.recordingUrl ?? null,
+    data.durationSeconds ?? null,
+    data.calledAt ?? null,
+    data.language ?? null,
+    data.transcript ? JSON.stringify(data.transcript) : null,
+  ]);
+}
+
+export async function updateCallRecordingMetrics(data: {
+  id: string;
+  interruptionCount: number;
+  deadAirCount: number;
+  status: string;
+}): Promise<void> {
+  await query(`
+    UPDATE call_recordings
+    SET interruption_count = $1, dead_air_count = $2, status = $3, updated_at = NOW()
+    WHERE id = $4
+  `, [data.interruptionCount, data.deadAirCount, data.status, data.id]);
+}
+
+export async function getCallRecording(callId: string): Promise<CallRecordingRow | null> {
+  const rows = await query<CallRecordingRow>(`SELECT * FROM call_recordings WHERE id = $1`, [callId]);
+  return rows[0] ?? null;
+}
+
+export async function insertCallIQSScore(data: {
+  callId: string;
+  iqsScore: number;
+  parameters: Record<string, IQSParameterResult>;
+  modelVersion: string;
+}): Promise<void> {
+  await query(`
+    INSERT INTO call_iqs_scores (call_id, iqs_score, parameters, model_version, scored_at)
+    VALUES ($1, $2, $3, $4, NOW())
+    ON CONFLICT (call_id) DO UPDATE SET
+      iqs_score     = EXCLUDED.iqs_score,
+      parameters    = EXCLUDED.parameters,
+      model_version = EXCLUDED.model_version,
+      scored_at     = NOW()
+  `, [data.callId, data.iqsScore, JSON.stringify(data.parameters), data.modelVersion]);
+
+  await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [data.callId]);
+}
+
+export async function getAllScoredCalls(opts: {
+  agentName?: string;
+  agentNames?: string[];
+  dateFrom?: string;
+  dateTo?: string;
+  minScore?: number;
+  maxScore?: number;
+  page?: number;
+  pageSize?: number;
+} = {}): Promise<{ rows: any[]; total: number }> {
+  const conditions: string[] = ['s.call_id IS NOT NULL'];
+  const params: any[] = [];
+
+  if (opts.dateFrom) {
+    params.push(opts.dateFrom);
+    conditions.push(`r.called_at::date >= $${params.length}`);
+  }
+  if (opts.dateTo) {
+    params.push(opts.dateTo);
+    conditions.push(`r.called_at::date <= $${params.length}`);
+  }
+  if (opts.minScore !== undefined) {
+    params.push(opts.minScore);
+    conditions.push(`s.iqs_score >= $${params.length}`);
+  }
+  if (opts.maxScore !== undefined) {
+    params.push(opts.maxScore);
+    conditions.push(`s.iqs_score <= $${params.length}`);
+  }
+  if (opts.agentName) {
+    params.push(opts.agentName);
+    conditions.push(`a.name = $${params.length}`);
+  } else if (opts.agentNames && opts.agentNames.length > 0) {
+    params.push(opts.agentNames);
+    conditions.push(`a.name = ANY($${params.length})`);
+  } else if (opts.agentNames && opts.agentNames.length === 0) {
+    conditions.push('1=0');
+  }
+
+  const where = `WHERE ${conditions.join(' AND ')}`;
+
+  const countRows = await query<{ count: string }>(`
+    SELECT COUNT(*) AS count
+    FROM call_recordings r
+    LEFT JOIN call_iqs_scores s ON s.call_id = r.id
+    LEFT JOIN agents a ON a.id = r.agent_id
+    ${where}
+  `, params);
+  const total = parseInt(countRows[0]?.count ?? '0', 10);
+
+  const page = opts.page ?? 0;
+  const pageSize = opts.pageSize ?? 50;
+  const offsetVal = page * pageSize;
+  params.push(pageSize, offsetVal);
+
+  const rows = await query(`
+    SELECT
+      r.id                  AS "callId",
+      r.chat_id             AS "chatId",
+      r.called_at           AS "calledAt",
+      r.called_at::date     AS "date",
+      r.duration_seconds    AS "durationSeconds",
+      r.language,
+      r.interruption_count  AS "interruptionCount",
+      r.dead_air_count      AS "deadAirCount",
+      a.name                AS "agentName",
+      s.iqs_score           AS "iqs",
+      s.parameters,
+      s.model_version       AS "modelVersion",
+      s.scored_at           AS "scoredAt"
+    FROM call_recordings r
+    LEFT JOIN call_iqs_scores s ON s.call_id = r.id
+    LEFT JOIN agents a ON a.id = r.agent_id
+    ${where}
+    ORDER BY r.called_at DESC
+    LIMIT $${params.length - 1} OFFSET $${params.length}
+  `, params);
+
+  return { rows, total };
+}
