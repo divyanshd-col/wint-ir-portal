@@ -293,7 +293,7 @@ export default function CallQualityTestClient() {
               placeholder="https://recordings.example.com/call-001.mp3"
               value={url}
               onChange={e => setUrl(e.target.value)}
-              disabled={stage === 'transcribing' || stage === 'scoring'}
+              disabled={false}
             />
             <p className="text-xs text-slate-400 mt-1">Supports MP3, WAV, M4A, OGG, FLAC. Must be publicly accessible.</p>
           </div>
