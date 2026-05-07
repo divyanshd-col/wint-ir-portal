@@ -49,9 +49,12 @@ import {
   linkCallToChat,
   getLinkedUnscoredCallsForChat,
   updateCallRecordingStatus,
+  insertCallRecording,
+  updateCallRecordingMetrics,
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
+import type { CallSegment } from '@/lib/call-quality';
 import Anthropic from '@anthropic-ai/sdk';
 import type { ParamScore } from '@/lib/quality';
 
@@ -721,6 +724,59 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'scoring' });
 }
 
+// ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
+async function handleCallComplete(body: any): Promise<NextResponse> {
+  // Robylon sends all events to the same webhook URL, including voice calls.
+  // The payload already contains a pre-transcribed transcript in data.transcript,
+  // plus a recording_url if we ever want audio re-transcription.
+
+  const callId      = String(body.ticket_id || body.chat_id || `call_${Date.now()}`);
+  const phone       = body.requester_info?.phone_number || body.data?.phone_number || '';
+  const agentName   = '';   // not present in this event; resolved at TICKET_CLOSED
+  const calledAt    = body.data?.started_at || body.data?.ended_at || body.created_at || new Date().toISOString();
+  const recordingUrl = body.data?.recording_url || '';
+  const durationRaw  = body.data?.call_duration;
+  const durationSeconds = durationRaw && durationRaw > 0 ? Math.round(durationRaw) : null;
+
+  // Build CallSegment array from Robylon's pre-transcribed data.transcript
+  const rawSegments: any[] = Array.isArray(body.data?.transcript) ? body.data.transcript : [];
+  const segments: CallSegment[] = rawSegments
+    .filter(m => m.message && !m.is_internal_message)
+    .map(m => ({
+      type: 'speech' as const,
+      speaker: m.sender === 'agent' ? 'IR EXECUTIVE' : 'INVESTOR',
+      text: String(m.message).trim(),
+      translated: false,
+      // preserve original timestamp for display
+      ts: m.ts,
+    }));
+
+  const interruptionCount = 0;
+  const deadAirCount = 0;
+
+  const [agentId, contactId] = await Promise.all([
+    upsertAgent(agentName),
+    upsertContact(phone),
+  ]);
+
+  await insertCallRecording({
+    id: callId,
+    chatId: null,      // linked at TICKET_CLOSED using phone number
+    agentId,
+    contactId,
+    recordingUrl,
+    durationSeconds,
+    calledAt,
+    language: 'Hindi/Hinglish',
+    transcript: segments,
+  });
+
+  await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
+
+  console.log(`[webhook] CC_VOICE_CALL_COMPLETE stored call ${callId} — ${segments.length} segments, phone=${phone}, status=pending_link`);
+  return NextResponse.json({ ok: true, event: 'call_stored', call_id: callId, segments: segments.length, status: 'pending_link' });
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   if (!isAuthorised(req)) {
@@ -754,8 +810,9 @@ export async function POST(req: NextRequest) {
 
   const eventType = String(body.event_type || '');
 
-  if (eventType === 'TICKET_CLOSED')          return handleTicketClosed(body);
-  if (eventType === 'CLASSIFICATION_UPDATED') return handleClassificationUpdated(body);
-  if (eventType === 'CSAT_SUBMITTED')         return handleCsatEvent(body);
+  if (eventType === 'TICKET_CLOSED')           return handleTicketClosed(body);
+  if (eventType === 'CLASSIFICATION_UPDATED')  return handleClassificationUpdated(body);
+  if (eventType === 'CSAT_SUBMITTED')          return handleCsatEvent(body);
+  if (eventType === 'CC_VOICE_CALL_COMPLETE')  return handleCallComplete(body);
   return handleLegacyPayload(body);
 }

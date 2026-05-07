@@ -89,6 +89,7 @@ export interface CallSegment {
   speaker?: string;
   text?: string;
   translated?: boolean;
+  ts?: string;          // ISO timestamp from Robylon's pre-transcribed payload
   // interruption
   interrupted_speaker?: string;
   interrupted_by?: string;
