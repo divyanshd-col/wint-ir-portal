@@ -27,7 +27,15 @@ import {
   analyzeConversationTiming,
 } from '@/lib/quality';
 import type { TimedMessage } from '@/lib/quality';
-import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock } from '@/lib/store';
+import {
+  CALL_IQS_SYSTEM_PROMPT,
+  CALL_TRANSCRIPTION_PROMPT,
+  buildCallScoringPrompt,
+  parseCallScoringResponse,
+  parseTranscriptionResponse,
+  segmentsToText,
+} from '@/lib/call-quality';
+import type { CallParamScore, CallSegment } from '@/lib/call-quality';
 import {
   upsertAgent,
   upsertContact,
@@ -37,10 +45,17 @@ import {
   getConversation,
   isScored,
   insertIQSScore,
-  findConversationByPhoneAndDate,
+  updateCallIQSScore,
+  getUnlinkedCallsForContact,
+  linkCallToChat,
+  getLinkedUnscoredCallsForChat,
+  updateCallRecordingStatus,
+  insertCallRecording,
+  updateCallRecordingMetrics,
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
+import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 import type { ParamScore } from '@/lib/quality';
 
@@ -150,6 +165,95 @@ function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult
     score: score === 'Yes' ? true : score === 'No' ? false : null,
     reasoning,
   };
+}
+
+// ── Call IQS scoring for calls linked to a chat ───────────────────────────────
+async function scoreLinkedCallsForChat(
+  chatId: string,
+  chatTranscriptText: string,
+  disposition: string,
+  subDisposition: string,
+  config: any,
+): Promise<void> {
+  const calls = await getLinkedUnscoredCallsForChat(chatId);
+  if (!calls.length) return;
+
+  const geminiKeys = getIQSGeminiKeys(config);
+  if (!geminiKeys.length) return;
+
+  let kbContext = '';
+  try {
+    const searchQuery = disposition ? `${disposition} ${subDisposition}`.trim() : '';
+    if (searchQuery) {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
+      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+    }
+  } catch {}
+
+  for (const call of calls) {
+    const segments = Array.isArray(call.transcript) ? call.transcript : [];
+    const callText  = segmentsToText(segments);
+    if (!callText) {
+      await updateCallRecordingStatus(call.id, 'scored');
+      continue;
+    }
+
+    const scoringPrompt = buildCallScoringPrompt(
+      callText,
+      chatTranscriptText,
+      call.id,
+      call.interruption_count ?? 0,
+      call.dead_air_count ?? 0,
+      kbContext,
+    );
+
+    try {
+      const raw = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [{ text: CALL_IQS_SYSTEM_PROMPT + '\n\n' + scoringPrompt }] }],
+        {},
+        60_000,
+      );
+
+      const { scores, reasoning, iqs } = parseCallScoringResponse(raw);
+      const parameters: Record<string, IQSParameterResult> = {};
+      for (const [key, val] of Object.entries(scores)) {
+        parameters[key] = {
+          score: val === 'Yes' ? true : val === 'No' ? false : null,
+          reasoning: reasoning[key] || '',
+        };
+      }
+
+      await updateCallIQSScore({ chatId, callIqsScore: iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
+      await updateCallRecordingStatus(call.id, 'scored');
+      console.log(`[webhook] Scored call ${call.id} → IQS ${iqs} for chat ${chatId}`);
+    } catch (err: any) {
+      console.error(`[webhook] Call IQS scoring failed for call ${call.id}:`, err.message);
+    }
+  }
+}
+
+// ── Link unscored calls to a chat, then score them if disposition is known ────
+async function linkAndScoreCallsForChat(
+  chatId: string,
+  contactId: number,
+  closedAt: string,
+  chatTranscriptText: string,
+  disposition: string,
+  subDisposition: string,
+  config: any,
+): Promise<void> {
+  const unlinked = await getUnlinkedCallsForContact(contactId, closedAt);
+  if (!unlinked.length) return;
+
+  await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
+  console.log(`[webhook] Linked ${unlinked.length} call(s) to chat ${chatId}`);
+
+  if (disposition) {
+    await scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config);
+  }
 }
 
 // ── Core scoring (called from webhook + cron) ─────────────────────────────────
@@ -402,16 +506,44 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   // Check if tags already stored (from a prior CLASSIFICATION_UPDATED)
   const existingConv = await getConversation(chatId);
   const hasTags = !!(existingConv?.tags);
+  const config = await readConfig();
 
-  if (hasTags && existingConv) {
-    const tags = existingConv.tags as any;
-    const scored = await executeScoring(
-      existingConv,
-      effectiveWebhookAgent,
-      tags?.disposition || '',
-      tags?.sub_disposition || '',
-      mobileNumber,
+  const disposition    = hasTags ? (existingConv!.tags as any)?.disposition    || '' : '';
+  const subDisposition = hasTags ? (existingConv!.tags as any)?.sub_disposition || '' : '';
+
+  // Always: link any pending_link calls for this contact to this chat (now that we have chatId + closedAt).
+  // Score them in parallel with chat scoring if tags are already available.
+  if (contactId && convEnded) {
+    const callLinkPromise = linkAndScoreCallsForChat(
+      chatId,
+      contactId,
+      convEnded,
+      transcriptText,
+      disposition,
+      subDisposition,
+      config,
     );
+
+    if (hasTags && existingConv) {
+      const [scoredResult] = await Promise.allSettled([
+        executeScoring(existingConv, effectiveWebhookAgent, disposition, subDisposition, mobileNumber),
+        callLinkPromise,
+      ]);
+      const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
+      if (scored) {
+        return NextResponse.json({
+          ok: true, chat_id: chatId, iqs: scored.iqs, agent: effectiveWebhookAgent,
+          conversation_type: timing.conversationType,
+          frt_secs: timing.frt, b_to_t_secs: timing.botToTeamSecs,
+          resolution_secs: timing.resolutionTime,
+        });
+      }
+    } else {
+      // No tags yet — link calls now; scoring fires at CLASSIFICATION_UPDATED
+      callLinkPromise.catch(err => console.error('[webhook] Call link error:', err));
+    }
+  } else if (hasTags && existingConv) {
+    const scored = await executeScoring(existingConv, effectiveWebhookAgent, disposition, subDisposition, mobileNumber);
     if (scored) {
       return NextResponse.json({
         ok: true, chat_id: chatId, iqs: scored.iqs, agent: effectiveWebhookAgent,
@@ -459,7 +591,19 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
       ? (await import('@/lib/robylon/db').then(m => m.getAgentName(agentId)))
       : '';
 
-    const scored = await executeScoring(conv, agentName, disposition, subDisposition);
+    // Build chat transcript text for call scoring context
+    let chatTranscriptText = '';
+    const transcriptMessages = Array.isArray(conv.transcript) ? conv.transcript
+      : Array.isArray((conv.transcript as any)?.messages) ? (conv.transcript as any).messages : [];
+    chatTranscriptText = transcriptFromJsonb(transcriptMessages);
+
+    const config = await readConfig();
+    const [scoredResult] = await Promise.allSettled([
+      executeScoring(conv, agentName, disposition, subDisposition),
+      scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config),
+    ]);
+
+    const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
     if (scored) {
       return NextResponse.json({
         ok: true, chat_id: chatId, iqs: scored.iqs,
@@ -488,63 +632,6 @@ async function handleCsatEvent(body: any): Promise<NextResponse> {
   await updateConversationCsat(chatId, normalised.score, normalised.label);
   console.log(`[webhook] CSAT updated for chat ${chatId}: ${normalised.score} (${normalised.label})`);
   return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat: normalised.score });
-}
-
-// ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
-// Maps a voice call to an existing chat conversation by matching phone number
-// (last 10 digits) + call date. Attaches voice call data to the conversation's
-// raw_payload without overwriting the chat transcript or IQS score.
-async function handleVoiceCallComplete(body: any): Promise<NextResponse> {
-  const rawPhone = String(
-    body.data?.phone_number || body.requester_info?.phone_number || ''
-  ).replace(/\D/g, '');
-
-  const callEndedAt = body.data?.ended_at || body.created_at || '';
-  const callDate = callEndedAt
-    ? callEndedAt.split('T')[0]
-    : new Date().toISOString().split('T')[0];
-
-  if (!rawPhone) {
-    console.log('[webhook] CC_VOICE_CALL_COMPLETE — no phone number in payload');
-    return NextResponse.json({ ok: true, matched: false, reason: 'No phone number in payload' });
-  }
-
-  const matched = await findConversationByPhoneAndDate(rawPhone, callDate);
-
-  if (!matched) {
-    console.log(`[webhook] CC_VOICE_CALL_COMPLETE — no chat found for phone ...${rawPhone.slice(-10)} on ${callDate}`);
-    return NextResponse.json({ ok: true, matched: false, phone_suffix: rawPhone.slice(-10), date: callDate });
-  }
-
-  // Attach voice call data to the existing conversation.
-  // raw_payload is updated; transcript/tags/scores are left untouched (COALESCE keeps them).
-  await upsertConversation({
-    id: matched.id,
-    rawPayload: {
-      _voice_call: {
-        ticket_id:      body.ticket_id,
-        call_status:    body.data?.call_status,
-        call_duration:  body.data?.call_duration,
-        recording_url:  body.data?.recording_url,
-        started_at:     body.data?.started_at,
-        ended_at:       body.data?.ended_at,
-        handled_by:     body.handled_by,
-        transcript:     body.data?.transcript,
-      },
-      _original_event: body,
-    },
-    webhookTrigger: 'CC_VOICE_CALL_COMPLETE',
-  });
-
-  console.log(`[webhook] CC_VOICE_CALL_COMPLETE — linked to chat ${matched.id} (phone ...${rawPhone.slice(-10)}, date ${callDate}, recording: ${body.data?.recording_url ?? 'none'})`);
-  return NextResponse.json({
-    ok: true,
-    matched: true,
-    chat_id: matched.id,
-    phone_suffix: rawPhone.slice(-10),
-    date: callDate,
-    recording_url: body.data?.recording_url ?? null,
-  });
 }
 
 // ── Handler: legacy flat payload (backward compat) ────────────────────────────
@@ -640,6 +727,109 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'scoring' });
 }
 
+// ── MIME type from URL ────────────────────────────────────────────────────────
+function mimeFromUrl(url: string): string {
+  const u = url.toLowerCase().split('?')[0];
+  if (u.endsWith('.mp3'))  return 'audio/mpeg';
+  if (u.endsWith('.wav'))  return 'audio/wav';
+  if (u.endsWith('.m4a'))  return 'audio/mp4';
+  if (u.endsWith('.ogg'))  return 'audio/ogg';
+  if (u.endsWith('.flac')) return 'audio/flac';
+  return 'audio/mpeg';
+}
+
+// ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
+async function handleCallComplete(body: any): Promise<NextResponse> {
+  // In CC_VOICE_CALL_COMPLETE, body.chat_id is the CALL ID (Robylon's voice
+  // ticket ID), NOT a WhatsApp chat ID. The real WhatsApp chat_id is only
+  // known at TICKET_CLOSED, where we link via phone number.
+  const callId       = String(body.chat_id);
+  const phone        = body.requester_info?.phone_number || body.data?.phone_number || '';
+  const recordingUrl = body.data?.recording_url || '';
+  const calledAt     = body.data?.started_at || body.data?.ended_at || body.created_at || new Date().toISOString();
+  const durationRaw  = body.data?.call_duration;
+  const durationSeconds = durationRaw && durationRaw > 0 ? Math.round(durationRaw) : null;
+
+  if (!recordingUrl) {
+    console.warn(`[webhook] CC_VOICE_CALL_COMPLETE call_id=${callId} has no recording_url — skipping`);
+    return NextResponse.json({ ok: true, skipped: true, reason: 'no recording_url' });
+  }
+
+  // Respond immediately — transcription is slow (10–30s), do it async
+  const contactId = await upsertContact(phone);
+
+  // Store a placeholder row now so the call is tracked even if transcription fails
+  await insertCallRecording({
+    id: callId,
+    chatId: null,         // linked at TICKET_CLOSED via phone number
+    agentId: null,        // agent name not available in this event
+    contactId,
+    recordingUrl,         // S3 URL stored permanently for reference / re-transcription
+    durationSeconds,
+    calledAt,
+    language: null,
+    transcript: [],
+  });
+
+  // Fire-and-forget: fetch audio → Gemini transcription → update DB
+  (async () => {
+    try {
+      const config = await readConfig();
+      const geminiKeys = getIQSGeminiKeys(config);
+      if (!geminiKeys.length) {
+        console.error(`[webhook] No Gemini key — cannot transcribe call ${callId}`);
+        return;
+      }
+
+      // Fetch audio into memory (never written to disk)
+      let audioBase64 = '';
+      let mimeType = mimeFromUrl(recordingUrl);
+      const audioRes = await fetch(recordingUrl);
+      if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio`);
+      const ct = audioRes.headers.get('content-type');
+      if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
+      audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+
+      // Gemini multimodal: audio → English segments (translates non-English)
+      const raw = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [
+          { inlineData: { mimeType, data: audioBase64 } },
+          { text: CALL_TRANSCRIPTION_PROMPT },
+        ]}],
+        {},
+        120_000,
+      );
+
+      const { language, segments } = parseTranscriptionResponse(raw);
+      const interruptionCount = segments.filter(s => s.type === 'interruption').length;
+      const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
+
+      // Update the placeholder row with the real transcript
+      await insertCallRecording({
+        id: callId,
+        chatId: null,
+        agentId: null,
+        contactId,
+        recordingUrl,
+        durationSeconds,
+        calledAt,
+        language,
+        transcript: segments,
+      });
+      await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
+
+      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
+    } catch (err: any) {
+      console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
+    }
+  })();
+
+  console.log(`[webhook] CC_VOICE_CALL_COMPLETE received call ${callId} — transcription started, phone=${phone}`);
+  return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'transcribing' });
+}
+
 // ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   if (!isAuthorised(req)) {
@@ -675,6 +865,6 @@ export async function POST(req: NextRequest) {
   if (eventType === 'TICKET_CLOSED')           return handleTicketClosed(body);
   if (eventType === 'CLASSIFICATION_UPDATED')  return handleClassificationUpdated(body);
   if (eventType === 'CSAT_SUBMITTED')          return handleCsatEvent(body);
-  if (eventType === 'CC_VOICE_CALL_COMPLETE')  return handleVoiceCallComplete(body);
+  if (eventType === 'CC_VOICE_CALL_COMPLETE')  return handleCallComplete(body);
   return handleLegacyPayload(body);
 }

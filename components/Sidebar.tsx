@@ -120,6 +120,14 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         <nav className={`py-4 flex-1 overflow-y-auto space-y-1 ${isExpanded ? 'px-4' : 'px-2'}`}>
 
           {canSeeAnalytics && (
+            <NavLink href="/call-analysis" icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
+              </svg>
+            } label="Call Analysis" active={pathname === '/call-analysis'} expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)} />
+          )}
+          {canSeeAnalytics && (
             <NavLink href="/analytics" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M2 12l3-4 3 2 3-5 3 3"/><rect x="1" y="1" width="14" height="14" rx="1.5"/>

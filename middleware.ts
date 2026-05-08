@@ -39,6 +39,13 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // Call analysis: admin and TL
+  if (pathname.startsWith('/call-analysis')) {
+    if (!token.isAdmin && token.role !== 'tl') {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
   return NextResponse.next();
 }
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
+import CallQualityClient from '@/components/CallQualityClient';
 
 const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Mobile', 'CSAT', 'FRT', 'Handoff', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
 
@@ -1353,7 +1354,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 }
 
 export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending'>(initialTab || 'performance');
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls'>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
 
   // Fresh agentName from config (overrides stale JWT value)
@@ -1958,6 +1959,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <path d="M8 2v7M8 12v2"/><circle cx="8" cy="8" r="7"/>
       </svg>
     ),
+    calls: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 3.5c0 5.5 4 9.5 9.5 9.5l1-2.5-2.5-1-1 1c-1.5-.5-3-2-3.5-3.5l1-1-1-2.5L3 3.5z"/>
+      </svg>
+    ),
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -2138,6 +2144,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
             collapsed={!sidebarExpanded} onClick={() => setTab('reports')} />
           <NavItem icon={icons.challenges} label="Chats Pending" active={tab === 'pending'}
             collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => setTab('pending')} />
+          <NavItem icon={icons.calls} label="Call Quality" active={tab === 'calls'}
+            collapsed={!sidebarExpanded} onClick={() => setTab('calls')} />
         </nav>
 
       </aside>
@@ -2149,7 +2157,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
           <div className="shrink-0">
             <h1 className="text-base font-bold text-gray-900">
-              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : 'Upload & Score'}
+              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : tab === 'calls' ? 'Call Quality' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {tab === 'performance' && `${agentStats.length} agents · ${perfTotal} chats`}
@@ -2157,6 +2165,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {tab === 'upload' && (fileName ? `${totalToScore} chats ready` : 'Drop a Wint CSV export to begin')}
               {tab === 'reports' && 'Download filtered data as CSV'}
               {tab === 'pending' && `${challengeCount} pending review`}
+              {tab === 'calls' && 'Scored IR call recordings'}
             </p>
           </div>
 
@@ -3403,6 +3412,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── CHATS PENDING TAB ── */}
           {tab === 'pending' && (
             <PendingChatsTab userRole={userRole} userEmail={userEmail} />
+          )}
+
+          {/* ── CALL QUALITY TAB ── */}
+          {tab === 'calls' && (
+            <div className="p-6 overflow-y-auto flex-1">
+              <CallQualityClient userRole={userRole} userEmail={userEmail} />
+            </div>
           )}
 
         </div>
