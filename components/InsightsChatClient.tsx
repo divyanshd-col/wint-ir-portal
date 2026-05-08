@@ -18,6 +18,7 @@ interface ChatMessage {
   logs?: string;
   loading?: boolean;
   sqlContext?: string;  // SQL intents from plan phase — included in history for follow-up anchoring
+  activeFilters?: AnalyticsFilters; // snapshot of filter bar state when this message was generated
 }
 
 interface DispositionTree { disposition: string; subDispositions: string[] }
@@ -634,6 +635,10 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
 
   const [exporting, setExporting] = useState(false);
 
+  // Download modal triggered from a chat message
+  const [downloadModal, setDownloadModal] = useState<null | { filters: AnalyticsFilters }>(null);
+  const [modalExporting, setModalExporting] = useState(false);
+
   // Multi-chat state
   const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string }>>([]);
   const [activeId, setActiveId] = useState('');
@@ -853,6 +858,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       blocks: [],
     };
     const assistantId = crypto.randomUUID();
+    const capturedFilters = buildFilters();
     const assistantMsg: ChatMessage = {
       id: assistantId,
       role: 'assistant',
@@ -860,6 +866,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       blocks: [],
       logs: '',
       loading: true,
+      activeFilters: capturedFilters,
     };
 
     setMessages(prev => [...prev, userMsg, assistantMsg]);
@@ -892,7 +899,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       return history.length ? history.join('\n\n') : undefined;
     })();
 
-    const activeFilters = buildFilters();
+    const activeFilters = capturedFilters;
 
     // Helper: read an SSE stream and update message state
     async function readSseStream(res: Response) {
@@ -1063,6 +1070,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   }
 
   return (
+    <>
     <div className="flex h-screen bg-[#1a1a1a]">
       {/* Sidebar */}
       <PageNav username={username} role={role} isAdmin={isAdmin} />
@@ -1283,6 +1291,22 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
                     {msg.blocks.map((block, bi) => (
                       <BlockRenderer key={bi} block={block} />
                     ))}
+
+                    {/* Download matching chats button — shown on completed messages with content */}
+                    {!msg.loading && (msg.content || msg.blocks.length > 0) && (
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={() => setDownloadModal({ filters: msg.activeFilters ?? buildFilters() })}
+                          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-emerald-700 hover:bg-emerald-50 border border-transparent hover:border-emerald-200 rounded-lg px-2.5 py-1 transition-all font-medium"
+                          title="Download transcripts matching the filters used for this analysis"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                          </svg>
+                          Download matching chats
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1403,6 +1427,229 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
           </div>
         </div>
 
+      </div>
+    </div>
+
+    {/* ── Download matching chats modal ── */}
+
+    {downloadModal && (
+      <DownloadModal
+        initialFilters={downloadModal.filters}
+        exporting={modalExporting}
+        onClose={() => setDownloadModal(null)}
+        onDownload={async (filters) => {
+          setModalExporting(true);
+          try {
+            const res = await fetch('/api/analytics/export-transcripts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ filters }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const cd = res.headers.get('content-disposition') || '';
+            const match = cd.match(/filename="([^"]+)"/);
+            a.download = match?.[1] ?? 'transcripts.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
+            setDownloadModal(null);
+          } catch (err: any) {
+            alert('Export failed: ' + err.message);
+          } finally {
+            setModalExporting(false);
+          }
+        }}
+      />
+    )}
+    </>
+  );
+}
+
+// ── Download modal ──────────────────────────────────────────────────────────
+function DownloadModal({
+  initialFilters,
+  exporting,
+  onClose,
+  onDownload,
+}: {
+  initialFilters: AnalyticsFilters;
+  exporting: boolean;
+  onClose: () => void;
+  onDownload: (filters: AnalyticsFilters) => void;
+}) {
+  const CSAT_OPTIONS  = ['good', 'could_be_better', 'bad'];
+  const TYPE_OPTIONS  = ['bot', 'hybrid', 'agent'];
+  const TYPE_LABELS: Record<string, string> = { bot: 'Bot', hybrid: 'Hybrid', agent: 'Human' };
+  const CSAT_LABELS: Record<string, string>  = { good: 'Good', could_be_better: 'CBB', bad: 'Bad' };
+
+  const [dateFrom, setDateFrom]           = useState(initialFilters.dateFrom);
+  const [dateTo, setDateTo]               = useState(initialFilters.dateTo);
+  const [dispositions, setDispositions]   = useState<string[]>(initialFilters.dispositions ?? []);
+  const [dispositionInput, setDispositionInput] = useState('');
+  const [csatLabels, setCsatLabels]       = useState<string[]>(initialFilters.csatLabels ?? CSAT_OPTIONS);
+  const [convTypes, setConvTypes]         = useState<string[]>(initialFilters.conversationTypes ?? TYPE_OPTIONS);
+  const [minUserMsgs, setMinUserMsgs]     = useState<number | null>(initialFilters.minUserMessages ?? null);
+
+  function toggle<T>(arr: T[], val: T): T[] {
+    return arr.includes(val) ? arr.filter(v => v !== val) : [...arr, val];
+  }
+
+  function buildModalFilters(): AnalyticsFilters {
+    return {
+      dateFrom,
+      dateTo,
+      dispositions,
+      subDispositions: initialFilters.subDispositions ?? [],
+      teams: initialFilters.teams ?? [],
+      csatLabels,
+      conversationTypes: convTypes,
+      agentIds: initialFilters.agentIds ?? [],
+      minUserMessages: minUserMsgs ?? undefined,
+    };
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl border border-gray-100 w-full max-w-md mx-4 overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Download Matching Chats</p>
+            <p className="text-xs text-gray-400 mt-0.5">Pre-filled from your analysis filters</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 3l12 12M15 3L3 15"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-4">
+          {/* Date range */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Date Range</p>
+            <div className="flex items-center gap-2">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              <span className="text-gray-400 text-xs">→</span>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+            </div>
+          </div>
+
+          {/* Disposition */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+            <div className="flex flex-wrap gap-1.5 mb-1.5">
+              {dispositions.map(d => (
+                <span key={d} className="inline-flex items-center gap-1 text-xs bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-full px-2.5 py-0.5 font-medium">
+                  {d}
+                  <button onClick={() => setDispositions(dispositions.filter(x => x !== d))} className="hover:text-red-500 ml-0.5 leading-none">×</button>
+                </span>
+              ))}
+              {dispositions.length === 0 && <span className="text-xs text-gray-400 italic">All dispositions</span>}
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={dispositionInput}
+                onChange={e => setDispositionInput(e.target.value)}
+                onKeyDown={e => {
+                  if ((e.key === 'Enter' || e.key === ',') && dispositionInput.trim()) {
+                    e.preventDefault();
+                    const val = dispositionInput.trim();
+                    if (!dispositions.includes(val)) setDispositions([...dispositions, val]);
+                    setDispositionInput('');
+                  }
+                }}
+                placeholder="Type and press Enter to add"
+                className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+              {dispositions.length > 0 && (
+                <button onClick={() => setDispositions([])} className="text-xs text-gray-400 hover:text-red-500 transition shrink-0">Clear</button>
+              )}
+            </div>
+          </div>
+
+          {/* CSAT */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
+            <div className="flex gap-2">
+              {CSAT_OPTIONS.map(c => (
+                <button
+                  key={c}
+                  onClick={() => setCsatLabels(toggle(csatLabels, c))}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold border transition ${
+                    csatLabels.includes(c) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {CSAT_LABELS[c]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Agent type */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Type</p>
+            <div className="flex gap-2">
+              {TYPE_OPTIONS.map(t => (
+                <button
+                  key={t}
+                  onClick={() => setConvTypes(toggle(convTypes, t))}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold border transition ${
+                    convTypes.includes(t) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  {TYPE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Min user messages */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Min User Messages</p>
+            <input
+              type="number" min={1} max={500}
+              value={minUserMsgs ?? ''}
+              onChange={e => setMinUserMsgs(e.target.value ? parseInt(e.target.value) : null)}
+              placeholder="No minimum"
+              className="w-32 text-xs border border-gray-200 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between">
+          <button onClick={onClose} className="text-xs text-gray-500 hover:text-gray-700 font-medium transition">Cancel</button>
+          <button
+            onClick={() => onDownload(buildModalFilters())}
+            disabled={exporting}
+            className="flex items-center gap-2 px-5 py-2 bg-[#1a3a2a] text-white text-xs font-bold rounded-xl hover:bg-[#0f2a1a] disabled:opacity-50 transition"
+          >
+            {exporting ? (
+              <>
+                <span className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                Exporting…
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3" />
+                </svg>
+                Download Excel
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );

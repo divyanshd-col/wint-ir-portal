@@ -191,7 +191,7 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMax?: number; includeUncertain?: boolean } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMax?: number; includeUncertain?: boolean; minUserMessages?: number } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
@@ -223,6 +223,10 @@ export async function getAllScoredConversations(
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     // Scoped role with no assigned agents — return nothing
     conditions.push(`1=0`);
+  }
+  if (opts.minUserMessages && opts.minUserMessages > 0) {
+    params.push(opts.minUserMessages);
+    conditions.push(`(SELECT COUNT(*) FROM jsonb_array_elements(c.transcript) AS m WHERE m->>'sender_type' = 'customer') >= $${params.length}`);
   }
 
   const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';

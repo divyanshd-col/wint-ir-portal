@@ -76,15 +76,17 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
-  const agentFilter  = searchParams.get('agent') || '';
-  const tagFilter    = searchParams.get('tag') || '';
-  const subTagFilter = searchParams.get('subTag') || '';
-  const csatFilter   = searchParams.get('csat') || '';
-  const dateFrom     = searchParams.get('dateFrom') || '';
-  const dateTo       = searchParams.get('dateTo') || '';
-  const typeFilter   = searchParams.get('type') || '';
+  const agentFilter    = searchParams.get('agent') || '';
+  const tagFilter      = searchParams.get('tag') || '';
+  const subTagFilter   = searchParams.get('subTag') || '';
+  const csatFilter     = searchParams.get('csat') || '';
+  const dateFrom       = searchParams.get('dateFrom') || '';
+  const dateTo         = searchParams.get('dateTo') || '';
+  const typeFilter     = searchParams.get('type') || '';
+  const minUserMsgsRaw = searchParams.get('minUserMsgs');
+  const minUserMessages = minUserMsgsRaw ? parseInt(minUserMsgsRaw, 10) : undefined;
 
-  const rawRows = await getAllScoredConversations(10000); // higher limit for full export
+  const rawRows = await getAllScoredConversations(10000, { minUserMessages }); // higher limit for full export
   let entries: IQSScoreEntry[] = rawRows.map(row => {
     try { return toIQSScoreEntry(row); } catch { return null; }
   }).filter(Boolean) as IQSScoreEntry[];

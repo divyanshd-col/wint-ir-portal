@@ -125,8 +125,10 @@ export async function GET(req: NextRequest) {
   const csatFilter    = searchParams.get('csat') || '';
   const dateFrom      = searchParams.get('dateFrom') || '';
   const dateTo        = searchParams.get('dateTo') || '';
-  const typeFilter    = searchParams.get('type') || '';
-  const chatIdSearch  = searchParams.get('chatId') || '';
+  const typeFilter     = searchParams.get('type') || '';
+  const chatIdSearch   = searchParams.get('chatId') || '';
+  const minUserMsgsRaw = searchParams.get('minUserMsgs');
+  const minUserMessages = minUserMsgsRaw ? parseInt(minUserMsgsRaw, 10) : undefined;
 
   const role = session.user?.role;
 
@@ -152,11 +154,12 @@ export async function GET(req: NextRequest) {
 
   // Push date + agent filters to DB
   // When searching by chatId, skip date range — find the chat regardless of period
-  const dbOpts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[] } = {};
+  const dbOpts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; minUserMessages?: number } = {};
   if (!chatIdSearch) {
     if (dateFrom) dbOpts.dateFrom = dateFrom;
     if (dateTo)   dbOpts.dateTo   = dateTo;
   }
+  if (minUserMessages && minUserMessages > 0) dbOpts.minUserMessages = minUserMessages;
   if (scopedAgentNames) {
     // Further restrict by the requested agentFilter if one is active
     if (agentFilter) {

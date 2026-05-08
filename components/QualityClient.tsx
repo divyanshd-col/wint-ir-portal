@@ -22,13 +22,14 @@ interface LogFilters {
   dateFrom: string;
   dateTo: string;
   chatId: string;
+  minUserMsgs: number | null;
 }
 
 const DEFAULT_FILTERS: LogFilters = {
   agent: '', minScore: 0, maxScore: 100,
   disposition: '', subDisposition: '', csat: '', type: '',
   dateRange: '1w', dateFrom: '', dateTo: '',
-  chatId: '',
+  chatId: '', minUserMsgs: null,
 };
 
 function buildParams(page: number, f: LogFilters): URLSearchParams {
@@ -42,6 +43,7 @@ function buildParams(page: number, f: LogFilters): URLSearchParams {
   if (f.csat)         p.set('csat', f.csat);
   if (f.type)         p.set('type', f.type);
   if (f.chatId)       p.set('chatId', f.chatId);
+  if (f.minUserMsgs && f.minUserMsgs > 0) p.set('minUserMsgs', String(f.minUserMsgs));
   // Skip date range when searching by chat ID — find the chat regardless of period
   if (!f.chatId) {
     if (f.dateRange === 'today') {
@@ -1441,6 +1443,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // Score Log — filter panel toggle + needs-review filter
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  // Reports tab — filter panel toggle
+  const [showReportFilters, setShowReportFilters] = useState(false);
   const [showOnlyNeedsReview, setShowOnlyNeedsReview] = useState(false);
 
   // Sidebar collapse state
@@ -3172,126 +3176,174 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
           {/* ── REPORTS TAB ── */}
           {tab === 'reports' && (
-            <div className="space-y-6 max-w-3xl mx-auto">
-              {/* Independent filter controls */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-sm font-bold text-gray-900 mb-4">Report Filters</p>
-                <div className="flex flex-wrap items-end gap-4">
-                  {/* Period chips */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Period</p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {(['today', 'yesterday', '1w'] as const).map(r => (
-                        <button key={r}
-                          onClick={() => { setReportFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' })); setReportTotalFiltered(null); setShowReportPicker(false); }}
-                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
-                            reportFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}>
-                          {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
-                        </button>
-                      ))}
-                      {/* Custom */}
-                      <div className="relative">
-                        <button
-                          onClick={() => { setReportFilters(f => ({ ...f, dateRange: 'custom' })); setShowReportPicker(v => !v); setReportTotalFiltered(null); }}
-                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
-                            reportFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}>
-                          {reportFilters.dateRange === 'custom' && reportFilters.dateFrom
-                            ? `${reportFilters.dateFrom.slice(5)} → ${reportFilters.dateTo ? reportFilters.dateTo.slice(5) : '…'}`
-                            : 'Custom'}
-                        </button>
-                        {showReportPicker && (
-                          <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 overflow-hidden">
-                            <DateRangePicker
-                              from={reportFilters.dateFrom} to={reportFilters.dateTo}
-                              onChange={(from, to) => {
-                                setReportFilters(f => ({ ...f, dateRange: 'custom', dateFrom: from, dateTo: to }));
-                                setReportTotalFiltered(null);
-                              }}
-                              onClose={() => setShowReportPicker(false)}
-                            />
-                          </div>
-                        )}
+            <div className="space-y-4 max-w-3xl mx-auto">
+              {/* Header row with Filters toggle */}
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-gray-700">Download IQS Report</p>
+                <button
+                  onClick={() => setShowReportFilters(v => !v)}
+                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition ${
+                    showReportFilters
+                      ? 'bg-emerald-600 text-white border-emerald-600'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-400 hover:text-emerald-700'
+                  }`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M2 4h12M4 8h8M6 12h4"/>
+                  </svg>
+                  Filters
+                  {/* Active filter count badge */}
+                  {(() => {
+                    let n = 0;
+                    if (reportFilters.agent) n++;
+                    if (reportFilters.csat) n++;
+                    if (reportFilters.type) n++;
+                    if (reportFilters.disposition) n++;
+                    if (reportFilters.subDisposition) n++;
+                    if (reportFilters.minUserMsgs) n++;
+                    if (reportFilters.minScore > 0 || reportFilters.maxScore < 100) n++;
+                    return n > 0 ? (
+                      <span className={`ml-0.5 text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ${showReportFilters ? 'bg-white text-emerald-700' : 'bg-emerald-600 text-white'}`}>{n}</span>
+                    ) : null;
+                  })()}
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
+                    {showReportFilters ? <path d="M1 7l4-4 4 4"/> : <path d="M1 3l4 4 4-4"/>}
+                  </svg>
+                </button>
+              </div>
+
+              {/* Collapsible filter panel */}
+              {showReportFilters && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+                  <div className="flex flex-wrap items-end gap-4">
+                    {/* Period chips */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Date</p>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {(['today', 'yesterday', '1w'] as const).map(r => (
+                          <button key={r}
+                            onClick={() => { setReportFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' })); setReportTotalFiltered(null); setShowReportPicker(false); }}
+                            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                              reportFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}>
+                            {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                          </button>
+                        ))}
+                        <div className="relative">
+                          <button
+                            onClick={() => { setReportFilters(f => ({ ...f, dateRange: 'custom' })); setShowReportPicker(v => !v); setReportTotalFiltered(null); }}
+                            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                              reportFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}>
+                            {reportFilters.dateRange === 'custom' && reportFilters.dateFrom
+                              ? `${reportFilters.dateFrom.slice(5)} → ${reportFilters.dateTo ? reportFilters.dateTo.slice(5) : '…'}`
+                              : 'Custom'}
+                          </button>
+                          {showReportPicker && (
+                            <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 overflow-hidden">
+                              <DateRangePicker
+                                from={reportFilters.dateFrom} to={reportFilters.dateTo}
+                                onChange={(from, to) => {
+                                  setReportFilters(f => ({ ...f, dateRange: 'custom', dateFrom: from, dateTo: to }));
+                                  setReportTotalFiltered(null);
+                                }}
+                                onClose={() => setShowReportPicker(false)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Disposition */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+                      <select value={reportFilters.disposition}
+                        onChange={e => { setReportFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' })); setReportTotalFiltered(null); }}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                        <option value="">All</option>
+                        {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    {/* Sub-Disposition */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+                      <select value={reportFilters.subDisposition}
+                        onChange={e => { setReportFilters(f => ({ ...f, subDisposition: e.target.value })); setReportTotalFiltered(null); }}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                        <option value="">All</option>
+                        {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+                    {/* CSAT */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
+                      <select value={reportFilters.csat}
+                        onChange={e => { setReportFilters(f => ({ ...f, csat: e.target.value })); setReportTotalFiltered(null); }}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
+                        <option value="">Any</option>
+                        <option value="5">Good</option>
+                        <option value="3">CBB</option>
+                        <option value="1">Bad</option>
+                      </select>
+                    </div>
+                    {/* Agent type */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Type</p>
+                      <select value={reportFilters.type}
+                        onChange={e => { setReportFilters(f => ({ ...f, type: e.target.value })); setReportTotalFiltered(null); }}
+                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[120px]">
+                        <option value="">All</option>
+                        <option value="bot">Bot</option>
+                        <option value="hybrid">Hybrid</option>
+                        <option value="agent">Human</option>
+                      </select>
+                    </div>
+                    {/* Min user messages */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Min User Messages</p>
+                      <input
+                        type="number" min={1} max={500}
+                        value={reportFilters.minUserMsgs ?? ''}
+                        onChange={e => { setReportFilters(f => ({ ...f, minUserMsgs: e.target.value ? parseInt(e.target.value) : null })); setReportTotalFiltered(null); }}
+                        placeholder="Any"
+                        className="w-20 text-xs border border-gray-200 rounded-xl px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                      />
+                    </div>
+                    {/* IQS range */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
+                      <div className="flex items-center gap-2">
+                        <input type="number" min={0} max={100} value={reportFilters.minScore}
+                          onChange={e => { setReportFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 })); setReportTotalFiltered(null); }}
+                          className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+                        <span className="text-gray-400 text-xs">–</span>
+                        <input type="number" min={0} max={100} value={reportFilters.maxScore}
+                          onChange={e => { setReportFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 })); setReportTotalFiltered(null); }}
+                          className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
                       </div>
                     </div>
                   </div>
-                  {/* Agent */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
-                    <select value={reportFilters.agent}
-                      onChange={e => { setReportFilters(f => ({ ...f, agent: e.target.value })); setReportTotalFiltered(null); }}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px]">
-                      <option value="">All agents</option>
-                      {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
-                    </select>
-                  </div>
-                  {/* CSAT */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
-                    <select value={reportFilters.csat}
-                      onChange={e => { setReportFilters(f => ({ ...f, csat: e.target.value })); setReportTotalFiltered(null); }}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
-                      <option value="">Any</option>
-                      <option value="5">Good</option>
-                      <option value="3">CBB</option>
-                      <option value="1">Bad</option>
-                    </select>
-                  </div>
-                  {/* IQS range */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
-                    <div className="flex items-center gap-2">
-                      <input type="number" min={0} max={100} value={reportFilters.minScore}
-                        onChange={e => { setReportFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 })); setReportTotalFiltered(null); }}
-                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
-                      <span className="text-gray-400 text-xs">–</span>
-                      <input type="number" min={0} max={100} value={reportFilters.maxScore}
-                        onChange={e => { setReportFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 })); setReportTotalFiltered(null); }}
-                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
-                    </div>
-                  </div>
-                  {/* Disposition */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
-                    <select value={reportFilters.disposition}
-                      onChange={e => { setReportFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' })); setReportTotalFiltered(null); }}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
-                      <option value="">All</option>
-                      {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-                  {/* Sub-Disposition */}
-                  <div>
-                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
-                    <select value={reportFilters.subDisposition}
-                      onChange={e => { setReportFilters(f => ({ ...f, subDisposition: e.target.value })); setReportTotalFiltered(null); }}
-                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
-                      <option value="">All</option>
-                      {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
+                  {/* Reset + Preview count row */}
+                  <div className="flex items-center gap-3 pt-4 border-t border-gray-50">
+                    <button
+                      onClick={previewReportCount}
+                      disabled={reportCountLoading}
+                      className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                      {reportCountLoading ? 'Counting…' : 'Preview count'}
+                    </button>
+                    <button
+                      onClick={() => { setReportFilters(DEFAULT_FILTERS); setReportTotalFiltered(null); }}
+                      className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
+                      Reset
+                    </button>
+                    {reportTotalFiltered !== null && (
+                      <span className="text-xs text-gray-500 ml-2">
+                        <span className="font-bold text-gray-900">{reportTotalFiltered.toLocaleString()}</span> chats will be exported
+                      </span>
+                    )}
                   </div>
                 </div>
-                {/* Reset + Preview count row */}
-                <div className="flex items-center gap-3 pt-4 border-t border-gray-50 mt-4">
-                  <button
-                    onClick={previewReportCount}
-                    disabled={reportCountLoading}
-                    className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
-                    {reportCountLoading ? 'Counting…' : 'Preview count'}
-                  </button>
-                  <button
-                    onClick={() => { setReportFilters(DEFAULT_FILTERS); setReportTotalFiltered(null); }}
-                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
-                    Reset
-                  </button>
-                  {reportTotalFiltered !== null && (
-                    <span className="text-xs text-gray-500 ml-2">
-                      <span className="font-bold text-gray-900">{reportTotalFiltered.toLocaleString()}</span> chats will be exported
-                    </span>
-                  )}
-                </div>
-              </div>
+              )}
 
               {/* Download buttons */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
