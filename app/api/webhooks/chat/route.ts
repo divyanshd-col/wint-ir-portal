@@ -29,12 +29,13 @@ import {
 import type { TimedMessage } from '@/lib/quality';
 import {
   CALL_IQS_SYSTEM_PROMPT,
+  CALL_TRANSCRIPTION_PROMPT,
   buildCallScoringPrompt,
   parseCallScoringResponse,
+  parseTranscriptionResponse,
   segmentsToText,
 } from '@/lib/call-quality';
-import type { CallParamScore } from '@/lib/call-quality';
-import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock } from '@/lib/store';
+import type { CallParamScore, CallSegment } from '@/lib/call-quality';
 import {
   upsertAgent,
   upsertContact,
@@ -54,7 +55,7 @@ import {
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
-import type { CallSegment } from '@/lib/call-quality';
+import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 import type { ParamScore } from '@/lib/quality';
 
@@ -724,57 +725,107 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'scoring' });
 }
 
+// ── MIME type from URL ────────────────────────────────────────────────────────
+function mimeFromUrl(url: string): string {
+  const u = url.toLowerCase().split('?')[0];
+  if (u.endsWith('.mp3'))  return 'audio/mpeg';
+  if (u.endsWith('.wav'))  return 'audio/wav';
+  if (u.endsWith('.m4a'))  return 'audio/mp4';
+  if (u.endsWith('.ogg'))  return 'audio/ogg';
+  if (u.endsWith('.flac')) return 'audio/flac';
+  return 'audio/mpeg';
+}
+
 // ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
 async function handleCallComplete(body: any): Promise<NextResponse> {
-  // Robylon sends all events to the same webhook URL, including voice calls.
-  // The payload already contains a pre-transcribed transcript in data.transcript,
-  // plus a recording_url if we ever want audio re-transcription.
-
-  const callId      = String(body.ticket_id || body.chat_id || `call_${Date.now()}`);
-  const phone       = body.requester_info?.phone_number || body.data?.phone_number || '';
-  const agentName   = '';   // not present in this event; resolved at TICKET_CLOSED
-  const calledAt    = body.data?.started_at || body.data?.ended_at || body.created_at || new Date().toISOString();
+  // In CC_VOICE_CALL_COMPLETE, body.chat_id is the CALL ID (Robylon's voice
+  // ticket ID), NOT a WhatsApp chat ID. The real WhatsApp chat_id is only
+  // known at TICKET_CLOSED, where we link via phone number.
+  const callId       = String(body.chat_id);
+  const phone        = body.requester_info?.phone_number || body.data?.phone_number || '';
   const recordingUrl = body.data?.recording_url || '';
+  const calledAt     = body.data?.started_at || body.data?.ended_at || body.created_at || new Date().toISOString();
   const durationRaw  = body.data?.call_duration;
   const durationSeconds = durationRaw && durationRaw > 0 ? Math.round(durationRaw) : null;
 
-  // Build CallSegment array from Robylon's pre-transcribed data.transcript
-  const rawSegments: any[] = Array.isArray(body.data?.transcript) ? body.data.transcript : [];
-  const segments: CallSegment[] = rawSegments
-    .filter(m => m.message && !m.is_internal_message)
-    .map(m => ({
-      type: 'speech' as const,
-      speaker: m.sender === 'agent' ? 'IR EXECUTIVE' : 'INVESTOR',
-      text: String(m.message).trim(),
-      translated: false,
-      // preserve original timestamp for display
-      ts: m.ts,
-    }));
+  if (!recordingUrl) {
+    console.warn(`[webhook] CC_VOICE_CALL_COMPLETE call_id=${callId} has no recording_url — skipping`);
+    return NextResponse.json({ ok: true, skipped: true, reason: 'no recording_url' });
+  }
 
-  const interruptionCount = 0;
-  const deadAirCount = 0;
+  // Respond immediately — transcription is slow (10–30s), do it async
+  const contactId = await upsertContact(phone);
 
-  const [agentId, contactId] = await Promise.all([
-    upsertAgent(agentName),
-    upsertContact(phone),
-  ]);
-
+  // Store a placeholder row now so the call is tracked even if transcription fails
   await insertCallRecording({
     id: callId,
-    chatId: null,      // linked at TICKET_CLOSED using phone number
-    agentId,
+    chatId: null,         // linked at TICKET_CLOSED via phone number
+    agentId: null,        // agent name not available in this event
     contactId,
-    recordingUrl,
+    recordingUrl,         // S3 URL stored permanently for reference / re-transcription
     durationSeconds,
     calledAt,
-    language: 'Hindi/Hinglish',
-    transcript: segments,
+    language: null,
+    transcript: [],
   });
 
-  await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
+  // Fire-and-forget: fetch audio → Gemini transcription → update DB
+  (async () => {
+    try {
+      const config = await readConfig();
+      const geminiKeys = getIQSGeminiKeys(config);
+      if (!geminiKeys.length) {
+        console.error(`[webhook] No Gemini key — cannot transcribe call ${callId}`);
+        return;
+      }
 
-  console.log(`[webhook] CC_VOICE_CALL_COMPLETE stored call ${callId} — ${segments.length} segments, phone=${phone}, status=pending_link`);
-  return NextResponse.json({ ok: true, event: 'call_stored', call_id: callId, segments: segments.length, status: 'pending_link' });
+      // Fetch audio into memory (never written to disk)
+      let audioBase64 = '';
+      let mimeType = mimeFromUrl(recordingUrl);
+      const audioRes = await fetch(recordingUrl);
+      if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio`);
+      const ct = audioRes.headers.get('content-type');
+      if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
+      audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+
+      // Gemini multimodal: audio → English segments (translates non-English)
+      const raw = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [
+          { inlineData: { mimeType, data: audioBase64 } },
+          { text: CALL_TRANSCRIPTION_PROMPT },
+        ]}],
+        {},
+        120_000,
+      );
+
+      const { language, segments } = parseTranscriptionResponse(raw);
+      const interruptionCount = segments.filter(s => s.type === 'interruption').length;
+      const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
+
+      // Update the placeholder row with the real transcript
+      await insertCallRecording({
+        id: callId,
+        chatId: null,
+        agentId: null,
+        contactId,
+        recordingUrl,
+        durationSeconds,
+        calledAt,
+        language,
+        transcript: segments,
+      });
+      await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
+
+      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
+    } catch (err: any) {
+      console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
+    }
+  })();
+
+  console.log(`[webhook] CC_VOICE_CALL_COMPLETE received call ${callId} — transcription started, phone=${phone}`);
+  return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'transcribing' });
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
