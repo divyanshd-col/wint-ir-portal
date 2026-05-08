@@ -198,11 +198,11 @@ export async function getAllScoredConversations(
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    conditions.push(`c.started_at::date >= $${params.length}`);
+    conditions.push(`COALESCE(c.started_at, c.closed_at)::date >= $${params.length}`);
   }
   if (opts.dateTo) {
     params.push(opts.dateTo);
-    conditions.push(`c.started_at::date <= $${params.length}`);
+    conditions.push(`COALESCE(c.started_at, c.closed_at)::date <= $${params.length}`);
   }
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
@@ -215,11 +215,11 @@ export async function getAllScoredConversations(
     conditions.push(`s.parameters ? '__uncertain'`);
   }
   if (opts.agentName) {
-    params.push(opts.agentName);
-    conditions.push(`a.name = $${params.length}`);
+    params.push(opts.agentName.toLowerCase());
+    conditions.push(`LOWER(a.name) = $${params.length}`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
-    conditions.push(`a.name = ANY($${params.length})`);
+    conditions.push(`LOWER(a.name) = ANY(SELECT LOWER(unnest($${params.length}::text[])))`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     // Scoped role with no assigned agents — return nothing
     conditions.push(`1=0`);

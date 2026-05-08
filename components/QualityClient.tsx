@@ -458,7 +458,7 @@ function DateRangePicker({ from, to, onChange, onClose }: {
   };
   const [viewDate, setViewDate] = useState(initMonth);
   const [pendingFrom, setPendingFrom] = useState(from);
-  const [step, setStep] = useState<'from' | 'to'>(from ? 'to' : 'from');
+  const [step, setStep] = useState<'from' | 'to'>('from');
   const [hoverDate, setHoverDate] = useState('');
 
   const year  = viewDate.getFullYear();
@@ -1416,6 +1416,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   // Server-provided lookup data
   const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
   const [availableSubDispositions, setAvailableSubDispositions] = useState<string[]>([]);
+  const [dispositionSubMap, setDispositionSubMap] = useState<Record<string, string[]>>({});
   const [weeklyParamData, setWeeklyParamData] = useState<WeeklyParamRow[]>([]);
 
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
@@ -1592,6 +1593,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setAvailableAgents(data.availableAgents || []);
       setAvailableDispositions(data.availableDispositions || []);
       setAvailableSubDispositions(data.availableSubDispositions || []);
+      if (data.dispositionSubMap) setDispositionSubMap(data.dispositionSubMap);
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1636,6 +1638,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setAvailableAgents(data.availableAgents || []);
       setAvailableDispositions(data.availableDispositions || []);
       setAvailableSubDispositions(data.availableSubDispositions || []);
+      if (data.dispositionSubMap) setDispositionSubMap(data.dispositionSubMap);
       setTotalStored(data.totalStored ?? 0);
       setTotalFiltered(data.total ?? 0);
       setHasMore(data.hasMore ?? false);
@@ -2703,7 +2706,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
                         className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
                         <option value="">All</option>
-                        {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                        {(pendingFilters.disposition && dispositionSubMap[pendingFilters.disposition]
+                          ? dispositionSubMap[pendingFilters.disposition]
+                          : availableSubDispositions
+                        ).map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
                   </div>
@@ -3271,7 +3277,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         onChange={e => { setReportFilters(f => ({ ...f, subDisposition: e.target.value })); setReportTotalFiltered(null); }}
                         className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
                         <option value="">All</option>
-                        {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                        {(reportFilters.disposition && dispositionSubMap[reportFilters.disposition]
+                          ? dispositionSubMap[reportFilters.disposition]
+                          : availableSubDispositions
+                        ).map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
                     {/* CSAT */}

@@ -193,15 +193,27 @@ export async function GET(req: NextRequest) {
   const availableDispositions     = [...new Set(allParsed.map(e => e.disposition).filter(Boolean))].sort() as string[];
   const availableSubDispositions  = [...new Set(allParsed.map(e => e.subDisposition).filter(Boolean))].sort() as string[];
 
+  // Build disposition → sub-disposition map so the client can scope the sub-disp dropdown
+  const dispositionSubMap: Record<string, string[]> = {};
+  for (const e of allParsed) {
+    if (!e.disposition) continue;
+    if (!dispositionSubMap[e.disposition]) dispositionSubMap[e.disposition] = [];
+    if (e.subDisposition && !dispositionSubMap[e.disposition].includes(e.subDisposition)) {
+      dispositionSubMap[e.disposition].push(e.subDisposition);
+    }
+  }
+  for (const k of Object.keys(dispositionSubMap)) dispositionSubMap[k].sort();
+
   // Apply remaining in-memory filters (tag, csat, score range, type)
   let entries = [...allParsed];
+  const agentFilterLc = agentFilter.toLowerCase();
   if (scopedAgentNames !== null) {
     // scoped role (agent/tl/quality) — DB already filtered, but agentFilter may further narrow
     if (agentFilter) {
-      entries = entries.filter(e => e.agentName === agentFilter);
+      entries = entries.filter(e => (e.agentName || '').toLowerCase() === agentFilterLc);
     }
   } else if (agentFilter) {
-    entries = entries.filter(e => e.agentName === agentFilter);
+    entries = entries.filter(e => (e.agentName || '').toLowerCase() === agentFilterLc);
   }
   if (chatIdSearch) entries = entries.filter(e => String(e.chatId).includes(chatIdSearch.trim()));
   if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
@@ -334,6 +346,7 @@ export async function GET(req: NextRequest) {
     availableAgents,
     availableDispositions,
     availableSubDispositions,
+    dispositionSubMap,
     total: totalFiltered,
     totalStored,
     selfAgentName: selfAgentName || null,
