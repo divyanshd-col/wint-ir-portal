@@ -553,12 +553,13 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
     setTranscriptLoading(true);
     setTranscriptError('');
     fetch(`/api/quality/transcript?chatId=${encodeURIComponent(entry.chatId)}`)
-      .then(r => r.json())
-      .then(d => {
+      .then(async r => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d?.detail || d?.error || `HTTP ${r.status}`);
         if (d.found) setTranscript({ timedMessages: d.timedMessages, rawTranscript: d.rawTranscript });
         else setTranscript({});
       })
-      .catch(() => setTranscriptError('Failed to load transcript'))
+      .catch((e: any) => setTranscriptError(e?.message || 'Failed to load transcript'))
       .finally(() => setTranscriptLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.chatId]);
