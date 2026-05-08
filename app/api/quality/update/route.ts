@@ -103,7 +103,7 @@ export async function PATCH(req: NextRequest) {
 
     if (csat !== undefined) {
       const csatNum = csat ? parseInt(csat) : null;
-      const csatLbl = csat === '5' ? 'Good' : csat === '3' ? 'Neutral' : csat === '1' ? 'Bad' : null;
+      const csatLbl = csat === '5' ? 'good' : csat === '3' ? 'could_be_better' : csat === '1' ? 'bad' : null;
       convParams.push(isNaN(csatNum as any) ? null : csatNum);
       convUpdates.push(`csat_score = $${convParams.length}`);
       convParams.push(csatLbl);
