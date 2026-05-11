@@ -717,7 +717,7 @@ export async function runSynthesizerPhase(
 // Primary: gemini-2.0-flash (faster, lower latency)
 // Fallback: gemini-2.5-flash (only on timeout — fully transparent to the user)
 
-const PRIMARY_MODEL  = 'gemini-3-flash-preview';
+const PRIMARY_MODEL  = 'gemini-2.5-flash';
 const FALLBACK_MODEL_ANALYTICS = 'gemini-2.5-flash';
 
 async function geminiWithFallback(
@@ -732,7 +732,7 @@ async function geminiWithFallback(
   } catch (err: any) {
     const isTimeout = String(err?.message ?? '').toLowerCase().includes('timeout');
     if (!isTimeout) throw err;
-    console.warn('[analytics/agent] gemini-3-flash-preview timed out — retrying with gemini-2.5-flash');
+    console.warn('[analytics/agent] gemini-2.5-flash timed out — retrying with fallback');
     return await geminiGenerate(keys, FALLBACK_MODEL_ANALYTICS, contents, extra, fallbackTimeoutMs);
   }
 }
