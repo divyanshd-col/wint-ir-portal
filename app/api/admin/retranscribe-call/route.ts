@@ -68,8 +68,9 @@ export async function POST(req: NextRequest) {
     if (!audioRes.ok) {
       return NextResponse.json({ error: `Failed to fetch recording: HTTP ${audioRes.status}` }, { status: 502 });
     }
-    const ct = audioRes.headers.get('content-type');
-    if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
+    const ct = audioRes.headers.get('content-type')?.split(';')[0].trim() || '';
+    // Only use Content-Type if it's a specific audio type — ignore generic binary responses
+    if (ct && ct.startsWith('audio/') && ct !== 'audio/octet-stream') mimeType = ct;
     const audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
 
     // Send to Gemini multimodal for transcription
