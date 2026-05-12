@@ -150,12 +150,13 @@ function isAuthorised(req: NextRequest): boolean {
   return false;
 }
 
-// ── Extract a search query from the transcript (fallback when no disposition) ──
-function extractQueryFromTranscript(transcript: string): string {
+// ── Extract all unique customer question lines from transcript ────────────────
+function extractCustomerQuestions(transcript: string): string {
+  const seen = new Set<string>();
   return transcript.split('\n')
     .filter(l => l.startsWith('Customer:'))
-    .slice(0, 3)
     .map(l => l.replace('Customer:', '').trim())
+    .filter(l => l.length > 10 && !seen.has(l) && seen.add(l))
     .join(' ');
 }
 
@@ -183,11 +184,16 @@ async function scoreLinkedCallsForChat(
 
   let kbContext = '';
   try {
-    const searchQuery = disposition ? `${disposition} ${subDisposition}`.trim() : '';
-    if (searchQuery) {
-      const allChunks = await fetchKnowledgeChunks();
-      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
-      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+    const allChunks = await fetchKnowledgeChunks();
+    if (allChunks.length) {
+      const dispositionQuery = `${disposition} ${subDisposition}`.trim();
+      const seen = new Set<string>();
+      const merged: typeof allChunks = [];
+      for (const chunk of retrieveRelevantChunks(allChunks, dispositionQuery, 5)) {
+        const key = `${chunk.fileId}::${chunk.content.slice(0, 80)}`;
+        if (!seen.has(key)) { seen.add(key); merged.push(chunk); }
+      }
+      if (merged.length) kbContext = merged.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
     }
   } catch {}
 
@@ -318,20 +324,36 @@ export async function executeScoring(
   const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
   // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
+  // Run two retrieval passes — one on disposition topic, one on customer questions —
+  // then merge and deduplicate so every topic the customer raised gets KB coverage.
   let kbContext = '';
   try {
-    const searchQuery = disposition
-      ? `${disposition} ${subDisposition}`.trim()
-      : extractQueryFromTranscript(transcriptText);
+    const allChunks = await fetchKnowledgeChunks();
+    if (allChunks.length) {
+      const dispositionQuery  = `${disposition} ${subDisposition}`.trim();
+      const customerQuery     = extractCustomerQuestions(transcriptText);
 
-    if (searchQuery) {
-      const allChunks = await fetchKnowledgeChunks();
-      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
-      if (relevant.length) {
-        kbContext = relevant
-          .map(c => `[${c.fileName}]\n${c.content}`)
-          .join('\n---\n');
-        console.log(`[webhook] KB context: ${relevant.length} chunks for query "${searchQuery}"`);
+      const seen = new Set<string>();
+      const merged: typeof allChunks = [];
+
+      const addChunks = (query: string, topK: number) => {
+        if (!query) return;
+        for (const chunk of retrieveRelevantChunks(allChunks, query, topK)) {
+          const key = `${chunk.fileId}::${chunk.content.slice(0, 80)}`;
+          if (!seen.has(key)) { seen.add(key); merged.push(chunk); }
+        }
+      };
+
+      // 3 chunks for disposition (topic anchor) + 4 for customer questions (breadth)
+      addChunks(dispositionQuery, 3);
+      addChunks(customerQuery, 4);
+
+      // If either query was empty, fill up to 5 total from whichever ran
+      if (merged.length < 5) addChunks(dispositionQuery || customerQuery, 5 - merged.length);
+
+      if (merged.length) {
+        kbContext = merged.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+        console.log(`[webhook] KB context: ${merged.length} chunks (disposition="${dispositionQuery}", customer questions=${customerQuery.split(' ').length} words)`);
       }
     }
   } catch (err: any) {
