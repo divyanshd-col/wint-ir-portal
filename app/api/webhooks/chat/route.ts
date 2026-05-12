@@ -33,6 +33,7 @@ import {
   buildCallScoringPrompt,
   parseCallScoringResponse,
   parseTranscriptionResponse,
+  insertPoorListeningFlags,
   segmentsToText,
 } from '@/lib/call-quality';
 import type { CallParamScore, CallSegment } from '@/lib/call-quality';
@@ -69,7 +70,7 @@ function normaliseCsat(raw: string | undefined): { score: number; label: string 
   return null;
 }
 
-// ── Messages → transcript text ────────────────────────────────────────────────
+// ── Messages → transcript text ────────────────────────────────────────────────────
 interface RobyMessage { sender?: string; content?: string; role?: string; text?: string; timestamp?: string; }
 
 function messagesToTranscript(messages: RobyMessage[]): string {
@@ -104,7 +105,7 @@ function transcriptFromJsonb(messages: any[]): string {
   return lines.join('\n');
 }
 
-// ── Parse "Apr 15, 10:51 AM" → ISO (IST = UTC+5:30) ─────────────────────────
+// ── Parse "Apr 15, 10:51 AM" → ISO (IST = UTC+5:30) ───────────────────────────
 function parseRobyTimestamp(ts: string, year: number): string {
   try {
     const match = ts.match(/^(\w+)\s+(\d+),\s+(\d+):(\d+)\s+(AM|PM)$/);
@@ -139,7 +140,7 @@ function extractAgentName(messages: any[]): string {
   return '';
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Auth ────────────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
   if (!secret) { console.warn('[webhook] WEBHOOK_SECRET not set — accepting all requests'); return true; }
@@ -159,7 +160,7 @@ function extractQueryFromTranscript(transcript: string): string {
     .join(' ');
 }
 
-// ── Convert ParamScore → IQSParameterResult ───────────────────────────────────
+// ── Convert ParamScore → IQSParameterResult ───────────────────────────────────────────
 function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult {
   return {
     score: score === 'Yes' ? true : score === 'No' ? false : null,
@@ -167,7 +168,7 @@ function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult
   };
 }
 
-// ── Call IQS scoring for calls linked to a chat ───────────────────────────────
+// ── Call IQS scoring for calls linked to a chat ─────────────────────────────────────
 async function scoreLinkedCallsForChat(
   chatId: string,
   chatTranscriptText: string,
@@ -195,16 +196,18 @@ async function scoreLinkedCallsForChat(
     const segments = Array.isArray(call.transcript) ? call.transcript : [];
     const callText  = segmentsToText(segments);
     if (!callText) {
-      await updateCallRecordingStatus(call.id, 'scored');
+      await updateCallRecordingStatus(call.call_id, 'scored');
       continue;
     }
 
     const scoringPrompt = buildCallScoringPrompt(
       callText,
       chatTranscriptText,
-      call.id,
+      call.call_id,
       call.interruption_count ?? 0,
       call.dead_air_count ?? 0,
+      '',
+      `${disposition} ${subDisposition}`.trim(),
       kbContext,
     );
 
@@ -217,7 +220,9 @@ async function scoreLinkedCallsForChat(
         60_000,
       );
 
-      const { scores, reasoning, iqs } = parseCallScoringResponse(raw);
+      const { scores, reasoning, poorListeningSegments, iqs } = parseCallScoringResponse(raw);
+      const finalSegments = insertPoorListeningFlags(segments, poorListeningSegments);
+
       const parameters: Record<string, IQSParameterResult> = {};
       for (const [key, val] of Object.entries(scores)) {
         parameters[key] = {
@@ -226,11 +231,17 @@ async function scoreLinkedCallsForChat(
         };
       }
 
+      // Persist updated transcript with poor_listening flags
+      await insertCallRecording({
+        id: call.call_id,
+        transcript: finalSegments,
+      });
+
       await updateCallIQSScore({ chatId, callIqsScore: iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
-      await updateCallRecordingStatus(call.id, 'scored');
-      console.log(`[webhook] Scored call ${call.id} → IQS ${iqs} for chat ${chatId}`);
+      await updateCallRecordingStatus(call.call_id, 'scored');
+      console.log(`[webhook] Scored call ${call.call_id} → IQS ${iqs} for chat ${chatId}`);
     } catch (err: any) {
-      console.error(`[webhook] Call IQS scoring failed for call ${call.id}:`, err.message);
+      console.error(`[webhook] Call IQS scoring failed for call ${call.call_id}:`, err.message);
     }
   }
 }
@@ -248,7 +259,7 @@ async function linkAndScoreCallsForChat(
   const unlinked = await getUnlinkedCallsForContact(contactId, closedAt);
   if (!unlinked.length) return;
 
-  await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
+  await Promise.all(unlinked.map(c => linkCallToChat(c.call_id, chatId)));
   console.log(`[webhook] Linked ${unlinked.length} call(s) to chat ${chatId}`);
 
   if (disposition) {
@@ -256,7 +267,7 @@ async function linkAndScoreCallsForChat(
   }
 }
 
-// ── Core scoring (called from webhook + cron) ─────────────────────────────────
+// ── Core scoring (called from webhook + cron) ────────────────────────────────────
 export async function executeScoring(
   conv: ConversationRow,
   agentName: string,
@@ -288,7 +299,7 @@ export async function executeScoring(
     return null;
   }
 
-  // ── Call detection — skip scoring silently ──────────────────────────────
+  // ── Call detection — skip scoring silently ───────────────────────────────
   if (hasCallInteraction(transcriptText, conv.tags)) {
     console.log(`[webhook] Skipping scoring for chat ${chatId} — call interaction detected`);
     return null;
@@ -389,7 +400,7 @@ export async function executeScoring(
   const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
   console.log(`[webhook] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
 
-  // ── Slack + Sheet alert — deduplicated via KV ────────────────────────────────
+  // ── Slack + Sheet alert — deduplicated via KV ─────────────────────────────────────────
   fireQualityAlert({
     chatId,
     agentName:           finalAgentName,
@@ -632,7 +643,7 @@ async function handleCsatEvent(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat: normalised.score });
 }
 
-// ── Handler: legacy flat payload (backward compat) ────────────────────────────
+// ── Handler: legacy flat payload (backward compat) ────────────────────────────────
 async function handleLegacyPayload(body: any): Promise<NextResponse> {
   const {
     chat_id, conversation_id, agent_name,
@@ -725,7 +736,7 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'scoring' });
 }
 
-// ── MIME type from URL ────────────────────────────────────────────────────────
+// ── MIME type from URL ────────────────────────────────────────────────────────────────
 function mimeFromUrl(url: string): string {
   const u = url.toLowerCase().split('?')[0];
   if (u.endsWith('.mp3'))  return 'audio/mpeg';
@@ -736,7 +747,7 @@ function mimeFromUrl(url: string): string {
   return 'audio/mpeg';
 }
 
-// ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
+// ── Handler: CC_VOICE_CALL_COMPLETE ────────────────────────────────────────────
 async function handleCallComplete(body: any): Promise<NextResponse> {
   // In CC_VOICE_CALL_COMPLETE, body.chat_id is the CALL ID (Robylon's voice
   // ticket ID), NOT a WhatsApp chat ID. The real WhatsApp chat_id is only
@@ -828,7 +839,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'transcribing' });
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// ── Main handler ───────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   if (!isAuthorised(req)) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
