@@ -42,6 +42,7 @@ import {
   upsertConversation,
   updateConversationCsat,
   updateConversationTags,
+  mergeConversationTags,
   getConversation,
   isScored,
   insertIQSScore,
@@ -508,6 +509,12 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     upsertAgent(effectiveWebhookAgent),
   ]);
 
+  // Extract Ticket Raised status from properties array
+  const properties: any[] = body.data?.properties || [];
+  const ticketRaisedProp = properties.find((p: any) => p.name === 'Ticket Raised');
+  const ticketRaised: string | null =
+    ticketRaisedProp?.selected_value?.value === 'Yes' ? 'Yes' : null;
+
   // Persist conversation to PostgreSQL
   await upsertConversation({
     id: chatId,
@@ -524,6 +531,11 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     webhookTrigger: 'TICKET_CLOSED',
     phoneNumber: mobileNumber ?? null,
   });
+
+  // Merge ticket_raised into tags without overwriting disposition from CLASSIFICATION_UPDATED
+  if (ticketRaised !== null) {
+    await mergeConversationTags(chatId, { ticket_raised: ticketRaised });
+  }
 
   // Check if tags already stored (from a prior CLASSIFICATION_UPDATED)
   const existingConv = await getConversation(chatId);

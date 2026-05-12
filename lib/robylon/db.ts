@@ -142,6 +142,33 @@ export async function updateConversationTags(
   );
 }
 
+/** Merge extra keys into the existing tags JSONB without overwriting unrelated keys. */
+export async function mergeConversationTags(
+  chatId: string,
+  extra: Record<string, string | null>,
+): Promise<void> {
+  await query(
+    `UPDATE conversations SET tags = COALESCE(tags, '{}'::jsonb) || $1::jsonb, updated_at = NOW() WHERE id = $2`,
+    [JSON.stringify(extra), chatId],
+  );
+}
+
+/** Latest closed conversation for a contact phone number, with tags. */
+export async function getLatestConversationByPhone(phone: string): Promise<any | null> {
+  const rows = await query<any>(`
+    SELECT c.id AS "chatId", c.closed_at AS "closedAt", c.tags,
+           c.agent_id AS "agentId", a.name AS "agentName"
+    FROM conversations c
+    JOIN contacts ct ON ct.id = c.contact_id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    WHERE ct.phone = $1
+      AND c.closed_at IS NOT NULL
+    ORDER BY c.closed_at DESC
+    LIMIT 1
+  `, [phone]);
+  return rows[0] ?? null;
+}
+
 export async function getConversation(chatId: string): Promise<ConversationRow | null> {
   const rows = await query<ConversationRow>(`SELECT * FROM conversations WHERE id = $1`, [chatId]);
   return rows[0] ?? null;
