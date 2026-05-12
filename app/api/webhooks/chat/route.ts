@@ -196,14 +196,14 @@ async function scoreLinkedCallsForChat(
     const segments = Array.isArray(call.transcript) ? call.transcript : [];
     const callText  = segmentsToText(segments);
     if (!callText) {
-      await updateCallRecordingStatus(call.call_id, 'scored');
+      await updateCallRecordingStatus(call.id, 'scored');
       continue;
     }
 
     const scoringPrompt = buildCallScoringPrompt(
       callText,
       chatTranscriptText,
-      call.call_id,
+      call.id,
       call.interruption_count ?? 0,
       call.dead_air_count ?? 0,
       '',
@@ -233,15 +233,15 @@ async function scoreLinkedCallsForChat(
 
       // Persist updated transcript with poor_listening flags
       await insertCallRecording({
-        id: call.call_id,
+        id: call.id,
         transcript: finalSegments,
       });
 
       await updateCallIQSScore({ chatId, callIqsScore: iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
-      await updateCallRecordingStatus(call.call_id, 'scored');
-      console.log(`[webhook] Scored call ${call.call_id} → IQS ${iqs} for chat ${chatId}`);
+      await updateCallRecordingStatus(call.id, 'scored');
+      console.log(`[webhook] Scored call ${call.id} → IQS ${iqs} for chat ${chatId}`);
     } catch (err: any) {
-      console.error(`[webhook] Call IQS scoring failed for call ${call.call_id}:`, err.message);
+      console.error(`[webhook] Call IQS scoring failed for call ${call.id}:`, err.message);
     }
   }
 }
@@ -259,7 +259,7 @@ async function linkAndScoreCallsForChat(
   const unlinked = await getUnlinkedCallsForContact(contactId, closedAt);
   if (!unlinked.length) return;
 
-  await Promise.all(unlinked.map(c => linkCallToChat(c.call_id, chatId)));
+  await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
   console.log(`[webhook] Linked ${unlinked.length} call(s) to chat ${chatId}`);
 
   if (disposition) {
