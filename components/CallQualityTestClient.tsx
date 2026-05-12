@@ -224,27 +224,25 @@ function ProgressStep({ n, label, sub, done, active }: {
 type Stage = 'idle' | 'transcribing' | 'scoring' | 'done' | 'error';
 
 export default function CallQualityTestClient() {
-  const [url, setUrl]                   = useState('');
-  const [chatCtx, setChatCtx]           = useState('');
-  const [showChatCtx, setShowChatCtx]   = useState(false);
-  const [stage, setStage]               = useState<Stage>('idle');
-  const [error, setError]               = useState('');
-  const [result, setResult]             = useState<ResultData | null>(null);
+  const [callId, setCallId]   = useState('');
+  const [chatId, setChatId]   = useState('');
+  const [stage, setStage]     = useState<Stage>('idle');
+  const [error, setError]     = useState('');
+  const [result, setResult]   = useState<ResultData | null>(null);
 
   async function analyze() {
-    if (!url.trim()) return;
+    if (!callId.trim()) return;
     setStage('transcribing');
     setError('');
     setResult(null);
 
     try {
-      // Single POST — server does both steps; we transition stage after a delay
       const transitionTimer = setTimeout(() => setStage('scoring'), 8000);
 
-      const res  = await fetch('/api/call-quality/test', {
+      const res = await fetch('/api/call-quality/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recording_url: url.trim(), chat_transcript: chatCtx }),
+        body: JSON.stringify({ call_id: callId.trim(), chat_id: chatId.trim() || undefined }),
       });
       clearTimeout(transitionTimer);
 
@@ -263,7 +261,7 @@ export default function CallQualityTestClient() {
   if (stage === 'done' && result) {
     return (
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <ResultPanel data={result} onReset={() => { setStage('idle'); setResult(null); setUrl(''); setChatCtx(''); }} />
+        <ResultPanel data={result} onReset={() => { setStage('idle'); setResult(null); setCallId(''); setChatId(''); }} />
       </div>
     );
   }
@@ -275,7 +273,7 @@ export default function CallQualityTestClient() {
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-100 text-3xl mb-4">📞</div>
         <h1 className="text-2xl font-bold text-slate-800">Call Quality — Test Mode</h1>
         <p className="text-slate-500 mt-1.5 text-sm">
-          Paste a recording URL to transcribe and score it instantly.<br />
+          Enter a Call ID to fetch the recording from the database and run the full pipeline.<br />
           Nothing is saved to the database.
         </p>
       </div>
@@ -285,41 +283,30 @@ export default function CallQualityTestClient() {
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Recording URL <span className="text-red-400">*</span>
+              Call ID <span className="text-red-400">*</span>
             </label>
             <input
-              type="url"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition"
-              placeholder="https://recordings.example.com/call-001.mp3"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              disabled={false}
+              type="text"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition font-mono"
+              placeholder="robylon-voice-ticket-id"
+              value={callId}
+              onChange={e => setCallId(e.target.value)}
             />
-            <p className="text-xs text-slate-400 mt-1">Supports MP3, WAV, M4A, OGG, FLAC. Must be publicly accessible.</p>
+            <p className="text-xs text-slate-400 mt-1">The call recording must already exist in call_recordings.</p>
           </div>
 
           <div>
-            <button
-              type="button"
-              className="text-sm font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1"
-              onClick={() => setShowChatCtx(v => !v)}
-            >
-              {showChatCtx ? '▲' : '▼'} Add WhatsApp chat context (optional)
-            </button>
-            {showChatCtx && (
-              <div className="mt-2">
-                <textarea
-                  rows={6}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition resize-none font-mono"
-                  placeholder={"Agent: Hi, I'm Priya from Wint Wealth…\nCustomer: I have a question about my payout\nAgent: Of course, can you share your registered phone number?"}
-                  value={chatCtx}
-                  onChange={e => setChatCtx(e.target.value)}
-                />
-                <p className="text-xs text-slate-400 mt-1">
-                  Paste the WhatsApp transcript. The AI will use it as context when scoring the call — it does not score the chat separately here.
-                </p>
-              </div>
-            )}
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Chat ID <span className="text-slate-400 text-xs font-normal">(optional — loads WhatsApp context)</span>
+            </label>
+            <input
+              type="text"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition font-mono"
+              placeholder="conversation-id from Robylon"
+              value={chatId}
+              onChange={e => setChatId(e.target.value)}
+            />
+            <p className="text-xs text-slate-400 mt-1">If provided, the chat transcript is fetched from conversations and used as context during scoring.</p>
           </div>
 
           {stage === 'error' && (
@@ -330,7 +317,7 @@ export default function CallQualityTestClient() {
 
           <button
             onClick={analyze}
-            disabled={!url.trim()}
+            disabled={!callId.trim()}
             className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
           >
             🔍 Analyze Call

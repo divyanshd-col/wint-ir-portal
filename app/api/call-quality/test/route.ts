@@ -1,10 +1,10 @@
 /**
  * POST /api/call-quality/test
  *
- * Stateless test endpoint — runs the full call quality AI pipeline and returns
- * results directly. Nothing is written to the database.
+ * Test endpoint — looks up a call recording by call_id and runs the full
+ * transcription + scoring pipeline. Nothing is written to the database.
  *
- * Body: { recording_url: string, chat_transcript?: string }
+ * Body: { call_id: string, chat_id?: string }
  * Auth: same session-based auth as all other routes (admin / quality / tl)
  */
 
@@ -21,6 +21,7 @@ import {
   parseCallScoringResponse,
   segmentsToText,
 } from '@/lib/call-quality';
+import { getCallRecording, getConversation } from '@/lib/robylon/db';
 
 function mimeFromUrl(url: string): string {
   const u = url.toLowerCase().split('?')[0];
@@ -32,6 +33,19 @@ function mimeFromUrl(url: string): string {
   return 'audio/mpeg';
 }
 
+function transcriptToText(transcript: any): string {
+  if (!transcript) return '';
+  if (typeof transcript === 'string') return transcript;
+  if (!Array.isArray(transcript)) return '';
+  return transcript
+    .map((m: any) => {
+      const sender = m.sender_type === 'agent' ? 'Agent' : 'Customer';
+      return `${sender}: ${m.message || m.content || m.text || ''}`;
+    })
+    .filter(Boolean)
+    .join('\n');
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -40,14 +54,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let body: { recording_url?: string; chat_transcript?: string };
+  let body: { call_id?: string; chat_id?: string };
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { recording_url, chat_transcript = '' } = body;
-  if (!recording_url?.trim()) {
-    return NextResponse.json({ error: 'recording_url is required' }, { status: 400 });
+  const { call_id, chat_id } = body;
+  if (!call_id?.trim()) {
+    return NextResponse.json({ error: 'call_id is required' }, { status: 400 });
   }
 
   const config    = await readConfig();
@@ -56,14 +70,33 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'No Gemini API key configured on this portal' }, { status: 503 });
   }
 
+  // ── Lookup call recording from DB ────────────────────────────────────────
+  const callRow = await getCallRecording(call_id.trim());
+  if (!callRow) {
+    return NextResponse.json({ error: `No call_recording found for call_id: ${call_id}` }, { status: 404 });
+  }
+  const recording_url = callRow.recording_url;
+  if (!recording_url) {
+    return NextResponse.json({ error: 'Call recording row has no recording_url' }, { status: 422 });
+  }
+
+  // ── Lookup chat transcript from DB (optional) ────────────────────────────
+  let chat_transcript = '';
+  if (chat_id?.trim()) {
+    const conv = await getConversation(chat_id.trim());
+    if (conv?.transcript) {
+      chat_transcript = transcriptToText(conv.transcript);
+    }
+  }
+
   // ── Step 1: Fetch audio ───────────────────────────────────────────────────
   let audioBase64 = '';
   let mimeType    = mimeFromUrl(recording_url);
   try {
     const res = await fetch(recording_url);
     if (!res.ok) throw new Error(`HTTP ${res.status} fetching recording`);
-    const ct = res.headers.get('content-type');
-    if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
+    const ct = res.headers.get('content-type')?.split(';')[0].trim() || '';
+    if (ct && ct.startsWith('audio/') && ct !== 'audio/octet-stream') mimeType = ct;
     audioBase64 = Buffer.from(await res.arrayBuffer()).toString('base64');
   } catch (err: any) {
     return NextResponse.json({ error: `Could not fetch recording: ${err.message}` }, { status: 422 });
