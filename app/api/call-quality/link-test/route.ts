@@ -80,17 +80,27 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!chat_id?.trim()) return NextResponse.json({ error: 'chat_id is required' }, { status: 400 });
 
   // ── Fetch existing data ────────────────────────────────────────────────────
-  const [callRec, chatConv] = await Promise.all([
-    getCallRecording(call_id.trim()),
-    getConversation(chat_id.trim()),
-  ]);
+  let callRec: any, chatConv: any;
+  try {
+    [callRec, chatConv] = await Promise.all([
+      getCallRecording(call_id.trim()),
+      getConversation(chat_id.trim()),
+    ]);
+  } catch (err: any) {
+    return NextResponse.json({ error: `DB lookup failed: ${err.message}` }, { status: 500 });
+  }
 
   if (!callRec) {
     return NextResponse.json({ error: `call_id ${call_id} not found in call_recordings` }, { status: 404 });
   }
 
-  const config     = await readConfig();
-  const geminiKeys = getIQSGeminiKeys(config);
+  let config: any, geminiKeys: string[];
+  try {
+    config     = await readConfig();
+    geminiKeys = getIQSGeminiKeys(config);
+  } catch (err: any) {
+    return NextResponse.json({ error: `Config error: ${err.message}` }, { status: 500 });
+  }
   if (!geminiKeys.length) {
     return NextResponse.json({ error: 'No Gemini API key configured' }, { status: 503 });
   }
@@ -248,25 +258,30 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const poorListeningCount = poorListeningSegments.length;
 
   // ── Persist results to DB ─────────────────────────────────────────────────
-  await linkCallToChat(call_id, chat_id);
+  let dbError: string | null = null;
+  try {
+    await linkCallToChat(call_id, chat_id);
+    await insertCallRecording({ id: call_id, chatId: chat_id, transcript: finalSegments, language });
 
-  await insertCallRecording({ id: call_id, chatId: chat_id, transcript: finalSegments, language });
+    const parameters: Record<string, IQSParameterResult> = {};
+    for (const [key, val] of Object.entries(scores)) {
+      parameters[key] = {
+        score: val === 'Yes' ? true : val === 'No' ? false : null,
+        reasoning: reasoning[key] || '',
+      };
+    }
 
-  const parameters: Record<string, IQSParameterResult> = {};
-  for (const [key, val] of Object.entries(scores)) {
-    parameters[key] = {
-      score: val === 'Yes' ? true : val === 'No' ? false : null,
-      reasoning: reasoning[key] || '',
-    };
+    await updateCallIQSScore({
+      chatId: chat_id,
+      callIqsScore: iqs,
+      callParameters: parameters,
+      callModelVersion: 'gemini-2.5-flash-preview-05-20',
+    });
+    await updateCallRecordingStatus(call_id, 'scored');
+  } catch (err: any) {
+    dbError = err.message;
+    console.error('[link-test] DB persist error:', err.message);
   }
-
-  await updateCallIQSScore({
-    chatId: chat_id,
-    callIqsScore: iqs,
-    callParameters: parameters,
-    callModelVersion: 'gemini-2.5-flash-preview-05-20',
-  });
-  await updateCallRecordingStatus(call_id, 'scored');
 
   const totalMs = Date.now() - t0;
 
@@ -292,5 +307,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     transcriptionMs,
     scoringMs,
     totalMs,
+    ...(dbError ? { dbWarning: `Scoring succeeded but DB save failed: ${dbError}` } : {}),
   });
 }
