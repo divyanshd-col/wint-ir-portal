@@ -281,7 +281,7 @@ export async function countUnscoredConversations(minHoursOld = 0): Promise<numbe
 // ── Call recording helpers ────────────────────────────────────────────────────
 
 export interface CallRecordingRow {
-  call_id: string;
+  id: string;
   chat_id: string | null;
   agent_id: number | null;
   contact_id: number | null;
@@ -308,10 +308,10 @@ export async function insertCallRecording(data: {
 }): Promise<void> {
   await query(`
     INSERT INTO call_recordings (
-      call_id, chat_id, agent_id, contact_id, recording_url,
+      id, chat_id, agent_id, contact_id, recording_url,
       duration_seconds, called_at, language, transcript, status
     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transcribed')
-    ON CONFLICT (call_id) DO UPDATE SET
+    ON CONFLICT (id) DO UPDATE SET
       chat_id          = COALESCE(EXCLUDED.chat_id, call_recordings.chat_id),
       agent_id         = COALESCE(EXCLUDED.agent_id, call_recordings.agent_id),
       contact_id       = COALESCE(EXCLUDED.contact_id, call_recordings.contact_id),
@@ -343,12 +343,12 @@ export async function updateCallRecordingMetrics(data: {
   await query(`
     UPDATE call_recordings
     SET interruption_count = $1, dead_air_count = $2, status = $3, updated_at = NOW()
-    WHERE call_id = $4
+    WHERE id = $4
   `, [data.interruptionCount, data.deadAirCount, data.status, data.id]);
 }
 
 export async function getCallRecording(callId: string): Promise<CallRecordingRow | null> {
-  const rows = await query<CallRecordingRow>(`SELECT * FROM call_recordings WHERE call_id = $1`, [callId]);
+  const rows = await query<CallRecordingRow>(`SELECT * FROM call_recordings WHERE id = $1`, [callId]);
   return rows[0] ?? null;
 }
 
@@ -401,7 +401,7 @@ export async function linkCallToChat(callId: string, chatId: string): Promise<vo
   await query(
     `UPDATE call_recordings
      SET chat_id = $1, status = 'linked', updated_at = NOW()
-     WHERE call_id = $2`,
+     WHERE id = $2`,
     [chatId, callId],
   );
 }
@@ -409,7 +409,7 @@ export async function linkCallToChat(callId: string, chatId: string): Promise<vo
 /** Update only the status field on a call recording (e.g. 'scored'). */
 export async function updateCallRecordingStatus(id: string, status: string): Promise<void> {
   await query(
-    `UPDATE call_recordings SET status = $1, updated_at = NOW() WHERE call_id = $2`,
+    `UPDATE call_recordings SET status = $1, updated_at = NOW() WHERE id = $2`,
     [status, id],
   );
 }
@@ -480,7 +480,7 @@ export async function getAllScoredCalls(opts: {
 
   const rows = await query(`
     SELECT
-      r.call_id              AS "callId",
+      r.id                   AS "callId",
       r.chat_id              AS "chatId",
       r.called_at            AS "calledAt",
       r.called_at::date      AS "date",
