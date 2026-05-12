@@ -94,6 +94,62 @@ export async function geminiGenerate(
   throw lastError;
 }
 
+// ── Call-quality specific Gemini caller ───────────────────────────────────────
+// Dedicated model chain, temperature=0, thinkingBudget=0 for flash, 5 retries with 10s gaps.
+const CALL_MODEL_CHAIN = [
+  'gemini-2.5-flash-preview-05-20',
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
+];
+
+export async function callGeminiForCall(
+  keys: string[],
+  contents: any[],
+  systemInstruction?: string,
+  timeoutMs = 120_000,
+): Promise<string> {
+  let lastError: any;
+
+  for (const model of CALL_MODEL_CHAIN) {
+    const isFlash = model.includes('flash');
+    const config: any = {
+      temperature: 0,
+      ...(isFlash ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      ...(systemInstruction ? { systemInstruction } : {}),
+    };
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      let triedAny = false;
+      for (const key of keys) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: key });
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('callGeminiForCall timeout')), timeoutMs)
+          );
+          const response = await Promise.race([
+            ai.models.generateContent({ model, contents, config }),
+            timeoutPromise,
+          ]);
+          if (model !== CALL_MODEL_CHAIN[0]) {
+            console.warn(`[gemini-call] fallback to ${model} (primary unavailable)`);
+          }
+          return response.text || '';
+        } catch (err: any) {
+          if (isRetryable(err)) { lastError = err; triedAny = true; continue; }
+          throw err;
+        }
+      }
+      if (!triedAny) break;
+      if (attempt < 4) await new Promise(r => setTimeout(r, 10_000));
+    }
+    console.warn(`[gemini-call] ${model} exhausted after 5 attempts — trying next model`);
+  }
+
+  throw lastError ?? new Error('All Gemini call-quality models failed');
+}
+
 /** Streaming Gemini call with automatic key rotation on 429/503, then model fallback chain. */
 export async function geminiStream(
   keys: string[],

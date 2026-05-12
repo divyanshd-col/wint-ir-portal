@@ -16,7 +16,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   return NextResponse.json({
     ok: true,
     found: true,
-    callId: row.id,
+    callId: row.call_id,
     chatId: row.chat_id,
     language: row.language,
     interruptionCount: row.interruption_count,
