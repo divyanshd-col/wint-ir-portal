@@ -75,10 +75,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!callRow) {
     return NextResponse.json({ error: `No call_recording found for call_id: ${call_id}` }, { status: 404 });
   }
-  const recording_url = callRow.recording_url;
-  if (!recording_url) {
-    return NextResponse.json({ error: 'Call recording row has no recording_url' }, { status: 422 });
-  }
 
   // ── Lookup chat transcript from DB (optional) ────────────────────────────
   let chat_transcript = '';
@@ -89,41 +85,61 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // ── Step 1: Fetch audio ───────────────────────────────────────────────────
-  let audioBase64 = '';
-  let mimeType    = mimeFromUrl(recording_url);
-  try {
-    const res = await fetch(recording_url);
-    if (!res.ok) throw new Error(`HTTP ${res.status} fetching recording`);
-    const ct = res.headers.get('content-type')?.split(';')[0].trim() || '';
-    if (ct && ct.startsWith('audio/') && ct !== 'audio/octet-stream') mimeType = ct;
-    audioBase64 = Buffer.from(await res.arrayBuffer()).toString('base64');
-  } catch (err: any) {
-    return NextResponse.json({ error: `Could not fetch recording: ${err.message}` }, { status: 422 });
-  }
+  // ── Step 1: Get transcript — use stored if available, else transcribe ─────
+  let segments: any[];
+  let language: string;
+  let interruptionCount: number;
+  let deadAirCount: number;
+  let transcriptionMs = 0;
 
-  // ── Step 2: Transcribe ───────────────────────────────────────────────────
-  const t1 = Date.now();
-  let transcriptionRaw: string;
-  try {
-    transcriptionRaw = await geminiGenerate(
-      geminiKeys,
-      'gemini-2.5-flash',
-      [{ role: 'user', parts: [
-        { inlineData: { mimeType, data: audioBase64 } },
-        { text: CALL_TRANSCRIPTION_PROMPT },
-      ]}],
-      {},
-      120_000,
-    );
-  } catch (err: any) {
-    return NextResponse.json({ error: `Transcription failed: ${err.message}` }, { status: 502 });
-  }
-  const transcriptionMs = Date.now() - t1;
+  const storedSegments = Array.isArray(callRow.transcript) && callRow.transcript.length > 0
+    ? callRow.transcript : null;
 
-  const { language, segments } = parseTranscriptionResponse(transcriptionRaw);
-  const interruptionCount = segments.filter(s => s.type === 'interruption').length;
-  const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
+  if (storedSegments) {
+    segments         = storedSegments;
+    language         = callRow.language || 'Unknown';
+    interruptionCount = callRow.interruption_count ?? segments.filter((s: any) => s.type === 'interruption').length;
+    deadAirCount      = callRow.dead_air_count     ?? segments.filter((s: any) => s.type === 'dead_air').length;
+  } else {
+    const recording_url = callRow.recording_url;
+    if (!recording_url) {
+      return NextResponse.json({ error: 'Call recording has no transcript and no recording_url to fetch' }, { status: 422 });
+    }
+
+    let audioBase64 = '';
+    let mimeType    = mimeFromUrl(recording_url);
+    try {
+      const res = await fetch(recording_url);
+      if (!res.ok) throw new Error(`HTTP ${res.status} fetching recording`);
+      const ct = res.headers.get('content-type')?.split(';')[0].trim() || '';
+      if (ct && ct.startsWith('audio/') && ct !== 'audio/octet-stream') mimeType = ct;
+      audioBase64 = Buffer.from(await res.arrayBuffer()).toString('base64');
+    } catch (err: any) {
+      return NextResponse.json({ error: `Could not fetch recording: ${err.message}` }, { status: 422 });
+    }
+
+    const t1 = Date.now();
+    let transcriptionRaw: string;
+    try {
+      transcriptionRaw = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [
+          { inlineData: { mimeType, data: audioBase64 } },
+          { text: CALL_TRANSCRIPTION_PROMPT },
+        ]}],
+        {},
+        120_000,
+      );
+    } catch (err: any) {
+      return NextResponse.json({ error: `Transcription failed: ${err.message}` }, { status: 502 });
+    }
+    transcriptionMs = Date.now() - t1;
+
+    ({ language, segments } = parseTranscriptionResponse(transcriptionRaw));
+    interruptionCount = segments.filter((s: any) => s.type === 'interruption').length;
+    deadAirCount      = segments.filter((s: any) => s.type === 'dead_air').length;
+  }
 
   // ── Step 3: Score ────────────────────────────────────────────────────────
   const t2 = Date.now();
@@ -154,6 +170,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({
     ok: true,
+    usedStoredTranscript: !!storedSegments,
     language,
     segments,
     interruptionCount,

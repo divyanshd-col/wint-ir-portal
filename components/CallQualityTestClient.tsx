@@ -76,6 +76,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
 // ── IQS Result Panel ──────────────────────────────────────────────────────────
 
 interface ResultData {
+  usedStoredTranscript?: boolean;
   language: string;
   segments: CallSegment[];
   interruptionCount: number;
@@ -117,7 +118,10 @@ function ResultPanel({ data, onReset }: { data: ResultData; onReset: () => void 
               <span className="text-slate-400">⏸</span> {data.deadAirCount} dead air
             </span>
             <span className="text-slate-400 text-xs">
-              Transcribed in {(data.transcriptionMs / 1000).toFixed(1)}s · Scored in {(data.scoringMs / 1000).toFixed(1)}s
+              {data.usedStoredTranscript
+                ? <span className="text-emerald-600 font-medium">Transcript from DB</span>
+                : <>Transcribed in {(data.transcriptionMs / 1000).toFixed(1)}s</>
+              } · Scored in {(data.scoringMs / 1000).toFixed(1)}s
             </span>
           </div>
         </div>
@@ -330,8 +334,8 @@ export default function CallQualityTestClient() {
         <div className="space-y-3">
           <ProgressStep
             n={1}
-            label="Transcribing audio"
-            sub="Fetching recording and running Gemini speech-to-text with speaker detection"
+            label="Loading transcript"
+            sub="Using stored transcript from DB, or fetching audio and running Gemini speech-to-text"
             done={stage === 'scoring'}
             active={stage === 'transcribing'}
           />
