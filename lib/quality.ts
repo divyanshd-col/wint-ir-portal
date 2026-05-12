@@ -14,9 +14,8 @@ export const WEIGHTS: Record<string, number> = {
   Process:      0.05,
   Opening:      0.05,
   Call:         0.05,
-  Tags:         0.05,
   Grammar:      0.05,
-  Empathy:      0.05,
+  Empathy:      0.10,
 };
 
 export const PARAM_NAMES: Record<string, string> = {
@@ -29,7 +28,6 @@ export const PARAM_NAMES: Record<string, string> = {
   Process:      'Process-wise',
   Opening:      'First Response & Opening',
   Call:         'Call (when required)',
-  Tags:         'Tags Accuracy',
   Grammar:      'Grammar / Structure',
   Empathy:      'Empathy',
 };
@@ -37,7 +35,7 @@ export const PARAM_NAMES: Record<string, string> = {
 export const PARAM_ORDER = [
   'Technical', 'AllQuestions', 'Expectation', 'Contextual',
   'FollowUp', 'Sentences', 'Process', 'Opening',
-  'Call', 'Tags', 'Grammar', 'Empathy',
+  'Call', 'Grammar', 'Empathy',
 ];
 
 export type ParamScore = 'Yes' | 'No' | 'NA';
@@ -75,6 +73,7 @@ export interface IQSScoreEntry {
   subDisposition?: string;  // l2 name — sub tag / sub-disposition
   // ── Customer contact ────────────────────────────────────────────────────────
   mobileNumber?: string;    // customer phone number (from webhook)
+  reviewNote?: string;      // quality reviewer's override note (persisted in DB)
 }
 
 // ── Bot name used at Wint Wealth ─────────────────────────────────────────────
@@ -146,17 +145,19 @@ export function analyzeConversationTiming(
 }
 
 // ── IQS calculation ──────────────────────────────────────────────────────────
+// Normalizes by sum of applicable weights so old DB rows with Tags still score correctly.
 export function calculateIQS(scores: Record<string, ParamScore>): number {
-  let total = 0;
+  let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(WEIGHTS)) {
+    possible += weight;
     const score = scores[param] ?? 'Yes';
     if (score === 'Yes' || score === 'NA') total += weight;
   }
-  return Math.round(total * 100);
+  return possible > 0 ? Math.round((total / possible) * 100) : 100;
 }
 
 // ── Scoring system prompt ────────────────────────────────────────────────────
-export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score (IQS) evaluator. You score customer support chat transcripts across 12 parameters. Your scoring decisions must match those of a trained human evaluator.
+export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score (IQS) evaluator. You score customer support chat transcripts across 11 parameters. Your scoring decisions must match those of a trained human evaluator.
 
 ## SCORING PHILOSOPHY
 - You catch DEFINITIVE FAILURES, not imperfections.
@@ -270,25 +271,19 @@ When you are unsure how to score a parameter because the transcript is ambiguous
 - **NA**: MOST chats. If the customer requested a call but you cannot see whether a call took place → NA + \`uncertain_parameters\`. If the customer requested a call and the agent called → NA (can't evaluate without call transcript).
 - **IMPORTANT**: If a customer requested a call anywhere in the transcript, agent calling is NOT a violation — score NA.
 
-### 10. Tags Accuracy (5%)
-Tags are applied by Robylon AI as Disposition (L1) and Sub-disposition (L2), provided in CHAT METADATA.
-- **Yes**: Both L1 and L2 accurately reflect the primary issue discussed in the conversation.
-- **No**: L1 or L2 is wrong or mismatched — e.g. tagged "Referral Program" but conversation is about a withdrawal, or sub-disposition doesn't match the specific issue.
-- **NA**: No classification data available (Disposition shows "none").
-
-### 11. Grammar / Structure (5%)
+### 10. Grammar / Structure (5%)
 - **Yes**: Messages are grammatically correct, complete sentences.
 - **No**: Duplicate messages. Incomplete words. Missing conjunctions. Run-on sentences.
 - **NA**: Very rare. Minor typos are okay.
 
-### 12. Empathy (5%)
+### 11. Empathy (10%)
 - **Yes**: Chat contains at least ONE empathy filler: "I understand your concern", "I can understand your frustration", "I apologize for the inconvenience" — anything that genuinely acknowledges the customer's situation.
 - **No**: No empathy filler anywhere. OR passive/dismissive language used.
 - **NA**: Very rare. Bar is LOW — even one genuine filler is enough.
 
 ## IQS CALCULATION
-IQS = Sum of (weight × pass) for all parameters.
-Weights: Technical=20%, AllQuestions=10%, Expectation=10%, Contextual=10%, FollowUp=10%, Sentences=10%, Process=5%, Opening=5%, Call=5%, Tags=5%, Grammar=5%, Empathy=5%
+IQS = Sum of (weight × pass) for all parameters, normalized to 100.
+Weights: Technical=20%, AllQuestions=10%, Expectation=10%, Contextual=10%, FollowUp=10%, Sentences=10%, Process=5%, Opening=5%, Call=5%, Grammar=5%, Empathy=10%
 
 ## OUTPUT FORMAT
 Respond with EXACTLY this JSON structure:
@@ -304,7 +299,6 @@ Respond with EXACTLY this JSON structure:
     "Process": "Yes|No|NA",
     "Opening": "Yes|No|NA",
     "Call": "Yes|No|NA",
-    "Tags": "Yes|No|NA",
     "Grammar": "Yes|No|NA",
     "Empathy": "Yes|No|NA"
   },
@@ -318,7 +312,6 @@ Respond with EXACTLY this JSON structure:
     "Process": "brief reason",
     "Opening": "brief reason",
     "Call": "brief reason",
-    "Tags": "brief reason",
     "Grammar": "brief reason",
     "Empathy": "brief reason"
   },

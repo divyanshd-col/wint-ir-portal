@@ -5,7 +5,7 @@ import { query } from '@/lib/cx/db';
 import { calculateIQS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 
-const PARAM_KEYS = ['Technical','AllQuestions','Expectation','Contextual','FollowUp','Sentences','Process','Opening','Call','Tags','Grammar','Empathy'];
+const PARAM_KEYS = ['Technical','AllQuestions','Expectation','Contextual','FollowUp','Sentences','Process','Opening','Call','Grammar','Empathy'];
 
 // PascalCase frontend key → DB snake_case key
 const LEGACY_TO_DB: Record<string, string> = {
@@ -18,7 +18,6 @@ const LEGACY_TO_DB: Record<string, string> = {
   Process:      'process',
   Opening:      'opening',
   Call:         'call',
-  Tags:         'tags',
   Grammar:      'grammar',
   Empathy:      'empathy',
 };
@@ -48,26 +47,26 @@ export async function PATCH(req: NextRequest) {
   }
 
   try {
-    // Check the iqs_scores row exists
+    // Fetch existing iqs_scores row (may not exist for older Redis-only scores)
     const existing = await query<{ chat_id: string; parameters: any; iqs_score: number }>(
       `SELECT chat_id, parameters, iqs_score FROM iqs_scores WHERE chat_id = $1`, [chatId]
     );
-    if (!existing.length) {
-      return NextResponse.json({ error: 'Entry not found in database — score may not have been generated yet.' }, { status: 404 });
-    }
+    const rowExists = existing.length > 0;
 
     const updatedBy = session.user?.email || session.user?.name || 'unknown';
 
-    // ── Update iqs_scores (parameters + iqs_score) ────────────────────────────
-    if (scores) {
-      let params = existing[0].parameters || {};
+    // ── Upsert iqs_scores (parameters + iqs_score) ────────────────────────────
+    if (scores || reasoning || note) {
+      let params = rowExists ? (existing[0].parameters || {}) : {};
       if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
-      for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
-        const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
-        if (!params[dbKey]) params[dbKey] = {};
-        params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : null;
-        if (reasoning?.[legacyKey] !== undefined) params[dbKey].reasoning = reasoning[legacyKey];
+      if (scores) {
+        for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
+          const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
+          if (!params[dbKey]) params[dbKey] = {};
+          params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : null;
+          if (reasoning?.[legacyKey] !== undefined) params[dbKey].reasoning = reasoning[legacyKey];
+        }
       }
 
       if (reasoning) {
@@ -78,23 +77,21 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
-      const newIqs = calculateIQS(scores);
-      await query(
-        `UPDATE iqs_scores SET parameters = $1, iqs_score = $2 WHERE chat_id = $3`,
-        [JSON.stringify(params), newIqs, chatId]
-      );
-    } else if (reasoning) {
-      let params = existing[0].parameters || {};
-      if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
-      for (const [legacyKey, text] of Object.entries(reasoning) as [string, string][]) {
-        const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
-        if (!params[dbKey]) params[dbKey] = {};
-        params[dbKey].reasoning = text;
+      if (note) params['__review_note'] = note;
+
+      const newIqs = scores ? calculateIQS(scores) : (rowExists ? existing[0].iqs_score : 0);
+
+      if (rowExists) {
+        await query(
+          `UPDATE iqs_scores SET parameters = $1, iqs_score = $2 WHERE chat_id = $3`,
+          [JSON.stringify(params), newIqs, chatId]
+        );
+      } else {
+        await query(
+          `INSERT INTO iqs_scores (chat_id, parameters, iqs_score, scored_at) VALUES ($1, $2, $3, NOW())`,
+          [chatId, JSON.stringify(params), newIqs]
+        );
       }
-      await query(
-        `UPDATE iqs_scores SET parameters = $1 WHERE chat_id = $2`,
-        [JSON.stringify(params), chatId]
-      );
     }
 
     // ── Update conversations (csat, tags, agent) ──────────────────────────────
@@ -139,14 +136,14 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const newIqs = scores ? calculateIQS(scores) : existing[0].iqs_score;
+    const finalIqs = scores ? calculateIQS(scores) : (rowExists ? existing[0].iqs_score : 0);
 
     return NextResponse.json({
       ok: true,
       entry: {
         id: id || `${new Date().toISOString()}-${chatId}`,
         chatId,
-        iqs: newIqs,
+        iqs: finalIqs,
         scores,
         reasoning,
         agentName,
@@ -155,6 +152,7 @@ export async function PATCH(req: NextRequest) {
         csat,
         updatedBy,
         updatedAt: new Date().toISOString(),
+        ...(note ? { reviewNote: note } : {}),
       },
     });
   } catch (err: any) {

@@ -243,6 +243,7 @@ export async function getAllScoredConversations(
       c.csat_score,
       c.csat_label,
       c.tags,
+      c.phone_number        AS "mobileNumber",
       a.name                AS "agentName",
       s.iqs_score           AS "iqs",
       s.parameters,
@@ -255,6 +256,29 @@ export async function getAllScoredConversations(
     ORDER BY s.scored_at DESC
     ${limitSql}
   `, params);
+}
+
+/** Get previous scored conversations for the same customer as chatId (excludes current chat) */
+export async function getConversationHistory(chatId: string, limit = 10): Promise<any[]> {
+  return query(`
+    SELECT
+      c.id                AS "chatId",
+      c.started_at::date  AS "date",
+      c.conversation_type AS "conversationType",
+      c.csat_score,
+      c.tags,
+      a.name              AS "agentName",
+      s.iqs_score         AS "iqs",
+      s.scored_at         AS "scoredAt"
+    FROM conversations c
+    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    WHERE c.contact_id = (SELECT contact_id FROM conversations WHERE id = $1)
+      AND c.id != $1
+      AND c.contact_id IS NOT NULL
+    ORDER BY c.started_at DESC
+    LIMIT $2
+  `, [chatId, limit]);
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */

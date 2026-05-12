@@ -82,6 +82,7 @@ export async function GET(_req: NextRequest) {
       iqs: row.iqs,
       scoredAt: row.scoredAt,
       date: row.date ? String(row.date).slice(0, 10) : '',
+      mobileNumber: row.mobileNumber || '',
       flag: flagsByChat[String(row.chatId)] || null,
       qaStatus: reviewMap[String(row.chatId)] || null,
       scores,

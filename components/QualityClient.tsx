@@ -1005,6 +1005,7 @@ interface IQSFlagComment {
 }
 interface PendingReviewItem {
   chatId: string; agentName: string; iqs: number; scoredAt: string; date: string;
+  mobileNumber?: string;
   flag?: IQSFlagData | null;
   qaStatus?: { reviewedBy: string; reviewedAt: string; reviewNote: string } | null;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
@@ -1012,7 +1013,7 @@ interface PendingReviewItem {
   reasoning?: Record<string, string>;
 }
 
-function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
+function PendingChatsTab({ userRole, userEmail, onOverride }: { userRole?: string; userEmail?: string; onOverride?: (item: PendingReviewItem) => void }) {
   const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
@@ -1028,6 +1029,9 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   const [reviewing, setReviewing] = useState<Record<string, boolean>>({});
   const [transcripts, setTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
   const [transcriptLoading, setTranscriptLoading] = useState<Record<string, boolean>>({});
+  const [histories, setHistories] = useState<Record<string, any[] | null>>({});
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
+  const [showHistory, setShowHistory] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -1059,6 +1063,24 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
       setTranscripts(t => ({ ...t, [chatId]: {} }));
     }
     setTranscriptLoading(t => ({ ...t, [chatId]: false }));
+  };
+
+  const loadHistory = async (chatId: string) => {
+    if (histories[chatId] !== undefined) return;
+    setHistoryLoading(h => ({ ...h, [chatId]: true }));
+    try {
+      const d = await fetch(`/api/quality/history?chatId=${encodeURIComponent(chatId)}`).then(r => r.json());
+      setHistories(h => ({ ...h, [chatId]: d.history || [] }));
+    } catch {
+      setHistories(h => ({ ...h, [chatId]: [] }));
+    }
+    setHistoryLoading(h => ({ ...h, [chatId]: false }));
+  };
+
+  const toggleHistory = (chatId: string) => {
+    const next = !showHistory[chatId];
+    setShowHistory(s => ({ ...s, [chatId]: next }));
+    if (next) loadHistory(chatId);
   };
 
   const expand = (chatId: string, flagId?: string) => {
@@ -1153,6 +1175,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
               {item.date || item.scoredAt?.slice(0, 10)}
+              {item.mobileNumber && <span className="ml-2 font-mono text-gray-500">{item.mobileNumber}</span>}
               {isReviewed && item.qaStatus?.reviewedAt && ` · Reviewed ${new Date(item.qaStatus.reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
             </p>
           </div>
@@ -1253,39 +1276,96 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
                   <>
                     <input type="text" value={reviewNotes[item.chatId] || ''} onChange={e => setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
                       placeholder="Review note (optional)…" className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 mb-2" />
-                    <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
-                      className="w-full px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
-                      {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
-                    </button>
+                    <div className="flex gap-2">
+                      <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
+                        className="flex-1 px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
+                        {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
+                      </button>
+                      {onOverride && (
+                        <button onClick={() => onOverride(item)}
+                          className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition">
+                          Override Score
+                        </button>
+                      )}
+                    </div>
                   </>
                 ) : isReviewed ? (
-                  <div className="text-center">
-                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
-                      ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
-                    </span>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
+                        ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
+                      </span>
+                      {onOverride && (
+                        <button onClick={() => onOverride(item)}
+                          className="text-[10px] font-bold text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full hover:bg-emerald-50 transition">
+                          Override Score
+                        </button>
+                      )}
+                    </div>
                     {item.qaStatus?.reviewNote && <p className="text-xs text-gray-500 mt-2">{item.qaStatus.reviewNote}</p>}
                   </div>
                 ) : null}
               </div>
             </div>
 
-            {/* Right: transcript */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Transcript</p>
-              {transcriptLoading[item.chatId] && (
-                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-                  Loading…
+            {/* Right: transcript + prior chats */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Transcript</p>
+                  <button onClick={() => toggleHistory(item.chatId)}
+                    className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1">
+                    {showHistory[item.chatId] ? 'Hide Prior Chats' : 'Prior Chats'}
+                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                      className={`transition-transform ${showHistory[item.chatId] ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+                  </button>
                 </div>
-              )}
-              {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
-                <TranscriptBubbles messages={txData.timedMessages} />
-              )}
-              {txData && txData.rawTranscript && !txData.timedMessages?.length && (
-                <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
-              )}
-              {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
-                <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
+                {transcriptLoading[item.chatId] && (
+                  <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                    Loading…
+                  </div>
+                )}
+                {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
+                  <TranscriptBubbles messages={txData.timedMessages} />
+                )}
+                {txData && txData.rawTranscript && !txData.timedMessages?.length && (
+                  <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
+                )}
+                {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
+                  <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
+                )}
+              </div>
+
+              {showHistory[item.chatId] && (
+                <div className="border-t border-gray-100 pt-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Customer's Prior Chats</p>
+                  {historyLoading[item.chatId] && (
+                    <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-4">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                      Loading…
+                    </div>
+                  )}
+                  {histories[item.chatId]?.length === 0 && !historyLoading[item.chatId] && (
+                    <p className="text-xs text-gray-400 text-center py-3">No prior chats found for this customer.</p>
+                  )}
+                  {(histories[item.chatId] || []).map((h: any) => (
+                    <div key={h.chatId} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                      <IQSRing iqs={h.iqs} size={32} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <ChatLink chatId={h.chatId} className="text-xs" />
+                          <span className="text-[10px] text-gray-500">{h.agentName}</span>
+                          {h.disposition && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{h.disposition}</span>}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-0.5">{h.date}</p>
+                      </div>
+                      {h.csat === '5' && <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded-full">Good</span>}
+                      {h.csat === '3' && <span className="text-[10px] bg-yellow-50 text-yellow-600 font-bold px-1.5 py-0.5 rounded-full">CBB</span>}
+                      {h.csat === '1' && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full">Bad</span>}
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -1770,7 +1850,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       summary: entry.summary || '',
       scores: { ...entry.scores },
       reasoning: { ...entry.reasoning },
-      note: '',
+      note: entry.reviewNote || '',
     });
     setEditSaved(false);
   };
@@ -1802,6 +1882,11 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setToast('Override saved successfully');
       setTimeout(() => setToast(null), 3000);
       setEditEntry(null); setEditForm(null);
+      // Auto-mark as reviewed in Pending Review
+      fetch('/api/quality/pending-review', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId: editEntry.chatId, reviewNote: editForm.note || 'Reviewed via override' }),
+      }).catch(() => {});
     } catch (err: any) {
       setToast(err?.message || 'Failed to save override');
       setTimeout(() => setToast(null), 5000);
@@ -2089,7 +2174,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           paramFails={paramFails}
           onClose={() => setAgentReportStat(null)}
           onFilterLog={({ agent, minScore, maxScore }) => {
-            const f = { ...DEFAULT_FILTERS, agent, minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
+            const f = { ...DEFAULT_FILTERS, agent, minScore: minScore ?? 0, maxScore: maxScore ?? 100,
+              dateRange: perfPeriod, dateFrom: perfPeriod === 'custom' ? perfDateFrom : '', dateTo: perfPeriod === 'custom' ? perfDateTo : '' };
             setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
             loadScores(0, f); switchTab('log');
           }}
@@ -2259,6 +2345,16 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* Score Log tab — Filters button */}
           {tab === 'log' && (
             <div className="flex items-center gap-2 ml-auto">
+              {/* Standalone Chat ID search */}
+              <input
+                type="text"
+                value={pendingFilters.chatId}
+                onChange={e => setPendingFilters(f => ({ ...f, chatId: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') applyFilters(); }}
+                onBlur={() => { if (pendingFilters.chatId !== appliedFilters.chatId) applyFilters(); }}
+                placeholder="Search Chat ID…"
+                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+              />
               <button
                 onClick={() => setShowOnlyNeedsReview(v => !v)}
                 className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl font-semibold transition border ${
@@ -2418,7 +2514,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                           onViewReport={s => setAgentReportStat(s)}
                           onFilterLog={({ agent, minScore, maxScore }) => {
                             const f = { ...DEFAULT_FILTERS, agent,
-                              minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
+                              minScore: minScore ?? 0, maxScore: maxScore ?? 100,
+                              dateRange: perfPeriod, dateFrom: perfPeriod === 'custom' ? perfDateFrom : '', dateTo: perfPeriod === 'custom' ? perfDateTo : '' };
                             setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
                             loadScores(0, f); switchTab('log');
                           }}
@@ -2450,7 +2547,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               onViewReport={s => { setShowAllAgents(false); setAgentReportStat(s); }}
                               onFilterLog={({ agent, minScore, maxScore }) => {
                                 const f = { ...DEFAULT_FILTERS, agent,
-                                  minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
+                                  minScore: minScore ?? 0, maxScore: maxScore ?? 100,
+                                  dateRange: perfPeriod, dateFrom: perfPeriod === 'custom' ? perfDateFrom : '', dateTo: perfPeriod === 'custom' ? perfDateTo : '' };
                                 setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
                                 setShowAllAgents(false); loadScores(0, f); switchTab('log');
                               }}
@@ -3412,7 +3510,25 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
           {/* ── CHATS PENDING TAB ── */}
           {tab === 'pending' && (
-            <PendingChatsTab userRole={userRole} userEmail={userEmail} />
+            <PendingChatsTab userRole={userRole} userEmail={userEmail}
+              onOverride={item => openEditModal({
+                id: `override-${item.chatId}`,
+                chatId: item.chatId,
+                agentName: item.agentName,
+                iqs: item.iqs,
+                scores: (item.scores || {}) as Record<string, ParamScore>,
+                reasoning: (item.reasoning || {}) as Record<string, string>,
+                scoredAt: item.scoredAt,
+                date: item.date,
+                disposition: '',
+                subDisposition: '',
+                csat: '',
+                summary: '',
+                provider: 'gemini',
+                model: '',
+                reviewNote: item.qaStatus?.reviewNote,
+              })}
+            />
           )}
 
           {/* ── CALL QUALITY TAB ── */}
