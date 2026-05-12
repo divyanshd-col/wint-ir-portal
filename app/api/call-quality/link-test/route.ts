@@ -70,30 +70,19 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let body: { call_id?: string; chat_id?: string };
+  let body: { call_id?: string; chat_id?: string; recording_url?: string };
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { call_id, chat_id } = body;
-  if (!call_id?.trim()) return NextResponse.json({ error: 'call_id is required' }, { status: 400 });
-  if (!chat_id?.trim()) return NextResponse.json({ error: 'chat_id is required' }, { status: 400 });
+  const { call_id, chat_id, recording_url } = body;
+  if (!call_id?.trim())       return NextResponse.json({ error: 'call_id is required' }, { status: 400 });
+  if (!chat_id?.trim())       return NextResponse.json({ error: 'chat_id is required' }, { status: 400 });
+  if (!recording_url?.trim()) return NextResponse.json({ error: 'recording_url is required' }, { status: 400 });
 
-  // ── Fetch existing data ────────────────────────────────────────────────────
-  let callRec: any, chatConv: any;
-  try {
-    [callRec, chatConv] = await Promise.all([
-      getCallRecording(call_id.trim()),
-      getConversation(chat_id.trim()),
-    ]);
-  } catch (err: any) {
-    return NextResponse.json({ error: `DB lookup failed: ${err.message}` }, { status: 500 });
-  }
+  const recordingUrl = recording_url.trim();
 
-  if (!callRec) {
-    return NextResponse.json({ error: `call_id ${call_id} not found in call_recordings` }, { status: 404 });
-  }
-
+  // ── Load Gemini config ─────────────────────────────────────────────────────
   let config: any, geminiKeys: string[];
   try {
     config     = await readConfig();
@@ -105,10 +94,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'No Gemini API key configured' }, { status: 503 });
   }
 
-  const recordingUrl = callRec.recording_url || '';
-  if (!recordingUrl) {
-    return NextResponse.json({ error: 'call_recording has no recording_url' }, { status: 422 });
-  }
+  // ── Load chat transcript from DB (optional — skip gracefully if unavailable) ─
+  let chatConv: any = null;
+  try {
+    chatConv = await getConversation(chat_id.trim());
+  } catch { /* chat context unavailable — continue without it */ }
 
   // ── Fetch audio (needed for transcription and energy/tone) ─────────────────
   let audioBase64 = '';
@@ -124,40 +114,32 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: `Could not fetch recording: ${err.message}` }, { status: 422 });
   }
 
-  // ── Pass 1: Transcription (skip if already done) ──────────────────────────
+  // ── Pass 1: Transcription (always fresh from provided URL) ───────────────
   const t1 = Date.now();
-  let segments = Array.isArray(callRec.transcript) && callRec.transcript.length > 0
-    ? callRec.transcript
-    : null;
-  let language = callRec.language || 'English';
-  let interruptionCount = callRec.interruption_count ?? 0;
-  let deadAirCount      = callRec.dead_air_count ?? 0;
+  let segments: any[];
+  let language = 'English';
+  let interruptionCount = 0;
+  let deadAirCount      = 0;
   let transcriptionMs = 0;
-  let alreadyTranscribed = !!segments;
 
-  if (!segments) {
-    try {
-      const raw = await callGeminiForCall(
-        geminiKeys,
-        [{ role: 'user', parts: [
-          { inlineData: { mimeType, data: audioBase64 } },
-          { text: CALL_TRANSCRIPTION_PROMPT },
-        ]}],
-        undefined,
-        120_000,
-      );
-      transcriptionMs = Date.now() - t1;
-      const parsed = parseTranscriptionResponse(raw);
-      segments         = parsed.segments;
-      language         = parsed.language;
-      interruptionCount = segments.filter((s: any) => s.type === 'interruption').length;
-      deadAirCount      = segments.filter((s: any) => s.type === 'dead_air').length;
-
-      await insertCallRecording({ id: call_id, language, transcript: segments });
-      await updateCallRecordingMetrics({ id: call_id, interruptionCount, deadAirCount, status: 'pending_link' });
-    } catch (err: any) {
-      return NextResponse.json({ error: `Transcription failed: ${err.message}` }, { status: 502 });
-    }
+  try {
+    const raw = await callGeminiForCall(
+      geminiKeys,
+      [{ role: 'user', parts: [
+        { inlineData: { mimeType, data: audioBase64 } },
+        { text: CALL_TRANSCRIPTION_PROMPT },
+      ]}],
+      undefined,
+      120_000,
+    );
+    transcriptionMs = Date.now() - t1;
+    const parsed = parseTranscriptionResponse(raw);
+    segments         = parsed.segments;
+    language         = parsed.language;
+    interruptionCount = segments.filter((s: any) => s.type === 'interruption').length;
+    deadAirCount      = segments.filter((s: any) => s.type === 'dead_air').length;
+  } catch (err: any) {
+    return NextResponse.json({ error: `Transcription failed: ${err.message}` }, { status: 502 });
   }
 
   const callTranscriptText = segmentsToText(segments);
@@ -291,7 +273,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     ok: true,
     call_id,
     chat_id,
-    alreadyTranscribed,
     language,
     segments: finalSegments,
     interruptionCount,

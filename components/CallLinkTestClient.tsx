@@ -90,7 +90,6 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
 interface ResultData {
   call_id: string;
   chat_id: string;
-  alreadyTranscribed: boolean;
   language: string;
   segments: CallSegment[];
   interruptionCount: number;
@@ -147,12 +146,8 @@ function ResultPanel({ data, onReset }: { data: ResultData; onReset: () => void 
           {data.chatDisposition && (
             <span><span className="font-medium text-slate-600">Chat:</span> {data.chatDisposition}</span>
           )}
-          {data.alreadyTranscribed && (
-            <span className="text-emerald-600 font-medium">✓ Used existing transcript</span>
-          )}
           <span className="ml-auto text-slate-400">
-            {data.alreadyTranscribed ? '' : `Transcribed ${(data.transcriptionMs / 1000).toFixed(1)}s · `}
-            Scored {(data.scoringMs / 1000).toFixed(1)}s · Total {(data.totalMs / 1000).toFixed(1)}s
+            Transcribed {(data.transcriptionMs / 1000).toFixed(1)}s · Scored {(data.scoringMs / 1000).toFixed(1)}s · Total {(data.totalMs / 1000).toFixed(1)}s
           </span>
         </div>
       </div>
@@ -260,15 +255,16 @@ function ProgressStep({ n, label, sub, done, active }: {
 type Stage = 'idle' | 'running' | 'done' | 'error';
 
 export default function CallLinkTestClient() {
-  const [callId, setCallId]   = useState('');
-  const [chatId, setChatId]   = useState('');
-  const [stage, setStage]     = useState<Stage>('idle');
-  const [step, setStep]       = useState(0);
-  const [error, setError]     = useState('');
-  const [result, setResult]   = useState<ResultData | null>(null);
+  const [callId, setCallId]           = useState('');
+  const [chatId, setChatId]           = useState('');
+  const [recordingUrl, setRecordingUrl] = useState('');
+  const [stage, setStage]             = useState<Stage>('idle');
+  const [step, setStep]               = useState(0);
+  const [error, setError]             = useState('');
+  const [result, setResult]           = useState<ResultData | null>(null);
 
   async function run() {
-    if (!callId.trim() || !chatId.trim()) return;
+    if (!callId.trim() || !chatId.trim() || !recordingUrl.trim()) return;
     setStage('running');
     setStep(1);
     setError('');
@@ -282,7 +278,7 @@ export default function CallLinkTestClient() {
       const res = await fetch('/api/call-quality/link-test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ call_id: callId.trim(), chat_id: chatId.trim() }),
+        body: JSON.stringify({ call_id: callId.trim(), chat_id: chatId.trim(), recording_url: recordingUrl.trim() }),
       });
       clearTimeout(t1);
       clearTimeout(t2);
@@ -308,6 +304,7 @@ export default function CallLinkTestClient() {
     setResult(null);
     setCallId('');
     setChatId('');
+    setRecordingUrl('');
   }
 
   if (stage === 'done' && result) {
@@ -354,11 +351,25 @@ export default function CallLinkTestClient() {
             <input
               type="text"
               className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition font-mono"
-              placeholder="e.g. WA-98765"
+              placeholder="e.g. 40502"
               value={chatId}
               onChange={e => setChatId(e.target.value)}
             />
             <p className="text-xs text-slate-400 mt-1">The WhatsApp conversation ID from the conversations table.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+              Recording URL <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="url"
+              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition"
+              placeholder="https://…/recording.mp3"
+              value={recordingUrl}
+              onChange={e => setRecordingUrl(e.target.value)}
+            />
+            <p className="text-xs text-slate-400 mt-1">Direct URL to the call audio file (S3, Exotel, etc.).</p>
           </div>
 
           {stage === 'error' && (
@@ -369,7 +380,7 @@ export default function CallLinkTestClient() {
 
           <button
             onClick={run}
-            disabled={!callId.trim() || !chatId.trim()}
+            disabled={!callId.trim() || !chatId.trim() || !recordingUrl.trim()}
             className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
           >
             🚀 Run Full Pipeline
