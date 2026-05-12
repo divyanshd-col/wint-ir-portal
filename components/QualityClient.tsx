@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
+import CallLinkTestClient from '@/components/CallLinkTestClient';
 
 const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Mobile', 'CSAT', 'FRT', 'Handoff', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
 
@@ -1352,7 +1353,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 }
 
 export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls'>(initialTab || 'performance');
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test'>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
 
   // Fresh agentName from config (overrides stale JWT value)
@@ -1957,6 +1958,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <path d="M3 3.5c0 5.5 4 9.5 9.5 9.5l1-2.5-2.5-1-1 1c-1.5-.5-3-2-3.5-3.5l1-1-1-2.5L3 3.5z"/>
       </svg>
     ),
+    callTest: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
+        <path d="M10 6l2 2-2 2M12 8h-3"/>
+      </svg>
+    ),
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -2139,6 +2146,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
             collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => setTab('pending')} />
           <NavItem icon={icons.calls} label="Call Quality" active={tab === 'calls'}
             collapsed={!sidebarExpanded} onClick={() => setTab('calls')} />
+          {!selfAgentName && (
+            <NavItem icon={icons.callTest} label="Call Test" active={tab === 'call-test'}
+              collapsed={!sidebarExpanded} onClick={() => setTab('call-test')} />
+          )}
         </nav>
 
       </aside>
@@ -2150,7 +2161,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
           <div className="shrink-0">
             <h1 className="text-base font-bold text-gray-900">
-              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : tab === 'calls' ? 'Call Quality' : 'Upload & Score'}
+              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : tab === 'calls' ? 'Call Quality' : tab === 'call-test' ? 'Call Test' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {tab === 'performance' && `${agentStats.length} agents · ${perfTotal} chats`}
@@ -2159,6 +2170,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {tab === 'reports' && 'Download filtered data as CSV'}
               {tab === 'pending' && `${challengeCount} pending review`}
               {tab === 'calls' && 'Scored IR call recordings'}
+              {tab === 'call-test' && 'Link a call to a chat and run the full scoring pipeline'}
             </p>
           </div>
 
@@ -3357,6 +3369,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {tab === 'calls' && (
             <div className="p-6 overflow-y-auto flex-1">
               <CallQualityClient userRole={userRole} userEmail={userEmail} />
+            </div>
+          )}
+
+          {/* ── CALL TEST TAB ── */}
+          {tab === 'call-test' && (
+            <div className="overflow-y-auto flex-1">
+              <CallLinkTestClient />
             </div>
           )}
 
