@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { CALL_PARAM_ORDER, CALL_PARAM_NAMES, CALL_WEIGHTS } from '@/lib/call-quality';
+import CallQualityTestClient from '@/components/CallQualityTestClient';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -277,6 +278,8 @@ function buildParams(page: number, f: Filters): URLSearchParams {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function CallQualityClient({ userRole, selfAgentName, agentOnly }: Props) {
+  const [activeTab, setActiveTab] = useState<'scores' | 'test'>('scores');
+
   const [entries, setEntries] = useState<CallEntry[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -326,8 +329,40 @@ export default function CallQualityClient({ userRole, selfAgentName, agentOnly }
     load(appliedFilters, next);
   }
 
+  if (activeTab === 'test') {
+    return (
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-2 px-1">
+          <button
+            onClick={() => setActiveTab('scores')}
+            className="px-4 py-1.5 rounded-lg text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+          >
+            ← Scored Calls
+          </button>
+        </div>
+        <CallQualityTestClient />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      {/* Tab header */}
+      <div className="flex items-center gap-2 px-1">
+        <button
+          onClick={() => setActiveTab('scores')}
+          className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-amber-500 text-white"
+        >
+          Scored Calls
+        </button>
+        <button
+          onClick={() => setActiveTab('test')}
+          className="px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors bg-slate-100 hover:bg-slate-200 text-slate-600"
+        >
+          Test Pipeline
+        </button>
+      </div>
+
       {/* Filters bar */}
       <div className="flex flex-wrap items-end gap-3 px-1">
         {!agentOnly && (
