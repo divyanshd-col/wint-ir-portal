@@ -221,65 +221,107 @@ When you are unsure how to score a parameter because the transcript is ambiguous
 4. Score all parameters where you ARE confident as normal (Yes/No/NA as appropriate).
 5. Only add to \`uncertain_parameters\` when your uncertainty would change the score from NA to No if resolved.
 
-## THE 12 PARAMETERS (ordered by weight)
+## THE 11 PARAMETERS (ordered by weight)
 
 ### 1. Technically / Legally Correct (20%)
-- **Yes**: Agent's information matches Wint Wealth KB and any Slack resolution. Factually accurate for the customer's specific case.
-- **No**: Agent gave verifiably WRONG information — wrong formula, wrong product explanation, wrong amounts, wrong process. Must be a clear factual error, not a communication gap.
-- **NA**: Very rare — only if chat has zero substantive information exchange.
+Score based on whether the agent's information is factually correct per Wint Wealth KB and policy.
+- **Yes**: Information is accurate for the customer's specific case.
+- **No** — mark No if ANY of these failures are visible:
+  - **Technically wrong**: Agent stated a wrong fact, wrong amount, wrong formula, wrong product rule, or wrong process step — a clear factual error (not just a communication gap).
+  - **Dependent upon KB but contradicts it**: Agent gave guidance that directly contradicts what the Wint Wealth KB or Slack resolution says about the topic.
+- **NA**: Only if the chat has zero substantive information exchange.
+- **RULE**: Must be a CLEAR, VERIFIABLE factual error. Do not fail for ambiguity.
 
 ### 2. All Questions Answered (10%)
-- **Yes**: Every question the customer asked was addressed — either answered directly or explicitly deferred to another channel with a reason.
-- **No**: A customer's explicit question was redirected without answering OR completely skipped/ignored.
+- **Yes**: Every explicit customer question was answered or deliberately deferred with a reason.
+- **No** — mark No if ANY of these are visible:
+  - **AQ – Missed question with Bot**: A question the customer raised (even during bot phase) was never picked up and answered by the agent.
+  - **AQ – Multiple queries**: Customer asked several questions in one message and the agent answered only some of them, leaving one or more unanswered.
 - **NA**: Very rare.
 
 ### 3. Expectation Setting (10%)
-- **Yes**: Agent provided a specific timeline, next step, or commitment. Examples: "contact us on 3rd Feb", "credited within 7 working days".
-- **No**: Customer asked "how long?" / "when?" or showed impatience AND got no specific timeline. Also fails when agent made a promise without a timeline.
+Score whether the agent set a clear, specific expectation about timeline, next steps, or resolution path.
+- **Yes**: Agent gave a specific timeline, commitment, or next step (e.g. "credited within 7 working days", "our team will contact you by 3rd Feb"). "Please allow me some time" counts.
+- **No** — mark No if ANY of these are visible:
+  - **Exp – TAT missing**: Customer asked "how long?", "when?", or showed impatience about timing — and got no specific timeline or even a ballpark.
+  - **Exp – No education**: Agent resolved an issue but did not explain what happened or what the customer should expect next — leaving the customer without context on the outcome.
+  - **Exp – Others**: Agent made a promise or commitment but gave no timeline or follow-up structure around it.
 - **NA**: Very rare.
-- **NOTE**: "Please allow me some time" IS sufficient.
+- **IMPORTANT**: Distinguish from Technical. Expectation Setting is about whether a timeline/next-step was communicated — NOT about whether the timeline given was correct (that is Technical).
 
 ### 4. Contextual & Personal (10%)
-- **Yes**: Response includes customer-specific details — bond name, specific amounts, exact dates, account numbers.
-- **No**: Generic answer that could apply to any customer. Test: could this exact answer be copy-pasted to a different customer? If yes → No.
+- **Yes**: Response includes customer-specific details — their bond name, their specific amounts, their exact dates, their account details.
+- **No** — mark No if ANY of these are visible:
+  - **CP – Irrelevant answer**: Agent's response does not address the customer's actual situation or problem.
+  - **CP – Copy-paste answer**: Generic template answer that could apply to any customer. Test: could this exact answer be copy-pasted to a completely different customer's chat? If yes → No.
+  - **CP – Missing info for easy understanding**: Agent did not share links, screenshots, or docs that were clearly needed for the customer to understand or act — leaving the response incomplete.
 - **NA**: Very rare.
 
 ### 5. Follow-up & Closing (10%)
-- **Yes**: (a) RESOLVED: closing has resolution acknowledgment + invite to reach out + warm sign-off. (b) WAIT: closing has status update + chat continuity assurance + follow-up commitment + warm sign-off.
-- **No**: Generic follow-up template OR closing completely missing OR generic with zero personalisation.
+- **Yes**: Closing is personalised to the outcome — resolved / ticket raised / on wait — with a warm sign-off and relevant next step.
+- **No** — mark No if ANY of these are visible:
+  - **PF – Closing sentence missing or generic**: Closing does not reflect the actual outcome (resolved / ticket raised / custom). Generic template with no personalisation.
+  - **PF – Chat on wait not handled**: Chat needed to go on wait (pending resolution, raised case) but agent did not put it on wait or explain the status.
+  - **PF – Chat holding message not personalised**: Agent put the chat on wait but used a completely generic waiting message with no reference to the customer's specific query.
+  - **PF – Follow-up not personalised**: The follow-up message has no connection to the main conversation — it reads as a detached template.
 - **NA**: Very rare.
 
-### 6. Sentences / Tone (10%)
-- **Yes**: Language is professional, polite, not rude or dismissive.
-- **No**: Rude language, abrupt/dismissive tone, or language that fails basic professionalism.
-- **NA**: Very rare. Bar is VERY high.
+### 6. Sentences / Simple to Understand (10%)
+Score whether the agent's messages are clear, readable, and free from comprehension barriers.
+- **Yes**: Messages are clear, appropriately structured, and easy to read on mobile.
+- **No** — mark No if ANY of these are visible:
+  - **ST – Technical jargon without explanation**: Agent used internal jargon (EOD, Flexi-tenure, Upswing, T+1, etc.) without providing the full form or a plain-language explanation.
+  - **ST – Long, unbroken answers**: Wall-of-text messages — no line breaks, no paragraph splits, links buried inside text instead of sent as a separate message. Unreadable on mobile.
+  - **ST – Structure/Framing**: One-liner responses to complex queries where structure was clearly needed; or message fragmented in a confusing way.
+- **NA**: Very rare. Bar is HIGH.
 
 ### 7. Process-wise (5%)
-- **Yes**: Agent followed correct workflow. ALWAYS ASSUME agent did internal checks (Finder, order status, account state) unless their visible response directly CONTRADICTS what such a check would have shown.
-- **No**: Only on CLEAR, PROVABLE violations visible in the transcript: agent's statement directly contradicts Finder data, 4-5+ hour gap with zero communication, agent calls without any customer request and no business reason.
+Score whether the agent followed Wint Wealth's operational process correctly.
+- **Yes**: Agent followed correct workflow. Assume agent did internal checks (Finder, last chat, order status) unless their visible output directly contradicts what such a check would have shown.
+- **No** — mark No ONLY if the failure is VISIBLE in the transcript:
+  - **PW – Wrong process explained**: Agent described the wrong process step to the customer in a way that is clearly incorrect per Wint policy.
+  - **PW – Did not raise ticket / escalate when required**: Case clearly needed a ticket or Slack escalation (e.g. funds issue, bug, repayment error) — agent closed the chat without raising one.
+  - **PW – Delayed response (4–5+ hours)**: A gap of 4–5 hours or more with zero communication is visible in the timestamps, with no put-on-wait or explanation.
+  - **PW – Processes not followed**: Any other clear, provable process deviation visible in the transcript.
+  - **PW – Did not check Finder / last chat**: Only fail this if the agent's answer is WRONG in a way that would have been corrected by checking Finder or the previous chat. You cannot fail Process simply because a check might have been skipped — the wrong output must be visible.
 - **NA**: Very rare.
-- **CRITICAL**: You cannot see whether an agent used Finder or checked internal tools. Never fail Process on the assumption that a check was skipped — only fail if the output proves it.
+- **CRITICAL**: Never assume a Finder check was skipped unless the agent's response directly contradicts what that check would have shown.
 
 ### 8. First Response & Opening (5%)
-- **Yes**: Greeting is a SEPARATE message. Contains: (1) Hi/Hello, (2) agent name + Wint Wealth, (3) offer to help OR acknowledgment of specific query.
-- **No**: Greeting merged with answer. OR purely generic. OR no greeting. OR agent name missing.
+- **Yes**: Greeting is a SEPARATE message containing: (1) Hi/Hello, (2) agent name + Wint Wealth, (3) offer to help OR acknowledgment of the specific query.
+- **No**: Greeting merged with the answer. OR purely generic opener. OR no greeting at all. OR agent name missing.
 - **NA**: Very rare.
 
 ### 9. Call (when required) (5%)
-- **Yes**: Call offered/made when appropriate AND handled correctly. OR no call was needed.
-- **No**: Agent initiated a call with NO prior customer request AND no clear business reason for it. (See Calls policy above.)
-- **NA**: MOST chats. If the customer requested a call but you cannot see whether a call took place → NA + \`uncertain_parameters\`. If the customer requested a call and the agent called → NA (can't evaluate without call transcript).
-- **IMPORTANT**: If a customer requested a call anywhere in the transcript, agent calling is NOT a violation — score NA.
+Score whether the agent correctly decided on a call — made one when needed, and didn't make one when not needed.
+- **Yes**: No call was required and none was made. OR a call was required, offered, and handled.
+- **No** — mark No if ANY of these are visible AND no call was initiated:
+  - **Call – User requested a call** but the agent did not arrange one and just closed the chat.
+  - **Call – Complicated or urgent query** (funds stuck, known bug, repayment issue, panic/irate user, heavy jargon) but agent did not offer/arrange a call.
+  - **Call – User clearly not understanding** (repeated confusion, misunderstanding jargons or the explanation) but agent did not offer to call and clarify.
+  - **Call – Day-long / raised-case query**: Agent raised a case / logged off but did not offer a follow-up call before closing, even though the situation clearly warranted it.
+  - Also **No** if agent initiated a call with NO customer request and NO business reason.
+- **NA**: If a call was requested or arranged but you cannot verify how it went (no call transcript) → score NA and add to \`uncertain_parameters\`.
+- **IMPORTANT**: If you cannot tell whether a call happened or not from the chat → NA, never No.
 
 ### 10. Grammar / Structure (5%)
-- **Yes**: Messages are grammatically correct, complete sentences.
-- **No**: Duplicate messages. Incomplete words. Missing conjunctions. Run-on sentences.
-- **NA**: Very rare. Minor typos are okay.
+- **Yes**: Messages are grammatically correct and structurally complete.
+- **No** — mark No if ANY of these are visible:
+  - **SG – Spelling errors**: Clear misspellings that affect readability or professionalism.
+  - **SG – Typing errors**: Wrong words, autocorrect errors, garbled text that changes meaning.
+  - **SG – Grammar errors**: Missing conjunctions, run-on sentences, incomplete sentences, subject-verb disagreement.
+- **NA**: Very rare. Minor typos that don't affect meaning are fine.
 
 ### 11. Empathy (10%)
-- **Yes**: Chat contains at least ONE empathy filler: "I understand your concern", "I can understand your frustration", "I apologize for the inconvenience" — anything that genuinely acknowledges the customer's situation.
-- **No**: No empathy filler anywhere. OR passive/dismissive language used.
-- **NA**: Very rare. Bar is LOW — even one genuine filler is enough.
+Score whether the agent acknowledged the customer's emotional state and communicated with warmth.
+- **Yes**: Chat contains at least ONE genuine empathy acknowledgment — e.g. "I understand your concern", "I can see why this is frustrating", "I apologise for the inconvenience" — that addresses the customer's situation.
+- **No** — mark No if ANY of these are visible:
+  - **EP – Did not acknowledge the query**: Agent gave a purely transactional reply with no personalisation or acknowledgment of the customer's situation.
+  - **EP – Robotic / too formal**: Excessive use of "sir/ma'am" at the start or end of every statement; tone feels scripted and impersonal throughout.
+  - **EP – Hollow fillers overused**: Phrases like "Please", "I can understand your concern", "I can empathise with you", "Please do not worry" used repeatedly with no real personalisation — filler without feeling.
+  - **EP – Requesting user without proper tone**: Asking the user to retry, re-send, or take an action without a polite, properly framed request.
+  - **EP – Did not assess user's understanding**: Customer was clearly confused or emotionally distressed and the agent did not assess whether the customer understood, did not offer to rephrase, and did not consider offering a call.
+- **NA**: Very rare. Bar is LOW — even one genuine, personalised empathy line is enough to pass.
 
 ## IQS CALCULATION
 IQS = Sum of (weight × pass) for all parameters, normalized to 100.
