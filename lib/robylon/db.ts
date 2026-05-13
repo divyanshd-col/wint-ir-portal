@@ -454,10 +454,10 @@ export async function getAllScoredCalls(opts: {
   }
   if (opts.agentName) {
     params.push(opts.agentName);
-    conditions.push(`a.name = $${params.length}`);
+    conditions.push(`COALESCE(a.name, '') = $${params.length}`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
-    conditions.push(`a.name = ANY($${params.length})`);
+    conditions.push(`COALESCE(a.name, '') = ANY($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');
   }
@@ -468,7 +468,8 @@ export async function getAllScoredCalls(opts: {
     SELECT COUNT(*) AS count
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
-    LEFT JOIN agents a ON a.id = r.agent_id
+    LEFT JOIN conversations conv ON conv.id = r.chat_id
+    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
@@ -480,22 +481,23 @@ export async function getAllScoredCalls(opts: {
 
   const rows = await query(`
     SELECT
-      r.id                   AS "callId",
-      r.chat_id              AS "chatId",
-      r.called_at            AS "calledAt",
-      r.called_at::date      AS "date",
-      r.duration_seconds     AS "durationSeconds",
+      r.id                                    AS "callId",
+      r.chat_id                               AS "chatId",
+      r.called_at                             AS "calledAt",
+      r.called_at::date                       AS "date",
+      r.duration_seconds                      AS "durationSeconds",
       r.language,
-      r.interruption_count   AS "interruptionCount",
-      r.dead_air_count       AS "deadAirCount",
-      a.name                 AS "agentName",
-      s.call_iqs_score       AS "iqs",
-      s.call_parameters      AS "parameters",
-      s.call_model_version   AS "modelVersion",
-      s.call_scored_at       AS "scoredAt"
+      r.interruption_count                    AS "interruptionCount",
+      r.dead_air_count                        AS "deadAirCount",
+      COALESCE(a.name, '')                    AS "agentName",
+      s.call_iqs_score                        AS "iqs",
+      s.call_parameters                       AS "parameters",
+      s.call_model_version                    AS "modelVersion",
+      s.call_scored_at                        AS "scoredAt"
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
-    LEFT JOIN agents a ON a.id = r.agent_id
+    LEFT JOIN conversations conv ON conv.id = r.chat_id
+    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
     ${where}
     ORDER BY r.called_at DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}
