@@ -73,6 +73,7 @@ export interface CallSegment {
   // speech
   speaker?: string;
   text?: string;
+  translation?: string;
   translated?: boolean;
   ts?: string;
   // interruption
@@ -199,19 +200,24 @@ An interruption occurs when Speaker A is talking and Speaker B starts speaking b
 - Insert an interruption flag BEFORE the segment of the speaker who did the interrupting.
 - Only flag as interruption if Speaker A had spoken fewer than 10 words in that turn when cut off.
 
-Interruption flag format:
+Interruption flag format (insert as a segment object):
 {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[NUMBER]}
+
+Example: IR EXECUTIVE was saying "So the bond matures in three" (6 words) when INVESTOR cut in:
+{"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":6}
 
 ══════════════════════════════════════════
 DEAD AIR DETECTION
 ══════════════════════════════════════════
 Listen for pauses of 2 or more seconds where neither speaker is talking.
-Insert a dead air flag at the point where the silence occurs.
+Insert a dead air flag at the point in the conversation where the silence occurs.
 Estimate the duration to the nearest second.
 Note which speaker resumed the conversation.
 
-Dead air flag format:
+Dead air flag format (insert as a segment object):
 {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[SPEAKER NAME]"}
+
+Example: {"type":"dead_air","duration":"~4 seconds","resumed_by":"INVESTOR"}
 
 Only flag dead air that is noticeably long (2+ seconds). Ignore normal conversational pauses under 2 seconds.
 
@@ -219,9 +225,9 @@ Only flag dead air that is noticeably long (2+ seconds). Ignore normal conversat
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
-Speech segments: {"type":"speech","speaker":"[NAME]","text":"[TEXT]","translated":false}
-Interruption flags: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
-Dead air flags: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
+Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[TEXT]","translated":false}
+Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
+Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
 
 Example output:
 {"language":"English","segments":[

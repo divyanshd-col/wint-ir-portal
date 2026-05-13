@@ -95,7 +95,8 @@ export async function geminiGenerate(
 }
 
 // ── Call-quality specific Gemini caller ───────────────────────────────────────
-// Dedicated model chain, temperature=0, thinkingBudget=0 for flash, 5 retries with 10s gaps.
+// Raw-fetch implementation: responseMimeType=application/json, thinkingBudget=0 for flash,
+// reverse-part iteration to skip thought entries, 5 retries with 10s gaps, model fallback.
 const CALL_MODEL_CHAIN = [
   'gemini-2.5-flash-preview-05-20',
   'gemini-2.5-flash',
@@ -107,44 +108,71 @@ const CALL_MODEL_CHAIN = [
 export async function callGeminiForCall(
   keys: string[],
   contents: any[],
-  systemInstruction?: string,
+  _systemInstruction?: string,
   timeoutMs = 120_000,
 ): Promise<string> {
   let lastError: any;
 
   for (const model of CALL_MODEL_CHAIN) {
-    const isFlash = model.includes('flash');
-    const config: any = {
-      temperature: 0,
-      ...(isFlash ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-      ...(systemInstruction ? { systemInstruction } : {}),
-    };
+    const isPro = model.includes('-pro');
+    const body = JSON.stringify({
+      contents,
+      generationConfig: {
+        temperature: 0,
+        responseMimeType: 'application/json',
+        ...(!isPro ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      },
+    });
 
-    for (let attempt = 0; attempt < 5; attempt++) {
-      let triedAny = false;
+    let skipModel = false;
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      if (attempt > 1) await new Promise(r => setTimeout(r, 10_000));
+
       for (const key of keys) {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
         try {
-          const ai = new GoogleGenAI({ apiKey: key });
+          const fetchPromise = fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+          });
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('callGeminiForCall timeout')), timeoutMs)
           );
-          const response = await Promise.race([
-            ai.models.generateContent({ model, contents, config }),
-            timeoutPromise,
-          ]);
-          if (model !== CALL_MODEL_CHAIN[0]) {
-            console.warn(`[gemini-call] fallback to ${model} (primary unavailable)`);
+          const res  = await Promise.race([fetchPromise, timeoutPromise]);
+          const data = await res.json() as any;
+
+          const errMsg = (data.error?.message) ?? '';
+          const isCapacity   = res.status === 503 || res.status === 429
+            || errMsg.includes('demand') || errMsg.includes('overload');
+          const isDeprecated = errMsg.includes('no longer available')
+            || errMsg.includes('deprecated')
+            || errMsg.includes('Budget 0 is invalid')
+            || res.status === 404;
+
+          if (isDeprecated) { skipModel = true; break; }
+          if (isCapacity)   { lastError = new Error(errMsg || `HTTP ${res.status}`); break; }
+          if (!res.ok)      throw new Error(errMsg || `API error ${res.status}`);
+
+          // Reverse-iterate parts to skip thought:true entries (Gemini 2.5 Pro)
+          const parts: any[] = data.candidates?.[0]?.content?.parts ?? [];
+          for (let i = parts.length - 1; i >= 0; i--) {
+            if (!parts[i].thought && parts[i].text) return (parts[i].text as string).trim();
           }
-          return response.text || '';
+          return '';
         } catch (err: any) {
-          if (isRetryable(err)) { lastError = err; triedAny = true; continue; }
-          throw err;
+          const msg = String(err?.message ?? '').toLowerCase();
+          const isCapacity = msg.includes('demand') || msg.includes('503') || msg.includes('429');
+          if (!isCapacity) throw err;
+          lastError = err;
         }
       }
-      if (!triedAny) break;
-      if (attempt < 4) await new Promise(r => setTimeout(r, 10_000));
+      if (skipModel) break;
     }
-    console.warn(`[gemini-call] ${model} exhausted after 5 attempts — trying next model`);
+
+    if (model !== CALL_MODEL_CHAIN[CALL_MODEL_CHAIN.length - 1]) {
+      console.warn(`[gemini-call] ${model} exhausted — trying next model`);
+    }
   }
 
   throw lastError ?? new Error('All Gemini call-quality models failed');

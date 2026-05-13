@@ -57,15 +57,17 @@ interface CallEntry {
 }
 
 interface CallSegment {
-  type: 'speech' | 'interruption' | 'dead_air';
+  type: 'speech' | 'interruption' | 'dead_air' | 'poor_listening';
   speaker?: string;
   text?: string;
+  translation?: string;
   translated?: boolean;
   interrupted_speaker?: string;
   interrupted_by?: string;
   words_spoken?: number;
   duration?: string;
   resumed_by?: string;
+  phrase?: string;
 }
 
 interface Stats {
@@ -117,7 +119,24 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
     );
   }
 
+  if (seg.type === 'poor_listening') {
+    return (
+      <tr>
+        <td colSpan={2} className="px-4 py-1.5">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-amber-50 border border-amber-200">
+            <span className="text-amber-500 font-bold text-sm">🔁</span>
+            <span className="text-xs text-amber-700">
+              IR asked investor to repeat{seg.phrase ? ` — "${seg.phrase}"` : ''}
+            </span>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
   const isIR = seg.speaker === 'IR EXECUTIVE';
+  const displayText = seg.translation || seg.text;
+  const wasTranslated = seg.translated || !!seg.translation;
   return (
     <tr className="align-top border-b border-slate-50 hover:bg-slate-50/50">
       <td className="px-4 py-2 w-36 shrink-0">
@@ -128,8 +147,8 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
         </span>
       </td>
       <td className="px-4 py-2 text-sm text-slate-700">
-        {seg.text}
-        {seg.translated && (
+        {displayText}
+        {wasTranslated && (
           <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-500 align-middle">🌐 translated</span>
         )}
       </td>
