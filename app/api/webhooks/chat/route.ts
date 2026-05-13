@@ -41,7 +41,6 @@ import {
   upsertContact,
   upsertConversation,
   updateConversationCsat,
-  updateConversationTags,
   mergeConversationTags,
   getConversation,
   isScored,
@@ -605,15 +604,14 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const disposition    = primary.names?.l1 || '';
   const subDisposition = primary.names?.l2 || '';
 
-  // Upsert conversation with tags (will create row if not yet present)
+  // Upsert conversation row (no tags here — merge below preserves ticket_raised)
   await upsertConversation({
     id: chatId,
-    tags: { disposition, sub_disposition: subDisposition },
     webhookTrigger: 'CLASSIFICATION_UPDATED',
   });
 
-  // Also call updateConversationTags for clarity
-  await updateConversationTags(chatId, { disposition, sub_disposition: subDisposition });
+  // Merge disposition into tags without overwriting ticket_raised saved by TICKET_CLOSED
+  await mergeConversationTags(chatId, { disposition, sub_disposition: subDisposition });
 
   // Check if transcript already stored and not yet scored
   const conv = await getConversation(chatId);
