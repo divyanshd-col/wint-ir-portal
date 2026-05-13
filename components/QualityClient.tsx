@@ -1087,6 +1087,7 @@ function PendingChatsTab({ userRole, userEmail, onOverride }: { userRole?: strin
     if (expandedId === chatId) { setExpandedId(null); return; }
     setExpandedId(chatId);
     loadTranscript(chatId);
+    loadHistory(chatId);
     if (flagId) loadThread(flagId);
   };
 
@@ -1313,12 +1314,14 @@ function PendingChatsTab({ userRole, userEmail, onOverride }: { userRole?: strin
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Transcript</p>
-                  <button onClick={() => toggleHistory(item.chatId)}
-                    className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1">
-                    {showHistory[item.chatId] ? 'Hide Prior Chats' : 'Prior Chats'}
-                    <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
-                      className={`transition-transform ${showHistory[item.chatId] ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
-                  </button>
+                  {(histories[item.chatId]?.length ?? 0) > 0 && (
+                    <button onClick={() => toggleHistory(item.chatId)}
+                      className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1">
+                      {showHistory[item.chatId] ? 'Hide Prior Chats' : `Prior Chats (${histories[item.chatId]!.length})`}
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                        className={`transition-transform ${showHistory[item.chatId] ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+                    </button>
+                  )}
                 </div>
                 {transcriptLoading[item.chatId] && (
                   <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">

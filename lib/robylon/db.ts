@@ -298,7 +298,7 @@ export async function getConversationHistory(chatId: string, limit = 10): Promis
       s.iqs_score         AS "iqs",
       s.scored_at         AS "scoredAt"
     FROM conversations c
-    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     WHERE c.contact_id = (SELECT contact_id FROM conversations WHERE id = $1)
       AND c.id != $1
