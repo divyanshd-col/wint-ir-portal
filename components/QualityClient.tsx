@@ -1159,7 +1159,7 @@ interface PendingReviewItem {
   reasoning?: Record<string, string>;
 }
 
-function PendingChatsTab({ userRole, userEmail, onOverride }: { userRole?: string; userEmail?: string; onOverride?: (item: PendingReviewItem) => void }) {
+function PendingChatsTab({ userRole, userEmail, onOverride, onSaved }: { userRole?: string; userEmail?: string; onOverride?: (item: PendingReviewItem) => void; onSaved?: (cb: (chatId: string, updated: Partial<PendingReviewItem>) => void) => void }) {
   const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
@@ -1187,6 +1187,18 @@ function PendingChatsTab({ userRole, userEmail, onOverride }: { userRole?: strin
       .then(d => setItems(d.items || []))
       .catch(() => setLoadError('Failed to load pending chats'))
       .finally(() => setLoading(false));
+  }, []);
+
+  // Register the updater so the parent can push save results into our local items
+  useEffect(() => {
+    onSaved?.(( chatId, updated) => {
+      setItems(prev => prev.map(i =>
+        i.chatId === chatId
+          ? { ...i, iqs: updated.iqs ?? i.iqs, scores: updated.scores ?? i.scores, reasoning: updated.reasoning ?? i.reasoning, agentName: updated.agentName ?? i.agentName }
+          : i,
+      ));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadThread = async (flagId: string) => {
@@ -1651,6 +1663,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [weeklyParamData, setWeeklyParamData] = useState<WeeklyParamRow[]>([]);
 
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
+  // Callback registered by PendingChatsTab so the parent can notify it after a save
+  const pendingOnSavedRef = useRef<((chatId: string, updated: Partial<PendingReviewItem>) => void) | null>(null);
 
   // Column visibility
   const [showColPicker, setShowColPicker] = useState(false);
@@ -2225,6 +2239,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           onSave={updated => {
             setEntries(prev => prev.map(e => e.chatId === updated.chatId ? updated : e));
             setDetailEntry(updated);
+            // Notify PendingChatsTab so it updates its local items
+            pendingOnSavedRef.current?.(updated.chatId, {
+              iqs: updated.iqs,
+              scores: updated.scores as Record<string, string>,
+              reasoning: updated.reasoning as Record<string, string>,
+              agentName: updated.agentName,
+            });
             setToast('Override saved successfully');
             setTimeout(() => setToast(null), 3000);
           }}
@@ -3680,7 +3701,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── CHATS PENDING TAB ── */}
           {tab === 'pending' && (
             <PendingChatsTab userRole={userRole} userEmail={userEmail}
-              onOverride={item => openEditModal({
+              onOverride={item => setDetailEntry({
                 id: `override-${item.chatId}`,
                 chatId: item.chatId,
                 agentName: item.agentName,
@@ -3697,6 +3718,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                 model: '',
                 reviewNote: item.qaStatus?.reviewNote,
               })}
+              onSaved={cb => { pendingOnSavedRef.current = cb; }}
             />
           )}
 
