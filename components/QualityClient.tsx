@@ -619,9 +619,16 @@ function ScoreDetail({ entry, onClose, onSave, userRole, userEmail }: {
         throw new Error(err?.error || `Server error ${res.status}`);
       }
       const data = await res.json();
-      const updated: IQSScoreEntry = data.entry || {
-        ...entry, ...form,
-        updatedAt: new Date().toISOString(), updatedBy: userEmail,
+      // Merge API response on top of the original entry so no fields are lost.
+      // Use entry.id (not data.entry.id) — the API regenerates it each call.
+      const updated: IQSScoreEntry = {
+        ...entry,
+        ...form,
+        id: entry.id,
+        iqs: data.entry?.iqs ?? entry.iqs,
+        updatedAt: data.entry?.updatedAt ?? new Date().toISOString(),
+        updatedBy: data.entry?.updatedBy ?? userEmail,
+        reviewNote: form.note || entry.reviewNote,
       };
       onSave?.(updated);
       setSaved(true);
@@ -2017,9 +2024,23 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         throw new Error(errData?.error || `Server error ${res.status}`);
       }
       const data = await res.json();
-      const updated: IQSScoreEntry = data.entry || { ...editEntry, ...editForm, updatedAt: new Date().toISOString(), updatedBy: userEmail };
-      setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
-      setDetailEntry(prev => prev?.id === editEntry.id ? updated : prev);
+      const updated: IQSScoreEntry = {
+        ...editEntry,
+        agentName: editForm.agentName,
+        csat: editForm.csat,
+        disposition: editForm.disposition,
+        subDisposition: editForm.subDisposition,
+        summary: editForm.summary,
+        scores: editForm.scores as Record<string, ParamScore>,
+        reasoning: editForm.reasoning,
+        id: editEntry.id,
+        iqs: data.entry?.iqs ?? editEntry.iqs,
+        updatedAt: data.entry?.updatedAt ?? new Date().toISOString(),
+        updatedBy: data.entry?.updatedBy ?? userEmail,
+        reviewNote: editForm.note || editEntry.reviewNote,
+      };
+      setEntries(prev => prev.map(e => e.chatId === editEntry.chatId ? updated : e));
+      setDetailEntry(prev => prev?.chatId === editEntry.chatId ? updated : prev);
       setEditSaved(true);
       setToast('Override saved successfully');
       setTimeout(() => setToast(null), 3000);
@@ -2202,7 +2223,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           entry={detailEntry}
           onClose={() => setDetailEntry(null)}
           onSave={updated => {
-            setEntries(prev => prev.map(e => e.id === updated.id ? updated : e));
+            setEntries(prev => prev.map(e => e.chatId === updated.chatId ? updated : e));
             setDetailEntry(updated);
             setToast('Override saved successfully');
             setTimeout(() => setToast(null), 3000);
