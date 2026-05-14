@@ -306,11 +306,15 @@ Score whether the agent correctly decided on a call — made one when needed, an
 
 ### 10. Grammar / Structure (5%)
 - **Yes**: Messages are grammatically correct and structurally complete.
-- **No** — mark No if ANY of these are visible:
-  - **SG – Spelling errors**: Clear misspellings that affect readability or professionalism.
-  - **SG – Typing errors**: Wrong words, autocorrect errors, garbled text that changes meaning.
+- **No** — mark No ONLY if these are clearly visible in the agent's words:
+  - **SG – Spelling errors**: Clear misspellings that affect readability or professionalism (e.g. "recievd", "plese").
+  - **SG – Typing errors**: Wrong words, autocorrect errors, missing words that change meaning (e.g. "I will you the details" instead of "I will send you the details").
   - **SG – Grammar errors**: Missing conjunctions, run-on sentences, incomplete sentences, subject-verb disagreement.
-- **NA**: Very rare. Minor typos that don't affect meaning are fine.
+- **NEVER flag these — they are platform rendering artifacts, not agent errors:**
+  - Extra spaces or missing spaces between words (e.g. "thankyou", "thank  you") — WhatsApp/Robylon renders spacing differently.
+  - Line breaks or newlines within a message — these are formatting choices, not grammar errors.
+  - ALL-CAPS words used for emphasis — common in customer service chat.
+- **NA**: Very rare. Minor typos that don't affect meaning are acceptable.
 
 ### 11. Empathy (10%)
 Score whether the agent acknowledged the customer's emotional state and communicated with warmth.

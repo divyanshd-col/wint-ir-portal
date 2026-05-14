@@ -72,11 +72,18 @@ function normaliseCsat(raw: string | undefined): { score: number; label: string 
 // ── Messages → transcript text ────────────────────────────────────────────────
 interface RobyMessage { sender?: string; content?: string; role?: string; text?: string; timestamp?: string; }
 
+// Collapse internal newlines and multiple spaces into a single space so that
+// a multi-line WhatsApp message stays on one line in the LLM transcript.
+// This prevents the LLM from reading mid-message line breaks as structural errors.
+function normalizeContent(raw: string): string {
+  return raw.replace(/\r\n|\r|\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
+}
+
 function messagesToTranscript(messages: RobyMessage[]): string {
   const lines: string[] = [];
   for (const m of messages) {
     const sender  = m.sender || m.role || '';
-    const content = (m.content || m.text || '').trim();
+    const content = normalizeContent(m.content || m.text || '');
     if (!content) continue;
     const low = content.toLowerCase();
     if (low.includes('auto-assigned') || low.includes('assigned by') ||
@@ -98,7 +105,7 @@ function transcriptFromJsonb(messages: any[]): string {
     const role = m.sender_type === 'customer' ? 'Customer'
                : m.sender_type === 'bot'      ? 'Bot'
                : 'Agent';
-    const content = (m.content || '').trim();
+    const content = normalizeContent(m.content || '');
     if (content) lines.push(`${role}: ${content}`);
   }
   return lines.join('\n');

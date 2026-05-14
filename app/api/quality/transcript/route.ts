@@ -9,12 +9,18 @@ function qualityAccess(session: any): boolean {
   return !!role && ['admin', 'quality', 'tl', 'agent'].includes(role);
 }
 
+// Collapse internal newlines and extra spaces — WhatsApp line breaks within a bubble
+// become a single space so the portal display matches Robylon's rendered view.
+function normalizeContent(raw: string): string {
+  return (raw || '').replace(/\r\n|\r|\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
+}
+
 function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: string; timestamp?: string }[] {
   return messages.map((m: any) => ({
     sender: m.sender_type === 'customer' ? 'user'
           : m.sender_type === 'bot'      ? 'bot'
           : (m.sender_name || 'Agent'),
-    content: m.content || '',
+    content: normalizeContent(m.content || m.text || ''),
     timestamp: m.timestamp,
   })).filter(m => m.content);
 }
