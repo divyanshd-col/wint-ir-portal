@@ -7,6 +7,7 @@ import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
 import CallLinkTestClient from '@/components/CallLinkTestClient';
+import UnifiedScoringClient from '@/components/UnifiedScoringClient';
 
 const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Mobile', 'CSAT', 'FRT', 'Handoff', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
 
@@ -1353,7 +1354,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 }
 
 export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test'>(initialTab || 'performance');
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test' | 'unified'>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
 
   // Fresh agentName from config (overrides stale JWT value)
@@ -1964,6 +1965,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <path d="M10 6l2 2-2 2M12 8h-3"/>
       </svg>
     ),
+    unified: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2"/>
+        <path d="M8 2v2M8 12v2M2 8h2M12 8h2"/>
+      </svg>
+    ),
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -2150,6 +2157,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
             <NavItem icon={icons.callTest} label="Call Test" active={tab === 'call-test'}
               collapsed={!sidebarExpanded} onClick={() => setTab('call-test')} />
           )}
+          {!selfAgentName && (
+            <NavItem icon={icons.unified} label="Unified Score" active={tab === 'unified'}
+              collapsed={!sidebarExpanded} onClick={() => setTab('unified')} />
+          )}
         </nav>
 
       </aside>
@@ -2161,7 +2172,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
           <div className="shrink-0">
             <h1 className="text-base font-bold text-gray-900">
-              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : tab === 'calls' ? 'Call Quality' : tab === 'call-test' ? 'Call Test' : 'Upload & Score'}
+              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : tab === 'calls' ? 'Call Quality' : tab === 'call-test' ? 'Call Test' : tab === 'unified' ? 'Unified Score' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {tab === 'performance' && `${agentStats.length} agents · ${perfTotal} chats`}
@@ -2171,6 +2182,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {tab === 'pending' && `${challengeCount} pending review`}
               {tab === 'calls' && 'Scored IR call recordings'}
               {tab === 'call-test' && 'Link a call to a chat and run the full scoring pipeline'}
+              {tab === 'unified' && 'Score chat + call together — transcribe, retrieve KB, and evaluate both in one run'}
             </p>
           </div>
 
@@ -3376,6 +3388,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {tab === 'call-test' && (
             <div className="overflow-y-auto flex-1">
               <CallLinkTestClient />
+            </div>
+          )}
+
+          {/* ── UNIFIED SCORE TAB ── */}
+          {tab === 'unified' && (
+            <div className="overflow-y-auto flex-1">
+              <UnifiedScoringClient />
             </div>
           )}
 

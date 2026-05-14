@@ -6,59 +6,52 @@
 // ── Parameter weights (must sum to 1.0) ──────────────────────────────────────
 
 export const CALL_WEIGHTS: Record<string, number> = {
-  TechnicalLegal: 0.20,
-  AllQuestions:   0.10,
-  ProcessWise:    0.05,
-  Opening:        0.05,
-  OnCall:         0.05,
-  Contextual:     0.10,
-  Tags:           0.05,
-  Expectation:    0.10,
-  Sentences:      0.10,
-  Grammar:        0.05,
-  Empathy:        0.05,
-  FollowUp:       0.10,
+  CallOpening:     0.05,
+  CallClosing:     0.05,
+  TechnicalLegal:  0.15,
+  AllQuestions:    0.10,
+  Expectation:     0.10,
+  Process:         0.05,
+  Grammar:         0.10,
+  Fillers:         0.10,
+  EnergyTone:      0.10,
+  ActiveListening: 0.10,
+  Simplifying:     0.10,
 };
 
 export const CALL_PARAM_NAMES: Record<string, string> = {
-  TechnicalLegal: 'Technically / Legal-wise',
-  AllQuestions:   'All Questions Answered',
-  ProcessWise:    'Process-wise',
-  Opening:        'First Response & Opening',
-  OnCall:         'Going on a call (when required)',
-  Contextual:     'Contextual & Personal Answers',
-  Tags:           'Tags Accuracy',
-  Expectation:    'Expectation Setting',
-  Sentences:      'Sentences (simple to understand)',
-  Grammar:        'Grammatically & Structurally correct',
-  Empathy:        'Empathy',
-  FollowUp:       'Personalised Follow-up & Closing',
+  CallOpening:     'Call Opening',
+  CallClosing:     'Call Closing',
+  TechnicalLegal:  'Technically / Legally Correct',
+  AllQuestions:    'All Questions Addressed',
+  Expectation:     'Expectation Setting',
+  Process:         'Process',
+  Grammar:         'Vocabulary / Sentence Structure / Grammar / Pronunciations',
+  Fillers:         'Fillers, Fumbling & Stammering. Clarity of Speech. Avoid Dead Air',
+  EnergyTone:      'Energy Level, Enthusiasm & Tone Modulation',
+  ActiveListening: 'Active Listening, Interruptions & Empathy',
+  Simplifying:     'Simplifying Answers',
 };
 
 export const CALL_PARAM_GROUPS: Record<string, { label: string; keys: string[] }> = {
-  technical: {
-    label: 'Technical Answer (35%)',
-    keys: ['TechnicalLegal', 'AllQuestions', 'ProcessWise'],
-  },
   process: {
-    label: 'Process Knowledge (35%)',
-    keys: ['Opening', 'OnCall', 'Contextual', 'Tags', 'Expectation'],
+    label: 'Process (50%)',
+    keys: ['CallOpening', 'CallClosing', 'TechnicalLegal', 'AllQuestions', 'Expectation', 'Process'],
   },
-  grammarTone: {
-    label: 'Grammar & Tone (15%)',
-    keys: ['Sentences', 'Grammar'],
+  communication: {
+    label: 'Communication Skills (30%)',
+    keys: ['Grammar', 'Fillers', 'EnergyTone'],
   },
-  extraMile: {
-    label: 'Going an Extra Mile (15%)',
-    keys: ['Empathy', 'FollowUp'],
+  customerService: {
+    label: 'Customer Service Skills (20%)',
+    keys: ['ActiveListening', 'Simplifying'],
   },
 };
 
 export const CALL_PARAM_ORDER = [
-  'TechnicalLegal', 'AllQuestions', 'ProcessWise',
-  'Opening', 'OnCall', 'Contextual', 'Tags', 'Expectation',
-  'Sentences', 'Grammar',
-  'Empathy', 'FollowUp',
+  'CallOpening', 'CallClosing', 'TechnicalLegal', 'AllQuestions', 'Expectation', 'Process',
+  'Grammar', 'Fillers', 'EnergyTone',
+  'ActiveListening', 'Simplifying',
 ];
 
 export type CallParamScore = 'Yes' | 'No' | 'NA';
@@ -261,7 +254,7 @@ Return ONLY this JSON:
 {"call_disposition":"brief topic e.g. Payout Query, TDS Form Issue, Bond Maturity, Portfolio Question","call_sub_disposition":"more specific e.g. Delay in payout credit, Unable to submit Form 121"}`;
 
 // ── Call IQS scoring system prompt (Pass 2, text-based) ──────────────────────
-export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality evaluator. Score IR Executive voice call transcripts across 12 parameters.
+export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality evaluator. Score IR Executive voice call transcripts across 11 parameters.
 
 The IR EXECUTIVE is the Wint Wealth agent. The INVESTOR is the customer.
 Speech segments are numbered [1], [2], [3]... for reference.
@@ -274,79 +267,70 @@ Speech segments are numbered [1], [2], [3]... for reference.
 
 ---
 
-## GROUP 1: TECHNICAL ANSWER (35%)
+## GROUP 1: PROCESS (50%)
 
-### 1. Technically / Legal-wise (20%) — key: TechnicalLegal
+### 1. Call Opening (5%) — key: CallOpening
+- Yes: IR opens the call within 5 seconds with a self-introduction AND mentions "Wint Wealth".
+- No: No self-introduction within the first few seconds, or "Wint Wealth" not mentioned in the opening.
+- NA: Very rare.
+
+### 2. Call Closing (5%) — key: CallClosing
+- Yes: IR closes with an appropriate greeting/sign-off for the day (e.g. "Have a good day", "Thank you for calling").
+- No: Abrupt hang-up with no closing greeting, or call was cut off.
+- NA: Call was disconnected before closing was possible.
+
+### 3. Technically / Legally Correct (15%) — key: TechnicalLegal
 - Yes: All product info is factually correct — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms. Legally correct statements.
 - No: Clear factual or legal error about product details, returns, timelines, or regulatory requirements.
 - NA: No substantive product information exchanged.
 
-### 2. All Questions Answered (10%) — key: AllQuestions
+### 4. All Questions Addressed (10%) — key: AllQuestions
 - Yes: Every investor question was answered directly, or explicitly deferred with a reason.
 - No: An investor question was ignored, redirected without answering, or left hanging.
 - NA: Very rare.
 
-### 3. Process-wise (5%) — key: ProcessWise
-- Yes: IR followed correct process — checked prior chat/Finder before the call, did not ask investor to repeat already-shared info.
-- No: IR clearly had not reviewed prior context, asked investor to repeat known information, or followed the wrong process.
-- NA: No prior context existed to check.
-
----
-
-## GROUP 2: PROCESS KNOWLEDGE (35%)
-
-### 4. First Response & Opening (5%) — key: Opening
-- Yes: IR introduces themselves by name AND says "Wint Wealth" in their opening turn.
-- No: No self-introduction, or "Wint Wealth" not mentioned in the opening.
-- NA: Very rare.
-
-### 5. Going on a call (when required) (5%) — key: OnCall
-- Yes: The call itself was appropriate — investor needed a call and it was handled, or no call was needed.
-- No: Call was not needed and was made without reason, OR call was clearly needed but was not arranged.
-- NA: Cannot determine from transcript whether a call was appropriate.
-
-### 6. Contextual & Personal Answers (10%) — key: Contextual
-- Yes: IR's answers are tailored to this specific investor — references their bond name, amounts, dates, account details.
-- No: Generic answers that could apply to any investor. Copy-paste responses with no personalisation.
-- NA: Very rare.
-
-### 7. Tags Accuracy (5%) — key: Tags
-- Yes: IR correctly identified and tagged the call disposition/topic based on the investor's query.
-- No: Wrong disposition applied, or no attempt to classify the call topic.
-- NA: Cannot determine from transcript.
-
-### 8. Expectation Setting (10%) — key: Expectation
-- Yes: IR gave a specific timeline, next step, or commitment — e.g. "credited within 7 working days", "I'll email you by 5 PM".
+### 5. Expectation Setting (10%) — key: Expectation
+- Yes: IR gave a specific timeline, next step, or commitment — e.g. "credited within 7 working days", "I'll email you by 5 PM". Covers product info, TAT, and issue updates.
 - No: Investor asked when/how long and got no specific answer. Promise made without a timeframe.
 - NA: No timeline-sensitive question asked.
 
+### 6. Process (5%) — key: Process
+- Yes: IR checked the investor's prior chat query before the call and did not ask them to repeat already-shared info. Pre-checked details on Wint Finder to assist quickly without putting investor on hold.
+- No: IR clearly had not reviewed prior chat context, asked investor to repeat known information, or did not pre-check Finder details causing unnecessary hold time.
+- NA: No prior chat context existed to check.
+
 ---
 
-## GROUP 3: GRAMMAR & TONE (15%)
+## GROUP 2: COMMUNICATION SKILLS (30%)
 
-### 9. Sentences (simple to understand) (10%) — key: Sentences
-- Yes: IR speaks in clear, simple sentences. Financial terms explained in plain language. Easy for a non-expert to understand.
-- No: Heavy jargon without explanation. Long rambling sentences. Investor confused or had to ask for clarification.
-- NA: Very rare.
-
-### 10. Grammatically & Structurally correct (5%) — key: Grammar
-- Yes: Clear grammar and pronunciation. Professional vocabulary. Easy to follow.
+### 7. Vocabulary / Sentence Structure / Grammar / Pronunciations (10%) — key: Grammar
+- Yes: IR interacts with correct sentence structure, grammar, and clear pronunciation. Professional vocabulary.
 - No: Repeated grammatical errors, broken sentences, or mispronunciations that caused confusion.
 - NA: Very rare. Minor slips acceptable.
 
----
-
-## GROUP 4: GOING AN EXTRA MILE (15%)
-
-### 11. Empathy (5%) — key: Empathy
-- Yes: IR showed genuine empathy — acknowledged the investor's concern, apologised for inconvenience, or expressed understanding.
-- No: Purely transactional. No acknowledgment of investor's emotional state. Robotic or dismissive tone.
+### 8. Fillers, Fumbling & Stammering. Clarity of Speech. Avoid Dead Air (10%) — key: Fillers
+- Yes: No excessive fillers (aaa, uuumm), no fumbling or stammering. Clear confident delivery. Dead air avoided.
+- No: Frequent fillers, fumbling, or stammering that made IR sound unconfident. Prolonged dead air on the call.
 - NA: Very rare.
 
-### 12. Personalised Follow-up & Closing (10%) — key: FollowUp
-- Yes: IR ended with a warm, personalised closing that reflects the outcome — resolved / ticket raised / pending — with a clear next step.
-- No: Abrupt hang-up, no closing, or a generic scripted close with no reference to the investor's specific situation.
-- NA: Call was cut off before closing was possible.
+### 9. Energy Level, Enthusiasm & Tone Modulation (10%) — key: EnergyTone
+- Yes: IR displays good tone and manner, not scripted. Energy maintained throughout. Welcoming to queries regardless of call length. Not uninterested or stern.
+- No: IR sounds flat, bored, scripted, or uninterested. Monotone delivery. Energy drops noticeably.
+- NA: Cannot assess from transcript alone (audio-based parameter — use audio signal if available).
+
+---
+
+## GROUP 3: CUSTOMER SERVICE SKILLS (20%)
+
+### 10. Active Listening, Interruptions & Empathy (10%) — key: ActiveListening
+- Yes: IR listens to the investor without interrupting. Does not make investor repeat themselves. Does not have a parallel conversation. Shows empathy when investor raises concerns.
+- No: IR interrupted the investor, talked over them, made them repeat, or showed no empathy to a frustrated investor.
+- NA: Very rare.
+
+### 11. Simplifying Answers (10%) — key: Simplifying
+- Yes: IR explains financial terms in plain language. Confirms with investor if they need further clarification. Avoids heavy jargon.
+- No: Heavy unexplained jargon. Investor confused or had to ask for clarification. No attempt to simplify.
+- NA: No complex financial terms discussed.
 
 ---
 
@@ -360,32 +344,30 @@ Respond with EXACTLY this JSON — no other text:
 \`\`\`json
 {
   "scores": {
-    "TechnicalLegal": "Yes|No|NA",
-    "AllQuestions":   "Yes|No|NA",
-    "ProcessWise":    "Yes|No|NA",
-    "Opening":        "Yes|No|NA",
-    "OnCall":         "Yes|No|NA",
-    "Contextual":     "Yes|No|NA",
-    "Tags":           "Yes|No|NA",
-    "Expectation":    "Yes|No|NA",
-    "Sentences":      "Yes|No|NA",
-    "Grammar":        "Yes|No|NA",
-    "Empathy":        "Yes|No|NA",
-    "FollowUp":       "Yes|No|NA"
+    "CallOpening":     "Yes|No|NA",
+    "CallClosing":     "Yes|No|NA",
+    "TechnicalLegal":  "Yes|No|NA",
+    "AllQuestions":    "Yes|No|NA",
+    "Expectation":     "Yes|No|NA",
+    "Process":         "Yes|No|NA",
+    "Grammar":         "Yes|No|NA",
+    "Fillers":         "Yes|No|NA",
+    "EnergyTone":      "Yes|No|NA",
+    "ActiveListening": "Yes|No|NA",
+    "Simplifying":     "Yes|No|NA"
   },
   "reasoning": {
-    "TechnicalLegal": "brief reason",
-    "AllQuestions":   "brief reason",
-    "ProcessWise":    "brief reason",
-    "Opening":        "brief reason",
-    "OnCall":         "brief reason",
-    "Contextual":     "brief reason",
-    "Tags":           "brief reason",
-    "Expectation":    "brief reason",
-    "Sentences":      "brief reason",
-    "Grammar":        "brief reason",
-    "Empathy":        "brief reason",
-    "FollowUp":       "brief reason"
+    "CallOpening":     "brief reason",
+    "CallClosing":     "brief reason",
+    "TechnicalLegal":  "brief reason",
+    "AllQuestions":    "brief reason",
+    "Expectation":     "brief reason",
+    "Process":         "brief reason",
+    "Grammar":         "brief reason",
+    "Fillers":         "brief reason",
+    "EnergyTone":      "brief reason",
+    "ActiveListening": "brief reason",
+    "Simplifying":     "brief reason"
   },
   "poor_listening_segments": [
     {"segment_index": 7, "phrase": "Could you please repeat that?"}
