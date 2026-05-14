@@ -159,12 +159,22 @@ export async function GET(req: NextRequest) {
     scopedAgentNames = await getAgentNamesByQA(selfAgentName);
   }
 
-  // Push date + agent filters to DB
+  // Push all filterable dimensions to DB — avoids fetching thousands of rows then filtering in memory
   // When searching by chatId, skip date range — find the chat regardless of period
-  const dbOpts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; minUserMessages?: number } = {};
+  const dbOpts: {
+    dateFrom?: string; dateTo?: string;
+    agentName?: string; agentNames?: string[];
+    minUserMessages?: number;
+    disposition?: string; subDisposition?: string;
+    csat?: string; conversationType?: string;
+  } = {};
   if (!chatIdSearch) {
     if (dateFrom) dbOpts.dateFrom = dateFrom;
     if (dateTo)   dbOpts.dateTo   = dateTo;
+    if (tagFilter)     dbOpts.disposition     = tagFilter;
+    if (subTagFilter)  dbOpts.subDisposition  = subTagFilter;
+    if (csatFilter)    dbOpts.csat            = csatFilter;
+    if (typeFilter)    dbOpts.conversationType = typeFilter;
   }
   if (minUserMessages && minUserMessages > 0) dbOpts.minUserMessages = minUserMessages;
   if (scopedAgentNames) {
@@ -211,22 +221,10 @@ export async function GET(req: NextRequest) {
   }
   for (const k of Object.keys(dispositionSubMap)) dispositionSubMap[k].sort();
 
-  // Apply remaining in-memory filters (tag, csat, score range, type)
+  // In-memory filters: only for dimensions not pushed to DB (chatId search, IQS score range)
+  // Disposition, subDisposition, csat, conversationType, agent are all filtered in SQL
   let entries = [...allParsed];
-  const agentFilterLc = agentFilter.toLowerCase();
-  if (scopedAgentNames !== null) {
-    // scoped role (agent/tl/quality) — DB already filtered, but agentFilter may further narrow
-    if (agentFilter) {
-      entries = entries.filter(e => (e.agentName || '').toLowerCase() === agentFilterLc);
-    }
-  } else if (agentFilter) {
-    entries = entries.filter(e => (e.agentName || '').toLowerCase() === agentFilterLc);
-  }
   if (chatIdSearch) entries = entries.filter(e => String(e.chatId).includes(chatIdSearch.trim()));
-  if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
-  if (subTagFilter) entries = entries.filter(e => (e.subDisposition || '').toLowerCase() === subTagFilter.toLowerCase());
-  if (csatFilter)   entries = entries.filter(e => e.csat === csatFilter);
-  if (typeFilter)   entries = entries.filter(e => (e.conversationType || 'agent') === typeFilter);
   entries = entries.filter(e => e.iqs >= minScore && e.iqs <= maxScore);
 
   const totalFiltered = entries.length;

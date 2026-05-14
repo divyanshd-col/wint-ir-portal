@@ -218,18 +218,26 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMax?: number; includeUncertain?: boolean; minUserMessages?: number } = {},
+  opts: {
+    dateFrom?: string; dateTo?: string;
+    agentName?: string; agentNames?: string[];
+    iqsMax?: number; includeUncertain?: boolean;
+    minUserMessages?: number;
+    disposition?: string; subDisposition?: string;
+    csat?: string; conversationType?: string;
+  } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
 
+  // Use closed_at consistently — matches analytics and is semantically correct
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    conditions.push(`COALESCE(c.started_at, c.closed_at)::date >= $${params.length}`);
+    conditions.push(`c.closed_at::date >= $${params.length}`);
   }
   if (opts.dateTo) {
     params.push(opts.dateTo);
-    conditions.push(`COALESCE(c.started_at, c.closed_at)::date <= $${params.length}`);
+    conditions.push(`c.closed_at::date <= $${params.length}`);
   }
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
@@ -255,6 +263,26 @@ export async function getAllScoredConversations(
     params.push(opts.minUserMessages);
     conditions.push(`(SELECT COUNT(*) FROM jsonb_array_elements(c.transcript) AS m WHERE m->>'sender_type' = 'customer') >= $${params.length}`);
   }
+  if (opts.disposition) {
+    params.push(opts.disposition.toLowerCase());
+    conditions.push(`LOWER(c.tags->>'disposition') = $${params.length}`);
+  }
+  if (opts.subDisposition) {
+    params.push(opts.subDisposition.toLowerCase());
+    conditions.push(`LOWER(c.tags->>'sub_disposition') = $${params.length}`);
+  }
+  if (opts.csat) {
+    // csat stored as numeric csat_score: '5' → 5, '3' → 3, '1' → 1
+    const csatNum = parseInt(opts.csat, 10);
+    if (!isNaN(csatNum)) {
+      params.push(csatNum);
+      conditions.push(`c.csat_score = $${params.length}`);
+    }
+  }
+  if (opts.conversationType) {
+    params.push(opts.conversationType);
+    conditions.push(`c.conversation_type = $${params.length}`);
+  }
 
   const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const limitSql = limit > 0 ? `LIMIT ${limit}` : '';
@@ -262,7 +290,7 @@ export async function getAllScoredConversations(
   return query(`
     SELECT
       c.id                  AS "chatId",
-      c.started_at::date    AS "date",
+      c.closed_at::date     AS "date",
       c.conversation_type   AS "conversationType",
       c.frt_seconds         AS "frt",
       c.bot_to_team_seconds AS "botToTeamSecs",
@@ -280,7 +308,7 @@ export async function getAllScoredConversations(
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     ${where}
-    ORDER BY s.scored_at DESC
+    ORDER BY c.closed_at DESC NULLS LAST, s.scored_at DESC
     ${limitSql}
   `, params);
 }

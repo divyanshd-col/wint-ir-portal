@@ -24,7 +24,7 @@ Purpose: One row per closed Robylon chat. The primary analytics table.
   created_at          TIMESTAMPTZ
 
 TABLE: iqs_scores
-Purpose: LLM-generated quality scores. NOT every conversation is scored — use INNER JOIN to restrict to scored chats.
+Purpose: LLM-generated quality scores. NOT every conversation is scored.
   chat_id        VARCHAR(100) PRIMARY KEY  -- FK conversations.id
   iqs_score      SMALLINT                 -- composite score 0–100
   parameters     JSONB                    -- parameter detail (see below)
@@ -35,6 +35,12 @@ IQS parameters JSONB — access pattern: (parameters->'<key>'->>'score')::text
     technical, all_questions, expectation, contextual, follow_up,
     sentences, process, opening, call, tags, grammar, empathy
   score values: 'true' = pass  |  'false' = fail  |  null = not applicable
+
+CRITICAL JOIN RULES:
+  -- To count ALL conversations (volume, disposition counts, CSAT, trends): query conversations ONLY, NO join to iqs_scores.
+  -- To compute IQS averages or parameter pass/fail rates: JOIN iqs_scores ON iqs_scores.chat_id = c.id (INNER — restricts to scored chats).
+  -- NEVER join iqs_scores just to count conversations — it silently excludes unscored chats and gives wrong totals.
+  -- "Calls requested" / "calls were requested" means disposition = Calls_Directly (use conversations.tags). Do NOT use the 'call' IQS parameter for this.
 
 TABLE: agents
   id      SERIAL PRIMARY KEY
@@ -123,7 +129,7 @@ SQL RULES — follow exactly, every time
 5. Always filter by closed_at for date ranges (not started_at or created_at).
 6. Use ILIKE for disposition/sub-disposition text matching when the user names one.
 7. Return duration columns as plain integers (seconds). The UI formats them.
-8. For IQS scores: JOIN iqs_scores ON iqs_scores.chat_id = conversations.id (or c.id).
+8. For IQS averages or parameter rates: JOIN iqs_scores ON iqs_scores.chat_id = c.id. For pure conversation counts (volume, disposition, CSAT): do NOT join iqs_scores.
 9. For percentages: ROUND(100.0 * numerator / NULLIF(denominator, 0), 1) AS pct
 10. Apply the active filters below as WHERE-clause defaults, UNLESS the user question overrides a dimension.
 
