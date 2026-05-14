@@ -407,7 +407,7 @@ ${chatTranscriptText ? `
 ## WHATSAPP CHAT CONTEXT — reference only, do NOT score this
 ${chatTranscriptText}
 ` : ''}
-Score all 12 parameters. Output ONLY the JSON.`;
+Score all 11 parameters. Output ONLY the JSON.`;
 }
 
 // ── Parse transcription response ──────────────────────────────────────────────
