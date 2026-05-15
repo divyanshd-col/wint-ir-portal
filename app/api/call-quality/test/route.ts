@@ -13,6 +13,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   ENERGY_TONE_PROMPT,
@@ -132,6 +133,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } catch {}
   }
 
+  // ── Step 2d: KB chunks for TechnicalLegal scoring ───────────────────────
+  let kbContext = '';
+  const kbQuery = callDisposition;
+  if (kbQuery) {
+    try {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant  = retrieveRelevantChunks(allChunks, kbQuery, 5);
+      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+    } catch {}
+  }
+
   // ── Step 3: Text IQS scoring ─────────────────────────────────────────────
   const t2 = Date.now();
   const scoringPrompt = buildCallScoringPrompt(
@@ -142,6 +154,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     deadAirCount,
     callDisposition,
     '',
+    kbContext,
   );
 
   let scoringRaw: string;

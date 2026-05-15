@@ -313,8 +313,11 @@ export default function UnifiedScoringClient() {
             </div>
             <div className="flex flex-wrap gap-3 text-xs text-slate-500 shrink-0">
               {result.language && <span>🌐 {result.language}</span>}
-              <span>⚡ {result.interruptionCount}</span>
-              <span>⏸ {result.deadAirCount}</span>
+              {result.hasCallRecording && <span>⚡ {result.interruptionCount}</span>}
+              {result.hasCallRecording && <span>⏸ {result.deadAirCount}</span>}
+              {result.callRecordingCount > 1 && (
+                <span className="text-blue-500 font-medium">📞 {result.callRecordingCount} calls merged</span>
+              )}
               {result.callDisposition && <span className="text-slate-400">📞 {result.callDisposition}</span>}
             </div>
           </div>

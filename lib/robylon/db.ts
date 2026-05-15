@@ -380,6 +380,26 @@ export async function getCallRecordingByChatId(chatId: string): Promise<CallReco
   return rows[0] ?? null;
 }
 
+/**
+ * Find all call recordings for a contact within a time window.
+ * Used when Robylon creates separate ticket IDs for WhatsApp chat and voice call —
+ * we link them via shared contact_id + overlapping timestamps.
+ * Window is expanded by 1 hour on each side to handle clock skew.
+ */
+export async function getCallRecordingsByContactWindow(
+  contactId: number,
+  windowStart: string,
+  windowEnd: string,
+): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(`
+    SELECT * FROM call_recordings
+    WHERE contact_id = $1
+      AND called_at >= $2::timestamptz - INTERVAL '1 hour'
+      AND called_at <= $3::timestamptz + INTERVAL '1 hour'
+    ORDER BY called_at ASC
+  `, [contactId, windowStart, windowEnd]);
+}
+
 /** Find call recordings for a contact that have not yet been linked to a chat.
  *  Since one phone = one active chat at a time, all unlinked calls with
  *  called_at <= closedAt belong to this chat. */

@@ -19,7 +19,7 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { getConversation, getCallRecordingByChatId } from '@/lib/robylon/db';
+import { getConversation, getCallRecordingByChatId, getCallRecordingsByContactWindow } from '@/lib/robylon/db';
 import {
   CALL_DISPOSITION_PROMPT,
   CALL_IQS_SYSTEM_PROMPT,
@@ -119,23 +119,53 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     (chatConv?.tags as any)?.sub_disposition || '',
   ].filter(Boolean).join(' > ');
 
-  // ── Fetch call recording transcript from DB ───────────────────────────────
+  // ── Fetch call recording transcript(s) from DB ────────────────────────────
+  // Stage 1: direct chat_id match (call already linked to this WhatsApp ticket)
+  // Stage 2: contact + time window fallback (Robylon creates separate ticket IDs
+  //   for WhatsApp chat and voice call for the same phone number, so we match
+  //   via shared contact_id + overlapping called_at timestamps)
   let callSegments: CallSegment[] = [];
   let language = '';
   let interruptionCount = 0;
   let deadAirCount = 0;
   let callCalledAt: string | null = null;
   let hasCallRecording = false;
+  let callRecordingCount = 0;
+
+  function parseRecordingSegments(rec: any): CallSegment[] {
+    if (!rec.transcript) return [];
+    const t = typeof rec.transcript === 'string' ? JSON.parse(rec.transcript) : rec.transcript;
+    return Array.isArray(t.segments) ? t.segments : Array.isArray(t) ? t : [];
+  }
 
   try {
-    const rec = await getCallRecordingByChatId(chatId);
-    if (rec && rec.transcript) {
-      const t = typeof rec.transcript === 'string' ? JSON.parse(rec.transcript) : rec.transcript;
-      callSegments      = Array.isArray(t.segments) ? t.segments : Array.isArray(t) ? t : [];
-      language          = t.language || rec.language || '';
-      interruptionCount = rec.interruption_count ?? callSegments.filter((s: CallSegment) => s.type === 'interruption').length;
-      deadAirCount      = rec.dead_air_count ?? callSegments.filter((s: CallSegment) => s.type === 'dead_air').length;
-      callCalledAt      = rec.called_at ?? null;
+    // Stage 1: direct match
+    let recs: any[] = [];
+    const direct = await getCallRecordingByChatId(chatId);
+    if (direct) {
+      recs = [direct];
+    } else if (chatConv?.contact_id) {
+      // Stage 2: contact window fallback
+      const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+      const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
+      recs = await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd);
+    }
+
+    if (recs.length > 0) {
+      // Merge all recordings in chronological order
+      const allSegs: CallSegment[] = [];
+      for (const rec of recs) {
+        const segs = parseRecordingSegments(rec);
+        allSegs.push(...segs);
+        if (!language && (rec.language || (typeof rec.transcript === 'object' && rec.transcript?.language))) {
+          language = rec.language || rec.transcript?.language || '';
+        }
+        if (!callCalledAt && rec.called_at) callCalledAt = rec.called_at;
+      }
+      callSegments      = allSegs;
+      callRecordingCount = recs.length;
+      interruptionCount = callSegments.filter((s: CallSegment) => s.type === 'interruption').length;
+      deadAirCount      = callSegments.filter((s: CallSegment) => s.type === 'dead_air').length;
       hasCallRecording  = callSegments.length > 0;
     }
   } catch {}
@@ -235,6 +265,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     ok: true,
     chat_id: chatId,
     hasCallRecording,
+    callRecordingCount,
     chatDisposition,
     callDisposition,
     callSubDisposition,
