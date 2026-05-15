@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, Fragment } from 'react';
 import Link from 'next/link';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type DatePreset = 'today' | '7d' | '30d' | 'all' | 'custom';
+type DatePreset = 'today' | '7d' | '30d' | '90d' | 'all' | 'custom';
 type ViewTab    = 'tl' | 'qa';
 type MainTab    = 'metrics' | 'teams';
 
@@ -189,6 +189,7 @@ function getDateRange(preset: DatePreset, customFrom: string, customTo: string):
   if (preset === 'today') return { dateFrom: today, dateTo: today };
   if (preset === '7d')  return { dateFrom: new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10), dateTo: today };
   if (preset === '30d') return { dateFrom: new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10), dateTo: today };
+  if (preset === '90d') return { dateFrom: new Date(Date.now() - 90 * 86400000).toISOString().slice(0, 10), dateTo: today };
   if (preset === 'all') return { dateFrom: '', dateTo: '' };
   return { dateFrom: customFrom, dateTo: customTo };
 }
@@ -375,7 +376,7 @@ function TeamsView() {
                 {team.agents.map(a => (
                   <tr key={a.agent_id} className="border-b border-stone-50 last:border-0 hover:bg-stone-50/50 transition">
                     <td className="px-5 py-2.5 text-stone-700">{a.agent_name}</td>
-                    <td className="px-5 py-2.5 text-stone-500">{a.qa_name || <span className="italic text-stone-400">Unassigned</span>}</td>
+                    <td className="px-5 py-2.5 text-stone-500">{a.qa_name || <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium">QA lead vacant</span>}</td>
                     <td className="px-5 py-2.5">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${a.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
                         {a.status}
@@ -481,6 +482,7 @@ export default function AdminDashboard() {
     { id: 'today', label: 'Today' },
     { id: '7d', label: '7 days' },
     { id: '30d', label: '30 days' },
+    { id: '90d', label: '90 days' },
     { id: 'all', label: 'All time' },
     { id: 'custom', label: 'Custom' },
   ];

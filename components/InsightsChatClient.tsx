@@ -1063,7 +1063,8 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   dispositions.forEach(d => filterChips.push({ label: d, onRemove: () => setDispositions(prev => prev.filter(x => x !== d)) }));
   convTypes.forEach(t => filterChips.push({ label: t.charAt(0).toUpperCase() + t.slice(1), onRemove: () => setConvTypes(prev => prev.filter(x => x !== t)) }));
   if (!csatLabels.every(c => defaultCsat.includes(c)) || csatLabels.length !== defaultCsat.length) {
-    filterChips.push({ label: `CSAT: ${csatLabels.join(', ')}`, onRemove: () => setCsatLabels(defaultCsat) });
+    const csatDisplayMap: Record<string, string> = { good: 'Good', could_be_better: 'CBB', bad: 'Bad' };
+    filterChips.push({ label: `CSAT: ${csatLabels.map(c => csatDisplayMap[c] ?? c).join(', ')}`, onRemove: () => setCsatLabels(defaultCsat) });
   }
   if (minUserMsgs != null) {
     filterChips.push({ label: `>=${minUserMsgs} user msgs`, onRemove: () => setMinUserMsgs(null) });

@@ -868,18 +868,27 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                           })}
                         </div>
                         <div className="px-5 pb-5">
-                          <button
-                            onClick={() => submitForm(msg.id)}
-                            disabled={loading || msg.form.questions.some(q => {
+                          {(() => {
+                            const unanswered = msg.form.questions.filter(q => {
                               const ans = msg.form!.answers[q.id] ?? '';
                               return !ans.trim() || ans === '__other__';
-                            })}
-                            className="w-full bg-[#111827] hover:bg-[#1f2937] disabled:opacity-25 disabled:cursor-not-allowed text-white text-[13.5px] font-[600] py-2.5 rounded-xl transition-all"
-                          >
-                            {loading
-                              ? 'Processing…'
-                              : `Continue — ${msg.form.questions.filter(q => msg.form!.answers[q.id]?.trim()).length} / ${msg.form.questions.length} answered`}
-                          </button>
+                            }).length;
+                            return unanswered > 0 && !loading ? (
+                              <p className="text-center text-xs text-gray-400 py-1">
+                                {unanswered === msg.form.questions.length
+                                  ? 'Answer all questions to continue'
+                                  : `${unanswered} more question${unanswered > 1 ? 's' : ''} to answer`}
+                              </p>
+                            ) : (
+                              <button
+                                onClick={() => submitForm(msg.id)}
+                                disabled={loading}
+                                className="w-full bg-[#111827] hover:bg-[#1f2937] disabled:opacity-25 disabled:cursor-not-allowed text-white text-[13.5px] font-[600] py-2.5 rounded-xl transition-all"
+                              >
+                                {loading ? 'Processing…' : 'Continue'}
+                              </button>
+                            );
+                          })()}
                         </div>
                       </>
                     )}

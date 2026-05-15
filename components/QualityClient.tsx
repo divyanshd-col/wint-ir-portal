@@ -7,7 +7,13 @@ import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
 
-const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Mobile', 'CSAT', 'FRT', 'Handoff', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
+const ALL_LOG_COLS: readonly string[] = ['Disposition', 'Agent', 'IQS', 'CSAT', 'Date', 'Chat ID', 'Mobile', 'FRT', 'Handoff', 'Resolution', 'Closure', 'Fails', 'Sub-Disposition', 'Last Updated'];
+
+const PARAM_ABBR: Record<string, string> = {
+  Technical: 'Tech', AllQuestions: 'AllQ', Expectation: 'Exp', Contextual: 'Ctx',
+  FollowUp: 'F/Up', Sentences: 'Tone', Process: 'Proc', Opening: 'Open',
+  Call: 'Call', Grammar: 'Gram', Empathy: 'Emp',
+};
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -19,7 +25,7 @@ interface LogFilters {
   subDisposition: string;
   csat: string;
   type: string;
-  dateRange: 'today' | 'yesterday' | '1w' | 'custom';
+  dateRange: '7d' | '30d' | '90d' | 'custom';
   dateFrom: string;
   dateTo: string;
   chatId: string;
@@ -29,7 +35,7 @@ interface LogFilters {
 const DEFAULT_FILTERS: LogFilters = {
   agent: '', minScore: 0, maxScore: 100,
   disposition: '', subDisposition: '', csat: '', type: '',
-  dateRange: '1w', dateFrom: '', dateTo: '',
+  dateRange: '7d', dateFrom: '', dateTo: '',
   chatId: '', minUserMsgs: null,
 };
 
@@ -47,18 +53,13 @@ function buildParams(page: number, f: LogFilters): URLSearchParams {
   if (f.minUserMsgs && f.minUserMsgs > 0) p.set('minUserMsgs', String(f.minUserMsgs));
   // Skip date range when searching by chat ID — find the chat regardless of period
   if (!f.chatId) {
-    if (f.dateRange === 'today') {
-      const d = new Date().toISOString().slice(0, 10);
-      p.set('dateFrom', d); p.set('dateTo', d);
-    } else if (f.dateRange === 'yesterday') {
-      const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
-      p.set('dateFrom', d); p.set('dateTo', d);
-    } else if (f.dateRange === '1w') {
-      p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
-      p.set('dateTo', new Date().toISOString().slice(0, 10));
-    } else if (f.dateRange === 'custom') {
+    if (f.dateRange === 'custom') {
       if (f.dateFrom) p.set('dateFrom', f.dateFrom);
       if (f.dateTo)   p.set('dateTo', f.dateTo);
+    } else {
+      const days = f.dateRange === '7d' ? 6 : f.dateRange === '30d' ? 29 : 89;
+      p.set('dateFrom', new Date(Date.now() - days * 86400000).toISOString().slice(0, 10));
+      p.set('dateTo', new Date().toISOString().slice(0, 10));
     }
   }
   return p;
@@ -653,6 +654,9 @@ function ScoreDetail({ entry, onClose, onSave, userRole, userEmail }: {
         <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3.5 flex items-center gap-4 rounded-t-2xl">
           <IQSRing iqs={entry.iqs} size={44} />
           <div className="flex-1 min-w-0">
+            <p className="text-[10px] text-gray-400 mb-0.5">
+              Quality <span className="mx-0.5">›</span> {entry.agentName || 'Agent'} <span className="mx-0.5">›</span> {entry.chatId}
+            </p>
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-bold text-gray-900">{entry.agentName || 'Unknown Agent'}</p>
               {fails.length === 0
@@ -1159,7 +1163,7 @@ interface PendingReviewItem {
   reasoning?: Record<string, string>;
 }
 
-function PendingChatsTab({ userRole, userEmail, onOverride, onSaved }: { userRole?: string; userEmail?: string; onOverride?: (item: PendingReviewItem) => void; onSaved?: (cb: (chatId: string, updated: Partial<PendingReviewItem>) => void) => void }) {
+function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: { userRole?: string; userEmail?: string; onOverride?: (item: PendingReviewItem) => void; onSaved?: (cb: (chatId: string, updated: Partial<PendingReviewItem>) => void) => void; onToast?: (msg: string) => void }) {
   const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
@@ -1279,6 +1283,7 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved }: { userRol
           ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: reviewNotes[chatId] || '' } }
           : item
       ));
+      onToast?.('Chat marked as reviewed');
     } catch {}
     setReviewing(r => ({ ...r, [chatId]: false }));
   };
@@ -1437,12 +1442,12 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved }: { userRol
                       placeholder="Review note (optional)…" className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 mb-2" />
                     <div className="flex gap-2">
                       <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
-                        className="flex-1 px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
+                        className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
                         {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
                       </button>
                       {onOverride && (
                         <button onClick={() => onOverride(item)}
-                          className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition">
+                          className="flex-1 px-3 py-2 border border-emerald-600 text-emerald-700 text-xs font-bold rounded-xl hover:bg-emerald-50 transition">
                           Override Score
                         </button>
                       )}
@@ -1676,7 +1681,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Performance tab — independent period state (decoupled from Score Log)
-  const [perfPeriod, setPerfPeriod] = useState<'today'|'yesterday'|'1w'|'custom'>('1w');
+  const [perfPeriod, setPerfPeriod] = useState<'7d'|'30d'|'90d'|'custom'>('7d');
   const [perfDateFrom, setPerfDateFrom] = useState('');
   const [perfDateTo, setPerfDateTo] = useState('');
   const [showPerfPicker, setShowPerfPicker] = useState(false);
@@ -1778,7 +1783,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const activeFilterCount = useMemo(() => {
     let n = 0;
     if (appliedFilters.chatId) n++;
-    if (appliedFilters.dateRange !== '1w') n++;
+    if (appliedFilters.dateRange !== '7d') n++;
     if (appliedFilters.agent && appliedFilters.agent !== selfAgentName) n++;
     if (appliedFilters.csat) n++;
     if (appliedFilters.minScore > 0 || appliedFilters.maxScore < 100) n++;
@@ -1810,17 +1815,19 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   }, [agentStats, sortAgentCol, sortAgentDir]);
 
   // ── Performance data — independent of Score Log filters ────────────────────
-  const loadPerfData = useCallback(async (period: 'today'|'yesterday'|'1w'|'custom', customFrom = '', customTo = '') => {
+  const loadPerfData = useCallback(async (period: '7d'|'30d'|'90d'|'custom', customFrom = '', customTo = '') => {
     perfAbortRef.current?.abort();
     const controller = new AbortController();
     perfAbortRef.current = controller;
     const today     = new Date().toISOString().slice(0, 10);
     const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
     let dateFrom = '', dateTo = '';
-    if (period === 'today')     { dateFrom = today;      dateTo = today; }
-    else if (period === 'yesterday') { dateFrom = yesterday;  dateTo = yesterday; }
-    else if (period === '1w')   { dateFrom = new Date(Date.now() - 6*86400_000).toISOString().slice(0, 10); dateTo = today; }
-    else if (period === 'custom') { dateFrom = customFrom; dateTo = customTo; }
+    if (period === 'custom') { dateFrom = customFrom; dateTo = customTo; }
+    else {
+      const days = period === '7d' ? 6 : period === '30d' ? 29 : 89;
+      dateFrom = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+      dateTo = today;
+    }
     const params = new URLSearchParams({ page: '0' });
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo)   params.set('dateTo', dateTo);
@@ -1982,7 +1989,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // Auto-load on mount — Performance and Score Log load independently
   useEffect(() => {
-    loadPerfData('1w');
+    loadPerfData('7d');
     const startFilters = initialAgent
       ? { ...DEFAULT_FILTERS, agent: initialAgent }
       : DEFAULT_FILTERS;
@@ -2449,13 +2456,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* Performance tab — independent period picker */}
           {tab === 'performance' && (
             <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
-              {(['today', 'yesterday', '1w'] as const).map(r => (
+              {(['7d', '30d', '90d'] as const).map(r => (
                 <button key={r}
                   onClick={() => { setPerfPeriod(r); setShowPerfPicker(false); loadPerfData(r); }}
                   className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
                     perfPeriod === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}>
-                  {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                  {r === '7d' ? '7 days' : r === '30d' ? '30 days' : '90 days'}
                 </button>
               ))}
               {/* Custom date range */}
@@ -2793,6 +2800,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                                 </th>
                               );
                             })}
+                            <th className="w-8 px-3 py-3"></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2818,6 +2826,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                                     {atRiskPct}%
                                   </span>
                                 </td>
+                                <td className="px-3 py-3 text-right text-gray-400 text-sm">›</td>
                               </tr>
                             );
                           })}
@@ -2850,7 +2859,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Chats</th>
                               {PARAM_ORDER.map(p => (
                                 <th key={p} className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap" title={PARAM_NAMES[p]}>
-                                  {p === 'AllQuestions' ? 'All Q' : p === 'Expectation' ? 'Expect' : p === 'Contextual' ? 'Context' : p === 'FollowUp' ? 'Follow' : p === 'Sentences' ? 'Tone' : p === 'Technical' ? 'Tech' : p === 'Grammar' ? 'Grammar' : p}
+                                  {PARAM_ABBR[p] ?? p}
                                 </th>
                               ))}
                             </tr>
@@ -2904,13 +2913,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Date Range</p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {(['today', 'yesterday', '1w'] as const).map(r => (
+                      {(['7d', '30d', '90d'] as const).map(r => (
                         <button key={r}
                           onClick={() => setPendingFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' }))}
                           className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
                             pendingFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           }`}>
-                          {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                          {r === '7d' ? '7 days' : r === '30d' ? '30 days' : '90 days'}
                         </button>
                       ))}
                       <button
@@ -3119,6 +3128,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               </th>
                             );
                           })}
+                          <th className="w-8 px-3 py-3"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3209,6 +3219,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                                 if (col === 'Date') return <td key={col} className="px-3 py-2.5 text-gray-600">{(e.date || e.scoredAt || '').slice(0, 10)}</td>;
                                 return null;
                               })}
+                              <td className="px-3 py-2.5 text-right text-gray-400 text-sm">›</td>
                             </tr>
                           );
                         })}
@@ -3524,13 +3535,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                     <div>
                       <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Date</p>
                       <div className="flex items-center gap-1 flex-wrap">
-                        {(['today', 'yesterday', '1w'] as const).map(r => (
+                        {(['7d', '30d', '90d'] as const).map(r => (
                           <button key={r}
                             onClick={() => { setReportFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' })); setReportTotalFiltered(null); setShowReportPicker(false); }}
                             className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
                               reportFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                             }`}>
-                            {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                            {r === '7d' ? '7 days' : r === '30d' ? '30 days' : '90 days'}
                           </button>
                         ))}
                         <div className="relative">
@@ -3719,6 +3730,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                 reviewNote: item.qaStatus?.reviewNote,
               })}
               onSaved={cb => { pendingOnSavedRef.current = cb; }}
+              onToast={msg => { setToast(msg); setTimeout(() => setToast(null), 6000); }}
             />
           )}
 

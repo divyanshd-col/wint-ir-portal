@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import type { SavedConversation } from '@/lib/types';
+import TimeAgo from '@/components/TimeAgo';
 
 interface SidebarProps {
   username: string;
@@ -17,15 +18,6 @@ interface SidebarProps {
 
 const STORAGE_KEY = 'wint_sidebar_collapsed';
 
-function formatTimeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 export default function Sidebar({ username, isAdmin, role, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
   const canSeeQuality = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
@@ -36,6 +28,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
   const [conversations, setConversations] = useState<SavedConversation[]>([]);
   const pathname = usePathname();
   const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Restore collapsed preference
   useEffect(() => {
@@ -57,9 +50,10 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
 
   const handleMouseEnter = () => {
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
-    setHovered(true);
+    enterTimer.current = setTimeout(() => setHovered(true), 200);
   };
   const handleMouseLeave = () => {
+    if (enterTimer.current) clearTimeout(enterTimer.current);
     leaveTimer.current = setTimeout(() => setHovered(false), 120);
   };
 
@@ -152,7 +146,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           } label="CX Dashboard" active={pathname === '/cx'} expanded={isExpanded}
             onClick={() => setAndPersistCollapsed(true)} />
 
-          <div className={isExpanded ? 'pt-2' : 'pt-2 flex flex-col items-center'}>
+          <div className={isExpanded ? 'mt-3 pt-3 border-t border-white/10' : 'mt-2 pt-2 flex flex-col items-center border-t border-white/10'}>
             <button
               onClick={onNewChat}
               title={!isExpanded ? 'New Chat' : undefined}
@@ -175,7 +169,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
                       className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-white/5 transition group min-h-[44px]"
                     >
                       <p className="text-gray-300 text-sm truncate group-hover:text-white transition">{conv.title}</p>
-                      <p className="text-gray-500 text-xs mt-0.5">{formatTimeAgo(conv.timestamp)}</p>
+                      <p className="text-gray-500 text-xs mt-0.5"><TimeAgo ts={conv.timestamp} /></p>
                     </button>
                   ))}
                 </div>
@@ -239,7 +233,7 @@ function NavLink({ href, icon, label, active, expanded, onClick }: {
         expanded ? 'w-full px-3 min-h-[44px]' : 'w-10 h-10 justify-center'
       } ${
         active
-          ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full'
+          ? `${expanded ? 'bg-white/10' : 'bg-[#2d9e4f]/12'} text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full`
           : 'text-gray-400 hover:text-white hover:bg-white/5'
       }`}>
       {icon}
