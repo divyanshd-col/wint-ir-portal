@@ -112,6 +112,9 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     mobileNumber:    row.mobileNumber || undefined,
     ...(uncertainParameters && { uncertainParameters }),
     ...(reviewNote && { reviewNote }),
+    // "Edited by" indicator — populated from dedicated DB columns set by the override route
+    ...(row.reviewedBy  && { updatedBy: row.reviewedBy }),
+    ...(row.reviewedAt  && { updatedAt: new Date(row.reviewedAt).toISOString() }),
   } as IQSScoreEntry;
 }
 

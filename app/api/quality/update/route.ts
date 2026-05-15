@@ -60,6 +60,16 @@ export async function PATCH(req: NextRequest) {
       let params = rowExists ? (existing[0].parameters || {}) : {};
       if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
+      // Normalise existing params: migrate any legacy PascalCase keys to snake_case
+      // so we don't accumulate both formats after repeated overrides.
+      const normalised: Record<string, any> = {};
+      for (const [k, v] of Object.entries(params)) {
+        if (k.startsWith('__')) { normalised[k] = v; continue; }
+        const snakeKey = LEGACY_TO_DB[k] ?? k;
+        normalised[snakeKey] = v;
+      }
+      params = normalised;
+
       if (scores) {
         for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
           const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
@@ -83,15 +93,20 @@ export async function PATCH(req: NextRequest) {
 
       if (rowExists) {
         await query(
-          `UPDATE iqs_scores SET parameters = $1, iqs_score = $2 WHERE chat_id = $3`,
-          [JSON.stringify(params), newIqs, chatId]
+          `UPDATE iqs_scores
+           SET parameters = $1, iqs_score = $2,
+               reviewed_by = $4, reviewed_at = NOW(), review_note = $5
+           WHERE chat_id = $3`,
+          [JSON.stringify(params), newIqs, chatId, updatedBy, note || null]
         );
       } else {
         await query(
-          `INSERT INTO iqs_scores (chat_id, parameters, iqs_score, scored_at) VALUES ($1, $2, $3, NOW())`,
-          [chatId, JSON.stringify(params), newIqs]
+          `INSERT INTO iqs_scores (chat_id, parameters, iqs_score, scored_at, reviewed_by, reviewed_at, review_note)
+           VALUES ($1, $2, $3, NOW(), $4, NOW(), $5)`,
+          [chatId, JSON.stringify(params), newIqs, updatedBy, note || null]
         );
       }
+      console.log(`[quality/update] Saved override for ${chatId}: iqs=${newIqs}, by=${updatedBy}`);
     }
 
     // ── Update conversations (csat, tags, agent) ──────────────────────────────

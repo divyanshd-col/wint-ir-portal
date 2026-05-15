@@ -6,6 +6,20 @@ import { storeGetIQSFlags } from '@/lib/store';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 
+const DB_KEY_TO_LEGACY: Record<string, string> = {
+  technical:    'Technical',
+  all_questions:'AllQuestions',
+  expectation:  'Expectation',
+  contextual:   'Contextual',
+  follow_up:    'FollowUp',
+  sentences:    'Sentences',
+  process:      'Process',
+  opening:      'Opening',
+  call:         'Call',
+  grammar:      'Grammar',
+  empathy:      'Empathy',
+};
+
 function qualityAccess(role: string | undefined) {
   return !!role && ['admin', 'quality', 'tl'].includes(role);
 }
@@ -66,7 +80,7 @@ export async function GET(_req: NextRequest) {
         if (Array.isArray(val) && val.length > 0) uncertain = val;
         continue;
       }
-      const k = key.charAt(0).toUpperCase() + key.slice(1);
+      const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
       scores[k]    = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
       reasoning[k] = val?.reasoning || '';
     }
