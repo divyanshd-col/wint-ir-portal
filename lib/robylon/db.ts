@@ -303,7 +303,10 @@ export async function getAllScoredConversations(
       s.iqs_score           AS "iqs",
       s.parameters,
       s.model_version       AS "modelVersion",
-      s.scored_at           AS "scoredAt"
+      s.scored_at           AS "scoredAt",
+      s.reviewed_by         AS "reviewedBy",
+      s.reviewed_at         AS "reviewedAt",
+      s.review_note         AS "reviewNote"
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
