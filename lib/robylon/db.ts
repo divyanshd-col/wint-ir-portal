@@ -420,12 +420,14 @@ export async function insertCallRecording(data: {
   calledAt?: string | null;
   language?: string | null;
   transcript?: any;
+  status?: string;
 }): Promise<void> {
+  const status = data.status ?? (data.transcript ? 'transcribed' : 'pending_transcription');
   await query(`
     INSERT INTO call_recordings (
       id, chat_id, agent_id, contact_id, recording_url,
       duration_seconds, called_at, language, transcript, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transcribed')
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     ON CONFLICT (id) DO UPDATE SET
       chat_id          = COALESCE(EXCLUDED.chat_id, call_recordings.chat_id),
       agent_id         = COALESCE(EXCLUDED.agent_id, call_recordings.agent_id),
@@ -446,7 +448,19 @@ export async function insertCallRecording(data: {
     data.calledAt ?? null,
     data.language ?? null,
     data.transcript ? JSON.stringify(data.transcript) : null,
+    status,
   ]);
+}
+
+/** Return call recordings that need transcription (received but not yet processed). */
+export async function getCallsForTranscription(limit = 10): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(`
+    SELECT * FROM call_recordings
+    WHERE status = 'pending_transcription'
+      AND recording_url IS NOT NULL
+    ORDER BY created_at ASC
+    LIMIT $1
+  `, [limit]);
 }
 
 export async function updateCallRecordingMetrics(data: {

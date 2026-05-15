@@ -29,10 +29,8 @@ import {
 import type { TimedMessage } from '@/lib/quality';
 import {
   CALL_IQS_SYSTEM_PROMPT,
-  CALL_TRANSCRIPTION_PROMPT,
   buildCallScoringPrompt,
   parseCallScoringResponse,
-  parseTranscriptionResponse,
   segmentsToText,
 } from '@/lib/call-quality';
 import type { CallParamScore, CallSegment } from '@/lib/call-quality';
@@ -766,17 +764,6 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'scoring' });
 }
 
-// ── MIME type from URL ────────────────────────────────────────────────────────
-function mimeFromUrl(url: string): string {
-  const u = url.toLowerCase().split('?')[0];
-  if (u.endsWith('.mp3'))  return 'audio/mpeg';
-  if (u.endsWith('.wav'))  return 'audio/wav';
-  if (u.endsWith('.m4a'))  return 'audio/mp4';
-  if (u.endsWith('.ogg'))  return 'audio/ogg';
-  if (u.endsWith('.flac')) return 'audio/flac';
-  return 'audio/mpeg';
-}
-
 // ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
 async function handleCallComplete(body: any): Promise<NextResponse> {
   // In CC_VOICE_CALL_COMPLETE, body.chat_id is the CALL ID (Robylon's voice
@@ -794,79 +781,22 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
     return NextResponse.json({ ok: true, skipped: true, reason: 'no recording_url' });
   }
 
-  // Respond immediately — transcription is slow (10–30s), do it async
   const contactId = await upsertContact(phone);
 
-  // Store a placeholder row now so the call is tracked even if transcription fails
+  // Store placeholder — status 'pending_transcription' so the cron picks it up
   await insertCallRecording({
     id: callId,
-    chatId: null,         // linked at TICKET_CLOSED via phone number
-    agentId: null,        // agent name not available in this event
+    chatId: null,
+    agentId: null,
     contactId,
-    recordingUrl,         // S3 URL stored permanently for reference / re-transcription
+    recordingUrl,
     durationSeconds,
     calledAt,
     language: null,
-    transcript: [],
   });
 
-  // Fire-and-forget: fetch audio → Gemini transcription → update DB
-  (async () => {
-    try {
-      const config = await readConfig();
-      const geminiKeys = getIQSGeminiKeys(config);
-      if (!geminiKeys.length) {
-        console.error(`[webhook] No Gemini key — cannot transcribe call ${callId}`);
-        return;
-      }
-
-      // Fetch audio into memory (never written to disk)
-      let audioBase64 = '';
-      let mimeType = mimeFromUrl(recordingUrl);
-      const audioRes = await fetch(recordingUrl);
-      if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio`);
-      const ct = audioRes.headers.get('content-type')?.split(';')[0].trim() || '';
-      if (ct && ct.startsWith('audio/') && ct !== 'audio/octet-stream') mimeType = ct;
-      audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
-
-      // Gemini multimodal: audio → English segments (translates non-English)
-      const raw = await geminiGenerate(
-        geminiKeys,
-        'gemini-2.5-flash',
-        [{ role: 'user', parts: [
-          { inlineData: { mimeType, data: audioBase64 } },
-          { text: CALL_TRANSCRIPTION_PROMPT },
-        ]}],
-        {},
-        120_000,
-      );
-
-      const { language, segments } = parseTranscriptionResponse(raw);
-      const interruptionCount = segments.filter(s => s.type === 'interruption').length;
-      const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
-
-      // Update the placeholder row with the real transcript
-      await insertCallRecording({
-        id: callId,
-        chatId: null,
-        agentId: null,
-        contactId,
-        recordingUrl,
-        durationSeconds,
-        calledAt,
-        language,
-        transcript: segments,
-      });
-      await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
-
-      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
-    } catch (err: any) {
-      console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
-    }
-  })();
-
-  console.log(`[webhook] CC_VOICE_CALL_COMPLETE received call ${callId} — transcription started, phone=${phone}`);
-  return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'transcribing' });
+  console.log(`[webhook] CC_VOICE_CALL_COMPLETE queued call ${callId} for transcription, phone=${phone}`);
+  return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'pending_transcription' });
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
