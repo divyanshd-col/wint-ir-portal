@@ -236,7 +236,6 @@ type Stage = 'idle' | 'running' | 'done' | 'error';
 
 export default function UnifiedScoringClient() {
   const [chatId, setChatId]           = useState('');
-  const [recordingUrl, setRecordingUrl] = useState('');
   const [stage, setStage]             = useState<Stage>('idle');
   const [step, setStep]               = useState(0);
   const [error, setError]             = useState('');
@@ -244,30 +243,29 @@ export default function UnifiedScoringClient() {
   const [timelineView, setTimelineView] = useState<'merged' | 'call' | 'chat'>('merged');
 
   async function run() {
-    if (!chatId.trim() || !recordingUrl.trim()) return;
+    if (!chatId.trim()) return;
     setStage('running');
     setStep(1);
     setError('');
     setResult(null);
 
-    const t1 = setTimeout(() => setStep(2), 20_000);
-    const t2 = setTimeout(() => setStep(3), 50_000);
-    const t3 = setTimeout(() => setStep(4), 80_000);
+    const t1 = setTimeout(() => setStep(2), 8_000);
+    const t2 = setTimeout(() => setStep(3), 20_000);
 
     try {
       const res = await fetch('/api/call-quality/unified-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId.trim(), recording_url: recordingUrl.trim() }),
+        body: JSON.stringify({ chat_id: chatId.trim() }),
       });
-      [t1, t2, t3].forEach(clearTimeout);
+      [t1, t2].forEach(clearTimeout);
 
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || `Server error ${res.status}`);
       setResult(data);
       setStage('done');
     } catch (e: any) {
-      [t1, t2, t3].forEach(clearTimeout);
+      [t1, t2].forEach(clearTimeout);
       setError(e.message || 'Unknown error');
       setStage('error');
     }
@@ -278,7 +276,6 @@ export default function UnifiedScoringClient() {
     setStep(0);
     setResult(null);
     setChatId('');
-    setRecordingUrl('');
   }
 
   // ── Results view ────────────────────────────────────────────────────────────
@@ -306,6 +303,11 @@ export default function UnifiedScoringClient() {
             <IQSCircle iqs={callIqs} label="Call IQS" />
             <div className="flex-1 min-w-0 space-y-1">
               <p className="text-sm font-semibold text-slate-800">Unified Quality Score</p>
+              {!result.hasCallRecording && (
+                <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
+                  No call recording found for this chat — only chat was scored.
+                </p>
+              )}
               {result.chatSummary && <p className="text-xs text-slate-500"><span className="font-medium text-slate-600">Chat:</span> {result.chatSummary}</p>}
               {result.callSummary && <p className="text-xs text-slate-500"><span className="font-medium text-slate-600">Call:</span> {result.callSummary}</p>}
             </div>
@@ -319,7 +321,7 @@ export default function UnifiedScoringClient() {
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-4 text-xs text-slate-400">
             <span>Chat ID: <span className="font-mono text-slate-600">{result.chat_id}</span></span>
             <span className="ml-auto">
-              Transcribed {(result.transcriptionMs / 1000).toFixed(1)}s · Scored {(result.scoringMs / 1000).toFixed(1)}s · Total {(result.totalMs / 1000).toFixed(1)}s
+              Scored {(result.scoringMs / 1000).toFixed(1)}s · Total {(result.totalMs / 1000).toFixed(1)}s
             </span>
           </div>
         </div>
@@ -399,8 +401,8 @@ export default function UnifiedScoringClient() {
         <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-100 text-3xl mb-4">⚡</div>
         <h1 className="text-2xl font-bold text-slate-800">Unified Quality Score</h1>
         <p className="text-slate-500 mt-1.5 text-sm">
-          Score chat + call together in one run.<br />
-          Transcribes the call, retrieves KB chunks, and scores both in parallel.
+          Enter a Chat ID to score both the WhatsApp chat and any linked call recording.<br />
+          Transcripts are fetched from DB — no audio URL needed.
         </p>
       </div>
 
@@ -417,21 +419,7 @@ export default function UnifiedScoringClient() {
               value={chatId}
               onChange={e => setChatId(e.target.value)}
             />
-            <p className="text-xs text-slate-400 mt-1">WhatsApp conversation ID — fetches chat transcript from DB.</p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Call Recording URL <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="url"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 transition"
-              placeholder="https://…/recording.mp3"
-              value={recordingUrl}
-              onChange={e => setRecordingUrl(e.target.value)}
-            />
-            <p className="text-xs text-slate-400 mt-1">Direct URL to the call audio file (S3, Exotel, etc.).</p>
+            <p className="text-xs text-slate-400 mt-1">WhatsApp conversation ID — fetches chat transcript and any linked call recording from DB.</p>
           </div>
 
           {stage === 'error' && (
@@ -442,25 +430,24 @@ export default function UnifiedScoringClient() {
 
           <button
             onClick={run}
-            disabled={!chatId.trim() || !recordingUrl.trim()}
+            disabled={!chatId.trim()}
             className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
           >
             ⚡ Run Unified Scoring
           </button>
 
           <p className="text-xs text-slate-400 text-center">
-            Transcription + KB retrieval + dual scoring takes 60–120 seconds.
+            KB retrieval + dual scoring usually takes 30–60 seconds.
           </p>
         </div>
       )}
 
       {stage === 'running' && (
         <div className="space-y-3">
-          <ProgressStep n={1} label="Fetching chat transcript" sub="Loading WhatsApp conversation from database" done={step > 1} active={step === 1} />
-          <ProgressStep n={2} label="Transcribing call audio" sub="Fetching recording and running Gemini speech-to-text" done={step > 2} active={step === 2} />
-          <ProgressStep n={3} label="Retrieving KB chunks" sub="Finding relevant knowledge base sections for both transcripts" done={step > 3} active={step === 3} />
-          <ProgressStep n={4} label="Scoring chat + call" sub="Running IQS evaluation for both in parallel" done={false} active={step === 4} />
-          <p className="text-center text-xs text-slate-400 mt-4">This usually takes 60–120 seconds.</p>
+          <ProgressStep n={1} label="Fetching transcripts" sub="Loading chat + call recordings from database" done={step > 1} active={step === 1} />
+          <ProgressStep n={2} label="Retrieving KB chunks" sub="Finding relevant knowledge base sections for both transcripts" done={step > 2} active={step === 2} />
+          <ProgressStep n={3} label="Scoring chat + call" sub="Running IQS evaluation for both in parallel" done={false} active={step === 3} />
+          <p className="text-center text-xs text-slate-400 mt-4">This usually takes 30–60 seconds.</p>
         </div>
       )}
     </div>
