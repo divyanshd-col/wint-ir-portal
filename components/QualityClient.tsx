@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
+import DataState from '@/components/DataState';
 
 const ALL_LOG_COLS: readonly string[] = ['Disposition', 'Agent', 'IQS', 'CSAT', 'Date', 'Chat ID', 'Mobile', 'FRT', 'Handoff', 'Resolution', 'Closure', 'Fails', 'Sub-Disposition', 'Last Updated'];
 
@@ -685,6 +686,14 @@ function ScoreDetail({ entry, onClose, onSave, userRole, userEmail }: {
 
           {/* ── Left: params (editable for quality/admin, read-only otherwise) ── */}
           <div className="w-[42%] shrink-0 overflow-y-auto">
+            {entry.updatedBy && entry.updatedAt && (
+              <div className="mx-5 mt-4 mb-0 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2l2 2-9 9H3v-2L12 2z"/></svg>
+                Overridden by <span className="font-semibold">{entry.updatedBy.split('@')[0]}</span>
+                <span className="text-amber-400">·</span>
+                {new Date(entry.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+              </div>
+            )}
             {canEdit ? (
               <div className="px-5 py-4 space-y-4">
 
@@ -1166,6 +1175,8 @@ interface PendingReviewItem {
 function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: { userRole?: string; userEmail?: string; onOverride?: (item: PendingReviewItem) => void; onSaved?: (cb: (chatId: string, updated: Partial<PendingReviewItem>) => void) => void; onToast?: (msg: string) => void }) {
   const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
+  const [agentFilter, setAgentFilter] = useState('');
+  const [iqsBand, setIqsBand] = useState<'all' | 'critical' | 'low' | 'mid'>('all');
   const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
   const [items, setItems] = useState<PendingReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1295,18 +1306,27 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
   if (filter === 'challenged') filtered = filtered.filter(i => !!i.flag && i.flag.status === 'pending');
   else if (filter === 'uncertain') filtered = filtered.filter(i => !!(i.uncertainParameters && i.uncertainParameters.length > 0));
   if (chatIdSearch) filtered = filtered.filter(i => i.chatId.toLowerCase().includes(chatIdSearch.toLowerCase()));
+  if (agentFilter) filtered = filtered.filter(i => i.agentName === agentFilter);
+  if (iqsBand === 'critical') filtered = filtered.filter(i => i.iqs < 50);
+  else if (iqsBand === 'low')  filtered = filtered.filter(i => i.iqs >= 50 && i.iqs < 65);
+  else if (iqsBand === 'mid')  filtered = filtered.filter(i => i.iqs >= 65 && i.iqs <= 79);
   const pendingItems  = filtered.filter(i => !i.qaStatus).sort((a, b) => new Date(b.scoredAt).getTime() - new Date(a.scoredAt).getTime());
   const reviewedItems = filtered.filter(i => !!i.qaStatus).sort((a, b) => new Date(b.qaStatus!.reviewedAt).getTime() - new Date(a.qaStatus!.reviewedAt).getTime());
   const challengedCount = items.filter(i => i.flag?.status === 'pending').length;
   const uncertainCount  = items.filter(i => !!(i.uncertainParameters && i.uncertainParameters.length > 0) && !i.qaStatus).length;
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-48 text-gray-400 gap-2 text-sm">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-      Loading…
-    </div>
+  const isEmpty = !loading && !loadError && filtered.length === 0;
+
+  if (loading || loadError || isEmpty) return (
+    <DataState
+      loading={loading}
+      error={loadError}
+      empty={isEmpty}
+      emptyTitle="No items to review"
+      emptyBody="All chats have been reviewed or no chats match your current filters."
+      skeletonRows={6}
+    />
   );
-  if (loadError) return <p className="text-sm text-red-500 text-center py-12">{loadError}</p>;
 
   const renderItem = (item: PendingReviewItem) => {
     const isExpanded   = expandedId === item.chatId;
@@ -1541,6 +1561,7 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
   };
 
   const displayItems = section === 'pending' ? pendingItems : reviewedItems;
+  const agentOptions = Array.from(new Set(items.map(i => i.agentName).filter(Boolean))).sort();
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
@@ -1585,6 +1606,31 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
           placeholder="Filter by Chat ID…"
           className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
       </div>
+
+      {/* Q10: Agent + IQS band filter row */}
+      {(agentOptions.length > 0) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <select value={agentFilter} onChange={e => setAgentFilter(e.target.value)}
+            className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-600">
+            <option value="">All agents</option>
+            {agentOptions.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+          <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
+            {([['all', 'All IQS'], ['critical', '< 50'], ['low', '50–64'], ['mid', '65–79']] as const).map(([val, label]) => (
+              <button key={val} onClick={() => setIqsBand(val)}
+                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition ${iqsBand === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {(agentFilter || iqsBand !== 'all') && (
+            <button onClick={() => { setAgentFilter(''); setIqsBand('all'); }}
+              className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1 rounded-lg hover:bg-gray-100">
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Items */}
       {displayItems.length === 0 ? (
@@ -1687,6 +1733,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [showPerfPicker, setShowPerfPicker] = useState(false);
   const [perfTotal, setPerfTotal] = useState(0);
   const perfAbortRef = useRef<AbortController | null>(null);
+  const [prevSummary, setPrevSummary] = useState<SummaryMetrics | null>(null);
 
   // Agent analytics table sort
   const [sortAgentCol, setSortAgentCol] = useState<string>('avgIqs');
@@ -1697,6 +1744,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   // Reports tab — filter panel toggle
   const [showReportFilters, setShowReportFilters] = useState(false);
   const [showOnlyNeedsReview, setShowOnlyNeedsReview] = useState(false);
+
+  // Keyboard shortcuts cheatsheet
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Sidebar collapse state
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
@@ -1831,8 +1881,21 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     const params = new URLSearchParams({ page: '0' });
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo)   params.set('dateTo', dateTo);
+
+    // Prior period — same duration, shifted back by the same number of days
+    let prevParams: URLSearchParams | null = null;
+    if (period !== 'custom' && dateFrom && dateTo) {
+      const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
+      const priorTo   = new Date(new Date(dateFrom).getTime() - 86400_000).toISOString().slice(0, 10);
+      const priorFrom = new Date(new Date(dateFrom).getTime() - days * 86400_000).toISOString().slice(0, 10);
+      prevParams = new URLSearchParams({ page: '0', dateFrom: priorFrom, dateTo: priorTo, skipStats: '1' });
+    }
+
     try {
-      const resp = await fetch(`/api/quality/scores?${params}`, { signal: controller.signal });
+      const [resp, prevResp] = await Promise.all([
+        fetch(`/api/quality/scores?${params}`, { signal: controller.signal }),
+        prevParams ? fetch(`/api/quality/scores?${prevParams}`, { signal: controller.signal }) : Promise.resolve(null),
+      ]);
       if (controller.signal.aborted) return;
       const data = await resp.json();
       if (controller.signal.aborted || !resp.ok) return;
@@ -1841,6 +1904,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setWeeklyParamData(data.weeklyParamData || []);
       if (data.summary) setSummary(data.summary);
       setPerfTotal(data.total ?? 0);
+      if (prevResp?.ok) {
+        const prevData = await prevResp.json().catch(() => null);
+        if (prevData?.summary) setPrevSummary(prevData.summary);
+        else setPrevSummary(null);
+      } else {
+        setPrevSummary(null);
+      }
       setTotalStored(data.totalStored ?? 0);
       setAvailableAgents(data.availableAgents || []);
       setAvailableDispositions(data.availableDispositions || []);
@@ -2009,6 +2079,35 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // Reset agent timing page when data changes
   useEffect(() => { setAgentPage(0); }, [agentStats]);
+
+  // CR8: Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
+      if (isInput) return;
+
+      if (e.key === 'Escape') {
+        if (showShortcuts) { setShowShortcuts(false); return; }
+        if (detailEntry) { setDetailEntry(null); return; }
+      }
+      if (e.key === '?') {
+        setShowShortcuts(s => !s);
+        return;
+      }
+      if (detailEntry) {
+        const list = chatIdFilteredLogEntries;
+        const idx = list.findIndex(e => e.chatId === detailEntry.chatId);
+        if (e.key === 'j' || e.key === 'ArrowDown') {
+          if (idx < list.length - 1) setDetailEntry(list[idx + 1]);
+        } else if (e.key === 'k' || e.key === 'ArrowUp') {
+          if (idx > 0) setDetailEntry(list[idx - 1]);
+        }
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [detailEntry, showShortcuts, chatIdFilteredLogEntries]);
 
   const openEditModal = (entry: IQSScoreEntry) => {
     setEditEntry(entry);
@@ -2640,12 +2739,28 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                     const humanFrts = entries.filter(e => e.conversationType !== 'bot' && e.frt != null).map(e => e.frt as number);
                     const avgHumanFrt = humanFrts.length ? Math.round(humanFrts.reduce((s, n) => s + n, 0) / humanFrts.length) : null;
 
+                    // Q3: delta helper — higher is better unless lowerIsBetter
+                    const Delta = ({ curr, prev, lowerIsBetter = false, pct = false }: { curr: number | null; prev: number | null; lowerIsBetter?: boolean; pct?: boolean }) => {
+                      if (curr == null || prev == null || prev === 0) return null;
+                      const diff = curr - prev;
+                      if (Math.abs(diff) < 0.5) return null;
+                      const positive = lowerIsBetter ? diff < 0 : diff > 0;
+                      return (
+                        <span className={`text-[11px] font-semibold ${positive ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {diff > 0 ? '▲' : '▼'} {Math.abs(pct ? Math.round(diff) : Math.round(diff)).toLocaleString()}{pct ? '%' : ''}
+                        </span>
+                      );
+                    };
+
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         {/* Card 1 — No. of chats */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Chats</p>
-                          <p className="text-3xl font-bold text-gray-900">{total.toLocaleString()}</p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-3xl font-bold text-gray-900">{total.toLocaleString()}</p>
+                            <Delta curr={total} prev={prevSummary?.totalConvos ?? null} />
+                          </div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {botPct > 0 && (
                               <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
@@ -2667,15 +2782,21 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         {/* Card 2 — Resolution Time (all types) */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg Resolution</p>
-                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(summary?.avgResolution ?? null)}</p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-3xl font-bold text-gray-900">{fmtDuration(summary?.avgResolution ?? null)}</p>
+                            <Delta curr={summary?.avgResolution ?? null} prev={prevSummary?.avgResolution ?? null} lowerIsBetter />
+                          </div>
                           <p className="text-[11px] text-gray-400 mt-1">all conversations</p>
                         </div>
                         {/* Card 3 — CSAT combined */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">CSAT</p>
-                          <p className="text-3xl font-bold text-gray-900">
-                            {summary?.overallCsat != null ? `${summary.overallCsat}%` : '—'}
-                          </p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-3xl font-bold text-gray-900">
+                              {summary?.overallCsat != null ? `${summary.overallCsat}%` : '—'}
+                            </p>
+                            <Delta curr={summary?.overallCsat ?? null} prev={prevSummary?.overallCsat ?? null} pct />
+                          </div>
                           <p className="text-[11px] text-gray-400 mt-1">
                             {summary ? `${summary.good} good · ${summary.cbbBad} bad` : ''}
                           </p>
@@ -2683,7 +2804,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         {/* Card 4 — FRT for human-handled chats */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg FRT (Human)</p>
-                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(avgHumanFrt)}</p>
+                          <div className="flex items-baseline gap-2">
+                            <p className="text-3xl font-bold text-gray-900">{fmtDuration(avgHumanFrt)}</p>
+                            <Delta curr={avgHumanFrt} prev={prevSummary?.avgFrt ?? null} lowerIsBetter />
+                          </div>
                           <p className="text-[11px] text-gray-400 mt-1">first response time</p>
                         </div>
                       </div>
@@ -3743,6 +3867,33 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
         </div>
       </div>
+
+      {/* CR8: Keyboard shortcuts cheatsheet overlay */}
+      {showShortcuts && (
+        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <p className="text-sm font-bold text-gray-900">Keyboard Shortcuts</p>
+              <button onClick={() => setShowShortcuts(false)} className="text-gray-400 hover:text-gray-600 transition">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14"/></svg>
+              </button>
+            </div>
+            <div className="px-5 py-4 space-y-2.5">
+              {([
+                ['J / ↓', 'Next entry in Score Log'],
+                ['K / ↑', 'Previous entry in Score Log'],
+                ['Esc', 'Close modal / cheatsheet'],
+                ['?', 'Show this cheatsheet'],
+              ] as [string, string][]).map(([key, desc]) => (
+                <div key={key} className="flex items-center gap-3">
+                  <kbd className="shrink-0 font-mono text-[11px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded border border-gray-200 min-w-[52px] text-center">{key}</kbd>
+                  <span className="text-xs text-gray-600">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

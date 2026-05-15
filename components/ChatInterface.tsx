@@ -242,6 +242,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
   const [draftLoading, setDraftLoading] = useState<Record<string, boolean>>({});
   const [draftExpanded, setDraftExpanded] = useState<Record<string, boolean>>({});
   const [draftContext, setDraftContext] = useState<Record<string, string>>({});
+  const [editedDrafts, setEditedDrafts] = useState<Record<string, string>>({});
   // Fix 12 — step checkboxes
   const [checkedSteps, setCheckedSteps] = useState<Record<string, Set<number>>>({});
   const [attachedImage, setAttachedImage] = useState<{ base64: string; mimeType: string; previewUrl: string } | null>(null);
@@ -360,6 +361,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
       const { draft } = await res.json();
       if (draft) {
         setMessages(prev => prev.map(m => m.id === msgId ? { ...m, draft } : m));
+        setEditedDrafts(prev => ({ ...prev, [msgId]: draft }));
       }
     } catch {
       // silent failure — button reappears
@@ -969,7 +971,7 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                                 </button>
                                 <button
                                   onClick={() => {
-                                    navigator.clipboard.writeText(msg.draft!);
+                                    navigator.clipboard.writeText(editedDrafts[msg.id] ?? msg.draft!);
                                     setCopiedDraft(prev => ({ ...prev, [msg.id]: true }));
                                     setTimeout(() => setCopiedDraft(prev => ({ ...prev, [msg.id]: false })), 2000);
                                   }}
@@ -991,8 +993,12 @@ export default function ChatInterface({ username, historyEnabled = false, initia
                             </div>
                             {!collapsedPanels[`${msg.id}-draft`] && (
                               <div className="px-4 pb-3.5">
-                                <p className="text-[13.5px] leading-[1.7] text-blue-900 whitespace-pre-wrap">{msg.draft}</p>
-                              </div>
+                                <textarea
+                                  value={editedDrafts[msg.id] ?? msg.draft ?? ''}
+                                  onChange={e => setEditedDrafts(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                                  rows={Math.max(4, ((editedDrafts[msg.id] ?? msg.draft ?? '').match(/\n/g) || []).length + 2)}
+                                  className="w-full text-[13.5px] leading-[1.7] text-blue-900 whitespace-pre-wrap bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-blue-200 rounded-lg p-0"
+                                /></div>
                             )}
                           </div>
                         ) : draftExpanded[msg.id] ? (
