@@ -381,9 +381,34 @@ export async function getCallRecordingByChatId(chatId: string): Promise<CallReco
 }
 
 /**
+ * Find all call recordings that share the same contact as the given chat_id.
+ *
+ * This handles the case where Robylon creates separate ticket IDs for WhatsApp (e.g. 38007)
+ * and voice call (e.g. 38252) for the same phone number. The call recording will have
+ * chat_id=38252, but we need to find it when the user enters chat_id=38007.
+ *
+ * Strategy: join call_recordings → conversations (on call's chat_id) → match contact_id
+ * to the input chat's contact_id. Does NOT require call_recordings.contact_id to be set.
+ */
+export async function getCallRecordingsByConversationContact(
+  chatId: string,
+): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(`
+    SELECT cr.*
+    FROM call_recordings cr
+    JOIN conversations conv_call ON conv_call.id::text = cr.chat_id
+    WHERE conv_call.contact_id IS NOT NULL
+      AND conv_call.contact_id = (
+        SELECT contact_id FROM conversations WHERE id = $1
+      )
+      AND cr.chat_id != $1
+    ORDER BY cr.called_at ASC NULLS LAST, cr.created_at ASC
+  `, [chatId]);
+}
+
+/**
  * Find all call recordings for a contact within a time window.
- * Used when Robylon creates separate ticket IDs for WhatsApp chat and voice call —
- * we link them via shared contact_id + overlapping timestamps.
+ * Fallback when call_recordings.chat_id is NULL or not linked to any conversation row.
  * Window is expanded by 1 hour on each side to handle clock skew.
  */
 export async function getCallRecordingsByContactWindow(

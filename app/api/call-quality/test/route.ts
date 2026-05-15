@@ -134,8 +134,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── Step 2d: KB chunks for TechnicalLegal scoring ───────────────────────
+  // Fallback to first 400 chars of transcript when disposition is unknown
   let kbContext = '';
-  const kbQuery = callDisposition;
+  const kbQuery = callDisposition || callTranscriptText.slice(0, 400);
   if (kbQuery) {
     try {
       const allChunks = await fetchKnowledgeChunks();

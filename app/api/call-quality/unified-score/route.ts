@@ -19,7 +19,7 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { getConversation, getCallRecordingByChatId, getCallRecordingsByContactWindow } from '@/lib/robylon/db';
+import { getConversation, getCallRecordingByChatId, getCallRecordingsByConversationContact, getCallRecordingsByContactWindow } from '@/lib/robylon/db';
 import {
   CALL_DISPOSITION_PROMPT,
   CALL_IQS_SYSTEM_PROMPT,
@@ -120,10 +120,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   ].filter(Boolean).join(' > ');
 
   // ── Fetch call recording transcript(s) from DB ────────────────────────────
-  // Stage 1: direct chat_id match (call already linked to this WhatsApp ticket)
-  // Stage 2: contact + time window fallback (Robylon creates separate ticket IDs
-  //   for WhatsApp chat and voice call for the same phone number, so we match
-  //   via shared contact_id + overlapping called_at timestamps)
+  // Three-stage lookup to handle Robylon's separate ticket IDs per channel:
+  //   Stage 1: chat_id direct match (recording already linked to this ticket)
+  //   Stage 2: sibling-conversation join — find recordings whose chat_id points to
+  //            a conversation sharing the same contact_id as this chat (e.g. call
+  //            ticket 38252 and WhatsApp ticket 38007 both belong to same contact)
+  //   Stage 3: contact_id + time window (fallback if call_recordings.chat_id is NULL)
   let callSegments: CallSegment[] = [];
   let language = '';
   let interruptionCount = 0;
@@ -139,34 +141,42 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    // Stage 1: direct match
     let recs: any[] = [];
+
+    // Stage 1: direct match
     const direct = await getCallRecordingByChatId(chatId);
     if (direct) {
       recs = [direct];
-    } else if (chatConv?.contact_id) {
-      // Stage 2: contact window fallback
+    }
+
+    // Stage 2: sibling-conversation join (handles separate Robylon ticket per channel)
+    if (!recs.length) {
+      try { recs = await getCallRecordingsByConversationContact(chatId); } catch {}
+    }
+
+    // Stage 3: contact_id + time window (handles chat_id=NULL recordings)
+    if (!recs.length && chatConv?.contact_id) {
       const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
       const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
-      recs = await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd);
+      try { recs = await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd); } catch {}
     }
 
     if (recs.length > 0) {
-      // Merge all recordings in chronological order
       const allSegs: CallSegment[] = [];
       for (const rec of recs) {
         const segs = parseRecordingSegments(rec);
         allSegs.push(...segs);
-        if (!language && (rec.language || (typeof rec.transcript === 'object' && rec.transcript?.language))) {
-          language = rec.language || rec.transcript?.language || '';
+        if (!language) {
+          const t = typeof rec.transcript === 'object' ? rec.transcript : null;
+          language = rec.language || t?.language || '';
         }
         if (!callCalledAt && rec.called_at) callCalledAt = rec.called_at;
       }
-      callSegments      = allSegs;
+      callSegments       = allSegs;
       callRecordingCount = recs.length;
-      interruptionCount = callSegments.filter((s: CallSegment) => s.type === 'interruption').length;
-      deadAirCount      = callSegments.filter((s: CallSegment) => s.type === 'dead_air').length;
-      hasCallRecording  = callSegments.length > 0;
+      interruptionCount  = callSegments.filter((s: CallSegment) => s.type === 'interruption').length;
+      deadAirCount       = callSegments.filter((s: CallSegment) => s.type === 'dead_air').length;
+      hasCallRecording   = callSegments.length > 0;
     }
   } catch {}
 
@@ -189,8 +199,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // ── KB chunks (shared for both scorers) ──────────────────────────────────
+  // Use the best available signal: call disposition > chat disposition > first 400 chars of call transcript
   let kbContext = '';
-  const kbQuery = callDisposition || chatDisposition;
+  const kbQuery = callDisposition || chatDisposition || callTranscriptText.slice(0, 400);
   if (kbQuery) {
     try {
       const allChunks = await fetchKnowledgeChunks();
