@@ -104,13 +104,18 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
   const { source, data } = item;
 
   if (source === 'call-boundary') {
+    const isEnd = data.kind === 'end';
     return (
       <div className="flex items-center gap-3 my-3">
-        <div className="flex-1 h-px bg-amber-200" />
-        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full whitespace-nowrap">
-          📞 Call {data.callIndex} started
+        <div className={`flex-1 h-px ${isEnd ? 'bg-slate-200' : 'bg-amber-200'}`} />
+        <span className={`text-[10px] font-bold px-3 py-1 rounded-full border whitespace-nowrap ${
+          isEnd
+            ? 'text-slate-500 bg-slate-50 border-slate-200'
+            : 'text-amber-700 bg-amber-50 border-amber-200'
+        }`}>
+          {data.label}
         </span>
-        <div className="flex-1 h-px bg-amber-200" />
+        <div className={`flex-1 h-px ${isEnd ? 'bg-slate-200' : 'bg-amber-200'}`} />
       </div>
     );
   }
@@ -148,15 +153,15 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
         </div>
       );
     }
-    if (data.type === 'poor_listening') {
+    if (data.type === 'poor_listening' || data.type === 'active_listening') {
       return (
         <div className="flex gap-3 items-start">
           <div className="w-12 shrink-0 text-right">
             <span className="text-[9px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">CALL</span>
           </div>
-          <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded bg-orange-50 border border-orange-100">
-            <span>👂</span>
-            <span className="text-xs text-orange-700">Poor listening{data.phrase ? `: "${data.phrase}"` : ''}</span>
+          <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded bg-orange-50 border border-orange-200">
+            <span>🔁</span>
+            <span className="text-xs text-orange-700 font-medium">Active Listening flag{data.phrase ? ` — "${data.phrase}"` : ''}</span>
           </div>
         </div>
       );

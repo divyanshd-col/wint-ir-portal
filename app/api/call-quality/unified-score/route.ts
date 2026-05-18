@@ -68,20 +68,22 @@ function buildMergedTimeline(
   // Spread each recording's segments proportionally across its actual duration so
   // post-call chat messages (timestamped after call end) sort correctly.
   // Insert a boundary marker before each call after the first.
+  const totalCalls = recordingMeta.length;
   let segOffset = 0;
-  for (let recIdx = 0; recIdx < recordingMeta.length; recIdx++) {
+  for (let recIdx = 0; recIdx < totalCalls; recIdx++) {
     const rec        = recordingMeta[recIdx];
     const callBase   = rec.calledAt ? new Date(rec.calledAt).getTime() : (chatBase || Date.now());
     const durationMs = (rec.durationSeconds ?? 120) * 1000;
+    const callEnd    = callBase + durationMs;
     const count      = rec.segmentCount;
+    const callLabel  = totalCalls > 1 ? `Call ${recIdx + 1}` : 'Call';
 
-    if (recIdx > 0) {
-      items.push({
-        source: 'call-boundary',
-        sortKey: callBase - 1,
-        data: { callIndex: recIdx + 1, calledAt: rec.calledAt },
-      });
-    }
+    // Start marker — visible in merged timeline so it's clear where chat ends and call begins
+    items.push({
+      source: 'call-boundary',
+      sortKey: callBase - 1,
+      data: { label: `📞 ${callLabel} started`, calledAt: rec.calledAt, kind: 'start' },
+    });
 
     for (let i = 0; i < count; i++) {
       const seg = callSegments[segOffset + i];
@@ -90,6 +92,13 @@ function buildMergedTimeline(
       items.push({ source: 'call', sortKey: callBase + fraction * durationMs, data: seg });
     }
     segOffset += count;
+
+    // End marker so post-call chat clearly appears after the call
+    items.push({
+      source: 'call-boundary',
+      sortKey: callEnd + 1,
+      data: { label: `📞 ${callLabel} ended`, calledAt: rec.calledAt, kind: 'end' },
+    });
   }
 
   items.sort((a, b) => a.sortKey - b.sortKey);

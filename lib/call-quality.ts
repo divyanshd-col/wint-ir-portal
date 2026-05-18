@@ -62,7 +62,7 @@ export interface PoorListeningSegment {
 }
 
 export interface CallSegment {
-  type: 'speech' | 'interruption' | 'dead_air' | 'poor_listening';
+  type: 'speech' | 'interruption' | 'dead_air' | 'poor_listening' | 'active_listening';
   // speech
   speaker?: string;
   text?: string;
@@ -174,7 +174,9 @@ DECISION PROCEDURE:
 4. A short "Hello?" or "Haan?" with no introduction at the start = INVESTOR.
 
 Pay close attention to names — IR executives introduce themselves by name (e.g. "This is Priya from Wint Wealth").
-Transcribe that name exactly as spoken. Similarly transcribe bond names, fund names, and product names exactly as spoken.
+Transcribe that name EXACTLY as heard. Similarly transcribe bond names, fund names, and product names exactly as spoken.
+CRITICAL: NEVER guess, infer, or hallucinate any proper noun (person names, bond names, company names, product names).
+If a name is unclear, write it phonetically as best you can, or write [unclear]. Do NOT substitute a different name.
 
 ══════════════════════════════════════════
 TRANSCRIPTION RULES
@@ -221,12 +223,30 @@ Example: {"type":"dead_air","duration":"~4 seconds","resumed_by":"INVESTOR"}
 Only flag dead air that is noticeably long (2+ seconds). Ignore normal conversational pauses under 2 seconds.
 
 ══════════════════════════════════════════
+ACTIVE LISTENING DETECTION
+══════════════════════════════════════════
+Listen for any moment where the IR EXECUTIVE indicates they could not hear or understand the investor.
+This includes phrases like (in any language):
+- "I cannot hear you" / "I can't hear you" / "Hello? I can't hear"
+- "Can you please repeat?" / "Could you please repeat that?" / "Please come again"
+- "I'm sorry, I didn't understand" / "I didn't catch that" / "I didn't get that"
+- "Pardon?" / "Sorry, what did you say?" / "Can you come again?"
+- Equivalent phrases in Hindi, Telugu, Tamil, Kannada, Malayalam, etc.
+
+When detected, insert an active_listening flag IMMEDIATELY AFTER the IR EXECUTIVE speech segment where this phrase appears:
+{"type":"active_listening","phrase":"[exact phrase spoken, translated to English]"}
+
+Example: IR says "Sorry sir, I could not hear you, could you please repeat?" then insert:
+{"type":"active_listening","phrase":"Sorry sir, I could not hear you, could you please repeat?"}
+
+══════════════════════════════════════════
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
 Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false}
 Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
 Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
+Active listening flags use: {"type":"active_listening","phrase":"[exact phrase in English]"}
 
 Example output (mixed Telugu + English call):
 {"language":"Telugu + English","segments":[
