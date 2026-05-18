@@ -115,7 +115,9 @@ export function segmentsToText(segments: CallSegment[]): string {
   for (const seg of segments) {
     if (seg.type === 'speech') {
       speechIdx++;
-      lines.push(`[${speechIdx}] ${seg.speaker}: ${seg.text}${seg.translated ? ' [translated]' : ''}`);
+      // Use English translation for LLM scoring when available; fall back to original text
+      const content = seg.translation || seg.text || '';
+      lines.push(`[${speechIdx}] ${seg.speaker}: ${content}${seg.translated ? ' [translated]' : ''}`);
     } else if (seg.type === 'interruption') {
       lines.push(`[INTERRUPTION: ${seg.interrupted_speaker} cut off by ${seg.interrupted_by} after ${seg.words_spoken ?? '?'} words]`);
     } else if (seg.type === 'dead_air') {
@@ -178,9 +180,12 @@ TRANSCRIPTION RULES
 - Each segment = one complete speaker turn.
 - Transcribe every word spoken — do not skip, summarize, or paraphrase anything.
 - During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.
-- Translate ALL non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.) to natural fluent English. Put the English translation in the "text" field directly — do NOT add a separate "translation" field.
-- Keep filler sounds as-is (uh, um, haan, theek hai).
-- Mark translated:true for any segment with translated content.
+- For non-English speech (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.):
+  • "text" field: verbatim transcription in the ORIGINAL language (exactly what was spoken)
+  • "translation" field: natural, fluent English translation of what was said
+  • "translated": true
+- For English speech: "text" field only, no "translation" field, "translated": false
+- Keep filler sounds as-is in "text" (uh, um, haan, theek hai). Translate their meaning in "translation" if non-English.
 - Report detected languages in the "language" field.
 
 ══════════════════════════════════════════
@@ -218,18 +223,20 @@ Only flag dead air that is noticeably long (2+ seconds). Ignore normal conversat
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
-Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[TEXT]","translated":false}
-Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
-Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
 
-Example output:
-{"language":"English","segments":[
+English speech segment:   {"type":"speech","speaker":"[NAME]","text":"[TEXT]","translated":false}
+Non-English speech segment: {"type":"speech","speaker":"[NAME]","text":"[ORIGINAL LANGUAGE TEXT]","translation":"[ENGLISH TRANSLATION]","translated":true}
+Interruption flag:  {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
+Dead air flag:      {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
+
+Example output (mixed Hindi + English call):
+{"language":"Hindi + English","segments":[
   {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false},
   {"type":"dead_air","duration":"~2 seconds","resumed_by":"IR EXECUTIVE"},
   {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"Yes tell me.","translated":false},
+  {"type":"speech","speaker":"INVESTOR","text":"जी सर, हां बोलिए।","translation":"Yes sir, please go ahead.","translated":true},
   {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":5},
-  {"type":"speech","speaker":"INVESTOR","text":"Sorry, what was the maturity date again?","translated":false}
+  {"type":"speech","speaker":"INVESTOR","text":"वो bond कब mature होगा?","translation":"When will that bond mature?","translated":true}
 ]}`;
 
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────

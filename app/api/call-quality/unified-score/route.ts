@@ -19,7 +19,7 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { getConversation, getCallRecordingByChatId, getCallRecordingsByConversationContact, getCallRecordingsByContactWindow } from '@/lib/robylon/db';
+import { getConversation, getAllCallRecordingsByChatId, getCallRecordingsByConversationContact, getCallRecordingsByContactWindow } from '@/lib/robylon/db';
 import {
   CALL_DISPOSITION_PROMPT,
   CALL_IQS_SYSTEM_PROMPT,
@@ -141,39 +141,52 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    let recs: any[] = [];
+    // Run ALL three stages and merge results, deduplicating by recording ID.
+    // This handles chats with multiple calls (e.g. chat 51462 → calls 52883 + 52885).
+    const seenIds = new Set<string>();
+    const allRecs: any[] = [];
 
-    // Stage 1: direct match
-    const direct = await getCallRecordingByChatId(chatId);
-    if (direct) {
-      recs = [direct];
+    function addRecs(rows: any[]) {
+      for (const r of rows) {
+        if (r?.id && !seenIds.has(String(r.id))) {
+          seenIds.add(String(r.id));
+          allRecs.push(r);
+        }
+      }
     }
 
-    // Stage 2: sibling-conversation join (handles separate Robylon ticket per channel)
-    if (!recs.length) {
-      try { recs = await getCallRecordingsByConversationContact(chatId); } catch {}
-    }
+    // Stage 1: all recordings directly linked to this chat_id
+    try { addRecs(await getAllCallRecordingsByChatId(chatId)); } catch {}
 
-    // Stage 3: contact_id + time window (handles chat_id=NULL recordings)
-    if (!recs.length && chatConv?.contact_id) {
+    // Stage 2: sibling-conversation join (separate Robylon ticket per channel)
+    try { addRecs(await getCallRecordingsByConversationContact(chatId)); } catch {}
+
+    // Stage 3: contact_id + time window (chat_id=NULL recordings)
+    if (chatConv?.contact_id) {
       const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
       const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
-      try { recs = await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd); } catch {}
+      try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd)); } catch {}
     }
 
-    if (recs.length > 0) {
-      const allSegs: CallSegment[] = [];
-      for (const rec of recs) {
-        const segs = parseRecordingSegments(rec);
-        allSegs.push(...segs);
+    // Sort by called_at so segments are in chronological order across multiple calls
+    allRecs.sort((a, b) => {
+      if (!a.called_at) return 1;
+      if (!b.called_at) return -1;
+      return new Date(a.called_at).getTime() - new Date(b.called_at).getTime();
+    });
+
+    if (allRecs.length > 0) {
+      const mergedSegs: CallSegment[] = [];
+      for (const rec of allRecs) {
+        mergedSegs.push(...parseRecordingSegments(rec));
         if (!language) {
           const t = typeof rec.transcript === 'object' ? rec.transcript : null;
           language = rec.language || t?.language || '';
         }
         if (!callCalledAt && rec.called_at) callCalledAt = rec.called_at;
       }
-      callSegments       = allSegs;
-      callRecordingCount = recs.length;
+      callSegments       = mergedSegs;
+      callRecordingCount = allRecs.length;
       interruptionCount  = callSegments.filter((s: CallSegment) => s.type === 'interruption').length;
       deadAirCount       = callSegments.filter((s: CallSegment) => s.type === 'dead_air').length;
       hasCallRecording   = callSegments.length > 0;

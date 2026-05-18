@@ -371,13 +371,21 @@ export async function updateCallIQSScore(data: {
   `, [data.callIqsScore, JSON.stringify(data.callParameters), data.callModelVersion, data.chatId]);
 }
 
-/** Get call recording by the linked chat_id. */
+/** Get the most recent call recording directly linked to a chat_id. */
 export async function getCallRecordingByChatId(chatId: string): Promise<CallRecordingRow | null> {
   const rows = await query<CallRecordingRow>(
-    `SELECT * FROM call_recordings WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    `SELECT * FROM call_recordings WHERE chat_id = $1 ORDER BY called_at ASC NULLS LAST`,
     [chatId],
   );
   return rows[0] ?? null;
+}
+
+/** Get ALL call recordings directly linked to a chat_id (handles multiple calls per chat). */
+export async function getAllCallRecordingsByChatId(chatId: string): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(
+    `SELECT * FROM call_recordings WHERE chat_id = $1 ORDER BY called_at ASC NULLS LAST`,
+    [chatId],
+  );
 }
 
 /**
