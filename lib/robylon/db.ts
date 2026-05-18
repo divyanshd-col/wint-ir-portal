@@ -558,3 +558,69 @@ export async function getAllScoredCalls(opts: {
 
   return { rows, total };
 }
+
+// ── Call disposition + chunking ───────────────────────────────────────────────
+
+/** Store AI-classified disposition / sub-disposition on a call recording. */
+export async function updateCallDisposition(
+  callId: string,
+  disposition: string,
+  subDisposition: string,
+): Promise<void> {
+  await query(
+    `UPDATE call_recordings
+     SET call_disposition = $1, call_sub_disposition = $2, updated_at = NOW()
+     WHERE id = $3`,
+    [disposition, subDisposition, callId],
+  );
+}
+
+export interface CallTranscriptChunk {
+  callId: string;
+  chatId?: string | null;
+  contactId?: number | null;
+  agentId?: number | null;
+  calledAt?: string | null;
+  topic: string;
+  summary: string;
+  content: string;
+  chunkIndex: number;
+}
+
+/** Batch-insert topic chunks extracted from a call transcript. */
+export async function insertCallTranscriptChunks(chunks: CallTranscriptChunk[]): Promise<void> {
+  for (const c of chunks) {
+    await query(
+      `INSERT INTO call_transcript_chunks
+         (call_id, chat_id, contact_id, agent_id, called_at, topic, summary, content, chunk_index)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [c.callId, c.chatId ?? null, c.contactId ?? null, c.agentId ?? null,
+       c.calledAt ?? null, c.topic, c.summary, c.content, c.chunkIndex],
+    );
+  }
+}
+
+/** Retrieve the N most recent chunks for a contact (or globally) for RAG retrieval. */
+export async function getRelevantCallChunks(opts: {
+  contactId?: number;
+  limit?: number;
+}): Promise<Array<{ topic: string; summary: string; content: string; called_at: string | null; call_id: string }>> {
+  const limit = opts.limit ?? 5;
+  if (opts.contactId) {
+    return query(
+      `SELECT topic, summary, content, called_at, call_id
+       FROM call_transcript_chunks
+       WHERE contact_id = $1
+       ORDER BY called_at DESC NULLS LAST
+       LIMIT $2`,
+      [opts.contactId, limit],
+    );
+  }
+  return query(
+    `SELECT topic, summary, content, called_at, call_id
+     FROM call_transcript_chunks
+     ORDER BY called_at DESC NULLS LAST
+     LIMIT $1`,
+    [limit],
+  );
+}

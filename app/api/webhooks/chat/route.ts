@@ -30,9 +30,13 @@ import type { TimedMessage } from '@/lib/quality';
 import {
   CALL_IQS_SYSTEM_PROMPT,
   CALL_TRANSCRIPTION_PROMPT,
+  CALL_DISPOSITION_CLASSIFY_PROMPT,
+  CALL_CHUNK_PROMPT,
   buildCallScoringPrompt,
   parseCallScoringResponse,
   parseTranscriptionResponse,
+  parseCallDispositionClassified,
+  parseCallChunks,
   insertPoorListeningFlags,
   segmentsToText,
 } from '@/lib/call-quality';
@@ -53,6 +57,8 @@ import {
   updateCallRecordingStatus,
   insertCallRecording,
   updateCallRecordingMetrics,
+  updateCallDisposition,
+  insertCallTranscriptChunks,
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
@@ -830,6 +836,65 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
 
       console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
+
+      // ── Step 4: Classify disposition (constrained to official 14-category list) ──
+      const callTranscriptText = segmentsToText(segments);
+      let disposition = '';
+      let subDisposition = '';
+      if (callTranscriptText) {
+        try {
+          const rawDisp = await geminiGenerate(
+            geminiKeys,
+            'gemini-2.5-flash',
+            [{ role: 'user', parts: [{ text: CALL_DISPOSITION_CLASSIFY_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
+            { responseMimeType: 'application/json' },
+            30_000,
+          );
+          const classified = parseCallDispositionClassified(rawDisp);
+          disposition    = classified.disposition;
+          subDisposition = classified.subDisposition;
+        } catch (err: any) {
+          console.error(`[webhook] Disposition classify failed for call ${callId}:`, err.message);
+        }
+
+        // ── Step 5: Store disposition ───────────────────────────────────────────
+        if (disposition) {
+          try {
+            await updateCallDisposition(callId, disposition, subDisposition);
+            console.log(`[webhook] Call ${callId} classified — ${disposition} > ${subDisposition}`);
+          } catch (err: any) {
+            console.error(`[webhook] Failed to store disposition for call ${callId}:`, err.message);
+          }
+        }
+
+        // ── Step 6: Chunk transcript into topics + store for RAG retrieval ──────
+        try {
+          const rawChunks = await geminiGenerate(
+            geminiKeys,
+            'gemini-2.5-flash',
+            [{ role: 'user', parts: [{ text: CALL_CHUNK_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
+            { responseMimeType: 'application/json' },
+            30_000,
+          );
+          const chunks = parseCallChunks(rawChunks);
+          if (chunks.length > 0) {
+            await insertCallTranscriptChunks(chunks.map((c, i) => ({
+              callId,
+              chatId: null,
+              contactId: contactId ?? null,
+              agentId: null,
+              calledAt,
+              topic: c.topic,
+              summary: c.summary,
+              content: c.content,
+              chunkIndex: i,
+            })));
+            console.log(`[webhook] Call ${callId} chunked into ${chunks.length} topic chunk(s) for RAG`);
+          }
+        } catch (err: any) {
+          console.error(`[webhook] Chunking failed for call ${callId}:`, err.message);
+        }
+      }
     } catch (err: any) {
       console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
     }

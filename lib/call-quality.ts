@@ -254,11 +254,148 @@ ENERGY LEVEL, ENTHUSIASM & TONE MODULATION
 Return ONLY this JSON:
 {"score":"Yes|No|NA","reasoning":"one sentence explanation"}`;
 
-// ── Call disposition extraction prompt ────────────────────────────────────────
+// ── Call disposition extraction prompt (loose — used for KB query) ────────────
 export const CALL_DISPOSITION_PROMPT = `You are analyzing a Wint Wealth IR call transcript. Extract the primary topic/disposition of this call.
 
 Return ONLY this JSON:
 {"call_disposition":"brief topic e.g. Payout Query, TDS Form Issue, Bond Maturity, Portfolio Question","call_sub_disposition":"more specific e.g. Delay in payout credit, Unable to submit Form 121"}`;
+
+// ── Call disposition classification prompt (constrained to official 14-category list) ─
+export const CALL_DISPOSITION_CLASSIFY_PROMPT = `You are classifying a Wint Wealth IR call transcript into an official disposition and sub-disposition.
+
+You MUST choose EXACTLY one disposition and one sub-disposition from the lists below. Do not invent new values.
+If the call touches multiple topics, pick the one that consumed the most conversation time.
+If nothing fits, use disposition "OTHERS" and the closest sub-disposition.
+
+## OFFICIAL DISPOSITION LIST
+
+LIQUIDITY
+  - Liquidity General Enquiry
+  - Liquidity Process
+  - Liquidity Status Update
+  - Liquidity Charges
+  - Liquidity DDPI Status
+  - Liquidity cancellation
+  - Liquidity Funds Not Received
+  - Interest payout after selling a bond
+
+SGB
+  - SGB Enquiry
+  - SGBs Not Visible in Portfolio
+
+REFERRAL PROGRAM
+  - Refer & Earn Not Activated
+  - Referral reward calculation
+  - Referred User Not Showing (referral mapping)
+
+TAXATION
+  - Tax deduction
+  - Taxation Statement/Reports
+  - Taxation TDS Certificate
+  - Taxation 15G/H
+  - Taxation Capital Gain/Loss
+
+BOND PURCHASE
+  - Bond Purchase Cancellation
+  - Bond Purchase Order Status
+  - Bond Purchase issue
+  - Bond Purchase Process
+  - Net Banking unavailable
+
+FD
+  - FD Withdrawal
+  - FD Order status
+  - FD Nominee details
+  - FD Order pending
+  - FD KYC
+  - FD Bugs
+  - FD not visible in the portfolio
+  - FD interest
+
+Interest Repayment
+  - Interest Repayment Issue
+  - Asset YTM/Coupon
+  - Interest Repayment When/Where
+  - Interest Repayment Breakup
+
+ASSET
+  - Asset Risk
+  - Asset Specific Requirement
+  - Asset Covenant Breach
+  - Asset Limit
+  - Asset NRI
+
+FLEXI-TENURE BOND
+  - flexi general enquiry
+  - flexi sell process
+  - flexi interest
+  - flexi tenure change
+
+SIP
+  - SIP general enquiry
+  - SIP modification
+  - SIP cancellation
+  - SIP Instalment Skip
+
+WINT WISDOM
+  - General Enquiry
+  - Bugs
+  - Portfolio and Risk
+  - Tax and Optimisation
+
+DIVERISIFICATION METER
+  - Diversification Meter General
+
+OTHERS
+  - Unsubscribe Whatsapp
+  - Advisory
+  - Partnership
+  - Request for RM
+  - OTP not received
+  - PT Refund Pending
+  - Bond Name Change
+
+SEBI KYC
+  - SEBI KYC HUF
+  - SEBI KYC Demat Query
+  - SEBI KYC General Enquiry
+  - SEBI KYC Delete Account
+  - SEBI KYC NSDL SPEEDE
+  - SEBI KYC Documents
+  - Profile Change
+  - SEBI KYC Details Change
+  - Selfie Capture
+  - Nominee
+  - ACF link generation
+
+## OUTPUT
+Return ONLY this JSON — no other text:
+{"disposition":"<exact disposition from list above>","sub_disposition":"<exact sub-disposition from list above>"}`;
+
+// ── Call chunking prompt ──────────────────────────────────────────────────────
+export const CALL_CHUNK_PROMPT = `You are breaking a Wint Wealth IR call transcript into topic-based chunks for knowledge retrieval.
+
+Split the transcript at every point where the topic clearly changes. Each chunk should capture one distinct topic discussed.
+Aim for 2–8 chunks per call. Do not create tiny chunks (< 3 speaker turns) unless the topic is completely self-contained.
+
+For each chunk output:
+- "topic": short label (5–10 words) describing what this chunk is about
+- "summary": 1–2 sentence plain-English summary of what was discussed and resolved (if anything)
+- "content": the raw transcript lines that belong to this chunk (copy them verbatim)
+
+Return ONLY a valid JSON array — no other text:
+[
+  {
+    "topic": "Opening and investor identity",
+    "summary": "IR introduced herself and confirmed investor details.",
+    "content": "[1] IR EXECUTIVE: Hello, good morning! This is Priya from Wint Wealth...\\n[2] INVESTOR: Yes, good morning."
+  },
+  {
+    "topic": "Bond payout timeline query",
+    "summary": "Investor asked when their Muthoot NCD interest would be credited. IR confirmed 5–7 working days from record date.",
+    "content": "[3] INVESTOR: I wanted to ask about my payout...\\n[4] IR EXECUTIVE: The interest will be credited within 5 to 7 working days."
+  }
+]`;
 
 // ── Call IQS scoring system prompt (Pass 2, text-based) ──────────────────────
 export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality evaluator. Score IR Executive voice call transcripts across 11 parameters.
@@ -430,7 +567,7 @@ export function parseTranscriptionResponse(raw: string): { language: string; seg
   };
 }
 
-// ── Parse call disposition response ──────────────────────────────────────────
+// ── Parse call disposition response (loose) ──────────────────────────────────
 export function parseCallDisposition(raw: string): { callDisposition: string; callSubDisposition: string } {
   try {
     const parsed = robustJsonParse(raw);
@@ -440,6 +577,40 @@ export function parseCallDisposition(raw: string): { callDisposition: string; ca
     };
   } catch {
     return { callDisposition: '', callSubDisposition: '' };
+  }
+}
+
+// ── Parse constrained classification response ─────────────────────────────────
+export function parseCallDispositionClassified(raw: string): { disposition: string; subDisposition: string } {
+  try {
+    const parsed = robustJsonParse(raw);
+    return {
+      disposition: parsed?.disposition || '',
+      subDisposition: parsed?.sub_disposition || '',
+    };
+  } catch {
+    return { disposition: '', subDisposition: '' };
+  }
+}
+
+// ── Parse call chunk response ─────────────────────────────────────────────────
+export interface CallChunk {
+  topic: string;
+  summary: string;
+  content: string;
+}
+
+export function parseCallChunks(raw: string): CallChunk[] {
+  try {
+    const parsed = robustJsonParse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((c: any) => c?.topic && c?.content).map((c: any) => ({
+      topic: String(c.topic),
+      summary: String(c.summary || ''),
+      content: String(c.content),
+    }));
+  } catch {
+    return [];
   }
 }
 
