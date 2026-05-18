@@ -80,7 +80,7 @@ async function transcribeCall(
   const audioRes = await fetch(recordingUrl);
   if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio from ${recordingUrl}`);
   const ct = audioRes.headers.get('content-type');
-  if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
+  if (ct && ct.startsWith('audio/')) mimeType = ct.split(';')[0].trim();
   audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
 
   // Step 2: Gemini audio transcription — 3 retries so non-English calls never silently fail

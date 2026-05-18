@@ -803,7 +803,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       const audioRes = await fetch(recordingUrl);
       if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio`);
       const ct = audioRes.headers.get('content-type');
-      if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
+      if (ct && ct.startsWith('audio/')) mimeType = ct.split(';')[0].trim();
       audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
 
       // Gemini multimodal: audio → English segments (translates non-English).
