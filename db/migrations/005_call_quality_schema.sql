@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS call_recordings (
   transcript         JSONB,          -- array of CallSegment objects
   interruption_count SMALLINT DEFAULT 0,
   dead_air_count     SMALLINT DEFAULT 0,
-  status             VARCHAR(20) NOT NULL DEFAULT 'transcribed',
+  status             VARCHAR(30) NOT NULL DEFAULT 'transcribed',
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
