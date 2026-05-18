@@ -1193,6 +1193,11 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
   const [histories, setHistories] = useState<Record<string, any[] | null>>({});
   const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
   const [showHistory, setShowHistory] = useState<Record<string, boolean>>({});
+  // Prior chat inline transcript — keyed by the prior chat's own chatId
+  const [priorTranscripts, setPriorTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
+  const [priorTranscriptLoading, setPriorTranscriptLoading] = useState<Record<string, boolean>>({});
+  // Which prior chat is currently expanded (one at a time per parent chat)
+  const [expandedPriorChat, setExpandedPriorChat] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -1254,6 +1259,27 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
     const next = !showHistory[chatId];
     setShowHistory(s => ({ ...s, [chatId]: next }));
     if (next) loadHistory(chatId);
+  };
+
+  const loadPriorTranscript = async (priorChatId: string) => {
+    if (priorTranscripts[priorChatId] !== undefined) return;
+    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: true }));
+    try {
+      const d = await fetch(`/api/quality/transcript?chatId=${encodeURIComponent(priorChatId)}`).then(r => r.json());
+      setPriorTranscripts(t => ({ ...t, [priorChatId]: d.found ? { timedMessages: d.timedMessages, rawTranscript: d.rawTranscript } : {} }));
+    } catch {
+      setPriorTranscripts(t => ({ ...t, [priorChatId]: {} }));
+    }
+    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: false }));
+  };
+
+  const togglePriorChat = (parentChatId: string, priorChatId: string) => {
+    setExpandedPriorChat(s => {
+      const current = s[parentChatId];
+      const next = current === priorChatId ? null : priorChatId;
+      if (next) loadPriorTranscript(next);
+      return { ...s, [parentChatId]: next };
+    });
   };
 
   const expand = (chatId: string, flagId?: string) => {
@@ -1494,17 +1520,92 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
 
             {/* Right: transcript + prior chats */}
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+
+              {/* Prior chats section — collapsed list + inline transcript above current chat */}
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Transcript</p>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Customer's Prior Chats</p>
                   {(histories[item.chatId]?.length ?? 0) > 0 && (
                     <button onClick={() => toggleHistory(item.chatId)}
                       className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1">
-                      {showHistory[item.chatId] ? 'Hide Prior Chats' : `Prior Chats (${histories[item.chatId]!.length})`}
+                      {showHistory[item.chatId] ? 'Hide' : `Show (${histories[item.chatId]!.length})`}
                       <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
                         className={`transition-transform ${showHistory[item.chatId] ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
                     </button>
                   )}
+                </div>
+
+                {historyLoading[item.chatId] && (
+                  <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-3">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                    Loading…
+                  </div>
+                )}
+
+                {showHistory[item.chatId] && (
+                  <div className="space-y-1">
+                    {histories[item.chatId]?.length === 0 && !historyLoading[item.chatId] && (
+                      <p className="text-xs text-gray-400 text-center py-3">No prior chats found for this customer.</p>
+                    )}
+                    {(histories[item.chatId] || []).map((h: any) => {
+                      const isExpanded = expandedPriorChat[item.chatId] === h.chatId;
+                      const ptx = priorTranscripts[h.chatId];
+                      return (
+                        <div key={h.chatId} className="rounded-xl border border-gray-100 overflow-hidden">
+                          {/* Row — click to expand/collapse inline transcript */}
+                          <button
+                            onClick={() => togglePriorChat(item.chatId, h.chatId)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${isExpanded ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
+                          >
+                            <IQSRing iqs={h.iqs} size={28} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-semibold text-gray-700">{h.chatId}</span>
+                                <span className="text-[10px] text-gray-500">{h.agentName}</span>
+                                {h.disposition && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{h.disposition}</span>}
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{h.date}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {h.csat === '5' && <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded-full">Good</span>}
+                              {h.csat === '3' && <span className="text-[10px] bg-yellow-50 text-yellow-600 font-bold px-1.5 py-0.5 rounded-full">CBB</span>}
+                              {h.csat === '1' && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full">Bad</span>}
+                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                                className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+                            </div>
+                          </button>
+
+                          {/* Inline transcript — shown when expanded */}
+                          {isExpanded && (
+                            <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-3 max-h-80 overflow-y-auto">
+                              {priorTranscriptLoading[h.chatId] && (
+                                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-4">
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                                  Loading transcript…
+                                </div>
+                              )}
+                              {ptx && ptx.timedMessages && ptx.timedMessages.length > 0 && (
+                                <TranscriptBubbles messages={ptx.timedMessages} />
+                              )}
+                              {ptx && ptx.rawTranscript && !ptx.timedMessages?.length && (
+                                <pre className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed font-sans">{ptx.rawTranscript}</pre>
+                              )}
+                              {ptx && !ptx.timedMessages?.length && !ptx.rawTranscript && !priorTranscriptLoading[h.chatId] && (
+                                <p className="text-xs text-gray-400 text-center py-3">No transcript saved for this chat.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Current chat transcript */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Transcript</p>
                 </div>
                 {transcriptLoading[item.chatId] && (
                   <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
@@ -1522,37 +1623,6 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
                   <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
                 )}
               </div>
-
-              {showHistory[item.chatId] && (
-                <div className="border-t border-gray-100 pt-4">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Customer's Prior Chats</p>
-                  {historyLoading[item.chatId] && (
-                    <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-4">
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-                      Loading…
-                    </div>
-                  )}
-                  {histories[item.chatId]?.length === 0 && !historyLoading[item.chatId] && (
-                    <p className="text-xs text-gray-400 text-center py-3">No prior chats found for this customer.</p>
-                  )}
-                  {(histories[item.chatId] || []).map((h: any) => (
-                    <div key={h.chatId} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                      <IQSRing iqs={h.iqs} size={32} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <ChatLink chatId={h.chatId} className="text-xs" />
-                          <span className="text-[10px] text-gray-500">{h.agentName}</span>
-                          {h.disposition && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{h.disposition}</span>}
-                        </div>
-                        <p className="text-[10px] text-gray-400 mt-0.5">{h.date}</p>
-                      </div>
-                      {h.csat === '5' && <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded-full">Good</span>}
-                      {h.csat === '3' && <span className="text-[10px] bg-yellow-50 text-yellow-600 font-bold px-1.5 py-0.5 rounded-full">CBB</span>}
-                      {h.csat === '1' && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full">Bad</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         )}

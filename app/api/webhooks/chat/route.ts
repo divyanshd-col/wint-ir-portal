@@ -79,6 +79,17 @@ function normalizeContent(raw: string): string {
   return raw.replace(/\r\n|\r|\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
 }
 
+// Robylon sends internal system annotations as chat messages — e.g.
+// "918758589296 {ticket_raised}" from sender "Robylon AI". These are
+// never visible to the customer and must not be scored or displayed.
+// Pattern: optional digits/spaces, then one or more {tag} tokens, nothing else.
+const ROBYLON_INTERNAL_ANNOTATION = /^[\d\s+()-]*(\{[^}]+\}\s*)+$/;
+
+function isInternalAnnotation(sender: string, content: string): boolean {
+  if ((sender || '').toLowerCase().includes('robylon')) return true;
+  return ROBYLON_INTERNAL_ANNOTATION.test(content.trim());
+}
+
 function messagesToTranscript(messages: RobyMessage[]): string {
   const lines: string[] = [];
   for (const m of messages) {
@@ -89,6 +100,7 @@ function messagesToTranscript(messages: RobyMessage[]): string {
     if (low.includes('auto-assigned') || low.includes('assigned by') ||
         low.includes('waiting to assign') || low.includes('please rate your experience') ||
         (m as any).buttons) continue;
+    if (isInternalAnnotation(sender, content)) continue;
     const role = sender === 'User' || sender === 'user' || sender === 'customer' ? 'Customer'
                : sender === 'Bot'  || sender === 'bot'                           ? 'Bot'
                : 'Agent';
@@ -102,11 +114,13 @@ export function transcriptFromJsonb(messages: any[]): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
   for (const m of messages) {
+    const content = normalizeContent(m.content || '');
+    if (!content) continue;
+    if (isInternalAnnotation(m.sender_name || '', content)) continue;
     const role = m.sender_type === 'customer' ? 'Customer'
                : m.sender_type === 'bot'      ? 'Bot'
                : 'Agent';
-    const content = normalizeContent(m.content || '');
-    if (content) lines.push(`${role}: ${content}`);
+    lines.push(`${role}: ${content}`);
   }
   return lines.join('\n');
 }

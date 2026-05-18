@@ -15,14 +15,23 @@ function normalizeContent(raw: string): string {
   return (raw || '').replace(/\r\n|\r|\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
 }
 
+// Filter out Robylon internal system annotations (e.g. "918758589296 {ticket_raised}")
+// sent by "Robylon AI" — these are never visible to customers and must not appear in the portal.
+const ROBYLON_INTERNAL_ANNOTATION = /^[\d\s+()-]*(\{[^}]+\}\s*)+$/;
+function isInternalAnnotation(senderName: string, content: string): boolean {
+  if ((senderName || '').toLowerCase().includes('robylon')) return true;
+  return ROBYLON_INTERNAL_ANNOTATION.test(content.trim());
+}
+
 function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: string; timestamp?: string }[] {
   return messages.map((m: any) => ({
     sender: m.sender_type === 'customer' ? 'user'
           : m.sender_type === 'bot'      ? 'bot'
           : (m.sender_name || 'Agent'),
     content: normalizeContent(m.content || m.text || ''),
+    senderName: m.sender_name || m.sender || '',
     timestamp: m.timestamp,
-  })).filter(m => m.content);
+  })).filter(m => m.content && !isInternalAnnotation(m.senderName, m.content));
 }
 
 export async function GET(req: NextRequest) {
