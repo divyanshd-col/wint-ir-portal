@@ -20,7 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import {
@@ -806,17 +806,25 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
       audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
 
-      // Gemini multimodal: audio → English segments (translates non-English)
-      const raw = await geminiGenerate(
-        geminiKeys,
-        'gemini-2.5-flash',
-        [{ role: 'user', parts: [
-          { inlineData: { mimeType, data: audioBase64 } },
-          { text: CALL_TRANSCRIPTION_PROMPT },
-        ]}],
-        {},
-        120_000,
-      );
+      // Gemini multimodal: audio → English segments (translates non-English).
+      // Retried up to 3 times (with 10s back-off) so non-English transcription never silently fails.
+      const transcriptionContents = [{ role: 'user', parts: [
+        { inlineData: { mimeType, data: audioBase64 } },
+        { text: CALL_TRANSCRIPTION_PROMPT },
+      ]}];
+      let raw = '';
+      let lastTranscriptionError: any;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          raw = await geminiGenerate(geminiKeys, 'gemini-2.5-flash', transcriptionContents, {}, 120_000);
+          break;
+        } catch (err: any) {
+          lastTranscriptionError = err;
+          console.error(`[webhook] Transcription attempt ${attempt}/3 failed for call ${callId}:`, err.message);
+          if (attempt < 3) await new Promise(r => setTimeout(r, 10_000 * attempt));
+        }
+      }
+      if (!raw) throw lastTranscriptionError ?? new Error('Audio transcription failed after 3 attempts');
 
       const { language, segments } = parseTranscriptionResponse(raw);
       const interruptionCount = segments.filter(s => s.type === 'interruption').length;
@@ -844,11 +852,10 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       let subDisposition = '';
       if (callTranscriptText) {
         try {
-          const rawDisp = await geminiGenerate(
+          const rawDisp = await callGeminiForCall(
             geminiKeys,
-            'gemini-2.5-flash',
             [{ role: 'user', parts: [{ text: CALL_DISPOSITION_CLASSIFY_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
-            { responseMimeType: 'application/json' },
+            undefined,
             30_000,
           );
           const classified = parseCallDispositionClassified(rawDisp);
@@ -870,11 +877,10 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
 
         // ── Step 6: Chunk transcript into topics + store for RAG retrieval ──────
         try {
-          const rawChunks = await geminiGenerate(
+          const rawChunks = await callGeminiForCall(
             geminiKeys,
-            'gemini-2.5-flash',
             [{ role: 'user', parts: [{ text: CALL_CHUNK_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
-            { responseMimeType: 'application/json' },
+            undefined,
             30_000,
           );
           const chunks = parseCallChunks(rawChunks);
