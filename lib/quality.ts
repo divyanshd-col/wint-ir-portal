@@ -214,6 +214,15 @@ Transcripts sometimes contain internal Slack links, internal tool URLs, internal
 - Do NOT penalize any parameter (Technical, Process, Sentences, Grammar, etc.) based on the presence of internal links or notes.
 - Evaluate the agent only on what they communicated to the customer, not on internal working notes visible in the transcript.
 
+### Screenshots and Media Shared in Chat
+When images are provided alongside the transcript, they are screenshots or other media shared by the customer or agent during the chat.
+- Use them as visual evidence — e.g. a screenshot of an error screen, an app UI state, or a document image.
+- **Technical**: check whether the guidance the agent gave matches what the screenshot actually shows.
+- **Contextual**: check whether a shared image or document is relevant to this customer's specific situation, not a generic screenshot.
+- **Process**: a screenshot of a Finder check or internal tool is supporting evidence of a check — do not penalise for it.
+- If an image is unreadable or unclear, ignore it and score based on the text transcript alone.
+- Document excerpts in the MEDIA SHARED IN CHAT section are trimmed previews — use them for context only.
+
 ### Call Requests — Always score Call as NA, flag for QA
 If the transcript contains any reference to a customer requesting a call, or a call that needs to happen:
 - Score the **Call** parameter as **NA** (we cannot evaluate calls without the call transcript).

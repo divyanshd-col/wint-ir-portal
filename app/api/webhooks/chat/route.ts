@@ -27,6 +27,7 @@ import {
   analyzeConversationTiming,
 } from '@/lib/quality';
 import type { TimedMessage } from '@/lib/quality';
+import { enrichTranscriptWithMedia } from '@/lib/media-context';
 import {
   CALL_IQS_SYSTEM_PROMPT,
   buildCallScoringPrompt,
@@ -365,6 +366,23 @@ export async function executeScoring(
     console.warn('[webhook] KB fetch failed, scoring without context:', err.message);
   }
 
+  // ── Media context — fetch images and doc snippets from transcript URLs ────────
+  let mediaImageParts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
+  let mediaClaudeParts: Array<{ type: 'image'; source: { type: 'base64'; media_type: string; data: string } }> = [];
+  try {
+    const media = await enrichTranscriptWithMedia(transcriptText);
+    if (media.textContext) {
+      kbContext += (kbContext ? '\n---\n' : '') + '## MEDIA SHARED IN CHAT\n' + media.textContext;
+    }
+    mediaImageParts   = media.imageParts;
+    mediaClaudeParts  = media.claudeImageParts;
+    if (media.imageParts.length) {
+      console.log(`[webhook] Media context: ${media.imageParts.length} image(s) fetched for chat ${chatId}`);
+    }
+  } catch (err: any) {
+    console.warn('[webhook] Media enrichment failed, scoring without media:', err.message);
+  }
+
   const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition, timing.conversationType);
   const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
 
@@ -374,13 +392,13 @@ export async function executeScoring(
     const resp = await client.messages.create({
       model: 'claude-sonnet-4-6', max_tokens: 2000,
       system: iqsSystemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+      messages: [{ role: 'user', content: [{ type: 'text', text: userPrompt }, ...mediaClaudeParts] }],
     });
     rawResponse = resp.content[0].type === 'text' ? resp.content[0].text : '';
   } else if (geminiKeys.length) {
     rawResponse = await geminiGenerate(
       geminiKeys, 'gemini-2.5-flash',
-      [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
+      [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }, ...mediaImageParts] }],
       {}, 60000,
     );
   } else {

@@ -48,7 +48,7 @@ function getDocName(url: string): string {
   } catch { return url; }
 }
 
-async function fetchGoogleDoc(url: string): Promise<{ text: string; name: string }> {
+export async function fetchGoogleDoc(url: string): Promise<{ text: string; name: string }> {
   const { id, isDoc } = extractIds(url);
   if (!id) throw new Error(`Cannot extract ID from URL: ${url}`);
 
