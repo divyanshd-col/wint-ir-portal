@@ -14,6 +14,9 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+
+export const runtime    = 'nodejs';
+export const maxDuration = 300; // 5 minutes — audio fetch + Gemini per call can take 2+ min
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
@@ -51,13 +54,14 @@ async function getPendingCalls(callId?: string): Promise<CallRecordingRow[]> {
       [callId],
     );
   }
-  // All calls from today (UTC) with no transcript and a recording URL
+  // Process one at a time when no call_id given — caller can loop through all pending IDs
   return query<CallRecordingRow>(
     `SELECT * FROM call_recordings
      WHERE transcript IS NULL
        AND recording_url IS NOT NULL
        AND called_at >= CURRENT_DATE
-     ORDER BY called_at ASC`,
+     ORDER BY called_at ASC
+     LIMIT 1`,
     [],
   );
 }
