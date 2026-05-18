@@ -280,11 +280,9 @@ Speech segments are numbered [1], [2], [3]... for reference.
 - NA: Call was disconnected before closing was possible.
 
 ### 3. Technically / Legally Correct (15%) — key: TechnicalLegal
-- Yes: All product info stated by the IR is factually correct — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms. Statements are legally accurate.
-- No: A clear factual or legal error was made about product details, returns, timelines, or regulatory requirements.
-- NA: No substantive product information exchanged.
-Cross-reference EVERY product claim against the WINT KNOWLEDGE BASE REFERENCE section below.
-In your reasoning, you MUST cite: document name, heading, and subheading for any fact you verify or flag as incorrect. If KB has no relevant entry, state that.
+- Yes: All product information stated by the IR EXECUTIVE matches the WINT KNOWLEDGE BASE REFERENCE below — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms, registered entity names. In your reasoning, name the specific KB document and section that confirms each fact.
+- No: A statement contradicts the KB, or the KB has no relevant entry to verify a significant product claim the IR made. State exactly what was claimed and what the KB says (or that it is absent from the KB).
+- NA: No substantive product information was exchanged on this call.
 
 ### 4. All Questions Addressed (10%) — key: AllQuestions
 - Yes: Every investor question was answered directly, or explicitly deferred with a reason.
@@ -401,11 +399,10 @@ export function buildCallScoringPrompt(
 - Chat disposition (from WhatsApp classification): ${chatDisposition || 'Unknown'}
 ${kbContext ? `
 ## WINT KNOWLEDGE BASE REFERENCE
-Use this section to verify product facts when scoring TechnicalLegal.
-Each chunk is labelled [Document Name] and may contain headings/subheadings.
-Cite the document name, heading, and subheading in your TechnicalLegal reasoning.
+Use these excerpts from Wint's internal KB to verify whether the IR Executive's product information is technically correct. Pay close attention when scoring TechnicalLegal.
+
 ${kbContext}
-` : '<!-- No KB chunks available — score TechnicalLegal from transcript context only -->'}
+` : ''}
 ## CALL TRANSCRIPT — score this (segments numbered for poor_listening_segments reference)
 ${callTranscriptText}
 ${chatTranscriptText ? `
