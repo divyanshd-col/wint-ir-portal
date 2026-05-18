@@ -73,7 +73,8 @@ function buildMergedTimeline(
   for (let recIdx = 0; recIdx < totalCalls; recIdx++) {
     const rec        = recordingMeta[recIdx];
     const callBase   = rec.calledAt ? new Date(rec.calledAt).getTime() : (chatBase || Date.now());
-    const durationMs = (rec.durationSeconds ?? 120) * 1000;
+    // Fall back to ~8s per segment when duration_seconds is null in DB
+    const durationMs = ((rec.durationSeconds ?? Math.max(rec.segmentCount * 8, 60))) * 1000;
     const callEnd    = callBase + durationMs;
     const count      = rec.segmentCount;
     const callLabel  = totalCalls > 1 ? `Call ${recIdx + 1}` : 'Call';

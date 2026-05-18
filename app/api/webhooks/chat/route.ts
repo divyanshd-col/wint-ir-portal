@@ -763,8 +763,15 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
   const phone        = body.requester_info?.phone_number || body.data?.phone_number || '';
   const recordingUrl = body.data?.recording_url || '';
   const calledAt     = body.data?.started_at || body.data?.ended_at || body.created_at || new Date().toISOString();
-  const durationRaw  = body.data?.call_duration;
-  const durationSeconds = durationRaw && durationRaw > 0 ? Math.round(durationRaw) : null;
+
+  // Derive duration: prefer call_duration field, fall back to ended_at − started_at
+  let durationSeconds: number | null = null;
+  if (body.data?.call_duration > 0) {
+    durationSeconds = Math.round(body.data.call_duration);
+  } else if (body.data?.started_at && body.data?.ended_at) {
+    const diff = Math.round((new Date(body.data.ended_at).getTime() - new Date(body.data.started_at).getTime()) / 1000);
+    if (diff > 0) durationSeconds = diff;
+  }
 
   if (!recordingUrl) {
     console.warn(`[webhook] CC_VOICE_CALL_COMPLETE call_id=${callId} has no recording_url — skipping`);
