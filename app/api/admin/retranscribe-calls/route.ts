@@ -92,7 +92,7 @@ async function transcribeCall(
   let lastErr: any;
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
-      raw = await geminiGenerate(geminiKeys, 'gemini-2.5-flash', transcriptionContents, {}, 120_000);
+      raw = await geminiGenerate(geminiKeys, 'gemini-2.5-pro', transcriptionContents, {}, 180_000);
       break;
     } catch (err: any) {
       lastErr = err;

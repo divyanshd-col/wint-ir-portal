@@ -182,10 +182,11 @@ TRANSCRIPTION RULES
 - During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.
 - For non-English speech (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.):
   • "text" field: verbatim transcription in the ORIGINAL language (exactly what was spoken)
-  • "translation" field: natural, fluent English translation of what was said
+  • "translation" field: complete, natural English translation — EVERY word must be translated, including single words, short phrases, and filler expressions. NEVER leave any non-English word in the translation field.
   • "translated": true
+  CRITICAL: Even if only 1–2 words are non-English in a segment, set translated=true and provide a full English translation of the entire segment in "translation".
 - For English speech: "text" field only, no "translation" field, "translated": false
-- Keep filler sounds as-is in "text" (uh, um, haan, theek hai). Translate their meaning in "translation" if non-English.
+- Keep filler sounds as-is in "text" (uh, um, haan, theek hai). Always translate their meaning into English in "translation" if they are non-English words.
 - Report detected languages in the "language" field.
 
 ══════════════════════════════════════════

@@ -162,7 +162,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat'; ts?: string; 
             {isIR ? '🟡' : '🟢'} {data.speaker}
           </span>
           <p className="text-sm text-slate-700 leading-relaxed">
-            {data.text}
+            {data.translated && data.translation ? data.translation : data.text}
             {data.translated && (
               <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-500">🌐</span>
             )}

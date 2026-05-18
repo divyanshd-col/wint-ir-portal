@@ -54,7 +54,7 @@ function buildMergedTimeline(
   callSegments: CallSegment[],
   chatMessages: any[],
   chatStartedAt: string | null,
-  callCalledAt: string | null,
+  recordingMeta: Array<{ calledAt: string | null; durationSeconds: number | null; segmentCount: number }>,
 ): Array<{ source: 'call' | 'chat'; ts?: string; data: any }> {
   const items: Array<{ source: 'call' | 'chat'; ts?: string; sortKey: number; data: any }> = [];
 
@@ -65,10 +65,21 @@ function buildMergedTimeline(
     items.push({ source: 'chat', ts: ts || undefined, sortKey, data: m });
   });
 
-  const callBase = callCalledAt ? new Date(callCalledAt).getTime() : (chatBase || Date.now());
-  callSegments.forEach((seg, i) => {
-    items.push({ source: 'call', sortKey: callBase + i * 500, data: seg });
-  });
+  // Spread each recording's segments proportionally across its actual duration so
+  // post-call chat messages (timestamped after call end) sort correctly.
+  let segOffset = 0;
+  for (const rec of recordingMeta) {
+    const callBase   = rec.calledAt ? new Date(rec.calledAt).getTime() : (chatBase || Date.now());
+    const durationMs = (rec.durationSeconds ?? 120) * 1000;
+    const count      = rec.segmentCount;
+    for (let i = 0; i < count; i++) {
+      const seg = callSegments[segOffset + i];
+      if (!seg) continue;
+      const fraction = count > 1 ? i / (count - 1) : 0;
+      items.push({ source: 'call', sortKey: callBase + fraction * durationMs, data: seg });
+    }
+    segOffset += count;
+  }
 
   items.sort((a, b) => a.sortKey - b.sortKey);
   return items.map(({ source, ts, data }) => ({ source, ts, data }));
@@ -133,6 +144,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let callCalledAt: string | null = null;
   let hasCallRecording = false;
   let callRecordingCount = 0;
+  const recordingMeta: Array<{ calledAt: string | null; durationSeconds: number | null; segmentCount: number }> = [];
 
   function parseRecordingSegments(rec: any): CallSegment[] {
     if (!rec.transcript) return [];
@@ -178,7 +190,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (allRecs.length > 0) {
       const mergedSegs: CallSegment[] = [];
       for (const rec of allRecs) {
-        mergedSegs.push(...parseRecordingSegments(rec));
+        const segs = parseRecordingSegments(rec);
+        mergedSegs.push(...segs);
+        recordingMeta.push({ calledAt: rec.called_at ?? null, durationSeconds: rec.duration_seconds ?? null, segmentCount: segs.length });
         if (!language) {
           const t = typeof rec.transcript === 'object' ? rec.transcript : null;
           language = rec.language || t?.language || '';
@@ -278,11 +292,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } catch {}
   }
 
+  // Rebuild recordingMeta segment counts if poor-listening flags were inserted
+  // (callResult?.segments may have extra segments vs original callSegments).
+  // We use the original counts since poorListening flags don't change call timing.
   const mergedTimeline = buildMergedTimeline(
     callResult?.segments ?? callSegments,
     chatMessages,
     chatConv?.started_at ?? null,
-    callCalledAt,
+    recordingMeta.length > 0 ? recordingMeta : [{ calledAt: callCalledAt, durationSeconds: null, segmentCount: (callResult?.segments ?? callSegments).length }],
   );
 
   return NextResponse.json({
