@@ -115,8 +115,7 @@ export function segmentsToText(segments: CallSegment[]): string {
   for (const seg of segments) {
     if (seg.type === 'speech') {
       speechIdx++;
-      // Use English translation for LLM scoring when available; fall back to original text
-      const content = seg.translation || seg.text || '';
+      const content = seg.text || '';
       lines.push(`[${speechIdx}] ${seg.speaker}: ${content}${seg.translated ? ' [translated]' : ''}`);
     } else if (seg.type === 'interruption') {
       lines.push(`[INTERRUPTION: ${seg.interrupted_speaker} cut off by ${seg.interrupted_by} after ${seg.words_spoken ?? '?'} words]`);
@@ -174,20 +173,21 @@ DECISION PROCEDURE:
 3. The other voice = INVESTOR for the entire call.
 4. A short "Hello?" or "Haan?" with no introduction at the start = INVESTOR.
 
+Pay close attention to names — IR executives introduce themselves by name (e.g. "This is Priya from Wint Wealth").
+Transcribe that name exactly as spoken. Similarly transcribe bond names, fund names, and product names exactly as spoken.
+
 ══════════════════════════════════════════
 TRANSCRIPTION RULES
 ══════════════════════════════════════════
 - Each segment = one complete speaker turn.
-- Transcribe every word spoken — do not skip, summarize, or paraphrase anything.
+- Transcribe EVERY single word spoken — do not skip, summarize, or paraphrase anything.
 - During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.
-- For non-English speech (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.):
-  • "text" field: verbatim transcription in the ORIGINAL language (exactly what was spoken)
-  • "translation" field: complete, natural English translation — EVERY word must be translated, including single words, short phrases, and filler expressions. NEVER leave any non-English word in the translation field.
-  • "translated": true
-  CRITICAL: Even if only 1–2 words are non-English in a segment, set translated=true and provide a full English translation of the entire segment in "translation".
-- For English speech: "text" field only, no "translation" field, "translated": false
-- Keep filler sounds as-is in "text" (uh, um, haan, theek hai). Always translate their meaning into English in "translation" if they are non-English words.
-- Report detected languages in the "language" field.
+- Translate ALL non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.) to natural fluent English.
+  Put the English translation directly in the "text" field — do NOT add a separate "translation" field.
+  CRITICAL: Even a single non-English word in an otherwise English sentence must be fully translated. No exceptions.
+- Keep filler sounds as-is where they are English (uh, um). Translate non-English fillers (haan → yes, theek hai → okay).
+- Set "translated": true for any segment that contained non-English words (even partially).
+- Report all detected languages in the "language" field.
 
 ══════════════════════════════════════════
 INTERRUPTION DETECTION
@@ -224,20 +224,18 @@ Only flag dead air that is noticeably long (2+ seconds). Ignore normal conversat
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
+Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false}
+Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
+Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
 
-English speech segment:   {"type":"speech","speaker":"[NAME]","text":"[TEXT]","translated":false}
-Non-English speech segment: {"type":"speech","speaker":"[NAME]","text":"[ORIGINAL LANGUAGE TEXT]","translation":"[ENGLISH TRANSLATION]","translated":true}
-Interruption flag:  {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
-Dead air flag:      {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
-
-Example output (mixed Hindi + English call):
-{"language":"Hindi + English","segments":[
+Example output (mixed Telugu + English call):
+{"language":"Telugu + English","segments":[
   {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false},
   {"type":"dead_air","duration":"~2 seconds","resumed_by":"IR EXECUTIVE"},
   {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"जी सर, हां बोलिए।","translation":"Yes sir, please go ahead.","translated":true},
+  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true},
   {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":5},
-  {"type":"speech","speaker":"INVESTOR","text":"वो bond कब mature होगा?","translation":"When will that bond mature?","translated":true}
+  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true}
 ]}`;
 
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────

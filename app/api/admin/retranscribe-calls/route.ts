@@ -19,7 +19,7 @@ export const runtime    = 'nodejs';
 export const maxDuration = 300; // 5 minutes — audio fetch + Gemini per call can take 2+ min
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   CALL_DISPOSITION_CLASSIFY_PROMPT,
@@ -83,23 +83,16 @@ async function transcribeCall(
   if (ct && ct.startsWith('audio/')) mimeType = ct.split(';')[0].trim();
   audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
 
-  // Step 2: Gemini audio transcription — 3 retries so non-English calls never silently fail
-  const transcriptionContents = [{ role: 'user', parts: [
-    { inlineData: { mimeType, data: audioBase64 } },
-    { text: CALL_TRANSCRIPTION_PROMPT },
-  ]}];
-  let raw = '';
-  let lastErr: any;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    try {
-      raw = await geminiGenerate(geminiKeys, 'gemini-2.5-pro', transcriptionContents, {}, 180_000);
-      break;
-    } catch (err: any) {
-      lastErr = err;
-      if (attempt < 3) await new Promise(r => setTimeout(r, 10_000 * attempt));
-    }
-  }
-  if (!raw) throw lastErr ?? new Error('Audio transcription failed after 3 attempts');
+  // Step 2: Gemini audio transcription — 5 retries × 5-model chain via callGeminiForCall
+  const raw = await callGeminiForCall(
+    geminiKeys,
+    [{ parts: [
+      { inline_data: { mime_type: mimeType, data: audioBase64 } },
+      { text: CALL_TRANSCRIPTION_PROMPT },
+    ]}],
+    undefined,
+    180_000,
+  );
 
   const { language, segments } = parseTranscriptionResponse(raw);
   const interruptionCount = segments.filter(s => s.type === 'interruption').length;

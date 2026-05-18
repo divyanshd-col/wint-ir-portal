@@ -100,8 +100,20 @@ function ParamPanel({
 
 // ── Merged timeline item ──────────────────────────────────────────────────────
 
-function TimelineItem({ item }: { item: { source: 'call' | 'chat'; ts?: string; data: any } }) {
+function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-boundary'; ts?: string; data: any } }) {
   const { source, data } = item;
+
+  if (source === 'call-boundary') {
+    return (
+      <div className="flex items-center gap-3 my-3">
+        <div className="flex-1 h-px bg-amber-200" />
+        <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full whitespace-nowrap">
+          📞 Call {data.callIndex} started
+        </span>
+        <div className="flex-1 h-px bg-amber-200" />
+      </div>
+    );
+  }
 
   if (source === 'call') {
     // Call segment
@@ -162,7 +174,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat'; ts?: string; 
             {isIR ? '🟡' : '🟢'} {data.speaker}
           </span>
           <p className="text-sm text-slate-700 leading-relaxed">
-            {data.translated && data.translation ? data.translation : data.text}
+            {data.text}
             {data.translated && (
               <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-500">🌐</span>
             )}

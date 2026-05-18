@@ -806,25 +806,17 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       if (ct && ct.startsWith('audio/')) mimeType = ct.split(';')[0].trim();
       audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
 
-      // Gemini multimodal: audio → English segments (translates non-English).
-      // Retried up to 3 times (with 10s back-off) so non-English transcription never silently fails.
-      const transcriptionContents = [{ role: 'user', parts: [
-        { inlineData: { mimeType, data: audioBase64 } },
-        { text: CALL_TRANSCRIPTION_PROMPT },
-      ]}];
-      let raw = '';
-      let lastTranscriptionError: any;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          raw = await geminiGenerate(geminiKeys, 'gemini-2.5-pro', transcriptionContents, {}, 180_000);
-          break;
-        } catch (err: any) {
-          lastTranscriptionError = err;
-          console.error(`[webhook] Transcription attempt ${attempt}/3 failed for call ${callId}:`, err.message);
-          if (attempt < 3) await new Promise(r => setTimeout(r, 10_000 * attempt));
-        }
-      }
-      if (!raw) throw lastTranscriptionError ?? new Error('Audio transcription failed after 3 attempts');
+      // Gemini multimodal: audio → English segments (translates ALL non-English words in-place).
+      // callGeminiForCall: 5 retries × 5 models (flash-preview → flash → pro → 1.5-pro → 1.5-flash).
+      const raw = await callGeminiForCall(
+        geminiKeys,
+        [{ parts: [
+          { inline_data: { mime_type: mimeType, data: audioBase64 } },
+          { text: CALL_TRANSCRIPTION_PROMPT },
+        ]}],
+        undefined,
+        180_000,
+      );
 
       const { language, segments } = parseTranscriptionResponse(raw);
       const interruptionCount = segments.filter(s => s.type === 'interruption').length;

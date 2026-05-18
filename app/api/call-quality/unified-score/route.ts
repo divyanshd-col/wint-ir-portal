@@ -55,8 +55,8 @@ function buildMergedTimeline(
   chatMessages: any[],
   chatStartedAt: string | null,
   recordingMeta: Array<{ calledAt: string | null; durationSeconds: number | null; segmentCount: number }>,
-): Array<{ source: 'call' | 'chat'; ts?: string; data: any }> {
-  const items: Array<{ source: 'call' | 'chat'; ts?: string; sortKey: number; data: any }> = [];
+): Array<{ source: 'call' | 'chat' | 'call-boundary'; ts?: string; data: any }> {
+  const items: Array<{ source: 'call' | 'chat' | 'call-boundary'; ts?: string; sortKey: number; data: any }> = [];
 
   const chatBase = chatStartedAt ? new Date(chatStartedAt).getTime() : 0;
   chatMessages.forEach((m, i) => {
@@ -67,11 +67,22 @@ function buildMergedTimeline(
 
   // Spread each recording's segments proportionally across its actual duration so
   // post-call chat messages (timestamped after call end) sort correctly.
+  // Insert a boundary marker before each call after the first.
   let segOffset = 0;
-  for (const rec of recordingMeta) {
+  for (let recIdx = 0; recIdx < recordingMeta.length; recIdx++) {
+    const rec        = recordingMeta[recIdx];
     const callBase   = rec.calledAt ? new Date(rec.calledAt).getTime() : (chatBase || Date.now());
     const durationMs = (rec.durationSeconds ?? 120) * 1000;
     const count      = rec.segmentCount;
+
+    if (recIdx > 0) {
+      items.push({
+        source: 'call-boundary',
+        sortKey: callBase - 1,
+        data: { callIndex: recIdx + 1, calledAt: rec.calledAt },
+      });
+    }
+
     for (let i = 0; i < count; i++) {
       const seg = callSegments[segOffset + i];
       if (!seg) continue;
