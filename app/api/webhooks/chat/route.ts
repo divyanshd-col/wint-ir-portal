@@ -18,6 +18,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
@@ -786,8 +787,8 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
     transcript: [],
   });
 
-  // Fire-and-forget: fetch audio → Gemini transcription → update DB
-  (async () => {
+  // Keep the function alive after responding so Vercel doesn't kill the background work
+  waitUntil((async () => {
     try {
       const config = await readConfig();
       const geminiKeys = getIQSGeminiKeys(config);
@@ -898,7 +899,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
     } catch (err: any) {
       console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
     }
-  })();
+  })());
 
   console.log(`[webhook] CC_VOICE_CALL_COMPLETE received call ${callId} — transcription started, phone=${phone}`);
   return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'transcribing' });

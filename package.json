@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.44.0",
     "@types/pg": "^8.20.0",
+    "@vercel/functions": "^3.6.0",
     "@vercel/kv": "^3.0.0",
     "autoprefixer": "^10.4.27",
     "bcryptjs": "^3.0.3",
