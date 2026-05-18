@@ -112,6 +112,16 @@ export async function GET(req: NextRequest) {
       console.error(`[cron/transcribe-calls] Failed to transcribe call ${call.id}:`, err.message);
       errors.push(`${call.id}: ${err.message}`);
       failed++;
+
+      // If the call has been pending for >6 hours, it's unlikely to recover
+      // (expired S3 URL, deleted file, permanent Gemini rejection, etc.).
+      // Mark it so it stops consuming cron slots every 10 minutes.
+      const createdAt = call.created_at ? new Date(call.created_at).getTime() : 0;
+      const ageMs = Date.now() - createdAt;
+      if (ageMs > 6 * 60 * 60 * 1000) {
+        await updateCallRecordingStatus(call.id, 'error_transcription_failed').catch(() => {});
+        console.warn(`[cron/transcribe-calls] Call ${call.id} marked error_transcription_failed after >6h`);
+      }
     }
   }
 

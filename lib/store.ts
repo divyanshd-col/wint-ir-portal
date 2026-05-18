@@ -84,15 +84,19 @@ export async function storeAcquireScoringLock(chatId: string): Promise<boolean> 
     const res = await fetch(`${UPSTASH_URL}/pipeline`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      // SET NX EX 600 — only sets if key doesn't exist; returns "OK" or null
-      body: JSON.stringify([['SET', `wint_scoring_lock:${chatId}`, '1', 'EX', '600', 'NX']]),
+      // SET NX EX 1800 — only sets if key doesn't exist; returns "OK" or null
+      // 1800s (30 min) covers multi-call chats: KB fetch + media + LLM × N calls
+      body: JSON.stringify([['SET', `wint_scoring_lock:${chatId}`, '1', 'EX', '1800', 'NX']]),
     });
     const data = await res.json();
     // Upstash pipeline response is an array: [{"result":"OK"}] or [{"result":null}]
     const result = Array.isArray(data) ? data[0]?.result : data.result;
     return result === 'OK';
   } catch {
-    return true; // on KV error, let scoring proceed
+    // Fail closed — on KV error, deny the lock so concurrent duplicate scoring
+    // doesn't proceed uncontrolled. The rejected scorer will be retried by cron.
+    console.warn(`[store] Scoring lock KV error for chat ${chatId} — denying lock`);
+    return false;
   }
 }
 

@@ -15,24 +15,44 @@ const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
 
 // ── Call detection ────────────────────────────────────────────────────────────
 
+// Tag patterns — checked against disposition + sub-disposition combined.
+// IMPORTANT: keep these specific. "/\bcall\b/i" is intentionally absent because
+// dispositions like "Callback Required" or "Call Not Answered" contain "call"
+// but do NOT mean a live call occurred — they would cause false positives that
+// skip chat scoring entirely.
 const CALL_TAG_PATTERNS = [
-  /\bcall\b/i, /callback/i, /phone call/i, /call back/i,
+  /\bphone\s+call\b/i,
+  /\bcall\s+back\b/i,
+  /\bcallback\b/i,          // "Callback Scheduled" — agent arranged a call
+  /\bcall\s+done\b/i,
+  /\bcall\s+completed\b/i,
+  /\bcall\s+connected\b/i,
 ];
 
 const CALL_TRANSCRIPT_PATTERNS = [
+  // Requests for a call — agent or customer asking for one
   /please\s+call/i,
   /can\s+you\s+call/i,
   /give\s+(me\s+)?a\s+call/i,
   /call\s+me\b/i,
+  /arrange\s+a\s+call/i,
+  /schedule\s+a\s+call/i,
+  // Post-call references — evidence a call already happened
   /talked\s+on\s+(the\s+)?call/i,
   /spoke\s+on\s+(the\s+)?call/i,
   /discussed\s+on\s+(the\s+)?call/i,
   /as\s+(per|discussed\s+(on\s+)?)(our\s+)?call/i,
-  /already\s+(spoke|called|talked)/i,
+  /already\s+(spoke|called|talked)\s+(with|to|on)/i,
+  /spoke\s+(with|to)\s+(you|the\s+team|our\s+team)/i,
+  // Hindi patterns — both explicit call references and post-call phrases
   /call\s+kar/i,
   /call\s+kiya/i,
   /call\s+hua/i,
+  /call\s+pe\b/i,
+  /call\s+par\b/i,
   /phone\s+pe\s+baat/i,
+  /phone\s+par\s+baat/i,
+  /baat\s+ki\s+thi/i,
 ];
 
 export function hasCallInteraction(transcript: string, tags?: any): boolean {

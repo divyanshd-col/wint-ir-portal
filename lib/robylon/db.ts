@@ -37,12 +37,24 @@ export async function getAgentNamesByQA(qaName: string): Promise<string[]> {
 
 // ── Contact helpers ───────────────────────────────────────────────────────────
 
+/**
+ * Normalize a phone number to its last 10 digits (strips country codes and
+ * non-digit characters). Consistently applied at insert and lookup time so
+ * "91XXXXXXXXXX" and "XXXXXXXXXX" resolve to the same contact row.
+ */
+export function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+}
+
 /** Upsert a contact by phone number. Returns contact.id */
 export async function upsertContact(phone: string | undefined): Promise<number | null> {
   if (!phone) return null;
+  const normalized = normalizePhone(phone);
+  if (!normalized) return null;
   const rows = await query<{ id: number }>(
     `INSERT INTO contacts (phone) VALUES ($1) ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone RETURNING id`,
-    [phone],
+    [normalized],
   );
   return rows[0]?.id ?? null;
 }
@@ -408,6 +420,8 @@ export interface CallRecordingRow {
   interruption_count: number;
   dead_air_count: number;
   status: string;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 export async function insertCallRecording(data: {
@@ -436,7 +450,10 @@ export async function insertCallRecording(data: {
       duration_seconds = COALESCE(EXCLUDED.duration_seconds, call_recordings.duration_seconds),
       called_at        = COALESCE(EXCLUDED.called_at, call_recordings.called_at),
       language         = COALESCE(EXCLUDED.language, call_recordings.language),
-      transcript       = COALESCE(EXCLUDED.transcript, call_recordings.transcript),
+      -- Never overwrite an existing transcript (concurrent cron + webhook race protection)
+      transcript       = CASE WHEN call_recordings.transcript IS NOT NULL
+                              THEN call_recordings.transcript
+                              ELSE EXCLUDED.transcript END,
       updated_at       = NOW()
   `, [
     data.id,
@@ -510,18 +527,25 @@ export async function getCallRecordingByChatId(chatId: string): Promise<CallReco
 }
 
 /** Find call recordings for a contact that have not yet been linked to a chat.
- *  Since one phone = one active chat at a time, all unlinked calls with
- *  called_at <= closedAt belong to this chat. */
+ *  Uses both direct contact_id match AND last-10-digit phone suffix matching so
+ *  calls stored with a different phone format (e.g. 91XXXXXXXXXX vs XXXXXXXXXX)
+ *  are still linked correctly. */
 export async function getUnlinkedCallsForContact(
   contactId: number,
   closedAt: string,
 ): Promise<CallRecordingRow[]> {
   return query<CallRecordingRow>(`
-    SELECT * FROM call_recordings
-    WHERE contact_id = $1
-      AND chat_id IS NULL
-      AND called_at <= $2::timestamptz
-    ORDER BY called_at ASC
+    SELECT cr.*
+    FROM call_recordings cr
+    LEFT JOIN contacts c ON c.id = cr.contact_id
+    LEFT JOIN contacts c2 ON c2.id = $1
+    WHERE cr.chat_id IS NULL
+      AND cr.called_at <= $2::timestamptz
+      AND (
+        cr.contact_id = $1
+        OR RIGHT(COALESCE(c.phone, ''), 10) = RIGHT(COALESCE(c2.phone, ''), 10)
+      )
+    ORDER BY cr.called_at ASC
   `, [contactId, closedAt]);
 }
 
@@ -549,6 +573,48 @@ export async function getLinkedUnscoredCallsForChat(chatId: string): Promise<Cal
     `SELECT * FROM call_recordings WHERE chat_id = $1 AND status = 'linked' ORDER BY called_at ASC`,
     [chatId],
   );
+}
+
+/**
+ * Atomically claim a call for scoring by transitioning status 'linked' → 'scoring'.
+ * Returns true if this process successfully claimed it; false if another process
+ * already grabbed it (preventing duplicate concurrent scoring).
+ */
+export async function claimCallForScoring(callId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE call_recordings SET status = 'scoring', updated_at = NOW()
+     WHERE id = $1 AND status = 'linked'
+     RETURNING id`,
+    [callId],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Find conversations that have call_recordings with status='linked' but those
+ * calls have never been scored. Used by the cron to catch calls that were linked
+ * after chat scoring completed (and thus missed the normal scoring path).
+ * Also resets any 'scoring' rows stuck >30 min (crashed mid-scoring) back to 'linked'.
+ */
+export async function getConversationsWithUnscoredLinkedCalls(): Promise<ConversationRow[]> {
+  // First: unstick any 'scoring' rows that have been stuck for >30 minutes
+  await query(`
+    UPDATE call_recordings
+    SET status = 'linked', updated_at = NOW()
+    WHERE status = 'scoring'
+      AND updated_at < NOW() - INTERVAL '30 minutes'
+  `, []);
+
+  return query<ConversationRow>(`
+    SELECT DISTINCT c.*
+    FROM conversations c
+    JOIN call_recordings cr ON cr.chat_id = c.id
+    WHERE cr.status = 'linked'
+      AND c.tags IS NOT NULL
+      AND c.closed_at < NOW() - INTERVAL '30 minutes'
+    ORDER BY c.closed_at ASC
+    LIMIT 50
+  `, []);
 }
 
 export async function getAllScoredCalls(opts: {

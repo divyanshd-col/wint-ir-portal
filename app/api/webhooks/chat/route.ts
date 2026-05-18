@@ -28,6 +28,7 @@ import {
 } from '@/lib/quality';
 import type { TimedMessage } from '@/lib/quality';
 import { enrichTranscriptWithMedia } from '@/lib/media-context';
+import { claimCallForScoring, getConversationsWithUnscoredLinkedCalls } from '@/lib/robylon/db';
 import {
   CALL_IQS_SYSTEM_PROMPT,
   buildCallScoringPrompt,
@@ -97,7 +98,7 @@ function messagesToTranscript(messages: RobyMessage[]): string {
 }
 
 // ── Build transcript text from JSONB array stored in conversations.transcript ──
-function transcriptFromJsonb(messages: any[]): string {
+export function transcriptFromJsonb(messages: any[]): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
   for (const m of messages) {
@@ -175,7 +176,7 @@ function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult
 }
 
 // ── Call IQS scoring for calls linked to a chat ───────────────────────────────
-async function scoreLinkedCallsForChat(
+export async function scoreLinkedCallsForChat(
   chatId: string,
   chatTranscriptText: string,
   disposition: string,
@@ -204,10 +205,20 @@ async function scoreLinkedCallsForChat(
   } catch {}
 
   for (const call of calls) {
+    // Atomic claim: transition 'linked' → 'scoring' in a single UPDATE.
+    // If another concurrent process already claimed this call, skip it here.
+    const claimed = await claimCallForScoring(call.id);
+    if (!claimed) {
+      console.log(`[webhook] Call ${call.id} already claimed by another process — skipping`);
+      continue;
+    }
+
     const segments = Array.isArray(call.transcript) ? call.transcript : [];
     const callText  = segmentsToText(segments);
     if (!callText) {
-      await updateCallRecordingStatus(call.id, 'scored');
+      // Transcript exists but produced no text — mark distinctly so cron won't retry forever
+      await updateCallRecordingStatus(call.id, 'skipped_no_transcript');
+      console.warn(`[webhook] Call ${call.id} has no usable transcript text — skipped`);
       continue;
     }
 
@@ -242,7 +253,9 @@ async function scoreLinkedCallsForChat(
       await updateCallRecordingStatus(call.id, 'scored');
       console.log(`[webhook] Scored call ${call.id} → IQS ${iqs} for chat ${chatId}`);
     } catch (err: any) {
-      console.error(`[webhook] Call IQS scoring failed for call ${call.id}:`, err.message);
+      // Reset to 'linked' so the cron can retry this call on the next sweep
+      await updateCallRecordingStatus(call.id, 'linked').catch(() => {});
+      console.error(`[webhook] Call IQS scoring failed for call ${call.id} — reset to linked for retry:`, err.message);
     }
   }
 }
@@ -640,7 +653,7 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const conv = await getConversation(chatId);
   const alreadyScored = await isScored(chatId);
 
-  if (conv?.transcript && !alreadyScored) {
+  if (conv?.transcript) {
     const agentId = conv.agent_id;
     const agentName = agentId
       ? (await import('@/lib/robylon/db').then(m => m.getAgentName(agentId)))
@@ -653,17 +666,26 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
     chatTranscriptText = transcriptFromJsonb(transcriptMessages);
 
     const config = await readConfig();
-    const [scoredResult] = await Promise.allSettled([
-      executeScoring(conv, agentName, disposition, subDisposition),
-      scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config),
-    ]);
 
-    const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
-    if (scored) {
-      return NextResponse.json({
-        ok: true, chat_id: chatId, iqs: scored.iqs,
-        disposition, subDisposition,
-      });
+    if (!alreadyScored) {
+      // Score chat + linked calls together
+      const [scoredResult] = await Promise.allSettled([
+        executeScoring(conv, agentName, disposition, subDisposition),
+        scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config),
+      ]);
+
+      const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
+      if (scored) {
+        return NextResponse.json({
+          ok: true, chat_id: chatId, iqs: scored.iqs,
+          disposition, subDisposition,
+        });
+      }
+    } else {
+      // Chat already scored — still attempt to score any linked calls that may have
+      // arrived after the original scoring run (e.g. call webhook fired late)
+      await scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config)
+        .catch(err => console.error('[webhook] Late call scoring failed:', err.message));
     }
   }
 
