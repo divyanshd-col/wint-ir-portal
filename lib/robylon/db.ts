@@ -40,9 +40,10 @@ export async function getAgentNamesByQA(qaName: string): Promise<string[]> {
 /** Upsert a contact by phone number. Returns contact.id */
 export async function upsertContact(phone: string | undefined): Promise<number | null> {
   if (!phone) return null;
+  const normalised = phone.trim().slice(0, 50);
   const rows = await query<{ id: number }>(
     `INSERT INTO contacts (phone) VALUES ($1) ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone RETURNING id`,
-    [phone],
+    [normalised],
   );
   return rows[0]?.id ?? null;
 }
