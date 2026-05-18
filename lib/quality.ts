@@ -193,6 +193,13 @@ The AI scorer cannot see whether an agent checked Finder, order status, or accou
 - Only mark Process as No if the agent's visible response directly contradicts what an internal check would have shown (e.g. agent says repayment not processed but transcript shows it was credited).
 - The fact that a response could have been improved by a tool check is NOT sufficient to fail Process.
 
+### Agent Not Narrating Backend Checks — NOT a Technical Error
+Agents routinely perform backend verifications (e.g., confirming an active SIP, checking Finder, verifying order status) without explicitly telling the customer what they checked. This is correct behaviour — we do not expose all internal backend details to clients.
+- **Do NOT mark Technical as No** simply because the agent did not say "I checked and confirmed X" before taking an action.
+- If the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP" — this is NOT a technical error. The check is internal; the agent is not required to narrate it to the customer.
+- Only mark Technical as No if the agent's actual response or action is provably wrong — e.g., they said the wrong fact, gave the wrong process step, or the outcome contradicts what a correct check would have produced.
+- The absence of a verbal confirmation of a backend check is **never** sufficient on its own to fail Technical.
+
 ### Skip Instalment before Cancellation — Not mandatory
 The KB mentions "Skip Instalment" as an option before cancellation, but this is **not a mandatory step**. An agent proceeding directly to cancellation without first offering "Skip Instalment" is NOT a process failure. Do not penalize.
 

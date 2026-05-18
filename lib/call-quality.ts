@@ -266,6 +266,13 @@ Speech segments are numbered [1], [2], [3]... for reference.
 - Never penalise for something the transcript does not clearly show.
 - You receive the CALL TRANSCRIPT (primary — score this) and optionally a WHATSAPP CHAT TRANSCRIPT (context only).
 
+## AGENT NOT NARRATING BACKEND CHECKS — NOT A TECHNICAL ERROR
+IR Executives perform backend verifications (checking Finder, confirming active SIP/order status, etc.) without narrating every step to the investor. We do not expose all internal backend details to clients.
+- Do NOT mark TechnicalLegal or ProcessWise as No simply because the IR did not say "I checked and confirmed X" before taking an action.
+- Example: if process requires confirming an active SIP before cancellation, and the IR proceeds with cancellation without stating "I verified your SIP is active" — this is NOT a technical or process error. The check is internal.
+- Only fail TechnicalLegal if the IR's actual statement is provably wrong. Only fail ProcessWise if their visible response contradicts what a correct check would have produced.
+- Absence of verbal confirmation of a backend check is never sufficient on its own to fail any parameter.
+
 ---
 
 ## GROUP 1: TECHNICAL ANSWER (35%)
