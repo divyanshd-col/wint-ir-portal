@@ -243,19 +243,20 @@ Example: IR says "Sorry sir, I could not hear you, could you please repeat?" the
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
-Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false}
+Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false,"ts":"M:SS"}
+  where "ts" is the timestamp when this line begins in the audio, in M:SS format (e.g. "0:00", "1:32", "12:05").
 Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
 Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
 Active listening flags use: {"type":"active_listening","phrase":"[exact phrase in English]"}
 
 Example output (mixed Telugu + English call):
 {"language":"Telugu + English","segments":[
-  {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false},
+  {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false,"ts":"0:00"},
   {"type":"dead_air","duration":"~2 seconds","resumed_by":"IR EXECUTIVE"},
-  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true},
+  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false,"ts":"0:03"},
+  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true,"ts":"0:08"},
   {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":5},
-  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true}
+  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true,"ts":"1:45"}
 ]}`;
 
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────
