@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 
 export const runtime    = 'nodejs';
-export const maxDuration = 600; // 10 minutes — long audio files can take 5+ min to transcribe
+export const maxDuration = 300;
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
