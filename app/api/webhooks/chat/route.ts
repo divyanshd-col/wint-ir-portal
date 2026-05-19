@@ -430,7 +430,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
 
   const rawMessages: any[] = transcriptObj.messages;
   const convStarted = transcriptObj.conversation_started || body.created_at || '';
-  const convEnded   = body.created_at || '';
+  const convEnded   = transcriptObj.conversation_ended || body.data?.closed_at || body.data?.ended_at || body.created_at || new Date().toISOString();
   const chatId      = String(body.chat_id || transcriptObj.chat_id || `wh_${Date.now()}`);
   const year        = convStarted ? new Date(convStarted).getUTCFullYear() : new Date().getUTCFullYear();
   const agentName   = extractAgentName(rawMessages);
