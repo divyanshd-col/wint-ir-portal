@@ -32,12 +32,10 @@ import {
   CALL_IQS_SYSTEM_PROMPT,
   CALL_TRANSCRIPTION_PROMPT,
   CALL_DISPOSITION_CLASSIFY_PROMPT,
-  CALL_CHUNK_PROMPT,
   buildCallScoringPrompt,
   parseCallScoringResponse,
   parseTranscriptionResponse,
   parseCallDispositionClassified,
-  parseCallChunks,
   insertPoorListeningFlags,
   segmentsToText,
 } from '@/lib/call-quality';
@@ -59,7 +57,6 @@ import {
   insertCallRecording,
   updateCallRecordingMetrics,
   updateCallDisposition,
-  insertCallTranscriptChunks,
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
@@ -874,32 +871,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
           }
         }
 
-        // ── Step 6: Chunk transcript into topics + store for RAG retrieval ──────
-        try {
-          const rawChunks = await callGeminiForCall(
-            geminiKeys,
-            [{ role: 'user', parts: [{ text: CALL_CHUNK_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
-            undefined,
-            30_000,
-          );
-          const chunks = parseCallChunks(rawChunks);
-          if (chunks.length > 0) {
-            await insertCallTranscriptChunks(chunks.map((c, i) => ({
-              callId,
-              chatId: null,
-              contactId: contactId ?? null,
-              agentId: null,
-              calledAt,
-              topic: c.topic,
-              summary: c.summary,
-              content: c.content,
-              chunkIndex: i,
-            })));
-            console.log(`[webhook] Call ${callId} chunked into ${chunks.length} topic chunk(s) for RAG`);
-          }
-        } catch (err: any) {
-          console.error(`[webhook] Chunking failed for call ${callId}:`, err.message);
-        }
+        // ── Step 6: Chunking removed ─────────────────────────────────────────
       }
     } catch (err: any) {
       console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);

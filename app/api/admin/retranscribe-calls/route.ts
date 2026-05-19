@@ -23,17 +23,14 @@ import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   CALL_DISPOSITION_CLASSIFY_PROMPT,
-  CALL_CHUNK_PROMPT,
   parseTranscriptionResponse,
   parseCallDispositionClassified,
-  parseCallChunks,
   segmentsToText,
 } from '@/lib/call-quality';
 import {
   insertCallRecording,
   updateCallRecordingMetrics,
   updateCallDisposition,
-  insertCallTranscriptChunks,
   type CallRecordingRow,
 } from '@/lib/robylon/db';
 import { query } from '@/lib/cx/db';
@@ -68,7 +65,7 @@ async function getPendingCalls(callIds?: string[]): Promise<CallRecordingRow[]> 
 async function transcribeCall(
   call: CallRecordingRow,
   geminiKeys: string[],
-): Promise<{ disposition: string; subDisposition: string; segments: number; chunks: number }> {
+): Promise<{ disposition: string; subDisposition: string; segments: number }> {
   const { id: callId, recording_url: recordingUrl, contact_id, agent_id, called_at } = call;
 
   if (!recordingUrl) throw new Error('No recording_url');
@@ -109,10 +106,8 @@ async function transcribeCall(
   const transcriptText = segmentsToText(segments);
   let disposition = '';
   let subDisposition = '';
-  let chunkCount = 0;
 
   if (transcriptText.trim()) {
-    // Step 4: Disposition — callGeminiForCall has 5 retries + full model chain
     try {
       const rawDisp = await callGeminiForCall(
         geminiKeys,
@@ -127,38 +122,9 @@ async function transcribeCall(
     } catch (err: any) {
       console.error(`[retranscribe] Disposition failed for call ${callId}:`, err.message);
     }
-
-    // Step 5: Chunking — callGeminiForCall has 5 retries + full model chain
-    try {
-      const rawChunks = await callGeminiForCall(
-        geminiKeys,
-        [{ role: 'user', parts: [{ text: CALL_CHUNK_PROMPT + '\n\n## CALL TRANSCRIPT\n' + transcriptText }] }],
-        undefined,
-        30_000,
-      );
-      const chunks = parseCallChunks(rawChunks);
-      if (chunks.length > 0) {
-        // Remove any stale chunks from a previous partial run before inserting fresh ones
-        await query(`DELETE FROM call_transcript_chunks WHERE call_id = $1`, [callId]);
-        await insertCallTranscriptChunks(chunks.map((c, i) => ({
-          callId,
-          chatId: call.chat_id ?? null,
-          contactId: contact_id ?? null,
-          agentId: agent_id ?? null,
-          calledAt: called_at ?? null,
-          topic: c.topic,
-          summary: c.summary,
-          content: c.content,
-          chunkIndex: i,
-        })));
-        chunkCount = chunks.length;
-      }
-    } catch (err: any) {
-      console.error(`[retranscribe] Chunking failed for call ${callId}:`, err.message);
-    }
   }
 
-  return { disposition, subDisposition, segments: segments.length, chunks: chunkCount };
+  return { disposition, subDisposition, segments: segments.length };
 }
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
