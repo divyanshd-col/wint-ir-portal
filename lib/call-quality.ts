@@ -156,113 +156,106 @@ export function insertPoorListeningFlags(
 }
 
 // ── Transcription prompt (Pass 1) — audio → segment JSON ─────────────────────
-export const CALL_TRANSCRIPTION_PROMPT = `You are transcribing a customer service call for Wint Wealth, an Indian fixed income investment platform.
-Listen to the ENTIRE audio from start to finish before writing a single word of output.
+export const CALL_TRANSCRIPTION_PROMPT = `You are analyzing a customer service call for Wint Wealth, an Indian fixed income investment platform.
+Listen to the ENTIRE audio before producing any output.
 
 ══════════════════════════════════════════
-STEP 1 — IDENTIFY THE TWO SPEAKERS
+SPEAKER IDENTIFICATION
 ══════════════════════════════════════════
-This is ALWAYS an outbound call: a Wint Wealth IR Executive called the investor.
-There are exactly two speakers. Label them ONLY as:
-  • IR EXECUTIVE — the Wint Wealth employee who made this call
-  • INVESTOR     — the customer who received this call
+There are exactly two speakers: IR EXECUTIVE and INVESTOR.
 
-── HOW TO IDENTIFY WHO IS WHO ──────────────────────────────────────────────────
-Listen through the entire call first, THEN assign labels.
+IR EXECUTIVE: Says their own name + "Wint Wealth" in their introduction. Explains products and resolves queries.
+INVESTOR: Often speaks first — answers with "Hello?", "Haan?", or silence. Asks questions, raises problems.
 
-PRIMARY RULE (use this first):
-  The speaker who says "Wint Wealth" at any point in the call = IR EXECUTIVE.
-  The other speaker = INVESTOR.
-  This rule is absolute. Never override it.
+DECISION PROCEDURE:
+1. Listen to the whole call first.
+2. Whoever says their name + "Wint Wealth" = IR EXECUTIVE for the entire call.
+3. The other voice = INVESTOR for the entire call.
+4. A short "Hello?" or "Haan?" with no introduction at the start = INVESTOR.
 
-SECONDARY RULES (use only if "Wint Wealth" is never clearly spoken):
-  • The speaker who introduces themselves by name AND explains products/timelines/processes = IR EXECUTIVE.
-  • The speaker who asks questions, raises problems, sounds uncertain or confused = INVESTOR.
-  • The speaker who uses formal professional language and offers to help = IR EXECUTIVE.
-
-── COMMON CALL OPENINGS (do NOT misidentify these) ─────────────────────────────
-Pattern A — investor picks up first:
-  INVESTOR:     "Hello?"
-  IR EXECUTIVE: "Hello, good morning! This is [Name] calling from Wint Wealth."
-
-Pattern B — IR speaks first (outbound auto-dial):
-  IR EXECUTIVE: "Hello, am I speaking with [investor name]?"
-  INVESTOR:     "Yes, speaking."
-  IR EXECUTIVE: "Hi, this is [Name] from Wint Wealth calling regarding..."
-
-In BOTH patterns, the speaker who says "Wint Wealth" = IR EXECUTIVE for the ENTIRE call.
-
-── MANDATORY VERIFICATION (do this before writing output) ──────────────────────
-After identifying speakers, verify:
-  ✓ Does a segment labeled IR EXECUTIVE contain "Wint Wealth" or "Wint"? → Correct.
-  ✗ Does a segment labeled INVESTOR contain "Wint Wealth" or "Wint"?     → Labels are REVERSED. Swap every label before outputting.
-  ✓ Does IR EXECUTIVE explain products, timelines, or processes?          → Correct.
-  ✗ Does INVESTOR explain products while IR EXECUTIVE asks questions?     → Labels are REVERSED. Swap every label before outputting.
-
-Labels NEVER change mid-call. One voice = one label for the entire call.
-
-── NAME ACCURACY ────────────────────────────────────────────────────────────────
-Transcribe the IR Executive's name EXACTLY as heard (e.g. "This is Priya calling from Wint Wealth").
-For bond names, fund names, and product names: transcribe phonetically if unclear, or write [unclear].
-NEVER guess, infer, or hallucinate any proper noun. If unsure, write what you hear phonetically.
+Pay close attention to names — IR executives introduce themselves by name (e.g. "This is Priya from Wint Wealth").
+Transcribe that name EXACTLY as heard. Similarly transcribe bond names, fund names, and product names exactly as spoken.
+CRITICAL: NEVER guess, infer, or hallucinate any proper noun (person names, bond names, company names, product names).
+If a name is unclear, write it phonetically as best you can, or write [unclear]. Do NOT substitute a different name.
 
 ══════════════════════════════════════════
-STEP 2 — TRANSCRIPTION RULES
+TRANSCRIPTION RULES
 ══════════════════════════════════════════
 - Each segment = one complete speaker turn.
-- Transcribe EVERY single word spoken — do not skip, summarise, or paraphrase anything.
-- During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff; the interrupting speaker's words appear in their own new segment.
-- Translate ALL non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.) into natural fluent English.
+- Transcribe EVERY single word spoken — do not skip, summarize, or paraphrase anything.
+- During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.
+- Translate ALL non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.) to natural fluent English.
   Put the English translation directly in the "text" field — do NOT add a separate "translation" field.
   CRITICAL: Even a single non-English word in an otherwise English sentence must be fully translated. No exceptions.
-- Keep English filler sounds as-is (uh, um). Translate non-English fillers (haan → yes, theek hai → okay, arre → oh).
+- Keep filler sounds as-is where they are English (uh, um). Translate non-English fillers (haan → yes, theek hai → okay).
 - Set "translated": true for any segment that contained non-English words (even partially).
-- Report all detected languages in the top-level "language" field.
+- Report all detected languages in the "language" field.
 
 ══════════════════════════════════════════
-STEP 3 — FLAG SPECIAL EVENTS
+INTERRUPTION DETECTION
 ══════════════════════════════════════════
+Listen carefully for moments where one speaker cuts off or talks over another.
 
-INTERRUPTIONS
-An interruption occurs when Speaker A is mid-sentence and Speaker B starts speaking before A finishes.
-Insert an interruption flag immediately BEFORE the interrupting speaker's segment.
-Only flag if Speaker A had spoken fewer than 10 words when cut off.
-Format: {"type":"interruption","interrupted_speaker":"[LABEL]","interrupted_by":"[LABEL]","words_spoken":[N]}
+An interruption occurs when Speaker A is talking and Speaker B starts speaking before Speaker A finishes their thought.
+- Count the words Speaker A had spoken in that turn at the moment of interruption.
+- Insert an interruption flag BEFORE the segment of the speaker who did the interrupting.
+- Only flag as interruption if Speaker A had spoken fewer than 10 words in that turn when cut off.
 
-DEAD AIR
-Flag any silence of 2+ seconds where neither speaker talks. Estimate duration to nearest second.
-Format: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[LABEL]"}
+Interruption flag format (insert as a segment object):
+{"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[NUMBER]}
 
-ACTIVE LISTENING
-Flag any moment where the IR EXECUTIVE indicates they could not hear or understand the investor.
-Phrases include (in any language): "I cannot hear you", "Can you please repeat?", "I didn't catch that",
-"Could you come again?", "I'm sorry, I didn't understand", "Pardon?", or equivalents in Hindi/Telugu/Tamil/Kannada/Malayalam.
-Insert the flag IMMEDIATELY AFTER the IR EXECUTIVE segment containing that phrase.
-Format: {"type":"active_listening","phrase":"[exact phrase translated to English]"}
+Example: IR EXECUTIVE was saying "So the bond matures in three" (6 words) when INVESTOR cut in:
+{"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":6}
+
+══════════════════════════════════════════
+DEAD AIR DETECTION
+══════════════════════════════════════════
+Listen for pauses of 2 or more seconds where neither speaker is talking.
+Insert a dead air flag at the point in the conversation where the silence occurs.
+Estimate the duration to the nearest second.
+Note which speaker resumed the conversation.
+
+Dead air flag format (insert as a segment object):
+{"type":"dead_air","duration":"~[N] seconds","resumed_by":"[SPEAKER NAME]"}
+
+Example: {"type":"dead_air","duration":"~4 seconds","resumed_by":"INVESTOR"}
+
+Only flag dead air that is noticeably long (2+ seconds). Ignore normal conversational pauses under 2 seconds.
+
+══════════════════════════════════════════
+ACTIVE LISTENING DETECTION
+══════════════════════════════════════════
+Listen for any moment where the IR EXECUTIVE indicates they could not hear or understand the investor.
+This includes phrases like (in any language):
+- "I cannot hear you" / "I can't hear you" / "Hello? I can't hear"
+- "Can you please repeat?" / "Could you please repeat that?" / "Please come again"
+- "I'm sorry, I didn't understand" / "I didn't catch that" / "I didn't get that"
+- "Pardon?" / "Sorry, what did you say?" / "Can you come again?"
+- Equivalent phrases in Hindi, Telugu, Tamil, Kannada, Malayalam, etc.
+
+When detected, insert an active_listening flag IMMEDIATELY AFTER the IR EXECUTIVE speech segment where this phrase appears:
+{"type":"active_listening","phrase":"[exact phrase spoken, translated to English]"}
+
+Example: IR says "Sorry sir, I could not hear you, could you please repeat?" then insert:
+{"type":"active_listening","phrase":"Sorry sir, I could not hear you, could you please repeat?"}
 
 ══════════════════════════════════════════
 OUTPUT FORMAT
 ══════════════════════════════════════════
-Return ONLY a valid JSON object. No markdown, no explanation, no code fences — raw JSON only.
+Return ONLY a valid JSON object. No markdown, no code fences.
+Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false}
+Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
+Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
+Active listening flags use: {"type":"active_listening","phrase":"[exact phrase in English]"}
 
-{"language":"[languages detected]","segments":[
-  {"type":"speech","speaker":"IR EXECUTIVE or INVESTOR","text":"[full English text of this turn]","translated":false},
-  {"type":"interruption","interrupted_speaker":"[LABEL]","interrupted_by":"[LABEL]","words_spoken":[N]},
-  {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[LABEL]"},
-  {"type":"active_listening","phrase":"[exact phrase in English]"}
-]}
-
-── EXAMPLE (outbound Telugu + English call) ────────────────────────────────────
+Example output (mixed Telugu + English call):
 {"language":"Telugu + English","segments":[
   {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false},
-  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! Am I speaking with Ramesh sir?","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"Yes, speaking.","translated":false},
-  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hi Ramesh sir, this is Priya calling from Wint Wealth. I am calling regarding your recent query about the payout.","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"Yes, I was asking about when my interest will be credited.","translated":true},
-  {"type":"dead_air","duration":"~3 seconds","resumed_by":"IR EXECUTIVE"},
-  {"type":"speech","speaker":"IR EXECUTIVE","text":"Sure sir, the interest payout will be credited within 5 to 7 working days from the record date.","translated":false},
-  {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":4},
-  {"type":"speech","speaker":"INVESTOR","text":"Okay, thank you.","translated":true}
+  {"type":"dead_air","duration":"~2 seconds","resumed_by":"IR EXECUTIVE"},
+  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false},
+  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true},
+  {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":5},
+  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true}
 ]}`;
 
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────
