@@ -47,21 +47,20 @@ function mimeFromUrl(u: string): string {
   return 'audio/mpeg';
 }
 
-async function getPendingCalls(callId?: string): Promise<CallRecordingRow[]> {
-  if (callId) {
+async function getPendingCalls(callIds?: string[]): Promise<CallRecordingRow[]> {
+  if (callIds?.length) {
     return query<CallRecordingRow>(
-      `SELECT * FROM call_recordings WHERE id = $1 AND recording_url IS NOT NULL`,
-      [callId],
+      `SELECT * FROM call_recordings WHERE id = ANY($1) AND recording_url IS NOT NULL`,
+      [callIds],
     );
   }
-  // Process one at a time when no call_id given — caller can loop through all pending IDs
   return query<CallRecordingRow>(
     `SELECT * FROM call_recordings
      WHERE transcript IS NULL
        AND recording_url IS NOT NULL
        AND called_at >= CURRENT_DATE
      ORDER BY called_at ASC
-     LIMIT 1`,
+     LIMIT 10`,
     [],
   );
 }
@@ -170,10 +169,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
   }
 
-  let body: { call_id?: string } = {};
+  let body: { call_id?: string; call_ids?: string[] } = {};
   try { body = await req.json(); } catch {}
 
-  const callId = body.call_id?.trim() || undefined;
+  // Support single call_id or batch call_ids array
+  const callIds: string[] | undefined =
+    body.call_ids?.length ? body.call_ids.map(s => s.trim()).filter(Boolean)
+    : body.call_id?.trim() ? [body.call_id.trim()]
+    : undefined;
 
   let geminiKeys: string[];
   try {
@@ -186,39 +189,34 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'No Gemini API key configured' }, { status: 503 });
   }
 
-  const calls = await getPendingCalls(callId);
+  const calls = await getPendingCalls(callIds);
   if (!calls.length) {
-    const reason = callId
-      ? `Call ${callId} not found or has no recording_url`
+    const reason = callIds?.length
+      ? `No calls found for IDs: ${callIds.join(', ')}`
       : 'No calls today with null transcript and a recording_url';
     return NextResponse.json({ ok: true, message: reason, processed: 0 });
   }
 
-  const results: Array<{
-    callId: string;
-    segments?: number;
-    disposition?: string;
-    subDisposition?: string;
-    chunks?: number;
-    error?: string;
-  }> = [];
-
-  for (const call of calls) {
-    try {
+  // Process all calls in parallel — total time = slowest single call, not sum of all
+  const settled = await Promise.allSettled(
+    calls.map(async call => {
       const r = await transcribeCall(call, geminiKeys);
-      console.log(`[retranscribe] call ${call.id} — ${r.segments} segments, disposition=${r.disposition}, chunks=${r.chunks}`);
-      results.push({ callId: call.id, ...r });
-    } catch (err: any) {
-      console.error(`[retranscribe] call ${call.id} failed:`, err.message);
-      results.push({ callId: call.id, error: err.message });
-    }
-  }
+      console.log(`[retranscribe] call ${call.id} — ${r.segments} segments, disposition=${r.disposition}`);
+      return { callId: call.id, ...r };
+    })
+  );
+
+  const results = settled.map((s, i) =>
+    s.status === 'fulfilled'
+      ? s.value
+      : { callId: calls[i].id, error: (s.reason as any)?.message ?? String(s.reason) }
+  );
 
   return NextResponse.json({
     ok: true,
     processed: calls.length,
-    succeeded: results.filter(r => !r.error).length,
-    failed: results.filter(r => r.error).length,
+    succeeded: results.filter(r => !('error' in r)).length,
+    failed: results.filter(r => 'error' in r).length,
     results,
   });
 }
