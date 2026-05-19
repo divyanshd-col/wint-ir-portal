@@ -582,19 +582,42 @@ ${chatTranscriptText}
 Score all 11 parameters. Output ONLY the JSON.`;
 }
 
+// ── Deterministic speaker-label correction ────────────────────────────────────
+// The LLM sometimes swaps IR EXECUTIVE and INVESTOR. We detect this by checking
+// whether any INVESTOR segment contains "Wint" (only the IR says "Wint Wealth").
+// If detected, swap every IR EXECUTIVE ↔ INVESTOR label in the entire array.
+function fixSpeakerLabels(segments: CallSegment[]): CallSegment[] {
+  const labelsReversed = segments.some(
+    s => s.type === 'speech' && s.speaker === 'INVESTOR' && /wint/i.test(s.text || ''),
+  );
+  if (!labelsReversed) return segments;
+
+  console.warn('[fixSpeakerLabels] Detected reversed labels — swapping IR EXECUTIVE ↔ INVESTOR');
+  const swap = (label: string | undefined) =>
+    label === 'IR EXECUTIVE' ? 'INVESTOR'
+    : label === 'INVESTOR'   ? 'IR EXECUTIVE'
+    : label;
+
+  return segments.map(seg => {
+    if (seg.type === 'speech')       return { ...seg, speaker: swap(seg.speaker) };
+    if (seg.type === 'interruption') return { ...seg, interrupted_speaker: swap(seg.interrupted_speaker), interrupted_by: swap(seg.interrupted_by) };
+    if (seg.type === 'dead_air')     return { ...seg, resumed_by: swap(seg.resumed_by) };
+    return seg;
+  });
+}
+
 // ── Parse transcription response ──────────────────────────────────────────────
 export function parseTranscriptionResponse(raw: string): { language: string; segments: CallSegment[] } {
   try {
     const parsed = robustJsonParse(raw);
     if (!parsed) return { language: 'English', segments: [] };
-    if (Array.isArray(parsed)) return { language: 'Unknown', segments: parsed };
+    if (Array.isArray(parsed)) return { language: 'Unknown', segments: fixSpeakerLabels(parsed) };
     return {
       language: parsed.language || 'English',
-      segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+      segments: fixSpeakerLabels(Array.isArray(parsed.segments) ? parsed.segments : []),
     };
   } catch {
     // Truncated JSON recovery — Gemini hit output token limit mid-response.
-    // Extract language + any complete segment objects from the partial string.
     const langMatch = raw.match(/"language"\s*:\s*"([^"]+)"/);
     const language = langMatch?.[1] || 'English';
     const segments: CallSegment[] = [];
@@ -607,7 +630,7 @@ export function parseTranscriptionResponse(raw: string): { language: string; seg
       } catch {}
     }
     console.warn(`[parseTranscriptionResponse] Truncated JSON recovered: ${segments.length} segments, language=${language}`);
-    return { language, segments };
+    return { language, segments: fixSpeakerLabels(segments) };
   }
 }
 
