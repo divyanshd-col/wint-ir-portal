@@ -254,13 +254,14 @@ export async function scoreLinkedCallsForChat(
 async function linkAndScoreCallsForChat(
   chatId: string,
   contactId: number,
+  startedAt: string,
   closedAt: string,
   chatTranscriptText: string,
   disposition: string,
   subDisposition: string,
   config: any,
 ): Promise<void> {
-  const unlinked = await getUnlinkedCallsForContact(contactId, closedAt);
+  const unlinked = await getUnlinkedCallsForContact(contactId, startedAt, closedAt);
   if (!unlinked.length) return;
 
   await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
@@ -533,6 +534,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     const callLinkPromise = linkAndScoreCallsForChat(
       chatId,
       contactId,
+      convStarted,
       convEnded,
       transcriptText,
       disposition,

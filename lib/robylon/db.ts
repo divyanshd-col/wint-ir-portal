@@ -506,19 +506,21 @@ export async function getCallRecordingsByContactWindow(
 }
 
 /** Find call recordings for a contact that have not yet been linked to a chat.
- *  Since one phone = one active chat at a time, all unlinked calls with
- *  called_at <= closedAt belong to this chat. */
+ *  Lower bound (startedAt - 15 min) prevents orphaned calls from older conversations
+ *  being incorrectly linked to a newer chat when a backlog of NULL chat_ids exists. */
 export async function getUnlinkedCallsForContact(
   contactId: number,
+  startedAt: string,
   closedAt: string,
 ): Promise<CallRecordingRow[]> {
   return query<CallRecordingRow>(`
     SELECT * FROM call_recordings
     WHERE contact_id = $1
       AND chat_id IS NULL
-      AND called_at <= $2::timestamptz
+      AND called_at >= $2::timestamptz - INTERVAL '15 minutes'
+      AND called_at <= $3::timestamptz
     ORDER BY called_at ASC
-  `, [contactId, closedAt]);
+  `, [contactId, startedAt, closedAt]);
 }
 
 /** Backfill chat_id and advance status to 'linked' on a call recording. */
