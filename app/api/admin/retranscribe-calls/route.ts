@@ -91,7 +91,7 @@ async function transcribeCall(
       { text: CALL_TRANSCRIPTION_PROMPT },
     ]}],
     undefined,
-    180_000,
+    270_000,
   );
 
   const { language, segments } = parseTranscriptionResponse(raw);

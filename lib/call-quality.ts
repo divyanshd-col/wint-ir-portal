@@ -577,13 +577,31 @@ Score all 11 parameters. Output ONLY the JSON.`;
 
 // ── Parse transcription response ──────────────────────────────────────────────
 export function parseTranscriptionResponse(raw: string): { language: string; segments: CallSegment[] } {
-  const parsed = robustJsonParse(raw);
-  if (!parsed) return { language: 'English', segments: [] };
-  if (Array.isArray(parsed)) return { language: 'Unknown', segments: parsed };
-  return {
-    language: parsed.language || 'English',
-    segments: Array.isArray(parsed.segments) ? parsed.segments : [],
-  };
+  try {
+    const parsed = robustJsonParse(raw);
+    if (!parsed) return { language: 'English', segments: [] };
+    if (Array.isArray(parsed)) return { language: 'Unknown', segments: parsed };
+    return {
+      language: parsed.language || 'English',
+      segments: Array.isArray(parsed.segments) ? parsed.segments : [],
+    };
+  } catch {
+    // Truncated JSON recovery — Gemini hit output token limit mid-response.
+    // Extract language + any complete segment objects from the partial string.
+    const langMatch = raw.match(/"language"\s*:\s*"([^"]+)"/);
+    const language = langMatch?.[1] || 'English';
+    const segments: CallSegment[] = [];
+    const segRegex = /\{[^{}]*"type"\s*:\s*"[^"]*"[^{}]*\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = segRegex.exec(raw)) !== null) {
+      try {
+        const seg = JSON.parse(m[0]);
+        if (seg?.type) segments.push(seg as CallSegment);
+      } catch {}
+    }
+    console.warn(`[parseTranscriptionResponse] Truncated JSON recovered: ${segments.length} segments, language=${language}`);
+    return { language, segments };
+  }
 }
 
 // ── Parse call disposition response (loose) ──────────────────────────────────
