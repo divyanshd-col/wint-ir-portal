@@ -35,8 +35,6 @@ export interface PortalConfig {
   iqsScoringPrompt?: string;
   analyticsPlannerPrompt?: string;
   analyticsSynthesizerPrompt?: string;
-  // ── Call transcription vocabulary (injected into transcription prompt) ───────
-  callVocabulary?: string[];  // known IR names, bond names, product names
 }
 
 const DEFAULT_CONFIG: PortalConfig = {

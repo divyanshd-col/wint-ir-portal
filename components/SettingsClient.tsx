@@ -26,7 +26,6 @@ interface SafeConfig {
   conversationHistoryEnabled?: boolean;
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
-  callVocabulary?: string[];
 }
 
 interface User {
@@ -66,11 +65,6 @@ const PROMPT_TABS = [
     id: 'synthesizer',
     label: 'Analytics Synthesizer',
     description: 'Second-pass prompt for the analytics agent. Turns SQL results into analytical narratives and charts.',
-  },
-  {
-    id: 'vocabulary',
-    label: 'Call Vocabulary',
-    description: 'Known IR names, bond names, and product names. Injected into every call transcription so the model uses exact spellings instead of guessing.',
   },
 ];
 
@@ -132,10 +126,6 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
   const [synthesizerPromptIsCustom, setSynthesizerPromptIsCustom] = useState(!!config.analyticsSynthesizerPrompt);
   const [savingSynthesizerPrompt, setSavingSynthesizerPrompt] = useState(false);
   const [synthesizerPromptSaved, setSynthesizerPromptSaved] = useState(false);
-
-  const [callVocabulary, setCallVocabulary] = useState((config.callVocabulary ?? []).join('\n'));
-  const [savingVocab, setSavingVocab] = useState(false);
-  const [vocabSaved, setVocabSaved] = useState(false);
 
   const [activePromptTab, setActivePromptTab] = useState('chat');
 
@@ -379,18 +369,6 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
     setAnalyticsSynthesizerPrompt(config.defaultAnalyticsSynthesizerPrompt || '');
     setSynthesizerPromptIsCustom(false);
     showToast('Synthesizer prompt reset to default');
-  };
-
-  const saveCallVocabulary = async () => {
-    setSavingVocab(true);
-    setVocabSaved(false);
-    try {
-      const terms = callVocabulary.split('\n').map(s => s.trim()).filter(Boolean);
-      await patchConfig({ callVocabulary: terms });
-      setVocabSaved(true);
-      showToast('Call vocabulary saved');
-      setTimeout(() => setVocabSaved(false), 2000);
-    } finally { setSavingVocab(false); }
   };
 
   const addUser = async () => {
@@ -920,33 +898,6 @@ export default function SettingsClient({ config }: { config: SafeConfig }) {
               </div>
             )}
 
-            {/* Call Vocabulary */}
-            {activePromptTab === 'vocabulary' && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">Call Vocabulary</h3>
-                  <p className="text-xs text-gray-400 mt-0.5">{PROMPT_TABS[4].description}</p>
-                </div>
-                <p className="text-xs text-gray-500 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                  Enter one term per line — IR executive names, bond names, fund names, product names.
-                  The transcription model will prefer these exact spellings over its own guesses.
-                  Changes take effect on the next call or retranscription.
-                </p>
-                <textarea
-                  value={callVocabulary}
-                  onChange={e => setCallVocabulary(e.target.value)}
-                  rows={14}
-                  placeholder={"Priya Sharma\nRahul Mehta\nMuthoot NCD 2024\nWint Wealth SGB Tranche 4\nNabha Power NCD"}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
-                />
-                <div className="flex items-center gap-3">
-                  <button onClick={saveCallVocabulary} disabled={savingVocab}
-                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
-                    {savingVocab ? 'Saving…' : vocabSaved ? '✓ Saved' : 'Save Vocabulary'}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 

@@ -258,23 +258,6 @@ Example output (mixed Telugu + English call):
   {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true}
 ]}`;
 
-// ── Build transcription prompt, optionally injecting known vocabulary ─────────
-export function buildTranscriptionPrompt(vocabulary?: string[]): string {
-  if (!vocabulary?.length) return CALL_TRANSCRIPTION_PROMPT;
-  return CALL_TRANSCRIPTION_PROMPT + `
-
-══════════════════════════════════════════
-KNOWN VOCABULARY — USE THESE EXACT SPELLINGS
-══════════════════════════════════════════
-The following names, bond names, and product names are KNOWN to appear in Wint Wealth calls.
-When you hear a word that sounds like any of these, use the EXACT spelling listed — do not guess or substitute.
-
-${vocabulary.map(v => `• ${v}`).join('\n')}
-
-If a proper noun is NOT in this list and you cannot clearly hear it, write it phonetically or write [unclear].
-NEVER invent a name or substitute a name from this list for a different sound.`;
-}
-
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────
 export const ENERGY_TONE_PROMPT = `You are evaluating the energy level, enthusiasm, and tone modulation of an IR Executive on a Wint Wealth customer service call.
 

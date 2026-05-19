@@ -21,9 +21,9 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import {
+  CALL_TRANSCRIPTION_PROMPT,
   CALL_DISPOSITION_CLASSIFY_PROMPT,
   CALL_CHUNK_PROMPT,
-  buildTranscriptionPrompt,
   parseTranscriptionResponse,
   parseCallDispositionClassified,
   parseCallChunks,
@@ -69,7 +69,6 @@ async function getPendingCalls(callId?: string): Promise<CallRecordingRow[]> {
 async function transcribeCall(
   call: CallRecordingRow,
   geminiKeys: string[],
-  vocabulary?: string[],
 ): Promise<{ disposition: string; subDisposition: string; segments: number; chunks: number }> {
   const { id: callId, recording_url: recordingUrl, contact_id, agent_id, called_at } = call;
 
@@ -89,7 +88,7 @@ async function transcribeCall(
     geminiKeys,
     [{ parts: [
       { inline_data: { mime_type: mimeType, data: audioBase64 } },
-      { text: buildTranscriptionPrompt(vocabulary) },
+      { text: CALL_TRANSCRIPTION_PROMPT },
     ]}],
     undefined,
     180_000,
@@ -177,11 +176,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const callId = body.call_id?.trim() || undefined;
 
   let geminiKeys: string[];
-  let callVocabulary: string[] | undefined;
   try {
     const config = await readConfig();
-    geminiKeys     = getIQSGeminiKeys(config);
-    callVocabulary = config.callVocabulary;
+    geminiKeys = getIQSGeminiKeys(config);
   } catch (err: any) {
     return NextResponse.json({ error: `Config error: ${err.message}` }, { status: 500 });
   }
@@ -208,7 +205,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   for (const call of calls) {
     try {
-      const r = await transcribeCall(call, geminiKeys, callVocabulary);
+      const r = await transcribeCall(call, geminiKeys);
       console.log(`[retranscribe] call ${call.id} — ${r.segments} segments, disposition=${r.disposition}, chunks=${r.chunks}`);
       results.push({ callId: call.id, ...r });
     } catch (err: any) {
