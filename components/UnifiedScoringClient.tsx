@@ -304,7 +304,7 @@ export default function UnifiedScoringClient() {
     const kt = iqsTheme(callIqs);
 
     const mergedItems = (result.mergedTimeline || []).filter((item: any) =>
-      item.source === 'call' || (item.data?.content || '').trim()
+      item.source === 'call' || item.source === 'call-boundary' || (item.data?.content || '').trim()
     );
 
     const chatMessages = mergedItems.filter((i: any) => i.source === 'chat');
