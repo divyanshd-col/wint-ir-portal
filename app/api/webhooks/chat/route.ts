@@ -435,8 +435,11 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   const year        = convStarted ? new Date(convStarted).getUTCFullYear() : new Date().getUTCFullYear();
   const agentName   = extractAgentName(rawMessages);
 
-  // Extract mobile/phone number
+  // Extract mobile/phone number — check all known Robylon field locations
   const mobileNumber: string | undefined =
+    body.data?.requester_info?.phone_number ||
+    body.requester_info?.phone_number       ||
+    transcriptObj?.requester_info?.phone_number ||
     body.data?.user_phone      || body.data?.customer_phone ||
     body.data?.phone_number    || body.data?.mobile         ||
     body.user_phone            || body.customer_phone       ||
