@@ -68,18 +68,24 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const qaAgents = await getAgentNamesByQA(userEmail);
     agentNames = agentFilter ? qaAgents.filter(n => n === agentFilter) : qaAgents;
   }
-  // admin/undefined → agentNames stays undefined (all agents)
+  // admin/undefined -> agentNames stays undefined (all agents)
 
-  const { rows, total } = await getAllScoredCalls({
-    agentName: !agentNames && agentFilter ? agentFilter : undefined,
-    agentNames: agentNames,
-    dateFrom: dateFrom || undefined,
-    dateTo: dateTo || undefined,
-    minScore,
-    maxScore,
-    page,
-    pageSize: PAGE_SIZE,
-  });
+  let rows: any[] = [];
+  let total = 0;
+  try {
+    ({ rows, total } = await getAllScoredCalls({
+      agentName: !agentNames && agentFilter ? agentFilter : undefined,
+      agentNames: agentNames,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      minScore,
+      maxScore,
+      page,
+      pageSize: PAGE_SIZE,
+    }));
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message || 'Database error' }, { status: 500 });
+  }
 
   // Normalise rows for the frontend
   const entries = rows.map((r: any) => {

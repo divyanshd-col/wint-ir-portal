@@ -37,11 +37,6 @@ export async function getAgentNamesByQA(qaName: string): Promise<string[]> {
 
 // ── Contact helpers ───────────────────────────────────────────────────────────
 
-/**
- * Normalize a phone number to its last 10 digits (strips country codes and
- * non-digit characters). Consistently applied at insert and lookup time so
- * "91XXXXXXXXXX" and "XXXXXXXXXX" resolve to the same contact row.
- */
 export function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   return digits.length > 10 ? digits.slice(-10) : digits;
@@ -50,11 +45,10 @@ export function normalizePhone(phone: string): string {
 /** Upsert a contact by phone number. Returns contact.id */
 export async function upsertContact(phone: string | undefined): Promise<number | null> {
   if (!phone) return null;
-  const normalized = normalizePhone(phone);
-  if (!normalized) return null;
+  const normalised = phone.trim().slice(0, 50);
   const rows = await query<{ id: number }>(
     `INSERT INTO contacts (phone) VALUES ($1) ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone RETURNING id`,
-    [normalized],
+    [normalised],
   );
   return rows[0]?.id ?? null;
 }
@@ -91,15 +85,14 @@ export async function upsertConversation(data: {
   resolutionSeconds?: number | null;
   rawPayload?: any;
   webhookTrigger?: string;
-  phoneNumber?: string | null;
 }): Promise<void> {
   await query(`
     INSERT INTO conversations (
       id, contact_id, agent_id, conversation_type,
       started_at, closed_at, transcript, tags,
       frt_seconds, bot_to_team_seconds, resolution_seconds,
-      raw_payload, webhook_trigger, phone_number, updated_at
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
+      raw_payload, webhook_trigger, updated_at
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())
     ON CONFLICT (id) DO UPDATE SET
       contact_id          = COALESCE(EXCLUDED.contact_id, conversations.contact_id),
       agent_id            = COALESCE(EXCLUDED.agent_id, conversations.agent_id),
@@ -113,7 +106,6 @@ export async function upsertConversation(data: {
       resolution_seconds  = COALESCE(EXCLUDED.resolution_seconds, conversations.resolution_seconds),
       raw_payload         = COALESCE(EXCLUDED.raw_payload, conversations.raw_payload),
       webhook_trigger     = COALESCE(EXCLUDED.webhook_trigger, conversations.webhook_trigger),
-      phone_number        = COALESCE(EXCLUDED.phone_number, conversations.phone_number),
       updated_at          = NOW()
   `, [
     data.id,
@@ -129,7 +121,6 @@ export async function upsertConversation(data: {
     data.resolutionSeconds ?? null,
     data.rawPayload ? JSON.stringify(data.rawPayload) : null,
     data.webhookTrigger ?? null,
-    data.phoneNumber ?? null,
   ]);
 }
 
@@ -154,18 +145,11 @@ export async function updateConversationTags(
   );
 }
 
-/** Merge extra keys into the existing tags JSONB without overwriting unrelated keys. */
-export async function mergeConversationTags(
-  chatId: string,
-  extra: Record<string, string | null>,
-): Promise<void> {
-  await query(
-    `UPDATE conversations SET tags = COALESCE(tags, '{}'::jsonb) || $1::jsonb, updated_at = NOW() WHERE id = $2`,
-    [JSON.stringify(extra), chatId],
-  );
+export async function getConversation(chatId: string): Promise<ConversationRow | null> {
+  const rows = await query<ConversationRow>(`SELECT * FROM conversations WHERE id = $1`, [chatId]);
+  return rows[0] ?? null;
 }
 
-/** Latest closed conversation for a contact phone number, with tags. */
 export async function getLatestConversationByPhone(phone: string): Promise<any | null> {
   const rows = await query<any>(`
     SELECT c.id AS "chatId", c.closed_at AS "closedAt", c.tags,
@@ -181,9 +165,55 @@ export async function getLatestConversationByPhone(phone: string): Promise<any |
   return rows[0] ?? null;
 }
 
-export async function getConversation(chatId: string): Promise<ConversationRow | null> {
-  const rows = await query<ConversationRow>(`SELECT * FROM conversations WHERE id = $1`, [chatId]);
+export async function getConversationHistory(chatId: string, limit = 10): Promise<any[]> {
+  return query(`
+    SELECT c.id AS "chatId", c.started_at::date AS "date",
+           c.conversation_type AS "conversationType", c.csat_score, c.tags,
+           a.name AS "agentName", s.iqs_score AS "iqs", s.scored_at AS "scoredAt"
+    FROM conversations c
+    LEFT JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    WHERE c.contact_id = (SELECT contact_id FROM conversations WHERE id = $1)
+      AND c.id != $1 AND c.contact_id IS NOT NULL
+    ORDER BY c.started_at DESC
+    LIMIT $2
+  `, [chatId, limit]);
+}
+
+export async function findConversationByPhoneAndDate(phone: string, date: string): Promise<ConversationRow | null> {
+  const last10 = phone.replace(/\D/g, '').slice(-10);
+  if (!last10) return null;
+  const rows = await query<ConversationRow>(`
+    SELECT c.* FROM conversations c
+    LEFT JOIN contacts ct ON ct.id = c.contact_id
+    WHERE (RIGHT(COALESCE(c.phone_number, ''), 10) = $1 OR RIGHT(COALESCE(ct.phone, ''), 10) = $1)
+      AND c.closed_at::date = $2::date
+    ORDER BY c.closed_at DESC LIMIT 1
+  `, [last10, date]);
   return rows[0] ?? null;
+}
+
+export async function claimCallForScoring(callId: string): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE call_recordings SET status = 'scoring', updated_at = NOW()
+     WHERE id = $1 AND status = 'linked' RETURNING id`,
+    [callId],
+  );
+  return rows.length > 0;
+}
+
+export async function getConversationsWithUnscoredLinkedCalls(): Promise<ConversationRow[]> {
+  await query(`
+    UPDATE call_recordings SET status = 'linked', updated_at = NOW()
+    WHERE status = 'scoring' AND updated_at < NOW() - INTERVAL '30 minutes'
+  `, []);
+  return query<ConversationRow>(`
+    SELECT DISTINCT c.* FROM conversations c
+    JOIN call_recordings cr ON cr.chat_id = c.id
+    WHERE cr.status = 'linked' AND c.tags IS NOT NULL
+      AND c.closed_at < NOW() - INTERVAL '30 minutes'
+    ORDER BY c.closed_at ASC LIMIT 50
+  `, []);
 }
 
 export async function isScored(chatId: string): Promise<boolean> {
@@ -230,26 +260,18 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: {
-    dateFrom?: string; dateTo?: string;
-    agentName?: string; agentNames?: string[];
-    iqsMax?: number; includeUncertain?: boolean;
-    minUserMessages?: number;
-    disposition?: string; subDisposition?: string;
-    csat?: string; conversationType?: string;
-  } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMax?: number; includeUncertain?: boolean } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
 
-  // Use closed_at consistently — matches analytics and is semantically correct
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    conditions.push(`c.closed_at::date >= $${params.length}`);
+    conditions.push(`c.started_at::date >= $${params.length}`);
   }
   if (opts.dateTo) {
     params.push(opts.dateTo);
-    conditions.push(`c.closed_at::date <= $${params.length}`);
+    conditions.push(`c.started_at::date <= $${params.length}`);
   }
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
@@ -262,38 +284,14 @@ export async function getAllScoredConversations(
     conditions.push(`s.parameters ? '__uncertain'`);
   }
   if (opts.agentName) {
-    params.push(opts.agentName.toLowerCase());
-    conditions.push(`LOWER(a.name) = $${params.length}`);
+    params.push(opts.agentName);
+    conditions.push(`a.name = $${params.length}`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
-    conditions.push(`LOWER(a.name) = ANY(SELECT LOWER(unnest($${params.length}::text[])))`);
+    conditions.push(`a.name = ANY($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     // Scoped role with no assigned agents — return nothing
     conditions.push(`1=0`);
-  }
-  if (opts.minUserMessages && opts.minUserMessages > 0) {
-    params.push(opts.minUserMessages);
-    conditions.push(`(SELECT COUNT(*) FROM jsonb_array_elements(c.transcript) AS m WHERE m->>'sender_type' = 'customer') >= $${params.length}`);
-  }
-  if (opts.disposition) {
-    params.push(opts.disposition.toLowerCase());
-    conditions.push(`LOWER(c.tags->>'disposition') = $${params.length}`);
-  }
-  if (opts.subDisposition) {
-    params.push(opts.subDisposition.toLowerCase());
-    conditions.push(`LOWER(c.tags->>'sub_disposition') = $${params.length}`);
-  }
-  if (opts.csat) {
-    // csat stored as numeric csat_score: '5' → 5, '3' → 3, '1' → 1
-    const csatNum = parseInt(opts.csat, 10);
-    if (!isNaN(csatNum)) {
-      params.push(csatNum);
-      conditions.push(`c.csat_score = $${params.length}`);
-    }
-  }
-  if (opts.conversationType) {
-    params.push(opts.conversationType);
-    conditions.push(`c.conversation_type = $${params.length}`);
   }
 
   const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -302,7 +300,7 @@ export async function getAllScoredConversations(
   return query(`
     SELECT
       c.id                  AS "chatId",
-      c.closed_at::date     AS "date",
+      c.started_at::date    AS "date",
       c.conversation_type   AS "conversationType",
       c.frt_seconds         AS "frt",
       c.bot_to_team_seconds AS "botToTeamSecs",
@@ -310,45 +308,18 @@ export async function getAllScoredConversations(
       c.csat_score,
       c.csat_label,
       c.tags,
-      c.phone_number        AS "mobileNumber",
       a.name                AS "agentName",
       s.iqs_score           AS "iqs",
       s.parameters,
       s.model_version       AS "modelVersion",
-      s.scored_at           AS "scoredAt",
-      s.reviewed_by         AS "reviewedBy",
-      s.reviewed_at         AS "reviewedAt",
-      s.review_note         AS "reviewNote"
+      s.scored_at           AS "scoredAt"
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     ${where}
-    ORDER BY c.closed_at DESC NULLS LAST, s.scored_at DESC
+    ORDER BY s.scored_at DESC
     ${limitSql}
   `, params);
-}
-
-/** Get previous scored conversations for the same customer as chatId (excludes current chat) */
-export async function getConversationHistory(chatId: string, limit = 10): Promise<any[]> {
-  return query(`
-    SELECT
-      c.id                AS "chatId",
-      c.started_at::date  AS "date",
-      c.conversation_type AS "conversationType",
-      c.csat_score,
-      c.tags,
-      a.name              AS "agentName",
-      s.iqs_score         AS "iqs",
-      s.scored_at         AS "scoredAt"
-    FROM conversations c
-    LEFT JOIN iqs_scores s ON s.chat_id = c.id
-    LEFT JOIN agents a ON a.id = c.agent_id
-    WHERE c.contact_id = (SELECT contact_id FROM conversations WHERE id = $1)
-      AND c.id != $1
-      AND c.contact_id IS NOT NULL
-    ORDER BY c.started_at DESC
-    LIMIT $2
-  `, [chatId, limit]);
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */
@@ -364,32 +335,6 @@ export async function getUnscoredConversations(minHoursOld = 12): Promise<Conver
     ORDER BY c.closed_at ASC
     LIMIT 50
   `, [minHoursOld]);
-}
-
-/**
- * Find a chat conversation matching a phone number on a given date.
- * Uses last-10-digit suffix matching so country-code variations (91xxxxxxxxxx vs xxxxxxxxxx) still match.
- * Returns the conversation closed closest to the given time, or null if none found.
- */
-export async function findConversationByPhoneAndDate(
-  phone: string,
-  date: string, // 'YYYY-MM-DD'
-): Promise<ConversationRow | null> {
-  const last10 = phone.replace(/\D/g, '').slice(-10);
-  if (!last10) return null;
-  const rows = await query<ConversationRow>(`
-    SELECT c.*
-    FROM conversations c
-    LEFT JOIN contacts ct ON ct.id = c.contact_id
-    WHERE (
-      RIGHT(COALESCE(c.phone_number, ''), 10) = $1
-      OR RIGHT(COALESCE(ct.phone, ''), 10) = $1
-    )
-    AND c.closed_at::date = $2::date
-    ORDER BY c.closed_at DESC
-    LIMIT 1
-  `, [last10, date]);
-  return rows[0] ?? null;
 }
 
 export async function countUnscoredConversations(minHoursOld = 0): Promise<number> {
@@ -420,8 +365,6 @@ export interface CallRecordingRow {
   interruption_count: number;
   dead_air_count: number;
   status: string;
-  created_at: string | null;
-  updated_at: string | null;
 }
 
 export async function insertCallRecording(data: {
@@ -434,14 +377,12 @@ export async function insertCallRecording(data: {
   calledAt?: string | null;
   language?: string | null;
   transcript?: any;
-  status?: string;
 }): Promise<void> {
-  const status = data.status ?? (data.transcript ? 'transcribed' : 'pending_transcription');
   await query(`
     INSERT INTO call_recordings (
       id, chat_id, agent_id, contact_id, recording_url,
       duration_seconds, called_at, language, transcript, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transcribed')
     ON CONFLICT (id) DO UPDATE SET
       chat_id          = COALESCE(EXCLUDED.chat_id, call_recordings.chat_id),
       agent_id         = COALESCE(EXCLUDED.agent_id, call_recordings.agent_id),
@@ -450,10 +391,7 @@ export async function insertCallRecording(data: {
       duration_seconds = COALESCE(EXCLUDED.duration_seconds, call_recordings.duration_seconds),
       called_at        = COALESCE(EXCLUDED.called_at, call_recordings.called_at),
       language         = COALESCE(EXCLUDED.language, call_recordings.language),
-      -- Never overwrite an existing transcript (concurrent cron + webhook race protection)
-      transcript       = CASE WHEN call_recordings.transcript IS NOT NULL
-                              THEN call_recordings.transcript
-                              ELSE EXCLUDED.transcript END,
+      transcript       = COALESCE(EXCLUDED.transcript, call_recordings.transcript),
       updated_at       = NOW()
   `, [
     data.id,
@@ -465,19 +403,7 @@ export async function insertCallRecording(data: {
     data.calledAt ?? null,
     data.language ?? null,
     data.transcript ? JSON.stringify(data.transcript) : null,
-    status,
   ]);
-}
-
-/** Return call recordings that need transcription (received but not yet processed). */
-export async function getCallsForTranscription(limit = 10): Promise<CallRecordingRow[]> {
-  return query<CallRecordingRow>(`
-    SELECT * FROM call_recordings
-    WHERE status = 'pending_transcription'
-      AND recording_url IS NOT NULL
-    ORDER BY created_at ASC
-    LIMIT $1
-  `, [limit]);
 }
 
 export async function updateCallRecordingMetrics(data: {
@@ -517,35 +443,81 @@ export async function updateCallIQSScore(data: {
   `, [data.callIqsScore, JSON.stringify(data.callParameters), data.callModelVersion, data.chatId]);
 }
 
-/** Get call recording by the linked chat_id. */
+/** Get the most recent call recording directly linked to a chat_id. */
 export async function getCallRecordingByChatId(chatId: string): Promise<CallRecordingRow | null> {
   const rows = await query<CallRecordingRow>(
-    `SELECT * FROM call_recordings WHERE chat_id = $1 ORDER BY created_at DESC LIMIT 1`,
+    `SELECT * FROM call_recordings WHERE chat_id = $1 ORDER BY called_at ASC NULLS LAST`,
     [chatId],
   );
   return rows[0] ?? null;
 }
 
+/** Get ALL call recordings directly linked to a chat_id (handles multiple calls per chat). */
+export async function getAllCallRecordingsByChatId(chatId: string): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(
+    `SELECT * FROM call_recordings WHERE chat_id = $1 ORDER BY called_at ASC NULLS LAST`,
+    [chatId],
+  );
+}
+
+/**
+ * Find all call recordings that share the same contact as the given chat_id.
+ *
+ * This handles the case where Robylon creates separate ticket IDs for WhatsApp (e.g. 38007)
+ * and voice call (e.g. 38252) for the same phone number. The call recording will have
+ * chat_id=38252, but we need to find it when the user enters chat_id=38007.
+ *
+ * Strategy: join call_recordings → conversations (on call's chat_id) → match contact_id
+ * to the input chat's contact_id. Does NOT require call_recordings.contact_id to be set.
+ */
+export async function getCallRecordingsByConversationContact(
+  chatId: string,
+): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(`
+    SELECT cr.*
+    FROM call_recordings cr
+    JOIN conversations conv_call ON conv_call.id::text = cr.chat_id
+    WHERE conv_call.contact_id IS NOT NULL
+      AND conv_call.contact_id = (
+        SELECT contact_id FROM conversations WHERE id = $1
+      )
+      AND cr.chat_id != $1
+    ORDER BY cr.called_at ASC NULLS LAST, cr.created_at ASC
+  `, [chatId]);
+}
+
+/**
+ * Find all call recordings for a contact within a time window.
+ * Fallback when call_recordings.chat_id is NULL or not linked to any conversation row.
+ * Window is expanded by 1 hour on each side to handle clock skew.
+ */
+export async function getCallRecordingsByContactWindow(
+  contactId: number,
+  windowStart: string,
+  windowEnd: string,
+): Promise<CallRecordingRow[]> {
+  return query<CallRecordingRow>(`
+    SELECT * FROM call_recordings
+    WHERE contact_id = $1
+      AND called_at >= $2::timestamptz - INTERVAL '1 hour'
+      AND called_at <= $3::timestamptz + INTERVAL '1 hour'
+    ORDER BY called_at ASC
+  `, [contactId, windowStart, windowEnd]);
+}
+
 /** Find call recordings for a contact that have not yet been linked to a chat.
- *  Uses both direct contact_id match AND last-10-digit phone suffix matching so
- *  calls stored with a different phone format (e.g. 91XXXXXXXXXX vs XXXXXXXXXX)
- *  are still linked correctly. */
+ *  Since one phone = one active chat at a time, all unlinked calls with
+ *  called_at <= closedAt belong to this chat. */
 export async function getUnlinkedCallsForContact(
   contactId: number,
   closedAt: string,
 ): Promise<CallRecordingRow[]> {
   return query<CallRecordingRow>(`
-    SELECT cr.*
-    FROM call_recordings cr
-    LEFT JOIN contacts c ON c.id = cr.contact_id
-    LEFT JOIN contacts c2 ON c2.id = $1
-    WHERE cr.chat_id IS NULL
-      AND cr.called_at <= $2::timestamptz
-      AND (
-        cr.contact_id = $1
-        OR RIGHT(COALESCE(c.phone, ''), 10) = RIGHT(COALESCE(c2.phone, ''), 10)
-      )
-    ORDER BY cr.called_at ASC
+    SELECT * FROM call_recordings
+    WHERE contact_id = $1
+      AND chat_id IS NULL
+      AND called_at <= $2::timestamptz
+    ORDER BY called_at ASC
   `, [contactId, closedAt]);
 }
 
@@ -573,48 +545,6 @@ export async function getLinkedUnscoredCallsForChat(chatId: string): Promise<Cal
     `SELECT * FROM call_recordings WHERE chat_id = $1 AND status = 'linked' ORDER BY called_at ASC`,
     [chatId],
   );
-}
-
-/**
- * Atomically claim a call for scoring by transitioning status 'linked' → 'scoring'.
- * Returns true if this process successfully claimed it; false if another process
- * already grabbed it (preventing duplicate concurrent scoring).
- */
-export async function claimCallForScoring(callId: string): Promise<boolean> {
-  const rows = await query<{ id: string }>(
-    `UPDATE call_recordings SET status = 'scoring', updated_at = NOW()
-     WHERE id = $1 AND status = 'linked'
-     RETURNING id`,
-    [callId],
-  );
-  return rows.length > 0;
-}
-
-/**
- * Find conversations that have call_recordings with status='linked' but those
- * calls have never been scored. Used by the cron to catch calls that were linked
- * after chat scoring completed (and thus missed the normal scoring path).
- * Also resets any 'scoring' rows stuck >30 min (crashed mid-scoring) back to 'linked'.
- */
-export async function getConversationsWithUnscoredLinkedCalls(): Promise<ConversationRow[]> {
-  // First: unstick any 'scoring' rows that have been stuck for >30 minutes
-  await query(`
-    UPDATE call_recordings
-    SET status = 'linked', updated_at = NOW()
-    WHERE status = 'scoring'
-      AND updated_at < NOW() - INTERVAL '30 minutes'
-  `, []);
-
-  return query<ConversationRow>(`
-    SELECT DISTINCT c.*
-    FROM conversations c
-    JOIN call_recordings cr ON cr.chat_id = c.id
-    WHERE cr.status = 'linked'
-      AND c.tags IS NOT NULL
-      AND c.closed_at < NOW() - INTERVAL '30 minutes'
-    ORDER BY c.closed_at ASC
-    LIMIT 50
-  `, []);
 }
 
 export async function getAllScoredCalls(opts: {
@@ -649,10 +579,10 @@ export async function getAllScoredCalls(opts: {
   }
   if (opts.agentName) {
     params.push(opts.agentName);
-    conditions.push(`a.name = $${params.length}`);
+    conditions.push(`COALESCE(a.name, '') = $${params.length}`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
-    conditions.push(`a.name = ANY($${params.length})`);
+    conditions.push(`COALESCE(a.name, '') = ANY($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');
   }
@@ -663,7 +593,8 @@ export async function getAllScoredCalls(opts: {
     SELECT COUNT(*) AS count
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
-    LEFT JOIN agents a ON a.id = r.agent_id
+    LEFT JOIN conversations conv ON conv.id = r.chat_id
+    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
@@ -675,26 +606,93 @@ export async function getAllScoredCalls(opts: {
 
   const rows = await query(`
     SELECT
-      r.id                   AS "callId",
-      r.chat_id              AS "chatId",
-      r.called_at            AS "calledAt",
-      r.called_at::date      AS "date",
-      r.duration_seconds     AS "durationSeconds",
+      r.id                                    AS "callId",
+      r.chat_id                               AS "chatId",
+      r.called_at                             AS "calledAt",
+      r.called_at::date                       AS "date",
+      r.duration_seconds                      AS "durationSeconds",
       r.language,
-      r.interruption_count   AS "interruptionCount",
-      r.dead_air_count       AS "deadAirCount",
-      a.name                 AS "agentName",
-      s.call_iqs_score       AS "iqs",
-      s.call_parameters      AS "parameters",
-      s.call_model_version   AS "modelVersion",
-      s.call_scored_at       AS "scoredAt"
+      r.interruption_count                    AS "interruptionCount",
+      r.dead_air_count                        AS "deadAirCount",
+      COALESCE(a.name, '')                    AS "agentName",
+      s.call_iqs_score                        AS "iqs",
+      s.call_parameters                       AS "parameters",
+      s.call_model_version                    AS "modelVersion",
+      s.call_scored_at                        AS "scoredAt"
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
-    LEFT JOIN agents a ON a.id = r.agent_id
+    LEFT JOIN conversations conv ON conv.id = r.chat_id
+    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
     ${where}
     ORDER BY r.called_at DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `, params);
 
   return { rows, total };
+}
+
+// ── Call disposition + chunking ───────────────────────────────────────────────
+
+/** Store AI-classified disposition / sub-disposition on a call recording. */
+export async function updateCallDisposition(
+  callId: string,
+  disposition: string,
+  subDisposition: string,
+): Promise<void> {
+  await query(
+    `UPDATE call_recordings
+     SET call_disposition = $1, call_sub_disposition = $2, updated_at = NOW()
+     WHERE id = $3`,
+    [disposition, subDisposition, callId],
+  );
+}
+
+export interface CallTranscriptChunk {
+  callId: string;
+  chatId?: string | null;
+  contactId?: number | null;
+  agentId?: number | null;
+  calledAt?: string | null;
+  topic: string;
+  summary: string;
+  content: string;
+  chunkIndex: number;
+}
+
+/** Batch-insert topic chunks extracted from a call transcript. */
+export async function insertCallTranscriptChunks(chunks: CallTranscriptChunk[]): Promise<void> {
+  for (const c of chunks) {
+    await query(
+      `INSERT INTO call_transcript_chunks
+         (call_id, chat_id, contact_id, agent_id, called_at, topic, summary, content, chunk_index)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [c.callId, c.chatId ?? null, c.contactId ?? null, c.agentId ?? null,
+       c.calledAt ?? null, c.topic, c.summary, c.content, c.chunkIndex],
+    );
+  }
+}
+
+/** Retrieve the N most recent chunks for a contact (or globally) for RAG retrieval. */
+export async function getRelevantCallChunks(opts: {
+  contactId?: number;
+  limit?: number;
+}): Promise<Array<{ topic: string; summary: string; content: string; called_at: string | null; call_id: string }>> {
+  const limit = opts.limit ?? 5;
+  if (opts.contactId) {
+    return query(
+      `SELECT topic, summary, content, called_at, call_id
+       FROM call_transcript_chunks
+       WHERE contact_id = $1
+       ORDER BY called_at DESC NULLS LAST
+       LIMIT $2`,
+      [opts.contactId, limit],
+    );
+  }
+  return query(
+    `SELECT topic, summary, content, called_at, call_id
+     FROM call_transcript_chunks
+     ORDER BY called_at DESC NULLS LAST
+     LIMIT $1`,
+    [limit],
+  );
 }

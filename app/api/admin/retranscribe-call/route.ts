@@ -1,79 +1,122 @@
+/**
+ * POST /api/admin/retranscribe-call
+ *
+ * Re-runs the full transcription → disposition → chunking pipeline for a
+ * specific call_recordings row whose transcript is NULL (e.g. Vercel killed
+ * the background job before it completed).
+ *
+ * Body: { call_id: string }
+ *
+ * Auth: admin only
+ */
+
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
-import { CALL_TRANSCRIPTION_PROMPT, parseTranscriptionResponse } from '@/lib/call-quality';
-import { upsertContact, insertCallRecording, updateCallRecordingMetrics } from '@/lib/robylon/db';
+import {
+  CALL_TRANSCRIPTION_PROMPT,
+  CALL_DISPOSITION_CLASSIFY_PROMPT,
+  CALL_CHUNK_PROMPT,
+  parseTranscriptionResponse,
+  parseCallDispositionClassified,
+  parseCallChunks,
+  segmentsToText,
+} from '@/lib/call-quality';
+import {
+  insertCallRecording,
+  updateCallRecordingMetrics,
+  updateCallDisposition,
+  insertCallTranscriptChunks,
+} from '@/lib/robylon/db';
+import { query } from '@/lib/cx/db';
 
-function mimeFromUrl(url: string): string {
-  const ext = url.split('?')[0].split('.').pop()?.toLowerCase();
-  if (ext === 'mp3') return 'audio/mpeg';
-  if (ext === 'wav') return 'audio/wav';
-  if (ext === 'ogg') return 'audio/ogg';
-  if (ext === 'webm') return 'audio/webm';
-  if (ext === 'm4a') return 'audio/mp4';
+function mimeFromUrl(u: string): string {
+  if (u.endsWith('.wav'))  return 'audio/wav';
+  if (u.endsWith('.mp3'))  return 'audio/mpeg';
+  if (u.endsWith('.m4a'))  return 'audio/mp4';
+  if (u.endsWith('.ogg'))  return 'audio/ogg';
+  if (u.endsWith('.flac')) return 'audio/flac';
   return 'audio/mpeg';
 }
 
-/**
- * POST /api/admin/retranscribe-call
- * Manually triggers transcription for a call recording URL.
- * Use this to re-process calls that failed before migration 005 was applied.
- *
- * Body: { callId, recordingUrl, phone?, calledAt?, durationSeconds? }
- */
-export async function POST(req: NextRequest) {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
-  if (!session?.user || (session.user as any).role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  const user = session.user as any;
+  if (!user?.isAdmin && user?.role !== 'admin') {
+    return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
   }
 
-  let body: any;
-  try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }); }
+  let body: { call_id?: string } = {};
+  try { body = await req.json(); } catch {}
 
-  const { callId, recordingUrl, phone, calledAt, durationSeconds } = body;
-
-  if (!callId || !recordingUrl) {
-    return NextResponse.json({ error: 'callId and recordingUrl are required' }, { status: 400 });
+  const callId = body.call_id?.trim();
+  if (!callId) {
+    return NextResponse.json({ error: 'call_id is required' }, { status: 400 });
   }
 
-  const config = await readConfig();
-  const geminiKeys = getIQSGeminiKeys(config);
-  if (!geminiKeys.length) {
-    return NextResponse.json({ error: 'No Gemini API key configured (IQS_GEMINI_API_KEY or GEMINI_API_KEY)' }, { status: 500 });
+  // Fetch the call row — only process if transcript is null
+  const rows = await query<{
+    id: string;
+    contact_id: number | null;
+    recording_url: string | null;
+    duration_seconds: number | null;
+    called_at: string | null;
+    transcript: any;
+  }>(
+    `SELECT id, contact_id, recording_url, duration_seconds, called_at, transcript
+     FROM call_recordings WHERE id = $1`,
+    [callId],
+  );
+
+  if (!rows.length) {
+    return NextResponse.json({ error: `Call ${callId} not found` }, { status: 404 });
   }
 
-  try {
-    const contactId = phone ? await upsertContact(phone) : null;
-    const effectiveCalledAt = calledAt || new Date().toISOString();
-    const effectiveDuration = durationSeconds && durationSeconds > 0 ? Math.round(durationSeconds) : null;
+  const call = rows[0];
 
-    // Upsert placeholder row so the call is tracked even if transcription fails mid-way
-    await insertCallRecording({
-      id: callId,
-      chatId: null,
-      agentId: null,
-      contactId,
-      recordingUrl,
-      durationSeconds: effectiveDuration,
-      calledAt: effectiveCalledAt,
-      language: null,
-      transcript: [],
+  if (call.transcript !== null) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: 'transcript already exists — use backfill-call-dispositions to re-classify',
     });
+  }
 
-    // Fetch audio from URL into memory
-    let mimeType = mimeFromUrl(recordingUrl);
-    const audioRes = await fetch(recordingUrl);
-    if (!audioRes.ok) {
-      return NextResponse.json({ error: `Failed to fetch recording: HTTP ${audioRes.status}` }, { status: 502 });
-    }
-    const ct = audioRes.headers.get('content-type')?.split(';')[0].trim() || '';
-    // Only use Content-Type if it's a specific audio type — ignore generic binary responses
-    if (ct && ct.startsWith('audio/') && ct !== 'audio/octet-stream') mimeType = ct;
-    const audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+  if (!call.recording_url) {
+    return NextResponse.json({ error: 'No recording_url for this call' }, { status: 422 });
+  }
 
-    // Send to Gemini multimodal for transcription
+  let geminiKeys: string[];
+  try {
+    const config = await readConfig();
+    geminiKeys   = getIQSGeminiKeys(config);
+  } catch (err: any) {
+    return NextResponse.json({ error: `Config error: ${err.message}` }, { status: 500 });
+  }
+  if (!geminiKeys.length) {
+    return NextResponse.json({ error: 'No Gemini API key configured' }, { status: 503 });
+  }
+
+  // Step 1: Fetch audio from S3 and base64-encode it
+  let audioBase64: string;
+  let mimeType = mimeFromUrl(call.recording_url);
+  try {
+    const audioRes = await fetch(call.recording_url);
+    if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio`);
+    const ct = audioRes.headers.get('content-type');
+    if (ct) mimeType = ct.split(';')[0].trim() || mimeType;
+    audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+  } catch (err: any) {
+    return NextResponse.json({ error: `Audio fetch failed: ${err.message}` }, { status: 502 });
+  }
+
+  // Step 2: Gemini multimodal transcription
+  let language: string;
+  let segments: any[];
+  try {
     const raw = await geminiGenerate(
       geminiKeys,
       'gemini-2.5-flash',
@@ -84,38 +127,99 @@ export async function POST(req: NextRequest) {
       {},
       120_000,
     );
+    ({ language, segments } = parseTranscriptionResponse(raw));
+  } catch (err: any) {
+    return NextResponse.json({ error: `Transcription failed: ${err.message}` }, { status: 502 });
+  }
 
-    const { language, segments } = parseTranscriptionResponse(raw);
-    const interruptionCount = segments.filter((s: any) => s.type === 'interruption').length;
-    const deadAirCount      = segments.filter((s: any) => s.type === 'dead_air').length;
+  const interruptionCount = segments.filter((s: any) => s.type === 'interruption').length;
+  const deadAirCount      = segments.filter((s: any) => s.type === 'dead_air').length;
 
-    // Update row with real transcript
-    await insertCallRecording({
-      id: callId,
-      chatId: null,
-      agentId: null,
-      contactId,
-      recordingUrl,
-      durationSeconds: effectiveDuration,
-      calledAt: effectiveCalledAt,
-      language,
-      transcript: segments,
-    });
-    await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
+  // Step 3: Persist transcript
+  await insertCallRecording({
+    id: callId,
+    chatId: null,
+    agentId: null,
+    contactId: call.contact_id ?? null,
+    recordingUrl: call.recording_url,
+    durationSeconds: call.duration_seconds ?? null,
+    calledAt: call.called_at ?? null,
+    language,
+    transcript: segments,
+  });
+  await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
 
-    console.log(`[retranscribe-call] ${callId} — ${segments.length} segments (${language}), interruptions=${interruptionCount}, dead_air=${deadAirCount}`);
+  // Step 4: Classify disposition
+  const callTranscriptText = segmentsToText(segments);
+  let disposition = '';
+  let subDisposition = '';
+
+  if (callTranscriptText) {
+    try {
+      const rawDisp = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [{ text: CALL_DISPOSITION_CLASSIFY_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
+        { responseMimeType: 'application/json' },
+        30_000,
+      );
+      const classified = parseCallDispositionClassified(rawDisp);
+      disposition    = classified.disposition;
+      subDisposition = classified.subDisposition;
+      if (disposition) {
+        await updateCallDisposition(callId, disposition, subDisposition);
+      }
+    } catch (err: any) {
+      console.error(`[retranscribe] Disposition classify failed for call ${callId}:`, err.message);
+    }
+
+    // Step 5: Chunk transcript for RAG
+    let chunkCount = 0;
+    try {
+      const rawChunks = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [{ text: CALL_CHUNK_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
+        { responseMimeType: 'application/json' },
+        30_000,
+      );
+      const chunks = parseCallChunks(rawChunks);
+      if (chunks.length > 0) {
+        await insertCallTranscriptChunks(chunks.map((c, i) => ({
+          callId,
+          chatId: null,
+          contactId: call.contact_id ?? null,
+          agentId: null,
+          calledAt: call.called_at ?? null,
+          topic: c.topic,
+          summary: c.summary,
+          content: c.content,
+          chunkIndex: i,
+        })));
+        chunkCount = chunks.length;
+      }
+    } catch (err: any) {
+      console.error(`[retranscribe] Chunking failed for call ${callId}:`, err.message);
+    }
 
     return NextResponse.json({
       ok: true,
       callId,
+      segments: segments.length,
       language,
-      segmentCount: segments.length,
-      interruptionCount,
-      deadAirCount,
-      segments,
+      disposition,
+      subDisposition,
+      chunks: chunkCount,
     });
-  } catch (err: any) {
-    console.error('[retranscribe-call] error:', err?.message ?? err);
-    return NextResponse.json({ ok: false, error: err?.message || 'Transcription failed' }, { status: 500 });
   }
+
+  return NextResponse.json({
+    ok: true,
+    callId,
+    segments: segments.length,
+    language,
+    disposition: '',
+    subDisposition: '',
+    chunks: 0,
+  });
 }

@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   const minUserMsgsRaw = searchParams.get('minUserMsgs');
   const minUserMessages = minUserMsgsRaw ? parseInt(minUserMsgsRaw, 10) : undefined;
 
-  const rawRows = await getAllScoredConversations(10000, { minUserMessages }); // higher limit for full export
+  const rawRows = await getAllScoredConversations(10000); // higher limit for full export
   let entries: IQSScoreEntry[] = rawRows.map(row => {
     try { return toIQSScoreEntry(row); } catch { return null; }
   }).filter(Boolean) as IQSScoreEntry[];

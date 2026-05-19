@@ -12,13 +12,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import {
   CALL_TRANSCRIPTION_PROMPT,
+  ENERGY_TONE_PROMPT,
+  CALL_DISPOSITION_PROMPT,
   CALL_IQS_SYSTEM_PROMPT,
   buildCallScoringPrompt,
   parseTranscriptionResponse,
   parseCallScoringResponse,
+  parseEnergyToneResponse,
+  parseCallDisposition,
+  insertPoorListeningFlags,
   segmentsToText,
 } from '@/lib/call-quality';
 
@@ -73,14 +79,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const t1 = Date.now();
   let transcriptionRaw: string;
   try {
-    transcriptionRaw = await geminiGenerate(
+    transcriptionRaw = await callGeminiForCall(
       geminiKeys,
-      'gemini-2.5-flash',
       [{ role: 'user', parts: [
         { inlineData: { mimeType, data: audioBase64 } },
         { text: CALL_TRANSCRIPTION_PROMPT },
       ]}],
-      {},
+      undefined,
       120_000,
     );
   } catch (err: any) {
@@ -91,25 +96,74 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { language, segments } = parseTranscriptionResponse(transcriptionRaw);
   const interruptionCount = segments.filter(s => s.type === 'interruption').length;
   const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
-
-  // ── Step 3: Score ────────────────────────────────────────────────────────
-  const t2 = Date.now();
   const callTranscriptText = segmentsToText(segments);
+
+  // ── Step 2b: Energy / Tone from audio ───────────────────────────────────
+  let energyScore: 'Yes' | 'No' | 'NA' = 'NA';
+  let energyReasoning = '';
+  try {
+    const energyRaw = await callGeminiForCall(
+      geminiKeys,
+      [{ role: 'user', parts: [
+        { inlineData: { mimeType, data: audioBase64 } },
+        { text: ENERGY_TONE_PROMPT },
+      ]}],
+      undefined,
+      60_000,
+    );
+    const et = parseEnergyToneResponse(energyRaw);
+    energyScore     = et.score;
+    energyReasoning = et.reasoning;
+  } catch {}
+
+  // ── Step 2c: Call disposition ────────────────────────────────────────────
+  let callDisposition = '';
+  let callSubDisposition = '';
+  if (callTranscriptText) {
+    try {
+      const dispRaw = await callGeminiForCall(
+        geminiKeys,
+        [{ role: 'user', parts: [{ text: CALL_DISPOSITION_PROMPT + '\n\n' + callTranscriptText }] }],
+        undefined,
+        30_000,
+      );
+      const d = parseCallDisposition(dispRaw);
+      callDisposition    = d.callDisposition;
+      callSubDisposition = d.callSubDisposition;
+    } catch {}
+  }
+
+  // ── Step 2d: KB chunks for TechnicalLegal scoring ───────────────────────
+  // Fallback to first 400 chars of transcript when disposition is unknown
+  let kbContext = '';
+  const kbQuery = callDisposition || callTranscriptText.slice(0, 400);
+  if (kbQuery) {
+    try {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant  = retrieveRelevantChunks(allChunks, kbQuery, 5);
+      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+    } catch {}
+  }
+
+  // ── Step 3: Text IQS scoring ─────────────────────────────────────────────
+  const t2 = Date.now();
   const scoringPrompt = buildCallScoringPrompt(
     callTranscriptText,
     chat_transcript,
     'test',
     interruptionCount,
     deadAirCount,
+    callDisposition,
+    '',
+    kbContext,
   );
 
   let scoringRaw: string;
   try {
-    scoringRaw = await geminiGenerate(
+    scoringRaw = await callGeminiForCall(
       geminiKeys,
-      'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: CALL_IQS_SYSTEM_PROMPT + '\n\n' + scoringPrompt }] }],
-      {},
+      undefined,
       60_000,
     );
   } catch (err: any) {
@@ -117,14 +171,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   const scoringMs = Date.now() - t2;
 
-  const { scores, reasoning, iqs, summary } = parseCallScoringResponse(scoringRaw);
+  const { scores, reasoning, poorListeningSegments, iqs, summary } = parseCallScoringResponse(scoringRaw);
+
+  // Override EnergyTone with audio-based score
+  scores['EnergyTone']   = energyScore;
+  reasoning['EnergyTone'] = energyReasoning || reasoning['EnergyTone'] || '';
+
+  const finalSegments = insertPoorListeningFlags(segments, poorListeningSegments);
+  const poorListeningCount = poorListeningSegments.length;
 
   return NextResponse.json({
     ok: true,
     language,
-    segments,
+    segments: finalSegments,
     interruptionCount,
     deadAirCount,
+    poorListeningCount,
+    callDisposition,
+    callSubDisposition,
     iqs,
     scores,
     reasoning,

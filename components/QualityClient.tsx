@@ -6,15 +6,10 @@ import * as XLSX from 'xlsx';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
-import DataState from '@/components/DataState';
+import CallLinkTestClient from '@/components/CallLinkTestClient';
+import UnifiedScoringClient from '@/components/UnifiedScoringClient';
 
-const ALL_LOG_COLS: readonly string[] = ['Disposition', 'Agent', 'IQS', 'CSAT', 'Date', 'Chat ID', 'Mobile', 'FRT', 'Handoff', 'Resolution', 'Closure', 'Fails', 'Sub-Disposition', 'Last Updated'];
-
-const PARAM_ABBR: Record<string, string> = {
-  Technical: 'Tech', AllQuestions: 'AllQ', Expectation: 'Exp', Contextual: 'Ctx',
-  FollowUp: 'F/Up', Sentences: 'Tone', Process: 'Proc', Opening: 'Open',
-  Call: 'Call', Grammar: 'Gram', Empathy: 'Emp',
-};
+const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Mobile', 'CSAT', 'FRT', 'Handoff', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,18 +21,17 @@ interface LogFilters {
   subDisposition: string;
   csat: string;
   type: string;
-  dateRange: '7d' | '30d' | '90d' | 'custom';
+  dateRange: 'today' | 'yesterday' | '1w' | 'custom';
   dateFrom: string;
   dateTo: string;
   chatId: string;
-  minUserMsgs: number | null;
 }
 
 const DEFAULT_FILTERS: LogFilters = {
   agent: '', minScore: 0, maxScore: 100,
   disposition: '', subDisposition: '', csat: '', type: '',
-  dateRange: '7d', dateFrom: '', dateTo: '',
-  chatId: '', minUserMsgs: null,
+  dateRange: '1w', dateFrom: '', dateTo: '',
+  chatId: '',
 };
 
 function buildParams(page: number, f: LogFilters): URLSearchParams {
@@ -51,16 +45,20 @@ function buildParams(page: number, f: LogFilters): URLSearchParams {
   if (f.csat)         p.set('csat', f.csat);
   if (f.type)         p.set('type', f.type);
   if (f.chatId)       p.set('chatId', f.chatId);
-  if (f.minUserMsgs && f.minUserMsgs > 0) p.set('minUserMsgs', String(f.minUserMsgs));
   // Skip date range when searching by chat ID — find the chat regardless of period
   if (!f.chatId) {
-    if (f.dateRange === 'custom') {
+    if (f.dateRange === 'today') {
+      const d = new Date().toISOString().slice(0, 10);
+      p.set('dateFrom', d); p.set('dateTo', d);
+    } else if (f.dateRange === 'yesterday') {
+      const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      p.set('dateFrom', d); p.set('dateTo', d);
+    } else if (f.dateRange === '1w') {
+      p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
+      p.set('dateTo', new Date().toISOString().slice(0, 10));
+    } else if (f.dateRange === 'custom') {
       if (f.dateFrom) p.set('dateFrom', f.dateFrom);
       if (f.dateTo)   p.set('dateTo', f.dateTo);
-    } else {
-      const days = f.dateRange === '7d' ? 6 : f.dateRange === '30d' ? 29 : 89;
-      p.set('dateFrom', new Date(Date.now() - days * 86400000).toISOString().slice(0, 10));
-      p.set('dateTo', new Date().toISOString().slice(0, 10));
     }
   }
   return p;
@@ -461,7 +459,7 @@ function DateRangePicker({ from, to, onChange, onClose }: {
   };
   const [viewDate, setViewDate] = useState(initMonth);
   const [pendingFrom, setPendingFrom] = useState(from);
-  const [step, setStep] = useState<'from' | 'to'>('from');
+  const [step, setStep] = useState<'from' | 'to'>(from ? 'to' : 'from');
   const [hoverDate, setHoverDate] = useState('');
 
   const year  = viewDate.getFullYear();
@@ -543,318 +541,160 @@ function DateRangePicker({ from, to, onChange, onClose }: {
 }
 
 // ── Score Detail Modal (split-pane: IQS analysis + transcript) ────────────────
-function ScoreDetail({ entry, onClose, onSave, userRole, userEmail }: {
-  entry: IQSScoreEntry;
-  onClose: () => void;
-  onSave?: (updated: IQSScoreEntry) => void;
-  userRole?: string;
-  userEmail?: string;
-}) {
+function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntry; onClose: () => void; onEdit?: (e: IQSScoreEntry) => void; userRole?: string }) {
+  const fails = PARAM_ORDER.filter(p => entry.scores[p] === 'No');
   const canEdit = userRole === 'quality' || userRole === 'admin';
-
-  // Transcript state
+  const [showTranscript, setShowTranscript] = useState(true);
   const [transcript, setTranscript] = useState<{ timedMessages?: any[]; rawTranscript?: string } | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
   const [transcriptError, setTranscriptError] = useState('');
-
-  // Edit form state (for quality/admin — always editable inline)
-  const [form, setForm] = useState({
-    agentName: entry.agentName || '',
-    csat: entry.csat || '',
-    disposition: entry.disposition || '',
-    subDisposition: entry.subDisposition || '',
-    summary: entry.summary || '',
-    scores: { ...entry.scores },
-    reasoning: { ...entry.reasoning },
-    note: entry.reviewNote || '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  // Reset form when entry changes
-  useEffect(() => {
-    setForm({
-      agentName: entry.agentName || '',
-      csat: entry.csat || '',
-      disposition: entry.disposition || '',
-      subDisposition: entry.subDisposition || '',
-      summary: entry.summary || '',
-      scores: { ...entry.scores },
-      reasoning: { ...entry.reasoning },
-      note: entry.reviewNote || '',
-    });
-    setSaved(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entry.chatId]);
 
   useEffect(() => {
     setTranscriptLoading(true);
     setTranscriptError('');
     fetch(`/api/quality/transcript?chatId=${encodeURIComponent(entry.chatId)}`)
-      .then(async r => {
-        const d = await r.json();
-        if (!r.ok) throw new Error(d?.detail || d?.error || `HTTP ${r.status}`);
+      .then(r => r.json())
+      .then(d => {
         if (d.found) setTranscript({ timedMessages: d.timedMessages, rawTranscript: d.rawTranscript });
         else setTranscript({});
       })
-      .catch((e: any) => setTranscriptError(e?.message || 'Failed to load transcript'))
+      .catch(() => setTranscriptError('Failed to load transcript'))
       .finally(() => setTranscriptLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.chatId]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch('/api/quality/update', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: entry.id, chatId: entry.chatId,
-          agentName: form.agentName, scores: form.scores,
-          reasoning: form.reasoning, disposition: form.disposition,
-          subDisposition: form.subDisposition, csat: form.csat,
-          summary: form.summary, note: form.note,
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => null);
-        throw new Error(err?.error || `Server error ${res.status}`);
-      }
-      const data = await res.json();
-      // Merge API response on top of the original entry so no fields are lost.
-      // Use entry.id (not data.entry.id) — the API regenerates it each call.
-      const updated: IQSScoreEntry = {
-        ...entry,
-        ...form,
-        id: entry.id,
-        iqs: data.entry?.iqs ?? entry.iqs,
-        updatedAt: data.entry?.updatedAt ?? new Date().toISOString(),
-        updatedBy: data.entry?.updatedBy ?? userEmail,
-        reviewNote: form.note || entry.reviewNote,
-      };
-      onSave?.(updated);
-      setSaved(true);
-      // Auto-mark reviewed
-      fetch('/api/quality/pending-review', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: entry.chatId, reviewNote: form.note || 'Reviewed via override' }),
-      }).catch(() => {});
-    } catch (e: any) {
-      alert(e?.message || 'Failed to save');
-    }
-    setSaving(false);
-  };
-
-  const fails = PARAM_ORDER.filter(p => (canEdit ? form.scores[p] : entry.scores[p]) === 'No');
-
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={onClose}>
-      <div className="bg-white w-full sm:rounded-2xl sm:max-w-6xl max-h-[96vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
-
-        {/* ── Header ── */}
-        <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-3.5 flex items-center gap-4 rounded-t-2xl">
-          <IQSRing iqs={entry.iqs} size={44} />
+      <div
+        className={`bg-white w-full sm:rounded-2xl max-h-[96vh] flex flex-col shadow-2xl transition-all ${showTranscript ? 'sm:max-w-5xl' : 'sm:max-w-3xl'}`}
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="shrink-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center gap-4 rounded-t-2xl">
+          <IQSRing iqs={entry.iqs} size={52} />
           <div className="flex-1 min-w-0">
-            <p className="text-[10px] text-gray-400 mb-0.5">
-              Quality <span className="mx-0.5">›</span> {entry.agentName || 'Agent'} <span className="mx-0.5">›</span> {entry.chatId}
-            </p>
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-bold text-gray-900">{entry.agentName || 'Unknown Agent'}</p>
               {fails.length === 0
                 ? <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">Clean</span>
-                : <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{fails.length} fail{fails.length !== 1 ? 's' : ''}</span>}
-              {canEdit && <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">Editing</span>}
+                : <span className="text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{fails.length} fail{fails.length > 1 ? 's' : ''}</span>}
             </div>
             <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-2 flex-wrap">
               <ChatLink chatId={entry.chatId} className="text-xs" />
               <span>·</span><span>{entry.scoredAt?.slice(0, 10)}</span>
               {entry.csat && <><span>·</span><span className="font-medium">{entry.csat === '5' ? 'Good' : entry.csat === '3' ? 'CBB' : 'Bad'}</span></>}
               {entry.disposition && <><span>·</span><span className="text-gray-600 font-medium">{entry.disposition}</span></>}
-              {entry.updatedBy && <><span>·</span><span className="text-amber-600">edited by {entry.updatedBy.split('@')[0]}</span></>}
+              {entry.subDisposition && <><span>/</span><span className="text-gray-500">{entry.subDisposition}</span></>}
             </p>
+            {entry.updatedBy && (
+              <p className="text-[10px] text-amber-600 mt-0.5">
+                Last edited by {entry.updatedBy.split('@')[0]} · {new Date(entry.updatedAt || '').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {saved && <span className="text-xs text-emerald-600 font-semibold">Saved ✓</span>}
+            <button
+              onClick={() => setShowTranscript(s => !s)}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+              {showTranscript ? 'Hide transcript' : 'Show transcript'}
+            </button>
+            {canEdit && onEdit && (
+              <button onClick={() => onEdit(entry)}
+                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">
+                Override
+              </button>
+            )}
             <button onClick={onClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
             </button>
           </div>
         </div>
 
-        {/* ── Split body ── */}
-        <div className="flex-1 overflow-hidden flex min-h-0 divide-x divide-gray-100">
-
-          {/* ── Left: params (editable for quality/admin, read-only otherwise) ── */}
-          <div className="w-[42%] shrink-0 overflow-y-auto">
-            {entry.updatedBy && entry.updatedAt && (
-              <div className="mx-5 mt-4 mb-0 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2l2 2-9 9H3v-2L12 2z"/></svg>
-                Overridden by <span className="font-semibold">{entry.updatedBy.split('@')[0]}</span>
-                <span className="text-amber-400">·</span>
-                {new Date(entry.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+        {/* Split-pane body */}
+        <div className={`flex-1 overflow-hidden flex min-h-0 ${showTranscript ? 'flex-row divide-x divide-gray-100' : ''}`}>
+          {/* Left: IQS analysis */}
+          <div className={`overflow-y-auto ${showTranscript ? 'w-[44%] shrink-0' : 'w-full'}`}>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Parameter Scores</p>
+              <div className="space-y-2">
+                {PARAM_ORDER.map(p => {
+                  const val = entry.scores[p];
+                  return (
+                    <div key={p} className={`rounded-xl p-3 ${val === 'No' ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
+                      <div className="flex items-center gap-2">
+                        <ParamBadge val={val} />
+                        <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
+                        <span className="text-[10px] text-gray-400">{Math.round(WEIGHTS[p] * 100)}%</span>
+                      </div>
+                      {entry.reasoning[p] && <p className="text-[11px] text-gray-500 leading-relaxed mt-1.5 ml-5">{entry.reasoning[p]}</p>}
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            {canEdit ? (
-              <div className="px-5 py-4 space-y-4">
-
-                {/* Metadata row */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Agent</label>
-                    <input type="text" value={form.agentName}
-                      onChange={e => setForm(f => ({ ...f, agentName: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400/30" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">CSAT</label>
-                    <select value={form.csat} onChange={e => setForm(f => ({ ...f, csat: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400/30 bg-white">
-                      <option value="">None</option>
-                      <option value="5">Good</option>
-                      <option value="3">Could be better</option>
-                      <option value="1">Bad</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Disposition</label>
-                    <input type="text" value={form.disposition}
-                      onChange={e => setForm(f => ({ ...f, disposition: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400/30" />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Sub-Disposition</label>
-                    <input type="text" value={form.subDisposition}
-                      onChange={e => setForm(f => ({ ...f, subDisposition: e.target.value }))}
-                      className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400/30" />
-                  </div>
-                </div>
-
-                {/* Parameters */}
+              {entry.summary && (
                 <div>
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Parameters</p>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Summary</p>
+                  <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 leading-relaxed">{entry.summary}</p>
+                </div>
+              )}
+              {entry.uncertainParameters && entry.uncertainParameters.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-600 shrink-0"><circle cx="8" cy="8" r="7"/><path d="M8 5v3.5M8 11v.5" strokeLinecap="round"/></svg>
+                    <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Needs QA Review</p>
+                  </div>
+                  <p className="text-[11px] text-amber-700 mb-3 leading-relaxed">
+                    The scoring bot was uncertain about the following parameters. They have been scored NA (benefit of doubt) pending QA review.
+                  </p>
                   <div className="space-y-2">
-                    {PARAM_ORDER.map(p => (
-                      <div key={p} className={`rounded-xl border p-2.5 ${form.scores[p] === 'No' ? 'bg-red-50 border-red-100' : 'bg-gray-50 border-transparent'}`}>
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
-                          <span className="text-[10px] text-gray-400">{Math.round(WEIGHTS[p] * 100)}%</span>
-                          <div className="flex gap-1">
-                            {(['Yes', 'No', 'NA'] as const).map(v => (
-                              <button key={v} onClick={() => setForm(f => ({ ...f, scores: { ...f.scores, [p]: v } }))}
-                                className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${
-                                  form.scores[p] === v
-                                    ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-gray-400 text-white'
-                                    : 'bg-white border border-gray-200 text-gray-400 hover:border-gray-400'
-                                }`}>{v}</button>
-                            ))}
-                          </div>
-                        </div>
-                        <textarea
-                          value={form.reasoning[p] || ''}
-                          onChange={e => setForm(f => ({ ...f, reasoning: { ...f.reasoning, [p]: e.target.value } }))}
-                          placeholder="Reasoning…"
-                          rows={2}
-                          className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-400/30 resize-none bg-white"
-                        />
+                    {entry.uncertainParameters.map((u, i) => (
+                      <div key={i} className="bg-white rounded-lg px-3 py-2.5 border border-amber-100">
+                        <p className="text-xs font-semibold text-gray-800 mb-0.5">{PARAM_NAMES[u.parameter] ?? u.parameter}</p>
+                        <p className="text-[11px] text-gray-600 leading-relaxed">{u.question}</p>
                       </div>
                     ))}
                   </div>
                 </div>
-
-                {/* QA Note + Save */}
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">QA Note</label>
-                  <textarea value={form.note}
-                    onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-                    placeholder="Internal note for this review…"
-                    rows={2}
-                    className="w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400/30 resize-none"
-                  />
-                </div>
-                <button onClick={handleSave} disabled={saving}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl text-sm transition">
-                  {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Changes'}
-                </button>
-                <p className="text-[10px] text-gray-300 pb-2">Scored by {(entry.scoredBy || '').split('@')[0]} · {entry.provider}/{entry.model}</p>
-              </div>
-            ) : (
-              /* Read-only view for agents/TLs */
-              <div className="px-6 py-5 space-y-4">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Parameter Scores</p>
-                <div className="space-y-2">
-                  {PARAM_ORDER.map(p => {
-                    const val = entry.scores[p];
-                    return (
-                      <div key={p} className={`rounded-xl p-3 ${val === 'No' ? 'bg-red-50 border border-red-100' : 'bg-gray-50'}`}>
-                        <div className="flex items-center gap-2">
-                          <ParamBadge val={val} />
-                          <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
-                          <span className="text-[10px] text-gray-400">{Math.round(WEIGHTS[p] * 100)}%</span>
-                        </div>
-                        {entry.reasoning[p] && <p className="text-[11px] text-gray-500 leading-relaxed mt-1.5 ml-5">{entry.reasoning[p]}</p>}
-                      </div>
-                    );
-                  })}
-                </div>
-                {entry.summary && (
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Summary</p>
-                    <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 leading-relaxed">{entry.summary}</p>
-                  </div>
-                )}
-                {entry.uncertainParameters && entry.uncertainParameters.length > 0 && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-600 shrink-0"><circle cx="8" cy="8" r="7"/><path d="M8 5v3.5M8 11v.5" strokeLinecap="round"/></svg>
-                      <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">Needs QA Review</p>
-                    </div>
-                    <div className="space-y-2">
-                      {entry.uncertainParameters.map((u, i) => (
-                        <div key={i} className="bg-white rounded-lg px-3 py-2.5 border border-amber-100">
-                          <p className="text-xs font-semibold text-gray-800 mb-0.5">{PARAM_NAMES[u.parameter] ?? u.parameter}</p>
-                          <p className="text-[11px] text-gray-600 leading-relaxed">{u.question}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <p className="text-[10px] text-gray-300">Scored by {(entry.scoredBy || '').split('@')[0]} · {entry.provider}/{entry.model}</p>
-              </div>
-            )}
-          </div>
-
-          {/* ── Right: transcript ── */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="px-6 py-5">
-              {transcriptLoading && (
-                <div className="flex items-center justify-center py-12 text-gray-400 gap-2 text-sm">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6" /></svg>
-                  Loading transcript…
-                </div>
               )}
-              {transcriptError && <p className="text-sm text-red-500 text-center py-8">{transcriptError}</p>}
-              {!transcriptLoading && !transcriptError && transcript !== null && (
-                <>
-                  {transcript.timedMessages && transcript.timedMessages.length > 0 ? (
-                    <>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">{transcript.timedMessages.length} messages</p>
-                      <TranscriptBubbles messages={transcript.timedMessages} />
-                    </>
-                  ) : transcript.rawTranscript ? (
-                    <>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Raw Transcript</p>
-                      <pre className="text-[12px] text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{transcript.rawTranscript}</pre>
-                    </>
-                  ) : (
-                    <div className="text-center py-12">
-                      <p className="text-sm text-gray-400">No transcript saved for this chat.</p>
-                      <p className="text-xs text-gray-300 mt-1">Transcripts are saved for new chats scored after this update.</p>
-                    </div>
-                  )}
-                </>
-              )}
+              <p className="text-[10px] text-gray-300">Scored by {(entry.scoredBy || '').split('@')[0]} · {entry.provider}/{entry.model}</p>
             </div>
           </div>
+
+          {/* Right: transcript */}
+          {showTranscript && (
+            <div className="flex-1 overflow-y-auto">
+              <div className="px-6 py-5">
+                {transcriptLoading && (
+                  <div className="flex items-center justify-center py-12 text-gray-400 gap-2 text-sm">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6" /></svg>
+                    Loading transcript…
+                  </div>
+                )}
+                {transcriptError && <p className="text-sm text-red-500 text-center py-8">{transcriptError}</p>}
+                {!transcriptLoading && !transcriptError && transcript !== null && (
+                  <>
+                    {transcript.timedMessages && transcript.timedMessages.length > 0 ? (
+                      <>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">
+                          {transcript.timedMessages.length} messages
+                        </p>
+                        <TranscriptBubbles messages={transcript.timedMessages} />
+                      </>
+                    ) : transcript.rawTranscript ? (
+                      <>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Raw Transcript</p>
+                        <pre className="text-[12px] text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{transcript.rawTranscript}</pre>
+                      </>
+                    ) : (
+                      <div className="text-center py-12">
+                        <p className="text-sm text-gray-400">No transcript saved for this chat.</p>
+                        <p className="text-xs text-gray-300 mt-1">Transcripts are saved for new chats scored after this update.</p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1164,7 +1004,6 @@ interface IQSFlagComment {
 }
 interface PendingReviewItem {
   chatId: string; agentName: string; iqs: number; scoredAt: string; date: string;
-  mobileNumber?: string;
   flag?: IQSFlagData | null;
   qaStatus?: { reviewedBy: string; reviewedAt: string; reviewNote: string } | null;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
@@ -1172,11 +1011,9 @@ interface PendingReviewItem {
   reasoning?: Record<string, string>;
 }
 
-function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: { userRole?: string; userEmail?: string; onOverride?: (item: PendingReviewItem) => void; onSaved?: (cb: (chatId: string, updated: Partial<PendingReviewItem>) => void) => void; onToast?: (msg: string) => void }) {
+function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
   const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
-  const [agentFilter, setAgentFilter] = useState('');
-  const [iqsBand, setIqsBand] = useState<'all' | 'critical' | 'low' | 'mid'>('all');
   const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
   const [items, setItems] = useState<PendingReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1190,14 +1027,6 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
   const [reviewing, setReviewing] = useState<Record<string, boolean>>({});
   const [transcripts, setTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
   const [transcriptLoading, setTranscriptLoading] = useState<Record<string, boolean>>({});
-  const [histories, setHistories] = useState<Record<string, any[] | null>>({});
-  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
-  const [showHistory, setShowHistory] = useState<Record<string, boolean>>({});
-  // Prior chat inline transcript — keyed by the prior chat's own chatId
-  const [priorTranscripts, setPriorTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
-  const [priorTranscriptLoading, setPriorTranscriptLoading] = useState<Record<string, boolean>>({});
-  // Which prior chat is currently expanded (one at a time per parent chat)
-  const [expandedPriorChat, setExpandedPriorChat] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -1207,18 +1036,6 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
       .then(d => setItems(d.items || []))
       .catch(() => setLoadError('Failed to load pending chats'))
       .finally(() => setLoading(false));
-  }, []);
-
-  // Register the updater so the parent can push save results into our local items
-  useEffect(() => {
-    onSaved?.(( chatId, updated) => {
-      setItems(prev => prev.map(i =>
-        i.chatId === chatId
-          ? { ...i, iqs: updated.iqs ?? i.iqs, scores: updated.scores ?? i.scores, reasoning: updated.reasoning ?? i.reasoning, agentName: updated.agentName ?? i.agentName }
-          : i,
-      ));
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadThread = async (flagId: string) => {
@@ -1243,50 +1060,10 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
     setTranscriptLoading(t => ({ ...t, [chatId]: false }));
   };
 
-  const loadHistory = async (chatId: string) => {
-    if (histories[chatId] !== undefined) return;
-    setHistoryLoading(h => ({ ...h, [chatId]: true }));
-    try {
-      const d = await fetch(`/api/quality/history?chatId=${encodeURIComponent(chatId)}`).then(r => r.json());
-      setHistories(h => ({ ...h, [chatId]: d.history || [] }));
-    } catch {
-      setHistories(h => ({ ...h, [chatId]: [] }));
-    }
-    setHistoryLoading(h => ({ ...h, [chatId]: false }));
-  };
-
-  const toggleHistory = (chatId: string) => {
-    const next = !showHistory[chatId];
-    setShowHistory(s => ({ ...s, [chatId]: next }));
-    if (next) loadHistory(chatId);
-  };
-
-  const loadPriorTranscript = async (priorChatId: string) => {
-    if (priorTranscripts[priorChatId] !== undefined) return;
-    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: true }));
-    try {
-      const d = await fetch(`/api/quality/transcript?chatId=${encodeURIComponent(priorChatId)}`).then(r => r.json());
-      setPriorTranscripts(t => ({ ...t, [priorChatId]: d.found ? { timedMessages: d.timedMessages, rawTranscript: d.rawTranscript } : {} }));
-    } catch {
-      setPriorTranscripts(t => ({ ...t, [priorChatId]: {} }));
-    }
-    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: false }));
-  };
-
-  const togglePriorChat = (parentChatId: string, priorChatId: string) => {
-    setExpandedPriorChat(s => {
-      const current = s[parentChatId];
-      const next = current === priorChatId ? null : priorChatId;
-      if (next) loadPriorTranscript(next);
-      return { ...s, [parentChatId]: next };
-    });
-  };
-
   const expand = (chatId: string, flagId?: string) => {
     if (expandedId === chatId) { setExpandedId(null); return; }
     setExpandedId(chatId);
     loadTranscript(chatId);
-    loadHistory(chatId);
     if (flagId) loadThread(flagId);
   };
 
@@ -1320,7 +1097,6 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
           ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: reviewNotes[chatId] || '' } }
           : item
       ));
-      onToast?.('Chat marked as reviewed');
     } catch {}
     setReviewing(r => ({ ...r, [chatId]: false }));
   };
@@ -1332,27 +1108,18 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
   if (filter === 'challenged') filtered = filtered.filter(i => !!i.flag && i.flag.status === 'pending');
   else if (filter === 'uncertain') filtered = filtered.filter(i => !!(i.uncertainParameters && i.uncertainParameters.length > 0));
   if (chatIdSearch) filtered = filtered.filter(i => i.chatId.toLowerCase().includes(chatIdSearch.toLowerCase()));
-  if (agentFilter) filtered = filtered.filter(i => i.agentName === agentFilter);
-  if (iqsBand === 'critical') filtered = filtered.filter(i => i.iqs < 50);
-  else if (iqsBand === 'low')  filtered = filtered.filter(i => i.iqs >= 50 && i.iqs < 65);
-  else if (iqsBand === 'mid')  filtered = filtered.filter(i => i.iqs >= 65 && i.iqs <= 79);
   const pendingItems  = filtered.filter(i => !i.qaStatus).sort((a, b) => new Date(b.scoredAt).getTime() - new Date(a.scoredAt).getTime());
   const reviewedItems = filtered.filter(i => !!i.qaStatus).sort((a, b) => new Date(b.qaStatus!.reviewedAt).getTime() - new Date(a.qaStatus!.reviewedAt).getTime());
   const challengedCount = items.filter(i => i.flag?.status === 'pending').length;
   const uncertainCount  = items.filter(i => !!(i.uncertainParameters && i.uncertainParameters.length > 0) && !i.qaStatus).length;
 
-  const isEmpty = !loading && !loadError && filtered.length === 0;
-
-  if (loading || loadError || isEmpty) return (
-    <DataState
-      loading={loading}
-      error={loadError}
-      empty={isEmpty}
-      emptyTitle="No items to review"
-      emptyBody="All chats have been reviewed or no chats match your current filters."
-      skeletonRows={6}
-    />
+  if (loading) return (
+    <div className="flex items-center justify-center h-48 text-gray-400 gap-2 text-sm">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+      Loading…
+    </div>
   );
+  if (loadError) return <p className="text-sm text-red-500 text-center py-12">{loadError}</p>;
 
   const renderItem = (item: PendingReviewItem) => {
     const isExpanded   = expandedId === item.chatId;
@@ -1385,7 +1152,6 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
               {item.date || item.scoredAt?.slice(0, 10)}
-              {item.mobileNumber && <span className="ml-2 font-mono text-gray-500">{item.mobileNumber}</span>}
               {isReviewed && item.qaStatus?.reviewedAt && ` · Reviewed ${new Date(item.qaStatus.reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
             </p>
           </div>
@@ -1486,143 +1252,40 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
                   <>
                     <input type="text" value={reviewNotes[item.chatId] || ''} onChange={e => setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
                       placeholder="Review note (optional)…" className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 mb-2" />
-                    <div className="flex gap-2">
-                      <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
-                        className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
-                        {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
-                      </button>
-                      {onOverride && (
-                        <button onClick={() => onOverride(item)}
-                          className="flex-1 px-3 py-2 border border-emerald-600 text-emerald-700 text-xs font-bold rounded-xl hover:bg-emerald-50 transition">
-                          Override Score
-                        </button>
-                      )}
-                    </div>
+                    <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
+                      className="w-full px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
+                      {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
+                    </button>
                   </>
                 ) : isReviewed ? (
-                  <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
-                        ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
-                      </span>
-                      {onOverride && (
-                        <button onClick={() => onOverride(item)}
-                          className="text-[10px] font-bold text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-full hover:bg-emerald-50 transition">
-                          Override Score
-                        </button>
-                      )}
-                    </div>
+                  <div className="text-center">
+                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
+                      ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
+                    </span>
                     {item.qaStatus?.reviewNote && <p className="text-xs text-gray-500 mt-2">{item.qaStatus.reviewNote}</p>}
                   </div>
                 ) : null}
               </div>
             </div>
 
-            {/* Right: transcript + prior chats */}
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-
-              {/* Prior chats section — collapsed list + inline transcript above current chat */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Customer's Prior Chats</p>
-                  {(histories[item.chatId]?.length ?? 0) > 0 && (
-                    <button onClick={() => toggleHistory(item.chatId)}
-                      className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1">
-                      {showHistory[item.chatId] ? 'Hide' : `Show (${histories[item.chatId]!.length})`}
-                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
-                        className={`transition-transform ${showHistory[item.chatId] ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
-                    </button>
-                  )}
+            {/* Right: transcript */}
+            <div className="flex-1 overflow-y-auto p-4">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Transcript</p>
+              {transcriptLoading[item.chatId] && (
+                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                  Loading…
                 </div>
-
-                {historyLoading[item.chatId] && (
-                  <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-3">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-                    Loading…
-                  </div>
-                )}
-
-                {showHistory[item.chatId] && (
-                  <div className="space-y-1">
-                    {histories[item.chatId]?.length === 0 && !historyLoading[item.chatId] && (
-                      <p className="text-xs text-gray-400 text-center py-3">No prior chats found for this customer.</p>
-                    )}
-                    {(histories[item.chatId] || []).map((h: any) => {
-                      const isExpanded = expandedPriorChat[item.chatId] === h.chatId;
-                      const ptx = priorTranscripts[h.chatId];
-                      return (
-                        <div key={h.chatId} className="rounded-xl border border-gray-100 overflow-hidden">
-                          {/* Row — click to expand/collapse inline transcript */}
-                          <button
-                            onClick={() => togglePriorChat(item.chatId, h.chatId)}
-                            className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${isExpanded ? 'bg-gray-50' : 'hover:bg-gray-50'}`}
-                          >
-                            <IQSRing iqs={h.iqs} size={28} />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-xs font-semibold text-gray-700">{h.chatId}</span>
-                                <span className="text-[10px] text-gray-500">{h.agentName}</span>
-                                {h.disposition && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{h.disposition}</span>}
-                              </div>
-                              <p className="text-[10px] text-gray-400 mt-0.5">{h.date}</p>
-                            </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              {h.csat === '5' && <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded-full">Good</span>}
-                              {h.csat === '3' && <span className="text-[10px] bg-yellow-50 text-yellow-600 font-bold px-1.5 py-0.5 rounded-full">CBB</span>}
-                              {h.csat === '1' && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full">Bad</span>}
-                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
-                                className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
-                            </div>
-                          </button>
-
-                          {/* Inline transcript — shown when expanded */}
-                          {isExpanded && (
-                            <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-3 max-h-80 overflow-y-auto">
-                              {priorTranscriptLoading[h.chatId] && (
-                                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-4">
-                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-                                  Loading transcript…
-                                </div>
-                              )}
-                              {ptx && ptx.timedMessages && ptx.timedMessages.length > 0 && (
-                                <TranscriptBubbles messages={ptx.timedMessages} />
-                              )}
-                              {ptx && ptx.rawTranscript && !ptx.timedMessages?.length && (
-                                <pre className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed font-sans">{ptx.rawTranscript}</pre>
-                              )}
-                              {ptx && !ptx.timedMessages?.length && !ptx.rawTranscript && !priorTranscriptLoading[h.chatId] && (
-                                <p className="text-xs text-gray-400 text-center py-3">No transcript saved for this chat.</p>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Current chat transcript */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Transcript</p>
-                </div>
-                {transcriptLoading[item.chatId] && (
-                  <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-                    Loading…
-                  </div>
-                )}
-                {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
-                  <TranscriptBubbles messages={txData.timedMessages} />
-                )}
-                {txData && txData.rawTranscript && !txData.timedMessages?.length && (
-                  <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
-                )}
-                {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
-                  <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
-                )}
-              </div>
+              )}
+              {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
+                <TranscriptBubbles messages={txData.timedMessages} />
+              )}
+              {txData && txData.rawTranscript && !txData.timedMessages?.length && (
+                <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
+              )}
+              {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
+                <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
+              )}
             </div>
           </div>
         )}
@@ -1631,7 +1294,6 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
   };
 
   const displayItems = section === 'pending' ? pendingItems : reviewedItems;
-  const agentOptions = Array.from(new Set(items.map(i => i.agentName).filter(Boolean))).sort();
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
@@ -1677,31 +1339,6 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
           className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
       </div>
 
-      {/* Q10: Agent + IQS band filter row */}
-      {(agentOptions.length > 0) && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <select value={agentFilter} onChange={e => setAgentFilter(e.target.value)}
-            className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-gray-600">
-            <option value="">All agents</option>
-            {agentOptions.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-          <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
-            {([['all', 'All IQS'], ['critical', '< 50'], ['low', '50–64'], ['mid', '65–79']] as const).map(([val, label]) => (
-              <button key={val} onClick={() => setIqsBand(val)}
-                className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition ${iqsBand === val ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
-                {label}
-              </button>
-            ))}
-          </div>
-          {(agentFilter || iqsBand !== 'all') && (
-            <button onClick={() => { setAgentFilter(''); setIqsBand('all'); }}
-              className="text-xs text-gray-400 hover:text-gray-600 transition px-2 py-1 rounded-lg hover:bg-gray-100">
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Items */}
       {displayItems.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-14 text-center">
@@ -1717,7 +1354,7 @@ function PendingChatsTab({ userRole, userEmail, onOverride, onSaved, onToast }: 
 }
 
 export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls'>(initialTab || 'performance');
+  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test' | 'unified'>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
 
   // Fresh agentName from config (overrides stale JWT value)
@@ -1780,12 +1417,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   // Server-provided lookup data
   const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
   const [availableSubDispositions, setAvailableSubDispositions] = useState<string[]>([]);
-  const [dispositionSubMap, setDispositionSubMap] = useState<Record<string, string[]>>({});
   const [weeklyParamData, setWeeklyParamData] = useState<WeeklyParamRow[]>([]);
 
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
-  // Callback registered by PendingChatsTab so the parent can notify it after a save
-  const pendingOnSavedRef = useRef<((chatId: string, updated: Partial<PendingReviewItem>) => void) | null>(null);
 
   // Column visibility
   const [showColPicker, setShowColPicker] = useState(false);
@@ -1797,13 +1431,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   // Performance tab — independent period state (decoupled from Score Log)
-  const [perfPeriod, setPerfPeriod] = useState<'7d'|'30d'|'90d'|'custom'>('7d');
+  const [perfPeriod, setPerfPeriod] = useState<'today'|'yesterday'|'1w'|'custom'>('1w');
   const [perfDateFrom, setPerfDateFrom] = useState('');
   const [perfDateTo, setPerfDateTo] = useState('');
   const [showPerfPicker, setShowPerfPicker] = useState(false);
   const [perfTotal, setPerfTotal] = useState(0);
   const perfAbortRef = useRef<AbortController | null>(null);
-  const [prevSummary, setPrevSummary] = useState<SummaryMetrics | null>(null);
 
   // Agent analytics table sort
   const [sortAgentCol, setSortAgentCol] = useState<string>('avgIqs');
@@ -1811,12 +1444,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // Score Log — filter panel toggle + needs-review filter
   const [showFilterPanel, setShowFilterPanel] = useState(false);
-  // Reports tab — filter panel toggle
-  const [showReportFilters, setShowReportFilters] = useState(false);
   const [showOnlyNeedsReview, setShowOnlyNeedsReview] = useState(false);
-
-  // Keyboard shortcuts cheatsheet
-  const [showShortcuts, setShowShortcuts] = useState(false);
 
   // Sidebar collapse state
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
@@ -1903,7 +1531,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const activeFilterCount = useMemo(() => {
     let n = 0;
     if (appliedFilters.chatId) n++;
-    if (appliedFilters.dateRange !== '7d') n++;
+    if (appliedFilters.dateRange !== '1w') n++;
     if (appliedFilters.agent && appliedFilters.agent !== selfAgentName) n++;
     if (appliedFilters.csat) n++;
     if (appliedFilters.minScore > 0 || appliedFilters.maxScore < 100) n++;
@@ -1935,37 +1563,22 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   }, [agentStats, sortAgentCol, sortAgentDir]);
 
   // ── Performance data — independent of Score Log filters ────────────────────
-  const loadPerfData = useCallback(async (period: '7d'|'30d'|'90d'|'custom', customFrom = '', customTo = '') => {
+  const loadPerfData = useCallback(async (period: 'today'|'yesterday'|'1w'|'custom', customFrom = '', customTo = '') => {
     perfAbortRef.current?.abort();
     const controller = new AbortController();
     perfAbortRef.current = controller;
     const today     = new Date().toISOString().slice(0, 10);
     const yesterday = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
     let dateFrom = '', dateTo = '';
-    if (period === 'custom') { dateFrom = customFrom; dateTo = customTo; }
-    else {
-      const days = period === '7d' ? 6 : period === '30d' ? 29 : 89;
-      dateFrom = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
-      dateTo = today;
-    }
+    if (period === 'today')     { dateFrom = today;      dateTo = today; }
+    else if (period === 'yesterday') { dateFrom = yesterday;  dateTo = yesterday; }
+    else if (period === '1w')   { dateFrom = new Date(Date.now() - 6*86400_000).toISOString().slice(0, 10); dateTo = today; }
+    else if (period === 'custom') { dateFrom = customFrom; dateTo = customTo; }
     const params = new URLSearchParams({ page: '0' });
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo)   params.set('dateTo', dateTo);
-
-    // Prior period — same duration, shifted back by the same number of days
-    let prevParams: URLSearchParams | null = null;
-    if (period !== 'custom' && dateFrom && dateTo) {
-      const days = period === '7d' ? 7 : period === '30d' ? 30 : 90;
-      const priorTo   = new Date(new Date(dateFrom).getTime() - 86400_000).toISOString().slice(0, 10);
-      const priorFrom = new Date(new Date(dateFrom).getTime() - days * 86400_000).toISOString().slice(0, 10);
-      prevParams = new URLSearchParams({ page: '0', dateFrom: priorFrom, dateTo: priorTo, skipStats: '1' });
-    }
-
     try {
-      const [resp, prevResp] = await Promise.all([
-        fetch(`/api/quality/scores?${params}`, { signal: controller.signal }),
-        prevParams ? fetch(`/api/quality/scores?${prevParams}`, { signal: controller.signal }) : Promise.resolve(null),
-      ]);
+      const resp = await fetch(`/api/quality/scores?${params}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
       const data = await resp.json();
       if (controller.signal.aborted || !resp.ok) return;
@@ -1974,18 +1587,10 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setWeeklyParamData(data.weeklyParamData || []);
       if (data.summary) setSummary(data.summary);
       setPerfTotal(data.total ?? 0);
-      if (prevResp?.ok) {
-        const prevData = await prevResp.json().catch(() => null);
-        if (prevData?.summary) setPrevSummary(prevData.summary);
-        else setPrevSummary(null);
-      } else {
-        setPrevSummary(null);
-      }
       setTotalStored(data.totalStored ?? 0);
       setAvailableAgents(data.availableAgents || []);
       setAvailableDispositions(data.availableDispositions || []);
       setAvailableSubDispositions(data.availableSubDispositions || []);
-      if (data.dispositionSubMap) setDispositionSubMap(data.dispositionSubMap);
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2030,7 +1635,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setAvailableAgents(data.availableAgents || []);
       setAvailableDispositions(data.availableDispositions || []);
       setAvailableSubDispositions(data.availableSubDispositions || []);
-      if (data.dispositionSubMap) setDispositionSubMap(data.dispositionSubMap);
       setTotalStored(data.totalStored ?? 0);
       setTotalFiltered(data.total ?? 0);
       setHasMore(data.hasMore ?? false);
@@ -2129,7 +1733,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // Auto-load on mount — Performance and Score Log load independently
   useEffect(() => {
-    loadPerfData('7d');
+    loadPerfData('1w');
     const startFilters = initialAgent
       ? { ...DEFAULT_FILTERS, agent: initialAgent }
       : DEFAULT_FILTERS;
@@ -2150,35 +1754,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   // Reset agent timing page when data changes
   useEffect(() => { setAgentPage(0); }, [agentStats]);
 
-  // CR8: Keyboard shortcuts
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable;
-      if (isInput) return;
-
-      if (e.key === 'Escape') {
-        if (showShortcuts) { setShowShortcuts(false); return; }
-        if (detailEntry) { setDetailEntry(null); return; }
-      }
-      if (e.key === '?') {
-        setShowShortcuts(s => !s);
-        return;
-      }
-      if (detailEntry) {
-        const list = chatIdFilteredLogEntries;
-        const idx = list.findIndex(e => e.chatId === detailEntry.chatId);
-        if (e.key === 'j' || e.key === 'ArrowDown') {
-          if (idx < list.length - 1) setDetailEntry(list[idx + 1]);
-        } else if (e.key === 'k' || e.key === 'ArrowUp') {
-          if (idx > 0) setDetailEntry(list[idx - 1]);
-        }
-      }
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [detailEntry, showShortcuts, chatIdFilteredLogEntries]);
-
   const openEditModal = (entry: IQSScoreEntry) => {
     setEditEntry(entry);
     setEditForm({
@@ -2189,7 +1764,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       summary: entry.summary || '',
       scores: { ...entry.scores },
       reasoning: { ...entry.reasoning },
-      note: entry.reviewNote || '',
+      note: '',
     });
     setEditSaved(false);
   };
@@ -2214,32 +1789,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         throw new Error(errData?.error || `Server error ${res.status}`);
       }
       const data = await res.json();
-      const updated: IQSScoreEntry = {
-        ...editEntry,
-        agentName: editForm.agentName,
-        csat: editForm.csat,
-        disposition: editForm.disposition,
-        subDisposition: editForm.subDisposition,
-        summary: editForm.summary,
-        scores: editForm.scores as Record<string, ParamScore>,
-        reasoning: editForm.reasoning,
-        id: editEntry.id,
-        iqs: data.entry?.iqs ?? editEntry.iqs,
-        updatedAt: data.entry?.updatedAt ?? new Date().toISOString(),
-        updatedBy: data.entry?.updatedBy ?? userEmail,
-        reviewNote: editForm.note || editEntry.reviewNote,
-      };
-      setEntries(prev => prev.map(e => e.chatId === editEntry.chatId ? updated : e));
-      setDetailEntry(prev => prev?.chatId === editEntry.chatId ? updated : prev);
+      const updated: IQSScoreEntry = data.entry || { ...editEntry, ...editForm, updatedAt: new Date().toISOString(), updatedBy: userEmail };
+      setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
+      setDetailEntry(prev => prev?.id === editEntry.id ? updated : prev);
       setEditSaved(true);
       setToast('Override saved successfully');
       setTimeout(() => setToast(null), 3000);
       setEditEntry(null); setEditForm(null);
-      // Auto-mark as reviewed in Pending Review
-      fetch('/api/quality/pending-review', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: editEntry.chatId, reviewNote: editForm.note || 'Reviewed via override' }),
-      }).catch(() => {});
     } catch (err: any) {
       setToast(err?.message || 'Failed to save override');
       setTimeout(() => setToast(null), 5000);
@@ -2403,6 +1959,18 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <path d="M3 3.5c0 5.5 4 9.5 9.5 9.5l1-2.5-2.5-1-1 1c-1.5-.5-3-2-3.5-3.5l1-1-1-2.5L3 3.5z"/>
       </svg>
     ),
+    callTest: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
+        <path d="M10 6l2 2-2 2M12 8h-3"/>
+      </svg>
+    ),
+    unified: (
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2"/>
+        <path d="M8 2v2M8 12v2M2 8h2M12 8h2"/>
+      </svg>
+    ),
   };
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -2412,21 +1980,8 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <ScoreDetail
           entry={detailEntry}
           onClose={() => setDetailEntry(null)}
-          onSave={updated => {
-            setEntries(prev => prev.map(e => e.chatId === updated.chatId ? updated : e));
-            setDetailEntry(updated);
-            // Notify PendingChatsTab so it updates its local items
-            pendingOnSavedRef.current?.(updated.chatId, {
-              iqs: updated.iqs,
-              scores: updated.scores as Record<string, string>,
-              reasoning: updated.reasoning as Record<string, string>,
-              agentName: updated.agentName,
-            });
-            setToast('Override saved successfully');
-            setTimeout(() => setToast(null), 3000);
-          }}
+          onEdit={openEditModal}
           userRole={userRole}
-          userEmail={userEmail}
         />
       )}
 
@@ -2540,8 +2095,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           paramFails={paramFails}
           onClose={() => setAgentReportStat(null)}
           onFilterLog={({ agent, minScore, maxScore }) => {
-            const f = { ...DEFAULT_FILTERS, agent, minScore: minScore ?? 0, maxScore: maxScore ?? 100,
-              dateRange: perfPeriod, dateFrom: perfPeriod === 'custom' ? perfDateFrom : '', dateTo: perfPeriod === 'custom' ? perfDateTo : '' };
+            const f = { ...DEFAULT_FILTERS, agent, minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
             setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
             loadScores(0, f); switchTab('log');
           }}
@@ -2565,7 +2119,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <div className={`border-b border-white/10 flex flex-col ${sidebarExpanded ? 'px-4 py-4' : 'px-2 py-4 items-center'}`}>
           {sidebarExpanded ? (
             <>
-              <Link href="/chat" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
+              <Link href="/" className="flex items-center gap-2 text-slate-400 hover:text-white transition mb-4 text-xs font-medium">
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
                 Back to chat
               </Link>
@@ -2576,7 +2130,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               <p className="text-slate-500 text-[10px] mt-1.5 font-semibold uppercase tracking-wider">Quality Intelligence</p>
             </>
           ) : (
-            <Link href="/chat" title="Back to chat"
+            <Link href="/" title="Back to chat"
               className="w-8 h-8 flex items-center justify-center text-slate-500 hover:text-white transition rounded-lg hover:bg-white/10">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
             </Link>
@@ -2599,6 +2153,14 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
             collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => setTab('pending')} />
           <NavItem icon={icons.calls} label="Call Quality" active={tab === 'calls'}
             collapsed={!sidebarExpanded} onClick={() => setTab('calls')} />
+          {!selfAgentName && (
+            <NavItem icon={icons.callTest} label="Call Test" active={tab === 'call-test'}
+              collapsed={!sidebarExpanded} onClick={() => setTab('call-test')} />
+          )}
+          {!selfAgentName && (
+            <NavItem icon={icons.unified} label="Unified Score" active={tab === 'unified'}
+              collapsed={!sidebarExpanded} onClick={() => setTab('unified')} />
+          )}
         </nav>
 
       </aside>
@@ -2610,7 +2172,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <header className="shrink-0 bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between gap-4">
           <div className="shrink-0">
             <h1 className="text-base font-bold text-gray-900">
-              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : tab === 'calls' ? 'Call Quality' : 'Upload & Score'}
+              {tab === 'performance' ? 'Team Performance' : tab === 'log' ? 'Score Log' : tab === 'reports' ? 'Reports' : tab === 'pending' ? 'Chats Pending' : tab === 'calls' ? 'Call Quality' : tab === 'call-test' ? 'Call Test' : tab === 'unified' ? 'Unified Score' : 'Upload & Score'}
             </h1>
             <p className="text-xs text-gray-500 mt-0.5">
               {tab === 'performance' && `${agentStats.length} agents · ${perfTotal} chats`}
@@ -2619,19 +2181,21 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {tab === 'reports' && 'Download filtered data as CSV'}
               {tab === 'pending' && `${challengeCount} pending review`}
               {tab === 'calls' && 'Scored IR call recordings'}
+              {tab === 'call-test' && 'Link a call to a chat and run the full scoring pipeline'}
+              {tab === 'unified' && 'Score chat + call together — transcribe, retrieve KB, and evaluate both in one run'}
             </p>
           </div>
 
           {/* Performance tab — independent period picker */}
           {tab === 'performance' && (
             <div className="flex items-center gap-2 ml-auto flex-wrap justify-end">
-              {(['7d', '30d', '90d'] as const).map(r => (
+              {(['today', 'yesterday', '1w'] as const).map(r => (
                 <button key={r}
                   onClick={() => { setPerfPeriod(r); setShowPerfPicker(false); loadPerfData(r); }}
                   className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
                     perfPeriod === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}>
-                  {r === '7d' ? '7 days' : r === '30d' ? '30 days' : '90 days'}
+                  {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
                 </button>
               ))}
               {/* Custom date range */}
@@ -2711,16 +2275,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* Score Log tab — Filters button */}
           {tab === 'log' && (
             <div className="flex items-center gap-2 ml-auto">
-              {/* Standalone Chat ID search */}
-              <input
-                type="text"
-                value={pendingFilters.chatId}
-                onChange={e => setPendingFilters(f => ({ ...f, chatId: e.target.value }))}
-                onKeyDown={e => { if (e.key === 'Enter') applyFilters(); }}
-                onBlur={() => { if (pendingFilters.chatId !== appliedFilters.chatId) applyFilters(); }}
-                placeholder="Search Chat ID…"
-                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-36 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
-              />
               <button
                 onClick={() => setShowOnlyNeedsReview(v => !v)}
                 className={`flex items-center gap-1.5 text-xs px-3.5 py-1.5 rounded-xl font-semibold transition border ${
@@ -2809,28 +2363,12 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                     const humanFrts = entries.filter(e => e.conversationType !== 'bot' && e.frt != null).map(e => e.frt as number);
                     const avgHumanFrt = humanFrts.length ? Math.round(humanFrts.reduce((s, n) => s + n, 0) / humanFrts.length) : null;
 
-                    // Q3: delta helper — higher is better unless lowerIsBetter
-                    const Delta = ({ curr, prev, lowerIsBetter = false, pct = false }: { curr: number | null; prev: number | null; lowerIsBetter?: boolean; pct?: boolean }) => {
-                      if (curr == null || prev == null || prev === 0) return null;
-                      const diff = curr - prev;
-                      if (Math.abs(diff) < 0.5) return null;
-                      const positive = lowerIsBetter ? diff < 0 : diff > 0;
-                      return (
-                        <span className={`text-[11px] font-semibold ${positive ? 'text-emerald-600' : 'text-red-500'}`}>
-                          {diff > 0 ? '▲' : '▼'} {Math.abs(pct ? Math.round(diff) : Math.round(diff)).toLocaleString()}{pct ? '%' : ''}
-                        </span>
-                      );
-                    };
-
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                         {/* Card 1 — No. of chats */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Chats</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-3xl font-bold text-gray-900">{total.toLocaleString()}</p>
-                            <Delta curr={total} prev={prevSummary?.totalConvos ?? null} />
-                          </div>
+                          <p className="text-3xl font-bold text-gray-900">{total.toLocaleString()}</p>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {botPct > 0 && (
                               <span className="text-[10px] font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
@@ -2852,21 +2390,15 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         {/* Card 2 — Resolution Time (all types) */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg Resolution</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-3xl font-bold text-gray-900">{fmtDuration(summary?.avgResolution ?? null)}</p>
-                            <Delta curr={summary?.avgResolution ?? null} prev={prevSummary?.avgResolution ?? null} lowerIsBetter />
-                          </div>
+                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(summary?.avgResolution ?? null)}</p>
                           <p className="text-[11px] text-gray-400 mt-1">all conversations</p>
                         </div>
                         {/* Card 3 — CSAT combined */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">CSAT</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-3xl font-bold text-gray-900">
-                              {summary?.overallCsat != null ? `${summary.overallCsat}%` : '—'}
-                            </p>
-                            <Delta curr={summary?.overallCsat ?? null} prev={prevSummary?.overallCsat ?? null} pct />
-                          </div>
+                          <p className="text-3xl font-bold text-gray-900">
+                            {summary?.overallCsat != null ? `${summary.overallCsat}%` : '—'}
+                          </p>
                           <p className="text-[11px] text-gray-400 mt-1">
                             {summary ? `${summary.good} good · ${summary.cbbBad} bad` : ''}
                           </p>
@@ -2874,10 +2406,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         {/* Card 4 — FRT for human-handled chats */}
                         <div className="bg-white rounded-2xl px-5 py-4 shadow-sm border border-gray-100">
                           <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Avg FRT (Human)</p>
-                          <div className="flex items-baseline gap-2">
-                            <p className="text-3xl font-bold text-gray-900">{fmtDuration(avgHumanFrt)}</p>
-                            <Delta curr={avgHumanFrt} prev={prevSummary?.avgFrt ?? null} lowerIsBetter />
-                          </div>
+                          <p className="text-3xl font-bold text-gray-900">{fmtDuration(avgHumanFrt)}</p>
                           <p className="text-[11px] text-gray-400 mt-1">first response time</p>
                         </div>
                       </div>
@@ -2905,8 +2434,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                           onViewReport={s => setAgentReportStat(s)}
                           onFilterLog={({ agent, minScore, maxScore }) => {
                             const f = { ...DEFAULT_FILTERS, agent,
-                              minScore: minScore ?? 0, maxScore: maxScore ?? 100,
-                              dateRange: perfPeriod, dateFrom: perfPeriod === 'custom' ? perfDateFrom : '', dateTo: perfPeriod === 'custom' ? perfDateTo : '' };
+                              minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
                             setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
                             loadScores(0, f); switchTab('log');
                           }}
@@ -2938,8 +2466,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               onViewReport={s => { setShowAllAgents(false); setAgentReportStat(s); }}
                               onFilterLog={({ agent, minScore, maxScore }) => {
                                 const f = { ...DEFAULT_FILTERS, agent,
-                                  minScore: minScore ?? 0, maxScore: maxScore ?? 100,
-                                  dateRange: perfPeriod, dateFrom: perfPeriod === 'custom' ? perfDateFrom : '', dateTo: perfPeriod === 'custom' ? perfDateTo : '' };
+                                  minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
                                 setPendingFilters(f); setAppliedFilters(f); setLogPage(0);
                                 setShowAllAgents(false); loadScores(0, f); switchTab('log');
                               }}
@@ -2994,7 +2521,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                                 </th>
                               );
                             })}
-                            <th className="w-8 px-3 py-3"></th>
                           </tr>
                         </thead>
                         <tbody>
@@ -3020,7 +2546,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                                     {atRiskPct}%
                                   </span>
                                 </td>
-                                <td className="px-3 py-3 text-right text-gray-400 text-sm">›</td>
                               </tr>
                             );
                           })}
@@ -3053,7 +2578,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               <th className="text-right px-3 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Chats</th>
                               {PARAM_ORDER.map(p => (
                                 <th key={p} className="text-right px-3 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap" title={PARAM_NAMES[p]}>
-                                  {PARAM_ABBR[p] ?? p}
+                                  {p === 'AllQuestions' ? 'All Q' : p === 'Expectation' ? 'Expect' : p === 'Contextual' ? 'Context' : p === 'FollowUp' ? 'Follow' : p === 'Sentences' ? 'Tone' : p === 'Technical' ? 'Tech' : p === 'Grammar' ? 'Grammar' : p}
                                 </th>
                               ))}
                             </tr>
@@ -3107,13 +2632,13 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                   <div>
                     <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Date Range</p>
                     <div className="flex flex-wrap items-center gap-2">
-                      {(['7d', '30d', '90d'] as const).map(r => (
+                      {(['today', 'yesterday', '1w'] as const).map(r => (
                         <button key={r}
                           onClick={() => setPendingFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' }))}
                           className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
                             pendingFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           }`}>
-                          {r === '7d' ? '7 days' : r === '30d' ? '30 days' : '90 days'}
+                          {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
                         </button>
                       ))}
                       <button
@@ -3207,10 +2732,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
                         className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
                         <option value="">All</option>
-                        {(pendingFilters.disposition && dispositionSubMap[pendingFilters.disposition]
-                          ? dispositionSubMap[pendingFilters.disposition]
-                          : availableSubDispositions
-                        ).map(d => <option key={d} value={d}>{d}</option>)}
+                        {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </div>
                   </div>
@@ -3322,7 +2844,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               </th>
                             );
                           })}
-                          <th className="w-8 px-3 py-3"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -3413,7 +2934,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                                 if (col === 'Date') return <td key={col} className="px-3 py-2.5 text-gray-600">{(e.date || e.scoredAt || '').slice(0, 10)}</td>;
                                 return null;
                               })}
-                              <td className="px-3 py-2.5 text-right text-gray-400 text-sm">›</td>
                             </tr>
                           );
                         })}
@@ -3685,177 +3205,126 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
           {/* ── REPORTS TAB ── */}
           {tab === 'reports' && (
-            <div className="space-y-4 max-w-3xl mx-auto">
-              {/* Header row with Filters toggle */}
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-gray-700">Download IQS Report</p>
-                <button
-                  onClick={() => setShowReportFilters(v => !v)}
-                  className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition ${
-                    showReportFilters
-                      ? 'bg-emerald-600 text-white border-emerald-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-emerald-400 hover:text-emerald-700'
-                  }`}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M2 4h12M4 8h8M6 12h4"/>
-                  </svg>
-                  Filters
-                  {/* Active filter count badge */}
-                  {(() => {
-                    let n = 0;
-                    if (reportFilters.agent) n++;
-                    if (reportFilters.csat) n++;
-                    if (reportFilters.type) n++;
-                    if (reportFilters.disposition) n++;
-                    if (reportFilters.subDisposition) n++;
-                    if (reportFilters.minUserMsgs) n++;
-                    if (reportFilters.minScore > 0 || reportFilters.maxScore < 100) n++;
-                    return n > 0 ? (
-                      <span className={`ml-0.5 text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center ${showReportFilters ? 'bg-white text-emerald-700' : 'bg-emerald-600 text-white'}`}>{n}</span>
-                    ) : null;
-                  })()}
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                    {showReportFilters ? <path d="M1 7l4-4 4 4"/> : <path d="M1 3l4 4 4-4"/>}
-                  </svg>
-                </button>
-              </div>
-
-              {/* Collapsible filter panel */}
-              {showReportFilters && (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
-                  <div className="flex flex-wrap items-end gap-4">
-                    {/* Period chips */}
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Date</p>
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {(['7d', '30d', '90d'] as const).map(r => (
-                          <button key={r}
-                            onClick={() => { setReportFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' })); setReportTotalFiltered(null); setShowReportPicker(false); }}
-                            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
-                              reportFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                            }`}>
-                            {r === '7d' ? '7 days' : r === '30d' ? '30 days' : '90 days'}
-                          </button>
-                        ))}
-                        <div className="relative">
-                          <button
-                            onClick={() => { setReportFilters(f => ({ ...f, dateRange: 'custom' })); setShowReportPicker(v => !v); setReportTotalFiltered(null); }}
-                            className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
-                              reportFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                            }`}>
-                            {reportFilters.dateRange === 'custom' && reportFilters.dateFrom
-                              ? `${reportFilters.dateFrom.slice(5)} → ${reportFilters.dateTo ? reportFilters.dateTo.slice(5) : '…'}`
-                              : 'Custom'}
-                          </button>
-                          {showReportPicker && (
-                            <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 overflow-hidden">
-                              <DateRangePicker
-                                from={reportFilters.dateFrom} to={reportFilters.dateTo}
-                                onChange={(from, to) => {
-                                  setReportFilters(f => ({ ...f, dateRange: 'custom', dateFrom: from, dateTo: to }));
-                                  setReportTotalFiltered(null);
-                                }}
-                                onClose={() => setShowReportPicker(false)}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Disposition */}
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
-                      <select value={reportFilters.disposition}
-                        onChange={e => { setReportFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' })); setReportTotalFiltered(null); }}
-                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
-                        <option value="">All</option>
-                        {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-                    {/* Sub-Disposition */}
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
-                      <select value={reportFilters.subDisposition}
-                        onChange={e => { setReportFilters(f => ({ ...f, subDisposition: e.target.value })); setReportTotalFiltered(null); }}
-                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
-                        <option value="">All</option>
-                        {(reportFilters.disposition && dispositionSubMap[reportFilters.disposition]
-                          ? dispositionSubMap[reportFilters.disposition]
-                          : availableSubDispositions
-                        ).map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-                    {/* CSAT */}
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
-                      <select value={reportFilters.csat}
-                        onChange={e => { setReportFilters(f => ({ ...f, csat: e.target.value })); setReportTotalFiltered(null); }}
-                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
-                        <option value="">Any</option>
-                        <option value="5">Good</option>
-                        <option value="3">CBB</option>
-                        <option value="1">Bad</option>
-                      </select>
-                    </div>
-                    {/* Agent type */}
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Type</p>
-                      <select value={reportFilters.type}
-                        onChange={e => { setReportFilters(f => ({ ...f, type: e.target.value })); setReportTotalFiltered(null); }}
-                        className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[120px]">
-                        <option value="">All</option>
-                        <option value="bot">Bot</option>
-                        <option value="hybrid">Hybrid</option>
-                        <option value="agent">Human</option>
-                      </select>
-                    </div>
-                    {/* Min user messages */}
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Min User Messages</p>
-                      <input
-                        type="number" min={1} max={500}
-                        value={reportFilters.minUserMsgs ?? ''}
-                        onChange={e => { setReportFilters(f => ({ ...f, minUserMsgs: e.target.value ? parseInt(e.target.value) : null })); setReportTotalFiltered(null); }}
-                        placeholder="Any"
-                        className="w-20 text-xs border border-gray-200 rounded-xl px-3 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                      />
-                    </div>
-                    {/* IQS range */}
-                    <div>
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
-                      <div className="flex items-center gap-2">
-                        <input type="number" min={0} max={100} value={reportFilters.minScore}
-                          onChange={e => { setReportFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 })); setReportTotalFiltered(null); }}
-                          className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
-                        <span className="text-gray-400 text-xs">–</span>
-                        <input type="number" min={0} max={100} value={reportFilters.maxScore}
-                          onChange={e => { setReportFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 })); setReportTotalFiltered(null); }}
-                          className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+            <div className="space-y-6 max-w-3xl mx-auto">
+              {/* Independent filter controls */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+                <p className="text-sm font-bold text-gray-900 mb-4">Report Filters</p>
+                <div className="flex flex-wrap items-end gap-4">
+                  {/* Period chips */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Period</p>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {(['today', 'yesterday', '1w'] as const).map(r => (
+                        <button key={r}
+                          onClick={() => { setReportFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' })); setReportTotalFiltered(null); setShowReportPicker(false); }}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                            reportFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}>
+                          {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                        </button>
+                      ))}
+                      {/* Custom */}
+                      <div className="relative">
+                        <button
+                          onClick={() => { setReportFilters(f => ({ ...f, dateRange: 'custom' })); setShowReportPicker(v => !v); setReportTotalFiltered(null); }}
+                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                            reportFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}>
+                          {reportFilters.dateRange === 'custom' && reportFilters.dateFrom
+                            ? `${reportFilters.dateFrom.slice(5)} → ${reportFilters.dateTo ? reportFilters.dateTo.slice(5) : '…'}`
+                            : 'Custom'}
+                        </button>
+                        {showReportPicker && (
+                          <div className="absolute left-0 top-full mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl z-30 overflow-hidden">
+                            <DateRangePicker
+                              from={reportFilters.dateFrom} to={reportFilters.dateTo}
+                              onChange={(from, to) => {
+                                setReportFilters(f => ({ ...f, dateRange: 'custom', dateFrom: from, dateTo: to }));
+                                setReportTotalFiltered(null);
+                              }}
+                              onClose={() => setShowReportPicker(false)}
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
-                  {/* Reset + Preview count row */}
-                  <div className="flex items-center gap-3 pt-4 border-t border-gray-50">
-                    <button
-                      onClick={previewReportCount}
-                      disabled={reportCountLoading}
-                      className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
-                      {reportCountLoading ? 'Counting…' : 'Preview count'}
-                    </button>
-                    <button
-                      onClick={() => { setReportFilters(DEFAULT_FILTERS); setReportTotalFiltered(null); }}
-                      className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
-                      Reset
-                    </button>
-                    {reportTotalFiltered !== null && (
-                      <span className="text-xs text-gray-500 ml-2">
-                        <span className="font-bold text-gray-900">{reportTotalFiltered.toLocaleString()}</span> chats will be exported
-                      </span>
-                    )}
+                  {/* Agent */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
+                    <select value={reportFilters.agent}
+                      onChange={e => { setReportFilters(f => ({ ...f, agent: e.target.value })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[140px]">
+                      <option value="">All agents</option>
+                      {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  {/* CSAT */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">CSAT</p>
+                    <select value={reportFilters.csat}
+                      onChange={e => { setReportFilters(f => ({ ...f, csat: e.target.value })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[110px]">
+                      <option value="">Any</option>
+                      <option value="5">Good</option>
+                      <option value="3">CBB</option>
+                      <option value="1">Bad</option>
+                    </select>
+                  </div>
+                  {/* IQS range */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
+                    <div className="flex items-center gap-2">
+                      <input type="number" min={0} max={100} value={reportFilters.minScore}
+                        onChange={e => { setReportFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 })); setReportTotalFiltered(null); }}
+                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+                      <span className="text-gray-400 text-xs">–</span>
+                      <input type="number" min={0} max={100} value={reportFilters.maxScore}
+                        onChange={e => { setReportFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 })); setReportTotalFiltered(null); }}
+                        className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none" />
+                    </div>
+                  </div>
+                  {/* Disposition */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+                    <select value={reportFilters.disposition}
+                      onChange={e => { setReportFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                      <option value="">All</option>
+                      {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  {/* Sub-Disposition */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+                    <select value={reportFilters.subDisposition}
+                      onChange={e => { setReportFilters(f => ({ ...f, subDisposition: e.target.value })); setReportTotalFiltered(null); }}
+                      className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[160px]">
+                      <option value="">All</option>
+                      {availableSubDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
                   </div>
                 </div>
-              )}
+                {/* Reset + Preview count row */}
+                <div className="flex items-center gap-3 pt-4 border-t border-gray-50 mt-4">
+                  <button
+                    onClick={previewReportCount}
+                    disabled={reportCountLoading}
+                    className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                    {reportCountLoading ? 'Counting…' : 'Preview count'}
+                  </button>
+                  <button
+                    onClick={() => { setReportFilters(DEFAULT_FILTERS); setReportTotalFiltered(null); }}
+                    className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
+                    Reset
+                  </button>
+                  {reportTotalFiltered !== null && (
+                    <span className="text-xs text-gray-500 ml-2">
+                      <span className="font-bold text-gray-900">{reportTotalFiltered.toLocaleString()}</span> chats will be exported
+                    </span>
+                  )}
+                </div>
+              </div>
 
               {/* Download buttons */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -3905,27 +3374,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
           {/* ── CHATS PENDING TAB ── */}
           {tab === 'pending' && (
-            <PendingChatsTab userRole={userRole} userEmail={userEmail}
-              onOverride={item => setDetailEntry({
-                id: `override-${item.chatId}`,
-                chatId: item.chatId,
-                agentName: item.agentName,
-                iqs: item.iqs,
-                scores: (item.scores || {}) as Record<string, ParamScore>,
-                reasoning: (item.reasoning || {}) as Record<string, string>,
-                scoredAt: item.scoredAt,
-                date: item.date,
-                disposition: '',
-                subDisposition: '',
-                csat: '',
-                summary: '',
-                provider: 'gemini',
-                model: '',
-                reviewNote: item.qaStatus?.reviewNote,
-              })}
-              onSaved={cb => { pendingOnSavedRef.current = cb; }}
-              onToast={msg => { setToast(msg); setTimeout(() => setToast(null), 6000); }}
-            />
+            <PendingChatsTab userRole={userRole} userEmail={userEmail} />
           )}
 
           {/* ── CALL QUALITY TAB ── */}
@@ -3935,35 +3384,22 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
             </div>
           )}
 
+          {/* ── CALL TEST TAB ── */}
+          {tab === 'call-test' && (
+            <div className="overflow-y-auto flex-1">
+              <CallLinkTestClient />
+            </div>
+          )}
+
+          {/* ── UNIFIED SCORE TAB ── */}
+          {tab === 'unified' && (
+            <div className="overflow-y-auto flex-1">
+              <UnifiedScoringClient />
+            </div>
+          )}
+
         </div>
       </div>
-
-      {/* CR8: Keyboard shortcuts cheatsheet overlay */}
-      {showShortcuts && (
-        <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-sm font-bold text-gray-900">Keyboard Shortcuts</p>
-              <button onClick={() => setShowShortcuts(false)} className="text-gray-400 hover:text-gray-600 transition">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14"/></svg>
-              </button>
-            </div>
-            <div className="px-5 py-4 space-y-2.5">
-              {([
-                ['J / ↓', 'Next entry in Score Log'],
-                ['K / ↑', 'Previous entry in Score Log'],
-                ['Esc', 'Close modal / cheatsheet'],
-                ['?', 'Show this cheatsheet'],
-              ] as [string, string][]).map(([key, desc]) => (
-                <div key={key} className="flex items-center gap-3">
-                  <kbd className="shrink-0 font-mono text-[11px] bg-gray-100 text-gray-700 px-2 py-0.5 rounded border border-gray-200 min-w-[52px] text-center">{key}</kbd>
-                  <span className="text-xs text-gray-600">{desc}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

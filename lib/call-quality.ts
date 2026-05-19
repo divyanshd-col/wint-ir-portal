@@ -6,59 +6,52 @@
 // ── Parameter weights (must sum to 1.0) ──────────────────────────────────────
 
 export const CALL_WEIGHTS: Record<string, number> = {
-  TechnicalLegal: 0.20,
-  AllQuestions:   0.10,
-  ProcessWise:    0.05,
-  Opening:        0.05,
-  OnCall:         0.05,
-  Contextual:     0.10,
-  Tags:           0.05,
-  Expectation:    0.10,
-  Sentences:      0.10,
-  Grammar:        0.05,
-  Empathy:        0.05,
-  FollowUp:       0.10,
+  CallOpening:     0.05,
+  CallClosing:     0.05,
+  TechnicalLegal:  0.15,
+  AllQuestions:    0.10,
+  Expectation:     0.10,
+  Process:         0.05,
+  Grammar:         0.10,
+  Fillers:         0.10,
+  EnergyTone:      0.10,
+  ActiveListening: 0.10,
+  Simplifying:     0.10,
 };
 
 export const CALL_PARAM_NAMES: Record<string, string> = {
-  TechnicalLegal: 'Technically / Legal-wise',
-  AllQuestions:   'All Questions Answered',
-  ProcessWise:    'Process-wise',
-  Opening:        'First Response & Opening',
-  OnCall:         'Going on a call (when required)',
-  Contextual:     'Contextual & Personal Answers',
-  Tags:           'Tags Accuracy',
-  Expectation:    'Expectation Setting',
-  Sentences:      'Sentences (simple to understand)',
-  Grammar:        'Grammatically & Structurally correct',
-  Empathy:        'Empathy',
-  FollowUp:       'Personalised Follow-up & Closing',
+  CallOpening:     'Call Opening',
+  CallClosing:     'Call Closing',
+  TechnicalLegal:  'Technically / Legally Correct',
+  AllQuestions:    'All Questions Addressed',
+  Expectation:     'Expectation Setting',
+  Process:         'Process',
+  Grammar:         'Vocabulary / Sentence Structure / Grammar / Pronunciations',
+  Fillers:         'Fillers, Fumbling & Stammering. Clarity of Speech. Avoid Dead Air',
+  EnergyTone:      'Energy Level, Enthusiasm & Tone Modulation',
+  ActiveListening: 'Active Listening, Interruptions & Empathy',
+  Simplifying:     'Simplifying Answers',
 };
 
 export const CALL_PARAM_GROUPS: Record<string, { label: string; keys: string[] }> = {
-  technical: {
-    label: 'Technical Answer (35%)',
-    keys: ['TechnicalLegal', 'AllQuestions', 'ProcessWise'],
-  },
   process: {
-    label: 'Process Knowledge (35%)',
-    keys: ['Opening', 'OnCall', 'Contextual', 'Tags', 'Expectation'],
+    label: 'Process (50%)',
+    keys: ['CallOpening', 'CallClosing', 'TechnicalLegal', 'AllQuestions', 'Expectation', 'Process'],
   },
-  grammarTone: {
-    label: 'Grammar & Tone (15%)',
-    keys: ['Sentences', 'Grammar'],
+  communication: {
+    label: 'Communication Skills (30%)',
+    keys: ['Grammar', 'Fillers', 'EnergyTone'],
   },
-  extraMile: {
-    label: 'Going an Extra Mile (15%)',
-    keys: ['Empathy', 'FollowUp'],
+  customerService: {
+    label: 'Customer Service Skills (20%)',
+    keys: ['ActiveListening', 'Simplifying'],
   },
 };
 
 export const CALL_PARAM_ORDER = [
-  'TechnicalLegal', 'AllQuestions', 'ProcessWise',
-  'Opening', 'OnCall', 'Contextual', 'Tags', 'Expectation',
-  'Sentences', 'Grammar',
-  'Empathy', 'FollowUp',
+  'CallOpening', 'CallClosing', 'TechnicalLegal', 'AllQuestions', 'Expectation', 'Process',
+  'Grammar', 'Fillers', 'EnergyTone',
+  'ActiveListening', 'Simplifying',
 ];
 
 export type CallParamScore = 'Yes' | 'No' | 'NA';
@@ -69,10 +62,11 @@ export interface PoorListeningSegment {
 }
 
 export interface CallSegment {
-  type: 'speech' | 'interruption' | 'dead_air' | 'poor_listening';
+  type: 'speech' | 'interruption' | 'dead_air' | 'poor_listening' | 'active_listening';
   // speech
   speaker?: string;
   text?: string;
+  translation?: string;
   translated?: boolean;
   ts?: string;
   // interruption
@@ -121,7 +115,8 @@ export function segmentsToText(segments: CallSegment[]): string {
   for (const seg of segments) {
     if (seg.type === 'speech') {
       speechIdx++;
-      lines.push(`[${speechIdx}] ${seg.speaker}: ${seg.text}${seg.translated ? ' [translated]' : ''}`);
+      const content = seg.text || '';
+      lines.push(`[${speechIdx}] ${seg.speaker}: ${content}${seg.translated ? ' [translated]' : ''}`);
     } else if (seg.type === 'interruption') {
       lines.push(`[INTERRUPTION: ${seg.interrupted_speaker} cut off by ${seg.interrupted_by} after ${seg.words_spoken ?? '?'} words]`);
     } else if (seg.type === 'dead_air') {
@@ -178,16 +173,23 @@ DECISION PROCEDURE:
 3. The other voice = INVESTOR for the entire call.
 4. A short "Hello?" or "Haan?" with no introduction at the start = INVESTOR.
 
+Pay close attention to names — IR executives introduce themselves by name (e.g. "This is Priya from Wint Wealth").
+Transcribe that name EXACTLY as heard. Similarly transcribe bond names, fund names, and product names exactly as spoken.
+CRITICAL: NEVER guess, infer, or hallucinate any proper noun (person names, bond names, company names, product names).
+If a name is unclear, write it phonetically as best you can, or write [unclear]. Do NOT substitute a different name.
+
 ══════════════════════════════════════════
 TRANSCRIPTION RULES
 ══════════════════════════════════════════
 - Each segment = one complete speaker turn.
-- Transcribe every word spoken — do not skip, summarize, or paraphrase anything.
+- Transcribe EVERY single word spoken — do not skip, summarize, or paraphrase anything.
 - During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.
-- Translate ALL non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.) to natural fluent English. Put the English translation in the "text" field directly — do NOT add a separate "translation" field.
-- Keep filler sounds as-is (uh, um, haan, theek hai).
-- Mark translated:true for any segment with translated content.
-- Report detected languages in the "language" field.
+- Translate ALL non-English words (Tamil, Malayalam, Hindi, Telugu, Kannada, etc.) to natural fluent English.
+  Put the English translation directly in the "text" field — do NOT add a separate "translation" field.
+  CRITICAL: Even a single non-English word in an otherwise English sentence must be fully translated. No exceptions.
+- Keep filler sounds as-is where they are English (uh, um). Translate non-English fillers (haan → yes, theek hai → okay).
+- Set "translated": true for any segment that contained non-English words (even partially).
+- Report all detected languages in the "language" field.
 
 ══════════════════════════════════════════
 INTERRUPTION DETECTION
@@ -199,38 +201,61 @@ An interruption occurs when Speaker A is talking and Speaker B starts speaking b
 - Insert an interruption flag BEFORE the segment of the speaker who did the interrupting.
 - Only flag as interruption if Speaker A had spoken fewer than 10 words in that turn when cut off.
 
-Interruption flag format:
+Interruption flag format (insert as a segment object):
 {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[NUMBER]}
+
+Example: IR EXECUTIVE was saying "So the bond matures in three" (6 words) when INVESTOR cut in:
+{"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":6}
 
 ══════════════════════════════════════════
 DEAD AIR DETECTION
 ══════════════════════════════════════════
 Listen for pauses of 2 or more seconds where neither speaker is talking.
-Insert a dead air flag at the point where the silence occurs.
+Insert a dead air flag at the point in the conversation where the silence occurs.
 Estimate the duration to the nearest second.
 Note which speaker resumed the conversation.
 
-Dead air flag format:
+Dead air flag format (insert as a segment object):
 {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[SPEAKER NAME]"}
 
+Example: {"type":"dead_air","duration":"~4 seconds","resumed_by":"INVESTOR"}
+
 Only flag dead air that is noticeably long (2+ seconds). Ignore normal conversational pauses under 2 seconds.
+
+══════════════════════════════════════════
+ACTIVE LISTENING DETECTION
+══════════════════════════════════════════
+Listen for any moment where the IR EXECUTIVE indicates they could not hear or understand the investor.
+This includes phrases like (in any language):
+- "I cannot hear you" / "I can't hear you" / "Hello? I can't hear"
+- "Can you please repeat?" / "Could you please repeat that?" / "Please come again"
+- "I'm sorry, I didn't understand" / "I didn't catch that" / "I didn't get that"
+- "Pardon?" / "Sorry, what did you say?" / "Can you come again?"
+- Equivalent phrases in Hindi, Telugu, Tamil, Kannada, Malayalam, etc.
+
+When detected, insert an active_listening flag IMMEDIATELY AFTER the IR EXECUTIVE speech segment where this phrase appears:
+{"type":"active_listening","phrase":"[exact phrase spoken, translated to English]"}
+
+Example: IR says "Sorry sir, I could not hear you, could you please repeat?" then insert:
+{"type":"active_listening","phrase":"Sorry sir, I could not hear you, could you please repeat?"}
 
 ══════════════════════════════════════════
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
-Speech segments: {"type":"speech","speaker":"[NAME]","text":"[TEXT]","translated":false}
-Interruption flags: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
-Dead air flags: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
+Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false}
+Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
+Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
+Active listening flags use: {"type":"active_listening","phrase":"[exact phrase in English]"}
 
-Example output:
-{"language":"English","segments":[
+Example output (mixed Telugu + English call):
+{"language":"Telugu + English","segments":[
   {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false},
   {"type":"dead_air","duration":"~2 seconds","resumed_by":"IR EXECUTIVE"},
   {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"Yes tell me.","translated":false},
+  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true},
   {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":5},
-  {"type":"speech","speaker":"INVESTOR","text":"Sorry, what was the maturity date again?","translated":false}
+  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true}
 ]}`;
 
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────
@@ -248,14 +273,151 @@ ENERGY LEVEL, ENTHUSIASM & TONE MODULATION
 Return ONLY this JSON:
 {"score":"Yes|No|NA","reasoning":"one sentence explanation"}`;
 
-// ── Call disposition extraction prompt ────────────────────────────────────────
+// ── Call disposition extraction prompt (loose — used for KB query) ────────────
 export const CALL_DISPOSITION_PROMPT = `You are analyzing a Wint Wealth IR call transcript. Extract the primary topic/disposition of this call.
 
 Return ONLY this JSON:
 {"call_disposition":"brief topic e.g. Payout Query, TDS Form Issue, Bond Maturity, Portfolio Question","call_sub_disposition":"more specific e.g. Delay in payout credit, Unable to submit Form 121"}`;
 
+// ── Call disposition classification prompt (constrained to official 14-category list) ─
+export const CALL_DISPOSITION_CLASSIFY_PROMPT = `You are classifying a Wint Wealth IR call transcript into an official disposition and sub-disposition.
+
+You MUST choose EXACTLY one disposition and one sub-disposition from the lists below. Do not invent new values.
+If the call touches multiple topics, pick the one that consumed the most conversation time.
+If nothing fits, use disposition "OTHERS" and the closest sub-disposition.
+
+## OFFICIAL DISPOSITION LIST
+
+LIQUIDITY
+  - Liquidity General Enquiry
+  - Liquidity Process
+  - Liquidity Status Update
+  - Liquidity Charges
+  - Liquidity DDPI Status
+  - Liquidity cancellation
+  - Liquidity Funds Not Received
+  - Interest payout after selling a bond
+
+SGB
+  - SGB Enquiry
+  - SGBs Not Visible in Portfolio
+
+REFERRAL PROGRAM
+  - Refer & Earn Not Activated
+  - Referral reward calculation
+  - Referred User Not Showing (referral mapping)
+
+TAXATION
+  - Tax deduction
+  - Taxation Statement/Reports
+  - Taxation TDS Certificate
+  - Taxation 15G/H
+  - Taxation Capital Gain/Loss
+
+BOND PURCHASE
+  - Bond Purchase Cancellation
+  - Bond Purchase Order Status
+  - Bond Purchase issue
+  - Bond Purchase Process
+  - Net Banking unavailable
+
+FD
+  - FD Withdrawal
+  - FD Order status
+  - FD Nominee details
+  - FD Order pending
+  - FD KYC
+  - FD Bugs
+  - FD not visible in the portfolio
+  - FD interest
+
+Interest Repayment
+  - Interest Repayment Issue
+  - Asset YTM/Coupon
+  - Interest Repayment When/Where
+  - Interest Repayment Breakup
+
+ASSET
+  - Asset Risk
+  - Asset Specific Requirement
+  - Asset Covenant Breach
+  - Asset Limit
+  - Asset NRI
+
+FLEXI-TENURE BOND
+  - flexi general enquiry
+  - flexi sell process
+  - flexi interest
+  - flexi tenure change
+
+SIP
+  - SIP general enquiry
+  - SIP modification
+  - SIP cancellation
+  - SIP Instalment Skip
+
+WINT WISDOM
+  - General Enquiry
+  - Bugs
+  - Portfolio and Risk
+  - Tax and Optimisation
+
+DIVERISIFICATION METER
+  - Diversification Meter General
+
+OTHERS
+  - Unsubscribe Whatsapp
+  - Advisory
+  - Partnership
+  - Request for RM
+  - OTP not received
+  - PT Refund Pending
+  - Bond Name Change
+
+SEBI KYC
+  - SEBI KYC HUF
+  - SEBI KYC Demat Query
+  - SEBI KYC General Enquiry
+  - SEBI KYC Delete Account
+  - SEBI KYC NSDL SPEEDE
+  - SEBI KYC Documents
+  - Profile Change
+  - SEBI KYC Details Change
+  - Selfie Capture
+  - Nominee
+  - ACF link generation
+
+## OUTPUT
+Return ONLY this JSON — no other text:
+{"disposition":"<exact disposition from list above>","sub_disposition":"<exact sub-disposition from list above>"}`;
+
+// ── Call chunking prompt ──────────────────────────────────────────────────────
+export const CALL_CHUNK_PROMPT = `You are breaking a Wint Wealth IR call transcript into topic-based chunks for knowledge retrieval.
+
+Split the transcript at every point where the topic clearly changes. Each chunk should capture one distinct topic discussed.
+Aim for 2–8 chunks per call. Do not create tiny chunks (< 3 speaker turns) unless the topic is completely self-contained.
+
+For each chunk output:
+- "topic": short label (5–10 words) describing what this chunk is about
+- "summary": 1–2 sentence plain-English summary of what was discussed and resolved (if anything)
+- "content": the raw transcript lines that belong to this chunk (copy them verbatim)
+
+Return ONLY a valid JSON array — no other text:
+[
+  {
+    "topic": "Opening and investor identity",
+    "summary": "IR introduced herself and confirmed investor details.",
+    "content": "[1] IR EXECUTIVE: Hello, good morning! This is Priya from Wint Wealth...\\n[2] INVESTOR: Yes, good morning."
+  },
+  {
+    "topic": "Bond payout timeline query",
+    "summary": "Investor asked when their Muthoot NCD interest would be credited. IR confirmed 5–7 working days from record date.",
+    "content": "[3] INVESTOR: I wanted to ask about my payout...\\n[4] IR EXECUTIVE: The interest will be credited within 5 to 7 working days."
+  }
+]`;
+
 // ── Call IQS scoring system prompt (Pass 2, text-based) ──────────────────────
-export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality evaluator. Score IR Executive voice call transcripts across 12 parameters.
+export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality evaluator. Score IR Executive voice call transcripts across 11 parameters.
 
 The IR EXECUTIVE is the Wint Wealth agent. The INVESTOR is the customer.
 Speech segments are numbered [1], [2], [3]... for reference.
@@ -266,88 +428,72 @@ Speech segments are numbered [1], [2], [3]... for reference.
 - Never penalise for something the transcript does not clearly show.
 - You receive the CALL TRANSCRIPT (primary — score this) and optionally a WHATSAPP CHAT TRANSCRIPT (context only).
 
-## AGENT NOT NARRATING BACKEND CHECKS — NOT A TECHNICAL ERROR
-IR Executives perform backend verifications (checking Finder, confirming active SIP/order status, etc.) without narrating every step to the investor. We do not expose all internal backend details to clients.
-- Do NOT mark TechnicalLegal or ProcessWise as No simply because the IR did not say "I checked and confirmed X" before taking an action.
-- Example: if process requires confirming an active SIP before cancellation, and the IR proceeds with cancellation without stating "I verified your SIP is active" — this is NOT a technical or process error. The check is internal.
-- Only fail TechnicalLegal if the IR's actual statement is provably wrong. Only fail ProcessWise if their visible response contradicts what a correct check would have produced.
-- Absence of verbal confirmation of a backend check is never sufficient on its own to fail any parameter.
-
 ---
 
-## GROUP 1: TECHNICAL ANSWER (35%)
+## GROUP 1: PROCESS (50%)
 
-### 1. Technically / Legal-wise (20%) — key: TechnicalLegal
-- Yes: All product info is factually correct — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms. Legally correct statements.
-- No: Clear factual or legal error about product details, returns, timelines, or regulatory requirements.
-- NA: No substantive product information exchanged.
+### 1. Call Opening (5%) — key: CallOpening
+- Yes: IR opens the call within 5 seconds with a self-introduction AND mentions "Wint Wealth".
+- No: No self-introduction within the first few seconds, or "Wint Wealth" not mentioned in the opening.
+- NA: Very rare.
 
-### 2. All Questions Answered (10%) — key: AllQuestions
+### 2. Call Closing (5%) — key: CallClosing
+- Yes: IR closes with an appropriate greeting/sign-off for the day (e.g. "Have a good day", "Thank you for calling").
+- No: Abrupt hang-up with no closing greeting, or call was cut off.
+- NA: Call was disconnected before closing was possible.
+
+### 3. Technically / Legally Correct (15%) — key: TechnicalLegal
+- Yes: All product information stated by the IR EXECUTIVE matches the WINT KNOWLEDGE BASE REFERENCE below — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms, registered entity names. In your reasoning, name the specific KB document and section that confirms each fact.
+- No: A statement contradicts the KB, or the KB has no relevant entry to verify a significant product claim the IR made. State exactly what was claimed and what the KB says (or that it is absent from the KB).
+- NA: No substantive product information was exchanged on this call.
+
+### 4. All Questions Addressed (10%) — key: AllQuestions
 - Yes: Every investor question was answered directly, or explicitly deferred with a reason.
 - No: An investor question was ignored, redirected without answering, or left hanging.
 - NA: Very rare.
 
-### 3. Process-wise (5%) — key: ProcessWise
-- Yes: IR followed correct process — checked prior chat/Finder before the call, did not ask investor to repeat already-shared info.
-- No: IR clearly had not reviewed prior context, asked investor to repeat known information, or followed the wrong process.
-- NA: No prior context existed to check.
-
----
-
-## GROUP 2: PROCESS KNOWLEDGE (35%)
-
-### 4. First Response & Opening (5%) — key: Opening
-- Yes: IR introduces themselves by name AND says "Wint Wealth" in their opening turn.
-- No: No self-introduction, or "Wint Wealth" not mentioned in the opening.
-- NA: Very rare.
-
-### 5. Going on a call (when required) (5%) — key: OnCall
-- Yes: The call itself was appropriate — investor needed a call and it was handled, or no call was needed.
-- No: Call was not needed and was made without reason, OR call was clearly needed but was not arranged.
-- NA: Cannot determine from transcript whether a call was appropriate.
-
-### 6. Contextual & Personal Answers (10%) — key: Contextual
-- Yes: IR's answers are tailored to this specific investor — references their bond name, amounts, dates, account details.
-- No: Generic answers that could apply to any investor. Copy-paste responses with no personalisation.
-- NA: Very rare.
-
-### 7. Tags Accuracy (5%) — key: Tags
-- Yes: IR correctly identified and tagged the call disposition/topic based on the investor's query.
-- No: Wrong disposition applied, or no attempt to classify the call topic.
-- NA: Cannot determine from transcript.
-
-### 8. Expectation Setting (10%) — key: Expectation
-- Yes: IR gave a specific timeline, next step, or commitment — e.g. "credited within 7 working days", "I'll email you by 5 PM".
+### 5. Expectation Setting (10%) — key: Expectation
+- Yes: IR gave a specific timeline, next step, or commitment — e.g. "credited within 7 working days", "I'll email you by 5 PM". Covers product info, TAT, and issue updates.
 - No: Investor asked when/how long and got no specific answer. Promise made without a timeframe.
 - NA: No timeline-sensitive question asked.
 
+### 6. Process (5%) — key: Process
+- Yes: IR checked the investor's prior chat query before the call and did not ask them to repeat already-shared info. Pre-checked details on Wint Finder to assist quickly without putting investor on hold.
+- No: IR clearly had not reviewed prior chat context, asked investor to repeat known information, or did not pre-check Finder details causing unnecessary hold time.
+- NA: No prior chat context existed to check.
+
 ---
 
-## GROUP 3: GRAMMAR & TONE (15%)
+## GROUP 2: COMMUNICATION SKILLS (30%)
 
-### 9. Sentences (simple to understand) (10%) — key: Sentences
-- Yes: IR speaks in clear, simple sentences. Financial terms explained in plain language. Easy for a non-expert to understand.
-- No: Heavy jargon without explanation. Long rambling sentences. Investor confused or had to ask for clarification.
-- NA: Very rare.
-
-### 10. Grammatically & Structurally correct (5%) — key: Grammar
-- Yes: Clear grammar and pronunciation. Professional vocabulary. Easy to follow.
+### 7. Vocabulary / Sentence Structure / Grammar / Pronunciations (10%) — key: Grammar
+- Yes: IR interacts with correct sentence structure, grammar, and clear pronunciation. Professional vocabulary.
 - No: Repeated grammatical errors, broken sentences, or mispronunciations that caused confusion.
 - NA: Very rare. Minor slips acceptable.
 
----
-
-## GROUP 4: GOING AN EXTRA MILE (15%)
-
-### 11. Empathy (5%) — key: Empathy
-- Yes: IR showed genuine empathy — acknowledged the investor's concern, apologised for inconvenience, or expressed understanding.
-- No: Purely transactional. No acknowledgment of investor's emotional state. Robotic or dismissive tone.
+### 8. Fillers, Fumbling & Stammering. Clarity of Speech. Avoid Dead Air (10%) — key: Fillers
+- Yes: No excessive fillers (aaa, uuumm), no fumbling or stammering. Clear confident delivery. Dead air avoided.
+- No: Frequent fillers, fumbling, or stammering that made IR sound unconfident. Prolonged dead air on the call.
 - NA: Very rare.
 
-### 12. Personalised Follow-up & Closing (10%) — key: FollowUp
-- Yes: IR ended with a warm, personalised closing that reflects the outcome — resolved / ticket raised / pending — with a clear next step.
-- No: Abrupt hang-up, no closing, or a generic scripted close with no reference to the investor's specific situation.
-- NA: Call was cut off before closing was possible.
+### 9. Energy Level, Enthusiasm & Tone Modulation (10%) — key: EnergyTone
+- Yes: IR displays good tone and manner, not scripted. Energy maintained throughout. Welcoming to queries regardless of call length. Not uninterested or stern.
+- No: IR sounds flat, bored, scripted, or uninterested. Monotone delivery. Energy drops noticeably.
+- NA: Cannot assess from transcript alone (audio-based parameter — use audio signal if available).
+
+---
+
+## GROUP 3: CUSTOMER SERVICE SKILLS (20%)
+
+### 10. Active Listening, Interruptions & Empathy (10%) — key: ActiveListening
+- Yes: IR listens to the investor without interrupting. Does not make investor repeat themselves. Does not have a parallel conversation. Shows empathy when investor raises concerns.
+- No: IR interrupted the investor, talked over them, made them repeat, or showed no empathy to a frustrated investor.
+- NA: Very rare.
+
+### 11. Simplifying Answers (10%) — key: Simplifying
+- Yes: IR explains financial terms in plain language. Confirms with investor if they need further clarification. Avoids heavy jargon.
+- No: Heavy unexplained jargon. Investor confused or had to ask for clarification. No attempt to simplify.
+- NA: No complex financial terms discussed.
 
 ---
 
@@ -361,32 +507,30 @@ Respond with EXACTLY this JSON — no other text:
 \`\`\`json
 {
   "scores": {
-    "TechnicalLegal": "Yes|No|NA",
-    "AllQuestions":   "Yes|No|NA",
-    "ProcessWise":    "Yes|No|NA",
-    "Opening":        "Yes|No|NA",
-    "OnCall":         "Yes|No|NA",
-    "Contextual":     "Yes|No|NA",
-    "Tags":           "Yes|No|NA",
-    "Expectation":    "Yes|No|NA",
-    "Sentences":      "Yes|No|NA",
-    "Grammar":        "Yes|No|NA",
-    "Empathy":        "Yes|No|NA",
-    "FollowUp":       "Yes|No|NA"
+    "CallOpening":     "Yes|No|NA",
+    "CallClosing":     "Yes|No|NA",
+    "TechnicalLegal":  "Yes|No|NA",
+    "AllQuestions":    "Yes|No|NA",
+    "Expectation":     "Yes|No|NA",
+    "Process":         "Yes|No|NA",
+    "Grammar":         "Yes|No|NA",
+    "Fillers":         "Yes|No|NA",
+    "EnergyTone":      "Yes|No|NA",
+    "ActiveListening": "Yes|No|NA",
+    "Simplifying":     "Yes|No|NA"
   },
   "reasoning": {
-    "TechnicalLegal": "brief reason",
-    "AllQuestions":   "brief reason",
-    "ProcessWise":    "brief reason",
-    "Opening":        "brief reason",
-    "OnCall":         "brief reason",
-    "Contextual":     "brief reason",
-    "Tags":           "brief reason",
-    "Expectation":    "brief reason",
-    "Sentences":      "brief reason",
-    "Grammar":        "brief reason",
-    "Empathy":        "brief reason",
-    "FollowUp":       "brief reason"
+    "CallOpening":     "brief reason",
+    "CallClosing":     "brief reason",
+    "TechnicalLegal":  "brief reason",
+    "AllQuestions":    "brief reason",
+    "Expectation":     "brief reason",
+    "Process":         "brief reason",
+    "Grammar":         "brief reason",
+    "Fillers":         "brief reason",
+    "EnergyTone":      "brief reason",
+    "ActiveListening": "brief reason",
+    "Simplifying":     "brief reason"
   },
   "poor_listening_segments": [
     {"segment_index": 7, "phrase": "Could you please repeat that?"}
@@ -418,6 +562,8 @@ export function buildCallScoringPrompt(
 - Chat disposition (from WhatsApp classification): ${chatDisposition || 'Unknown'}
 ${kbContext ? `
 ## WINT KNOWLEDGE BASE REFERENCE
+Use these excerpts from Wint's internal KB to verify whether the IR Executive's product information is technically correct. Pay close attention when scoring TechnicalLegal.
+
 ${kbContext}
 ` : ''}
 ## CALL TRANSCRIPT — score this (segments numbered for poor_listening_segments reference)
@@ -426,21 +572,62 @@ ${chatTranscriptText ? `
 ## WHATSAPP CHAT CONTEXT — reference only, do NOT score this
 ${chatTranscriptText}
 ` : ''}
-Score all 12 parameters. Output ONLY the JSON.`;
+Score all 11 parameters. Output ONLY the JSON.`;
+}
+
+// ── Deterministic speaker-label correction ────────────────────────────────────
+// The LLM sometimes swaps IR EXECUTIVE and INVESTOR. We detect this by checking
+// whether any INVESTOR segment contains "Wint" (only the IR says "Wint Wealth").
+// If detected, swap every IR EXECUTIVE ↔ INVESTOR label in the entire array.
+function fixSpeakerLabels(segments: CallSegment[]): CallSegment[] {
+  const labelsReversed = segments.some(
+    s => s.type === 'speech' && s.speaker === 'INVESTOR' && /wint/i.test(s.text || ''),
+  );
+  if (!labelsReversed) return segments;
+
+  console.warn('[fixSpeakerLabels] Detected reversed labels — swapping IR EXECUTIVE ↔ INVESTOR');
+  const swap = (label: string | undefined) =>
+    label === 'IR EXECUTIVE' ? 'INVESTOR'
+    : label === 'INVESTOR'   ? 'IR EXECUTIVE'
+    : label;
+
+  return segments.map(seg => {
+    if (seg.type === 'speech')       return { ...seg, speaker: swap(seg.speaker) };
+    if (seg.type === 'interruption') return { ...seg, interrupted_speaker: swap(seg.interrupted_speaker), interrupted_by: swap(seg.interrupted_by) };
+    if (seg.type === 'dead_air')     return { ...seg, resumed_by: swap(seg.resumed_by) };
+    return seg;
+  });
 }
 
 // ── Parse transcription response ──────────────────────────────────────────────
 export function parseTranscriptionResponse(raw: string): { language: string; segments: CallSegment[] } {
-  const parsed = robustJsonParse(raw);
-  if (!parsed) return { language: 'English', segments: [] };
-  if (Array.isArray(parsed)) return { language: 'Unknown', segments: parsed };
-  return {
-    language: parsed.language || 'English',
-    segments: Array.isArray(parsed.segments) ? parsed.segments : [],
-  };
+  try {
+    const parsed = robustJsonParse(raw);
+    if (!parsed) return { language: 'English', segments: [] };
+    if (Array.isArray(parsed)) return { language: 'Unknown', segments: fixSpeakerLabels(parsed) };
+    return {
+      language: parsed.language || 'English',
+      segments: fixSpeakerLabels(Array.isArray(parsed.segments) ? parsed.segments : []),
+    };
+  } catch {
+    // Truncated JSON recovery — Gemini hit output token limit mid-response.
+    const langMatch = raw.match(/"language"\s*:\s*"([^"]+)"/);
+    const language = langMatch?.[1] || 'English';
+    const segments: CallSegment[] = [];
+    const segRegex = /\{[^{}]*"type"\s*:\s*"[^"]*"[^{}]*\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = segRegex.exec(raw)) !== null) {
+      try {
+        const seg = JSON.parse(m[0]);
+        if (seg?.type) segments.push(seg as CallSegment);
+      } catch {}
+    }
+    console.warn(`[parseTranscriptionResponse] Truncated JSON recovered: ${segments.length} segments, language=${language}`);
+    return { language, segments: fixSpeakerLabels(segments) };
+  }
 }
 
-// ── Parse call disposition response ──────────────────────────────────────────
+// ── Parse call disposition response (loose) ──────────────────────────────────
 export function parseCallDisposition(raw: string): { callDisposition: string; callSubDisposition: string } {
   try {
     const parsed = robustJsonParse(raw);
@@ -450,6 +637,40 @@ export function parseCallDisposition(raw: string): { callDisposition: string; ca
     };
   } catch {
     return { callDisposition: '', callSubDisposition: '' };
+  }
+}
+
+// ── Parse constrained classification response ─────────────────────────────────
+export function parseCallDispositionClassified(raw: string): { disposition: string; subDisposition: string } {
+  try {
+    const parsed = robustJsonParse(raw);
+    return {
+      disposition: parsed?.disposition || '',
+      subDisposition: parsed?.sub_disposition || '',
+    };
+  } catch {
+    return { disposition: '', subDisposition: '' };
+  }
+}
+
+// ── Parse call chunk response ─────────────────────────────────────────────────
+export interface CallChunk {
+  topic: string;
+  summary: string;
+  content: string;
+}
+
+export function parseCallChunks(raw: string): CallChunk[] {
+  try {
+    const parsed = robustJsonParse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((c: any) => c?.topic && c?.content).map((c: any) => ({
+      topic: String(c.topic),
+      summary: String(c.summary || ''),
+      content: String(c.content),
+    }));
+  } catch {
+    return [];
   }
 }
 

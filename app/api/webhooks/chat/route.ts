@@ -18,8 +18,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { waitUntil } from '@vercel/functions';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import {
@@ -27,12 +28,15 @@ import {
   analyzeConversationTiming,
 } from '@/lib/quality';
 import type { TimedMessage } from '@/lib/quality';
-import { enrichTranscriptWithMedia } from '@/lib/media-context';
-import { claimCallForScoring, getConversationsWithUnscoredLinkedCalls } from '@/lib/robylon/db';
 import {
   CALL_IQS_SYSTEM_PROMPT,
+  CALL_TRANSCRIPTION_PROMPT,
+  CALL_DISPOSITION_CLASSIFY_PROMPT,
   buildCallScoringPrompt,
   parseCallScoringResponse,
+  parseTranscriptionResponse,
+  parseCallDispositionClassified,
+  insertPoorListeningFlags,
   segmentsToText,
 } from '@/lib/call-quality';
 import type { CallParamScore, CallSegment } from '@/lib/call-quality';
@@ -41,7 +45,7 @@ import {
   upsertContact,
   upsertConversation,
   updateConversationCsat,
-  mergeConversationTags,
+  updateConversationTags,
   getConversation,
   isScored,
   insertIQSScore,
@@ -52,6 +56,7 @@ import {
   updateCallRecordingStatus,
   insertCallRecording,
   updateCallRecordingMetrics,
+  updateCallDisposition,
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
@@ -69,38 +74,19 @@ function normaliseCsat(raw: string | undefined): { score: number; label: string 
   return null;
 }
 
-// ── Messages → transcript text ────────────────────────────────────────────────
+// ── Messages → transcript text ────────────────────────────────────────────────────
 interface RobyMessage { sender?: string; content?: string; role?: string; text?: string; timestamp?: string; }
-
-// Collapse internal newlines and multiple spaces into a single space so that
-// a multi-line WhatsApp message stays on one line in the LLM transcript.
-// This prevents the LLM from reading mid-message line breaks as structural errors.
-function normalizeContent(raw: string): string {
-  return raw.replace(/\r\n|\r|\n/g, ' ').replace(/\s{2,}/g, ' ').trim();
-}
-
-// Robylon sends internal system annotations as chat messages — e.g.
-// "918758589296 {ticket_raised}" from sender "Robylon AI". These are
-// never visible to the customer and must not be scored or displayed.
-// Pattern: optional digits/spaces, then one or more {tag} tokens, nothing else.
-const ROBYLON_INTERNAL_ANNOTATION = /^[\d\s+()-]*(\{[^}]+\}\s*)+$/;
-
-function isInternalAnnotation(sender: string, content: string): boolean {
-  if ((sender || '').toLowerCase().includes('robylon')) return true;
-  return ROBYLON_INTERNAL_ANNOTATION.test(content.trim());
-}
 
 function messagesToTranscript(messages: RobyMessage[]): string {
   const lines: string[] = [];
   for (const m of messages) {
     const sender  = m.sender || m.role || '';
-    const content = normalizeContent(m.content || m.text || '');
+    const content = (m.content || m.text || '').trim();
     if (!content) continue;
     const low = content.toLowerCase();
     if (low.includes('auto-assigned') || low.includes('assigned by') ||
         low.includes('waiting to assign') || low.includes('please rate your experience') ||
         (m as any).buttons) continue;
-    if (isInternalAnnotation(sender, content)) continue;
     const role = sender === 'User' || sender === 'user' || sender === 'customer' ? 'Customer'
                : sender === 'Bot'  || sender === 'bot'                           ? 'Bot'
                : 'Agent';
@@ -114,18 +100,16 @@ export function transcriptFromJsonb(messages: any[]): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
   for (const m of messages) {
-    const content = normalizeContent(m.content || '');
-    if (!content) continue;
-    if (isInternalAnnotation(m.sender_name || '', content)) continue;
     const role = m.sender_type === 'customer' ? 'Customer'
                : m.sender_type === 'bot'      ? 'Bot'
                : 'Agent';
-    lines.push(`${role}: ${content}`);
+    const content = (m.content || '').trim();
+    if (content) lines.push(`${role}: ${content}`);
   }
   return lines.join('\n');
 }
 
-// ── Parse "Apr 15, 10:51 AM" → ISO (IST = UTC+5:30) ─────────────────────────
+// ── Parse "Apr 15, 10:51 AM" → ISO (IST = UTC+5:30) ───────────────────────────
 function parseRobyTimestamp(ts: string, year: number): string {
   try {
     const match = ts.match(/^(\w+)\s+(\d+),\s+(\d+):(\d+)\s+(AM|PM)$/);
@@ -160,7 +144,7 @@ function extractAgentName(messages: any[]): string {
   return '';
 }
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+// ── Auth ────────────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
   if (!secret) { console.warn('[webhook] WEBHOOK_SECRET not set — accepting all requests'); return true; }
@@ -171,17 +155,16 @@ function isAuthorised(req: NextRequest): boolean {
   return false;
 }
 
-// ── Extract all unique customer question lines from transcript ────────────────
-function extractCustomerQuestions(transcript: string): string {
-  const seen = new Set<string>();
+// ── Extract a search query from the transcript (fallback when no disposition) ──
+function extractQueryFromTranscript(transcript: string): string {
   return transcript.split('\n')
     .filter(l => l.startsWith('Customer:'))
+    .slice(0, 3)
     .map(l => l.replace('Customer:', '').trim())
-    .filter(l => l.length > 10 && !seen.has(l) && seen.add(l))
     .join(' ');
 }
 
-// ── Convert ParamScore → IQSParameterResult ───────────────────────────────────
+// ── Convert ParamScore → IQSParameterResult ───────────────────────────────────────────
 function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult {
   return {
     score: score === 'Yes' ? true : score === 'No' ? false : null,
@@ -189,7 +172,7 @@ function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult
   };
 }
 
-// ── Call IQS scoring for calls linked to a chat ───────────────────────────────
+// ── Call IQS scoring for calls linked to a chat ─────────────────────────────────────
 export async function scoreLinkedCallsForChat(
   chatId: string,
   chatTranscriptText: string,
@@ -205,34 +188,19 @@ export async function scoreLinkedCallsForChat(
 
   let kbContext = '';
   try {
-    const allChunks = await fetchKnowledgeChunks();
-    if (allChunks.length) {
-      const dispositionQuery = `${disposition} ${subDisposition}`.trim();
-      const seen = new Set<string>();
-      const merged: typeof allChunks = [];
-      for (const chunk of retrieveRelevantChunks(allChunks, dispositionQuery, 5)) {
-        const key = `${chunk.fileId}::${chunk.content.slice(0, 80)}`;
-        if (!seen.has(key)) { seen.add(key); merged.push(chunk); }
-      }
-      if (merged.length) kbContext = merged.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+    const searchQuery = disposition ? `${disposition} ${subDisposition}`.trim() : '';
+    if (searchQuery) {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
+      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
     }
   } catch {}
 
   for (const call of calls) {
-    // Atomic claim: transition 'linked' → 'scoring' in a single UPDATE.
-    // If another concurrent process already claimed this call, skip it here.
-    const claimed = await claimCallForScoring(call.id);
-    if (!claimed) {
-      console.log(`[webhook] Call ${call.id} already claimed by another process — skipping`);
-      continue;
-    }
-
     const segments = Array.isArray(call.transcript) ? call.transcript : [];
     const callText  = segmentsToText(segments);
     if (!callText) {
-      // Transcript exists but produced no text — mark distinctly so cron won't retry forever
-      await updateCallRecordingStatus(call.id, 'skipped_no_transcript');
-      console.warn(`[webhook] Call ${call.id} has no usable transcript text — skipped`);
+      await updateCallRecordingStatus(call.id, 'scored');
       continue;
     }
 
@@ -242,6 +210,8 @@ export async function scoreLinkedCallsForChat(
       call.id,
       call.interruption_count ?? 0,
       call.dead_air_count ?? 0,
+      '',
+      `${disposition} ${subDisposition}`.trim(),
       kbContext,
     );
 
@@ -254,7 +224,9 @@ export async function scoreLinkedCallsForChat(
         60_000,
       );
 
-      const { scores, reasoning, iqs } = parseCallScoringResponse(raw);
+      const { scores, reasoning, poorListeningSegments, iqs } = parseCallScoringResponse(raw);
+      const finalSegments = insertPoorListeningFlags(segments, poorListeningSegments);
+
       const parameters: Record<string, IQSParameterResult> = {};
       for (const [key, val] of Object.entries(scores)) {
         parameters[key] = {
@@ -263,13 +235,17 @@ export async function scoreLinkedCallsForChat(
         };
       }
 
+      // Persist updated transcript with poor_listening flags
+      await insertCallRecording({
+        id: call.id,
+        transcript: finalSegments,
+      });
+
       await updateCallIQSScore({ chatId, callIqsScore: iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
       await updateCallRecordingStatus(call.id, 'scored');
       console.log(`[webhook] Scored call ${call.id} → IQS ${iqs} for chat ${chatId}`);
     } catch (err: any) {
-      // Reset to 'linked' so the cron can retry this call on the next sweep
-      await updateCallRecordingStatus(call.id, 'linked').catch(() => {});
-      console.error(`[webhook] Call IQS scoring failed for call ${call.id} — reset to linked for retry:`, err.message);
+      console.error(`[webhook] Call IQS scoring failed for call ${call.id}:`, err.message);
     }
   }
 }
@@ -295,7 +271,7 @@ async function linkAndScoreCallsForChat(
   }
 }
 
-// ── Core scoring (called from webhook + cron) ─────────────────────────────────
+// ── Core scoring (called from webhook + cron) ────────────────────────────────────
 export async function executeScoring(
   conv: ConversationRow,
   agentName: string,
@@ -327,7 +303,7 @@ export async function executeScoring(
     return null;
   }
 
-  // ── Call detection — skip scoring silently ──────────────────────────────
+  // ── Call detection — skip scoring silently ───────────────────────────────
   if (hasCallInteraction(transcriptText, conv.tags)) {
     console.log(`[webhook] Skipping scoring for chat ${chatId} — call interaction detected`);
     return null;
@@ -357,57 +333,24 @@ export async function executeScoring(
   const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
   // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
-  // Run two retrieval passes — one on disposition topic, one on customer questions —
-  // then merge and deduplicate so every topic the customer raised gets KB coverage.
   let kbContext = '';
   try {
-    const allChunks = await fetchKnowledgeChunks();
-    if (allChunks.length) {
-      const dispositionQuery  = `${disposition} ${subDisposition}`.trim();
-      const customerQuery     = extractCustomerQuestions(transcriptText);
+    const searchQuery = disposition
+      ? `${disposition} ${subDisposition}`.trim()
+      : extractQueryFromTranscript(transcriptText);
 
-      const seen = new Set<string>();
-      const merged: typeof allChunks = [];
-
-      const addChunks = (query: string, topK: number) => {
-        if (!query) return;
-        for (const chunk of retrieveRelevantChunks(allChunks, query, topK)) {
-          const key = `${chunk.fileId}::${chunk.content.slice(0, 80)}`;
-          if (!seen.has(key)) { seen.add(key); merged.push(chunk); }
-        }
-      };
-
-      // 3 chunks for disposition (topic anchor) + 4 for customer questions (breadth)
-      addChunks(dispositionQuery, 3);
-      addChunks(customerQuery, 4);
-
-      // If either query was empty, fill up to 5 total from whichever ran
-      if (merged.length < 5) addChunks(dispositionQuery || customerQuery, 5 - merged.length);
-
-      if (merged.length) {
-        kbContext = merged.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
-        console.log(`[webhook] KB context: ${merged.length} chunks (disposition="${dispositionQuery}", customer questions=${customerQuery.split(' ').length} words)`);
+    if (searchQuery) {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
+      if (relevant.length) {
+        kbContext = relevant
+          .map(c => `[${c.fileName}]\n${c.content}`)
+          .join('\n---\n');
+        console.log(`[webhook] KB context: ${relevant.length} chunks for query "${searchQuery}"`);
       }
     }
   } catch (err: any) {
     console.warn('[webhook] KB fetch failed, scoring without context:', err.message);
-  }
-
-  // ── Media context — fetch images and doc snippets from transcript URLs ────────
-  let mediaImageParts: Array<{ inlineData: { mimeType: string; data: string } }> = [];
-  let mediaClaudeParts: Array<{ type: 'image'; source: { type: 'base64'; media_type: string; data: string } }> = [];
-  try {
-    const media = await enrichTranscriptWithMedia(transcriptText);
-    if (media.textContext) {
-      kbContext += (kbContext ? '\n---\n' : '') + '## MEDIA SHARED IN CHAT\n' + media.textContext;
-    }
-    mediaImageParts   = media.imageParts;
-    mediaClaudeParts  = media.claudeImageParts;
-    if (media.imageParts.length) {
-      console.log(`[webhook] Media context: ${media.imageParts.length} image(s) fetched for chat ${chatId}`);
-    }
-  } catch (err: any) {
-    console.warn('[webhook] Media enrichment failed, scoring without media:', err.message);
   }
 
   const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition, timing.conversationType);
@@ -419,13 +362,13 @@ export async function executeScoring(
     const resp = await client.messages.create({
       model: 'claude-sonnet-4-6', max_tokens: 2000,
       system: iqsSystemPrompt,
-      messages: [{ role: 'user', content: [{ type: 'text', text: userPrompt }, ...mediaClaudeParts] }],
+      messages: [{ role: 'user', content: userPrompt }],
     });
     rawResponse = resp.content[0].type === 'text' ? resp.content[0].text : '';
   } else if (geminiKeys.length) {
     rawResponse = await geminiGenerate(
       geminiKeys, 'gemini-2.5-flash',
-      [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }, ...mediaImageParts] }],
+      [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
       {}, 60000,
     );
   } else {
@@ -461,7 +404,7 @@ export async function executeScoring(
   const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
   console.log(`[webhook] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
 
-  // ── Slack + Sheet alert — deduplicated via KV ────────────────────────────────
+  // ── Slack + Sheet alert — deduplicated via KV ─────────────────────────────────────────
   fireQualityAlert({
     chatId,
     agentName:           finalAgentName,
@@ -494,7 +437,6 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
 
   // Extract mobile/phone number
   const mobileNumber: string | undefined =
-    body.requester_info?.phone_number ||
     body.data?.user_phone      || body.data?.customer_phone ||
     body.data?.phone_number    || body.data?.mobile         ||
     body.user_phone            || body.customer_phone       ||
@@ -558,12 +500,6 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     upsertAgent(effectiveWebhookAgent),
   ]);
 
-  // Extract Ticket Raised status from properties array
-  const properties: any[] = body.data?.properties || [];
-  const ticketRaisedProp = properties.find((p: any) => p.name === 'Ticket Raised');
-  const ticketRaised: string | null =
-    ticketRaisedProp?.selected_value?.value === 'Yes' ? 'Yes' : null;
-
   // Persist conversation to PostgreSQL
   await upsertConversation({
     id: chatId,
@@ -578,13 +514,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     resolutionSeconds: timing.resolutionTime ?? null,
     rawPayload: body,
     webhookTrigger: 'TICKET_CLOSED',
-    phoneNumber: mobileNumber ?? null,
   });
-
-  // Merge ticket_raised into tags without overwriting disposition from CLASSIFICATION_UPDATED
-  if (ticketRaised !== null) {
-    await mergeConversationTags(chatId, { ticket_raised: ticketRaised });
-  }
 
   // Check if tags already stored (from a prior CLASSIFICATION_UPDATED)
   const existingConv = await getConversation(chatId);
@@ -654,20 +584,21 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const disposition    = primary.names?.l1 || '';
   const subDisposition = primary.names?.l2 || '';
 
-  // Upsert conversation row (no tags here — merge below preserves ticket_raised)
+  // Upsert conversation with tags (will create row if not yet present)
   await upsertConversation({
     id: chatId,
+    tags: { disposition, sub_disposition: subDisposition },
     webhookTrigger: 'CLASSIFICATION_UPDATED',
   });
 
-  // Merge disposition into tags without overwriting ticket_raised saved by TICKET_CLOSED
-  await mergeConversationTags(chatId, { disposition, sub_disposition: subDisposition });
+  // Also call updateConversationTags for clarity
+  await updateConversationTags(chatId, { disposition, sub_disposition: subDisposition });
 
   // Check if transcript already stored and not yet scored
   const conv = await getConversation(chatId);
   const alreadyScored = await isScored(chatId);
 
-  if (conv?.transcript) {
+  if (conv?.transcript && !alreadyScored) {
     const agentId = conv.agent_id;
     const agentName = agentId
       ? (await import('@/lib/robylon/db').then(m => m.getAgentName(agentId)))
@@ -680,26 +611,17 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
     chatTranscriptText = transcriptFromJsonb(transcriptMessages);
 
     const config = await readConfig();
+    const [scoredResult] = await Promise.allSettled([
+      executeScoring(conv, agentName, disposition, subDisposition),
+      scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config),
+    ]);
 
-    if (!alreadyScored) {
-      // Score chat + linked calls together
-      const [scoredResult] = await Promise.allSettled([
-        executeScoring(conv, agentName, disposition, subDisposition),
-        scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config),
-      ]);
-
-      const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
-      if (scored) {
-        return NextResponse.json({
-          ok: true, chat_id: chatId, iqs: scored.iqs,
-          disposition, subDisposition,
-        });
-      }
-    } else {
-      // Chat already scored — still attempt to score any linked calls that may have
-      // arrived after the original scoring run (e.g. call webhook fired late)
-      await scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config)
-        .catch(err => console.error('[webhook] Late call scoring failed:', err.message));
+    const scored = scoredResult.status === 'fulfilled' ? scoredResult.value : null;
+    if (scored) {
+      return NextResponse.json({
+        ok: true, chat_id: chatId, iqs: scored.iqs,
+        disposition, subDisposition,
+      });
     }
   }
 
@@ -725,7 +647,7 @@ async function handleCsatEvent(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat: normalised.score });
 }
 
-// ── Handler: legacy flat payload (backward compat) ────────────────────────────
+// ── Handler: legacy flat payload (backward compat) ────────────────────────────────
 async function handleLegacyPayload(body: any): Promise<NextResponse> {
   const {
     chat_id, conversation_id, agent_name,
@@ -818,7 +740,18 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'scoring' });
 }
 
-// ── Handler: CC_VOICE_CALL_COMPLETE ──────────────────────────────────────────
+// ── MIME type from URL ────────────────────────────────────────────────────────────────
+function mimeFromUrl(url: string): string {
+  const u = url.toLowerCase().split('?')[0];
+  if (u.endsWith('.mp3'))  return 'audio/mpeg';
+  if (u.endsWith('.wav'))  return 'audio/wav';
+  if (u.endsWith('.m4a'))  return 'audio/mp4';
+  if (u.endsWith('.ogg'))  return 'audio/ogg';
+  if (u.endsWith('.flac')) return 'audio/flac';
+  return 'audio/mpeg';
+}
+
+// ── Handler: CC_VOICE_CALL_COMPLETE ────────────────────────────────────────────
 async function handleCallComplete(body: any): Promise<NextResponse> {
   // In CC_VOICE_CALL_COMPLETE, body.chat_id is the CALL ID (Robylon's voice
   // ticket ID), NOT a WhatsApp chat ID. The real WhatsApp chat_id is only
@@ -827,33 +760,129 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
   const phone        = body.requester_info?.phone_number || body.data?.phone_number || '';
   const recordingUrl = body.data?.recording_url || '';
   const calledAt     = body.data?.started_at || body.data?.ended_at || body.created_at || new Date().toISOString();
-  const durationRaw  = body.data?.call_duration;
-  const durationSeconds = durationRaw && durationRaw > 0 ? Math.round(durationRaw) : null;
+
+  // Derive duration: prefer call_duration field, fall back to ended_at − started_at
+  let durationSeconds: number | null = null;
+  if (body.data?.call_duration > 0) {
+    durationSeconds = Math.round(body.data.call_duration);
+  } else if (body.data?.started_at && body.data?.ended_at) {
+    const diff = Math.round((new Date(body.data.ended_at).getTime() - new Date(body.data.started_at).getTime()) / 1000);
+    if (diff > 0) durationSeconds = diff;
+  }
 
   if (!recordingUrl) {
     console.warn(`[webhook] CC_VOICE_CALL_COMPLETE call_id=${callId} has no recording_url — skipping`);
     return NextResponse.json({ ok: true, skipped: true, reason: 'no recording_url' });
   }
 
+  // Respond immediately — transcription is slow (10–30s), do it async
   const contactId = await upsertContact(phone);
 
-  // Store placeholder — status 'pending_transcription' so the cron picks it up
+  // Store a placeholder row now so the call is tracked even if transcription fails
   await insertCallRecording({
     id: callId,
-    chatId: null,
-    agentId: null,
+    chatId: null,         // linked at TICKET_CLOSED via phone number
+    agentId: null,        // agent name not available in this event
     contactId,
-    recordingUrl,
+    recordingUrl,         // S3 URL stored permanently for reference / re-transcription
     durationSeconds,
     calledAt,
     language: null,
+    transcript: [],
   });
 
-  console.log(`[webhook] CC_VOICE_CALL_COMPLETE queued call ${callId} for transcription, phone=${phone}`);
-  return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'pending_transcription' });
+  // Keep the function alive after responding so Vercel doesn't kill the background work
+  waitUntil((async () => {
+    try {
+      const config = await readConfig();
+      const geminiKeys = getIQSGeminiKeys(config);
+      if (!geminiKeys.length) {
+        console.error(`[webhook] No Gemini key — cannot transcribe call ${callId}`);
+        return;
+      }
+
+      // Fetch audio into memory (never written to disk)
+      let audioBase64 = '';
+      let mimeType = mimeFromUrl(recordingUrl);
+      const audioRes = await fetch(recordingUrl);
+      if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio`);
+      const ct = audioRes.headers.get('content-type');
+      if (ct && ct.startsWith('audio/')) mimeType = ct.split(';')[0].trim();
+      audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+
+      // Gemini multimodal: audio → English segments (translates ALL non-English words in-place).
+      // callGeminiForCall: 5 retries × 5 models (flash-preview → flash → pro → 1.5-pro → 1.5-flash).
+      const raw = await callGeminiForCall(
+        geminiKeys,
+        [{ parts: [
+          { inline_data: { mime_type: mimeType, data: audioBase64 } },
+          { text: CALL_TRANSCRIPTION_PROMPT },
+        ]}],
+        undefined,
+        270_000,
+      );
+
+      const { language, segments } = parseTranscriptionResponse(raw);
+      const interruptionCount = segments.filter(s => s.type === 'interruption').length;
+      const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
+
+      // Update the placeholder row with the real transcript
+      await insertCallRecording({
+        id: callId,
+        chatId: null,
+        agentId: null,
+        contactId,
+        recordingUrl,
+        durationSeconds,
+        calledAt,
+        language,
+        transcript: segments,
+      });
+      await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
+
+      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
+
+      // ── Step 4: Classify disposition (constrained to official 14-category list) ──
+      const callTranscriptText = segmentsToText(segments);
+      let disposition = '';
+      let subDisposition = '';
+      if (callTranscriptText) {
+        try {
+          const rawDisp = await callGeminiForCall(
+            geminiKeys,
+            [{ role: 'user', parts: [{ text: CALL_DISPOSITION_CLASSIFY_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
+            undefined,
+            30_000,
+          );
+          const classified = parseCallDispositionClassified(rawDisp);
+          disposition    = classified.disposition;
+          subDisposition = classified.subDisposition;
+        } catch (err: any) {
+          console.error(`[webhook] Disposition classify failed for call ${callId}:`, err.message);
+        }
+
+        // ── Step 5: Store disposition ───────────────────────────────────────────
+        if (disposition) {
+          try {
+            await updateCallDisposition(callId, disposition, subDisposition);
+            console.log(`[webhook] Call ${callId} classified — ${disposition} > ${subDisposition}`);
+          } catch (err: any) {
+            console.error(`[webhook] Failed to store disposition for call ${callId}:`, err.message);
+          }
+        }
+
+        // ── Step 6: Chunking removed ─────────────────────────────────────────
+      }
+    } catch (err: any) {
+      console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
+    }
+  })());
+
+  console.log(`[webhook] CC_VOICE_CALL_COMPLETE received call ${callId} — transcription started, phone=${phone}`);
+  return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'transcribing' });
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+// ── Main handler ───────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   if (!isAuthorised(req)) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
@@ -866,7 +895,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
 
-  if (process.env.NODE_ENV !== 'production' || process.env.WEBHOOK_LOG_PAYLOAD === 'true') {
+  // Log only non-sensitive metadata — never dump full payload in production
+  if (process.env.NODE_ENV !== 'production') {
     console.log('[webhook] Incoming payload:', JSON.stringify(body, null, 2));
   } else {
     console.log(`[webhook] Received event_type=${body.event_type || 'unknown'} chat_id=${body.chat_id || 'n/a'}`);
