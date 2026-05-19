@@ -32,6 +32,7 @@ export default async function SettingsPage() {
     iqsScoringPrompt: config.iqsScoringPrompt || '',
     analyticsPlannerPrompt: config.analyticsPlannerPrompt || '',
     analyticsSynthesizerPrompt: config.analyticsSynthesizerPrompt || '',
+    callVocabulary: config.callVocabulary || [],
     defaultChatPrompt: DEFAULT_CHAT_PROCESS_PROMPT,
     defaultIqsScoringPrompt: IQS_SYSTEM_PROMPT,
     defaultAnalyticsPlannerPrompt: PLANNER_PROMPT,

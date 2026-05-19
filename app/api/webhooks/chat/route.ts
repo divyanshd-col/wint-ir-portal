@@ -30,9 +30,9 @@ import {
 import type { TimedMessage } from '@/lib/quality';
 import {
   CALL_IQS_SYSTEM_PROMPT,
-  CALL_TRANSCRIPTION_PROMPT,
   CALL_DISPOSITION_CLASSIFY_PROMPT,
   CALL_CHUNK_PROMPT,
+  buildTranscriptionPrompt,
   buildCallScoringPrompt,
   parseCallScoringResponse,
   parseTranscriptionResponse,
@@ -819,7 +819,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
         geminiKeys,
         [{ parts: [
           { inline_data: { mime_type: mimeType, data: audioBase64 } },
-          { text: CALL_TRANSCRIPTION_PROMPT },
+          { text: buildTranscriptionPrompt(config.callVocabulary) },
         ]}],
         undefined,
         180_000,

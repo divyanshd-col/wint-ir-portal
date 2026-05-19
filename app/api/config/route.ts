@@ -58,6 +58,7 @@ export async function PATCH(req: NextRequest) {
     ...(body.conversationHistoryEnabled !== undefined && { conversationHistoryEnabled: body.conversationHistoryEnabled }),
     ...(body.slackUserToken !== undefined && !body.slackUserToken.startsWith('••••') && { slackUserToken: body.slackUserToken }),
     ...(body.qualityAlertSheetUrl !== undefined && { qualityAlertSheetUrl: body.qualityAlertSheetUrl }),
+    ...(body.callVocabulary !== undefined && { callVocabulary: body.callVocabulary }),
   };
 
   await writeConfig(updated);
