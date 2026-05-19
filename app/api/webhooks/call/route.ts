@@ -31,6 +31,8 @@ import {
   upsertContact,
   insertCallRecording,
   updateCallRecordingMetrics,
+  findClosedConversationForCall,
+  linkCallToChat,
 } from '@/lib/robylon/db';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -135,14 +137,26 @@ async function processCallWebhook(body: any): Promise<void> {
   const interruptionCount = segments.filter(s => s.type === 'interruption').length;
   const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
 
+  // If no chatId from payload, check if the ticket already closed while transcription
+  // was in progress (race condition: TICKET_CLOSED fires before call recording exists).
+  let resolvedChatId = chatId;
+  if (!resolvedChatId && contactId) {
+    const conv = await findClosedConversationForCall(contactId, calledAt);
+    if (conv) {
+      resolvedChatId = conv.id;
+      await linkCallToChat(callId, resolvedChatId);
+      console.log(`[call-webhook] Late-linked call ${callId} → chat ${resolvedChatId} (ticket closed during transcription)`);
+    }
+  }
+
   await updateCallRecordingMetrics({
     id: callId,
     interruptionCount,
     deadAirCount,
-    status: chatId ? 'linked' : 'pending_link',
+    status: resolvedChatId ? 'linked' : 'pending_link',
   });
 
-  console.log(`[call-webhook] Stored call ${callId} — interruptions=${interruptionCount} dead_air=${deadAirCount} status=${chatId ? 'linked' : 'pending_link'}`);
+  console.log(`[call-webhook] Stored call ${callId} — interruptions=${interruptionCount} dead_air=${deadAirCount} status=${resolvedChatId ? 'linked' : 'pending_link'}`);
   // Scoring fires from the chat webhook at TICKET_CLOSED / CLASSIFICATION_UPDATED.
 }
 
