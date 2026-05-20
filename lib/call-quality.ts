@@ -246,19 +246,20 @@ Example: IR says "Sorry sir, I could not hear you, could you please repeat?" the
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
-Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false}
+Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false,"ts":"M:SS"}
+  where "ts" is the timestamp when this line begins in the audio, in M:SS format (e.g. "0:00", "1:32", "12:05").
 Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
 Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
 Active listening flags use: {"type":"active_listening","phrase":"[exact phrase in English]"}
 
 Example output (mixed Telugu + English call):
 {"language":"Telugu + English","segments":[
-  {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false},
+  {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false,"ts":"0:00"},
   {"type":"dead_air","duration":"~2 seconds","resumed_by":"IR EXECUTIVE"},
-  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true},
+  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false,"ts":"0:03"},
+  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true,"ts":"0:08"},
   {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":5},
-  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true}
+  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true,"ts":"1:45"}
 ]}`;
 
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────
@@ -464,7 +465,8 @@ Score each parameter as if you are filling in a completely separate evaluation f
 - No: Abrupt hang-up with no closing greeting, or call was cut off.
 - NA: Call was disconnected before closing was possible.
 
-### 3. Technically / Legally Correct (15%) — key: TechnicalLegal
+### 3. Technically / Legally Correct (15%) — key: TechnicalLegal ⚠️ HIGHEST PRIORITY PARAMETER
+Technical and legal correctness is the utmost crucial point for IQS evaluation. There must not be even a hint of incorrect information in any customer conversation. Every factual claim the IR makes about products, rates, timelines, or regulations must be verifiably accurate — no exceptions.
 - Yes: All product information stated by the IR EXECUTIVE matches the WINT KNOWLEDGE BASE REFERENCE below — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms, registered entity names. In your reasoning, name the specific KB document and section that confirms each fact.
 - No: A statement contradicts the KB, or the KB has no relevant entry to verify a significant product claim the IR made. State exactly what was claimed and what the KB says (or that it is absent from the KB).
   Also No — SEBI / Regulatory violation (automatic fail, no KB needed): IR gave a personalised investment recommendation (e.g. "You should invest in this bond", "I suggest putting your money here"), implied guaranteed returns, or provided investment advisory services that would constitute unregistered advisory activity under SEBI regulations.

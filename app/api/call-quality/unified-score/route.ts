@@ -58,6 +58,15 @@ function buildMergedTimeline(
 ): Array<{ source: 'call' | 'chat' | 'call-boundary'; ts?: string; data: any }> {
   const items: Array<{ source: 'call' | 'chat' | 'call-boundary'; ts?: string; sortKey: number; data: any }> = [];
 
+  // Parse "M:SS" or "MM:SS" or "H:MM:SS" relative timestamp → milliseconds offset
+  function parseTsToMs(ts: string): number | null {
+    const parts = ts.split(':').map(Number);
+    if (parts.some(isNaN)) return null;
+    if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000;
+    if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+    return null;
+  }
+
   const chatBase = chatStartedAt ? new Date(chatStartedAt).getTime() : 0;
   chatMessages.forEach((m, i) => {
     const ts = m.created_at || m.timestamp;
@@ -73,27 +82,28 @@ function buildMergedTimeline(
     return t > max ? t : max;
   }, chatBase);
 
-  // Spread each recording's segments proportionally across its actual duration so
-  // post-call chat messages (timestamped after call end) sort correctly.
-  // Insert a boundary marker before each call after the first.
   const totalCalls = recordingMeta.length;
   let segOffset = 0;
-  // Track the estimated end of the previous call so NULL-called_at calls chain correctly.
+  // Track estimated end of previous call so NULL-called_at calls chain correctly.
   let prevCallEnd = lastChatTs + 60_000;
   for (let recIdx = 0; recIdx < totalCalls; recIdx++) {
-    const rec = recordingMeta[recIdx];
-    // When called_at is NULL, place this call 60s after the last known chat activity
-    // (or after the previous call ended). This prevents call segments from being
-    // sorted into the middle of chat messages that occurred before the call.
+    const rec      = recordingMeta[recIdx];
+    // When called_at is NULL, place this call after last known chat/call activity.
     const callBase = rec.calledAt ? new Date(rec.calledAt).getTime() : prevCallEnd;
-    // Use 3s per segment as a conservative estimate when duration_seconds is NULL.
-    // 8s was too generous and caused post-call chat messages to appear inside the call window.
-    const durationMs = ((rec.durationSeconds ?? Math.max(rec.segmentCount * 3, 60))) * 1000;
-    const callEnd    = callBase + durationMs;
-    const count      = rec.segmentCount;
-    const callLabel  = totalCalls > 1 ? `Call ${recIdx + 1}` : 'Call';
+    const count    = rec.segmentCount;
+    const callLabel = totalCalls > 1 ? `Call ${recIdx + 1}` : 'Call';
 
-    // Start marker — visible in merged timeline so it's clear where chat ends and call begins
+    // Compute call end: prefer duration_seconds, then last real segment ts, then conservative estimate
+    const segsForRec = callSegments.slice(segOffset, segOffset + count);
+    const lastSegTs  = [...segsForRec].reverse().find(s => s.ts)?.ts;
+    const lastSegMs  = lastSegTs ? parseTsToMs(lastSegTs) : null;
+    const durationMs = rec.durationSeconds
+      ? rec.durationSeconds * 1000
+      : lastSegMs !== null
+        ? lastSegMs + 5000
+        : Math.max(count * 3, 60) * 1000;  // 3s/segment — conservative fallback
+    const callEnd = callBase + durationMs;
+
     items.push({
       source: 'call-boundary',
       sortKey: callBase - 1,
@@ -101,14 +111,17 @@ function buildMergedTimeline(
     });
 
     for (let i = 0; i < count; i++) {
-      const seg = callSegments[segOffset + i];
+      const seg = segsForRec[i];
       if (!seg) continue;
-      const fraction = count > 1 ? i / (count - 1) : 0;
-      items.push({ source: 'call', sortKey: callBase + fraction * durationMs, data: seg });
+      // Use real timestamp from Gemini if present, otherwise fall back to proportional estimate
+      const offsetMs = seg.ts ? parseTsToMs(seg.ts) : null;
+      const sortKey  = offsetMs !== null
+        ? callBase + offsetMs
+        : callBase + (count > 1 ? (i / (count - 1)) : 0) * durationMs;
+      items.push({ source: 'call', sortKey, data: seg });
     }
     segOffset += count;
 
-    // End marker so post-call chat clearly appears after the call
     items.push({
       source: 'call-boundary',
       sortKey: callEnd + 1,

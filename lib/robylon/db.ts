@@ -524,6 +524,24 @@ export async function getUnlinkedCallsForContact(
   `, [contactId, startedAt, closedAt]);
 }
 
+/** Find the closed conversation that a call belongs to, for self-linking after late transcription.
+ *  Matches a conversation whose window (started_at - 15 min → closed_at) contains the call. */
+export async function findClosedConversationForCall(
+  contactId: number,
+  calledAt: string,
+): Promise<{ id: string } | null> {
+  const rows = await query<{ id: string }>(`
+    SELECT id FROM conversations
+    WHERE contact_id = $1
+      AND started_at - INTERVAL '15 minutes' <= $2::timestamptz
+      AND closed_at >= $2::timestamptz
+      AND closed_at IS NOT NULL
+    ORDER BY started_at DESC
+    LIMIT 1
+  `, [contactId, calledAt]);
+  return rows[0] ?? null;
+}
+
 /** Backfill chat_id and advance status to 'linked' on a call recording. */
 export async function linkCallToChat(callId: string, chatId: string): Promise<void> {
   await query(

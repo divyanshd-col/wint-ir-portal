@@ -256,7 +256,8 @@ Score each parameter as if you are filling in a completely separate evaluation f
 
 ## THE 11 PARAMETERS (ordered by weight)
 
-### 1. Technically / Legally Correct (20%)
+### 1. Technically / Legally Correct (20%) ⚠️ HIGHEST PRIORITY PARAMETER
+Technical and legal correctness is the utmost crucial point for IQS evaluation. There must not be even a hint of incorrect information in any customer conversation. Every factual claim the agent makes must be verifiably accurate — no exceptions, no approximations.
 Score based on whether the agent's information is factually correct per Wint Wealth KB and policy.
 - **Yes**: Information is accurate for the customer's specific case.
 - **No** — mark No if ANY of these failures are visible:
