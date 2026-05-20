@@ -365,7 +365,7 @@ Respond with EXACTLY this JSON structure:
     "Empathy": "Yes|No|NA"
   },
   "reasoning": {
-    "Technical": "brief reason",
+    "Technical": "brief reason — if KB was consulted, cite the document and section",
     "AllQuestions": "brief reason",
     "Expectation": "brief reason",
     "Contextual": "brief reason",
@@ -377,6 +377,7 @@ Respond with EXACTLY this JSON structure:
     "Grammar": "brief reason",
     "Empathy": "brief reason"
   },
+  "kbCitation": "Document Name > Section Heading (null if KB was not relevant)",
   "iqs_score": 85,
   "summary": "1-2 sentence overall assessment",
   "agentName": "First name of the support agent extracted from the transcript, or empty string if not identifiable",
@@ -391,7 +392,7 @@ Notes on \`uncertain_parameters\`:
 - If there are no uncertain parameters, set \`uncertain_parameters\` to an empty array: \`[]\`.
 - Each question must be specific enough that a human QA reviewer who has call recordings and system access can answer it definitively.
 
-CRITICAL: Output ONLY the JSON. No other text before or after.`;
+CRITICAL: Output ONLY the JSON. No other text before or after. For kbCitation, use the exact document name and section heading from the KB context provided (e.g. "Wint Fixed Deposits > Lock-in Period"). Set to null if no KB lookup was needed for the Technical parameter.`;
 
 /**
  * Trim a transcript before sending to the LLM to reduce token cost.
@@ -522,6 +523,10 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     if ((uncertainParameters as any[]).length === 0) uncertainParameters = undefined;
   }
 
+  const kbCitation = typeof data.kbCitation === 'string' && data.kbCitation.toLowerCase() !== 'null'
+    ? data.kbCitation
+    : null;
+
   return {
     chatId,
     scores,
@@ -530,5 +535,6 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
     ...(uncertainParameters && { uncertainParameters }),
+    ...(kbCitation && { kbCitation }),
   };
 }

@@ -47,6 +47,7 @@ function ParamPanel({
   weights,
   scores,
   reasoning,
+  kbCitation,
 }: {
   title: string;
   groups: Record<string, { label: string; keys: string[] }>;
@@ -54,6 +55,7 @@ function ParamPanel({
   weights: Record<string, number>;
   scores: Record<string, string>;
   reasoning: Record<string, string>;
+  kbCitation?: string | null;
 }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   return (
@@ -72,6 +74,7 @@ function ParamPanel({
               const reason = reasoning[key];
               const weight = Math.round((weights[key] || 0) * 100);
               const isOpen = expanded === key;
+              const isTechParam = key === 'Technical' || key === 'TechnicalLegal';
               return (
                 <div key={key} className="px-4 py-2">
                   <button
@@ -86,7 +89,14 @@ function ParamPanel({
                     </div>
                   </button>
                   {isOpen && reason && (
-                    <p className="mt-1 text-[11px] text-slate-500 leading-relaxed pl-1">{reason}</p>
+                    <div className="mt-1 pl-1 space-y-1">
+                      <p className="text-[11px] text-slate-500 leading-relaxed">{reason}</p>
+                      {isTechParam && kbCitation && (
+                        <p className="text-[10px] text-indigo-600 bg-indigo-50 rounded px-2 py-1 font-medium">
+                          📖 Source: {kbCitation}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
               );
@@ -388,6 +398,7 @@ export default function UnifiedScoringClient() {
             weights={WEIGHTS}
             scores={result.chatScores || {}}
             reasoning={result.chatReasoning || {}}
+            kbCitation={result.chatKbCitation}
           />
 
           {/* Call params */}
@@ -398,6 +409,7 @@ export default function UnifiedScoringClient() {
             weights={CALL_WEIGHTS}
             scores={result.callScores || {}}
             reasoning={result.callReasoning || {}}
+            kbCitation={result.callKbCitation}
           />
         </div>
 
