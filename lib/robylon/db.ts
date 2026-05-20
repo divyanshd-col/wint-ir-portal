@@ -226,6 +226,7 @@ export async function isScored(chatId: string): Promise<boolean> {
 export interface IQSParameterResult {
   score: boolean | null;  // true=Yes, false=No, null=NA
   reasoning: string;
+  kbCitation?: string;
 }
 
 export async function insertIQSScore(data: {

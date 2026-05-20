@@ -10,5 +10,5 @@ export default async function CallLinkTestPage() {
   if (!session) redirect('/login');
   const user = session.user as any;
   if (!user?.isAdmin && !['quality', 'tl', 'admin'].includes(user?.role)) redirect('/');
-  return <CallLinkTestClient />;
+  return <CallLinkTestClient userRole={user?.role} />;
 }

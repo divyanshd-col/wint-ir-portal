@@ -1027,6 +1027,12 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   const [reviewing, setReviewing] = useState<Record<string, boolean>>({});
   const [transcripts, setTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
   const [transcriptLoading, setTranscriptLoading] = useState<Record<string, boolean>>({});
+  const [overrideItem, setOverrideItem] = useState<PendingReviewItem | null>(null);
+  const [overrideForm, setOverrideForm] = useState<{
+    agentName: string; scores: Record<string, string>; reasoning: Record<string, string>; note: string;
+  } | null>(null);
+  const [savingOverride, setSavingOverride] = useState(false);
+  const [overrideSaved, setOverrideSaved] = useState(false);
 
   useEffect(() => {
     setLoading(true);
@@ -1099,6 +1105,38 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
       ));
     } catch {}
     setReviewing(r => ({ ...r, [chatId]: false }));
+  };
+
+  const startOverride = (item: PendingReviewItem) => {
+    setOverrideItem(item);
+    setOverrideForm({ agentName: item.agentName || '', scores: { ...(item.scores || {}) }, reasoning: { ...(item.reasoning || {}) }, note: '' });
+    setOverrideSaved(false);
+  };
+
+  const saveOverride = async () => {
+    if (!overrideItem || !overrideForm) return;
+    setSavingOverride(true);
+    try {
+      await fetch('/api/quality/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId: overrideItem.chatId,
+          scores: overrideForm.scores,
+          reasoning: overrideForm.reasoning,
+          agentName: overrideForm.agentName,
+          note: overrideForm.note,
+        }),
+      });
+      setItems(prev => prev.map(i =>
+        i.chatId === overrideItem.chatId
+          ? { ...i, scores: overrideForm.scores, reasoning: overrideForm.reasoning, agentName: overrideForm.agentName }
+          : i
+      ));
+      setOverrideSaved(true);
+      setTimeout(() => { setOverrideItem(null); setOverrideForm(null); setOverrideSaved(false); }, 800);
+    } catch {}
+    setSavingOverride(false);
   };
 
   const canReview = ['quality', 'admin', 'tl'].includes(userRole || '');
@@ -1265,6 +1303,12 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
                     {item.qaStatus?.reviewNote && <p className="text-xs text-gray-500 mt-2">{item.qaStatus.reviewNote}</p>}
                   </div>
                 ) : null}
+                {canReview && (
+                  <button onClick={(e) => { e.stopPropagation(); startOverride(item); }}
+                    className="w-full mt-2 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold rounded-xl hover:bg-amber-100 transition">
+                    Override Score
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1348,6 +1392,82 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
         </div>
       ) : (
         <div className="space-y-3">{displayItems.map(renderItem)}</div>
+      )}
+
+      {/* Override Score Modal */}
+      {overrideItem && overrideForm && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setOverrideItem(null); setOverrideForm(null); }}>
+          <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-gray-900">Override Score</h2>
+                <p className="text-xs text-gray-400">Chat {overrideItem.chatId}</p>
+              </div>
+              <button onClick={() => { setOverrideItem(null); setOverrideForm(null); }} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-5">
+              {/* Agent Name */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Agent Name</label>
+                <input type="text" value={overrideForm.agentName} onChange={e => setOverrideForm(f => f ? { ...f, agentName: e.target.value } : f)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              </div>
+
+              {/* Parameter scores */}
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">Parameter Scores</p>
+                <div className="space-y-3">
+                  {PARAM_ORDER.map(p => (
+                    <div key={p} className="rounded-xl border border-gray-100 p-3 bg-gray-50/60">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-xs font-semibold text-gray-700 flex-1">{PARAM_NAMES[p]}</span>
+                        <span className="text-[10px] text-gray-400 shrink-0">{Math.round(WEIGHTS[p] * 100)}%</span>
+                        <div className="flex gap-1">
+                          {(['Yes', 'No', 'NA'] as const).map(v => (
+                            <button key={v} onClick={() => setOverrideForm(f => f ? { ...f, scores: { ...f.scores, [p]: v } } : f)}
+                              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                                overrideForm.scores[p] === v
+                                  ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-gray-400 text-white'
+                                  : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-400'
+                              }`}>{v}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <textarea
+                        value={overrideForm.reasoning[p] || ''}
+                        onChange={e => setOverrideForm(f => f ? { ...f, reasoning: { ...f.reasoning, [p]: e.target.value } } : f)}
+                        placeholder="Reasoning…"
+                        rows={2}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-y bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reviewer note */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Quality Reviewer Note</label>
+                <textarea value={overrideForm.note} onChange={e => setOverrideForm(f => f ? { ...f, note: e.target.value } : f)} rows={3}
+                  placeholder="Internal note for this override…"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 resize-y" />
+              </div>
+
+              <div className="flex gap-3 pt-1">
+                <button onClick={saveOverride} disabled={savingOverride || overrideSaved}
+                  className="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition text-sm">
+                  {overrideSaved ? 'Saved!' : savingOverride ? 'Saving…' : 'Save Override'}
+                </button>
+                <button onClick={() => { setOverrideItem(null); setOverrideForm(null); }}
+                  className="px-5 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl hover:bg-gray-50 transition text-sm">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -3394,7 +3514,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── UNIFIED SCORE TAB ── */}
           {tab === 'unified' && (
             <div className="overflow-y-auto flex-1">
-              <UnifiedScoringClient />
+              <UnifiedScoringClient userRole={userRole} />
             </div>
           )}
 

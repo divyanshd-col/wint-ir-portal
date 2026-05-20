@@ -13,6 +13,22 @@ function iqsTheme(iqs: number) {
   return           { text: '#b91c1c', bg: '#fee2e2', label: 'Needs Work' };
 }
 
+function fmt(seconds: number | null) {
+  if (!seconds) return null;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function fmtDate(iso: string | null) {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleString('en-IN', {
+      day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return iso; }
+}
+
 function ScoreBadge({ score }: { score?: string }) {
   if (score === 'Yes') return <span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700">Yes</span>;
   if (score === 'No')  return <span className="px-2 py-0.5 rounded text-xs font-bold bg-red-50 text-red-600">No</span>;
@@ -85,342 +101,569 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
   );
 }
 
-// ── Result Panel ──────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-interface ResultData {
-  call_id: string;
-  chat_id: string;
-  language: string;
+interface CallRecording {
+  id: string;
+  calledAt: string | null;
+  durationSeconds: number | null;
+  recordingUrl: string | null;
   segments: CallSegment[];
   interruptionCount: number;
   deadAirCount: number;
-  poorListeningCount: number;
-  callDisposition: string;
-  callSubDisposition: string;
-  chatDisposition: string;
-  iqs: number;
-  scores: Record<string, string>;
-  reasoning: Record<string, string>;
-  summary: string;
-  transcriptionMs: number;
+}
+
+interface UnifiedScoreResult {
+  ok: boolean;
+  chat_id: string;
+  hasCallRecording: boolean;
+  callRecordingCount: number;
+  language: string;
+  interruptionCount: number;
+  deadAirCount: number;
+  callIqs: number | null;
+  callScores: Record<string, string>;
+  callReasoning: Record<string, string>;
+  callSummary: string;
+  callSegments: CallSegment[];
+  callRecordings: CallRecording[];
+  callKbCitation: string | null;
+  chatIqs: number | null;
+  chatScores: Record<string, string>;
+  chatReasoning: Record<string, string>;
+  chatSummary: string;
+  mergedTimeline: any[];
   scoringMs: number;
   totalMs: number;
 }
 
-function ResultPanel({ data, onReset }: { data: ResultData; onReset: () => void }) {
+// ── Per-call card (transcript + parameters + override button) ─────────────────
+
+function CallCard({
+  recording,
+  index,
+  callScores,
+  callReasoning,
+  callKbCitation,
+  isQuality,
+  savedIqs,
+  onOverride,
+}: {
+  recording: CallRecording;
+  index: number;
+  callScores: Record<string, string>;
+  callReasoning: Record<string, string>;
+  callKbCitation: string | null;
+  isQuality: boolean;
+  savedIqs: number | null;
+  onOverride: () => void;
+}) {
+  const [transcriptOpen, setTranscriptOpen] = useState(true);
   const [expandedParam, setExpandedParam] = useState<string | null>(null);
-  const t = iqsTheme(data.iqs);
+
+  const dateStr = fmtDate(recording.calledAt);
+  const durStr  = fmt(recording.durationSeconds);
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* Card header */}
+      <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className="flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700 text-xs font-black">
+            {index + 1}
+          </span>
+          <div>
+            <p className="font-semibold text-slate-800 text-sm">Call {index + 1}</p>
+            {(dateStr || durStr) && (
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {dateStr}{dateStr && durStr ? ' · ' : ''}{durStr}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-3 text-xs text-slate-500">
+          {recording.interruptionCount > 0 && (
+            <span title="Interruptions">⚡ {recording.interruptionCount}</span>
+          )}
+          {recording.deadAirCount > 0 && (
+            <span title="Dead air events">⏸ {recording.deadAirCount}</span>
+          )}
+          {callKbCitation && (
+            <span className="max-w-[200px] truncate text-blue-500" title={callKbCitation}>
+              📖 {callKbCitation}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Transcript toggle */}
+      <button
+        onClick={() => setTranscriptOpen(o => !o)}
+        className="w-full px-5 py-2.5 flex items-center justify-between bg-white hover:bg-slate-50/60 transition border-b border-slate-100"
+      >
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+          Transcript
+          <span className="ml-1.5 text-slate-400 font-normal normal-case">
+            ({recording.segments.filter(s => s.type === 'speech').length} turns)
+          </span>
+        </span>
+        <span className="text-slate-400 text-xs">{transcriptOpen ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Transcript table */}
+      {transcriptOpen && (
+        <div className="overflow-y-auto max-h-[420px] border-b border-slate-100">
+          {recording.segments.length > 0 ? (
+            <>
+              {/* Start marker */}
+              <div className="px-4 py-1.5 bg-emerald-50 border-b border-emerald-100 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wide">
+                  Call starts
+                </span>
+              </div>
+              <table className="w-full">
+                <tbody>
+                  {recording.segments.map((seg, i) => (
+                    <SegmentRow key={i} seg={seg} />
+                  ))}
+                </tbody>
+              </table>
+              {/* End marker */}
+              <div className="px-4 py-1.5 bg-slate-100 border-t border-slate-200 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-slate-400" />
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                  Call ends
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="px-5 py-8 text-center text-slate-400 text-sm">
+              No transcript segments available.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* IQS Parameters */}
+      <div>
+        <div className="px-5 py-2.5 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between">
+          <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wide">
+            Call IQS Parameters
+            {savedIqs !== null && (
+              <span className="ml-2 text-emerald-600 font-bold normal-case">→ {savedIqs} (overridden)</span>
+            )}
+          </p>
+        </div>
+        <div className="divide-y divide-slate-50">
+          {Object.entries(CALL_PARAM_GROUPS).map(([groupKey, group]) => (
+            <div key={groupKey}>
+              <div className="px-5 py-1.5 bg-slate-50/50">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{group.label}</p>
+              </div>
+              {group.keys.map(key => {
+                const score  = callScores[key];
+                const reason = callReasoning[key];
+                const weight = Math.round((CALL_WEIGHTS[key] || 0) * 100);
+                const isOpen = expandedParam === key;
+                return (
+                  <div key={key} className="px-5 py-2.5">
+                    <button
+                      className="w-full flex items-center justify-between gap-2 text-left"
+                      onClick={() => setExpandedParam(isOpen ? null : key)}
+                    >
+                      <span className="text-sm text-slate-700 font-medium flex-1">{CALL_PARAM_NAMES[key]}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-slate-400">{weight}%</span>
+                        <ScoreBadge score={score} />
+                        {reason && (
+                          <span className="text-slate-300 text-xs">{isOpen ? '▲' : '▼'}</span>
+                        )}
+                      </div>
+                    </button>
+                    {isOpen && reason && (
+                      <p className="mt-1.5 text-xs text-slate-500 leading-relaxed pl-1">{reason}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Bottom actions */}
+      {isQuality && (
+        <div className="px-5 py-4 border-t border-slate-100 bg-white">
+          <button
+            onClick={onOverride}
+            className="w-full py-2.5 rounded-xl border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 font-semibold text-sm transition"
+          >
+            Override Score
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Result Panel ──────────────────────────────────────────────────────────────
+
+function ResultPanel({
+  data,
+  onReset,
+  userRole,
+}: {
+  data: UnifiedScoreResult;
+  onReset: () => void;
+  userRole?: string;
+}) {
+  const isQuality = ['quality', 'admin', 'tl'].includes(userRole || '');
+
+  // ── Override modal state ────────────────────────────────────────────────────
+  const [overrideOpen, setOverrideOpen]         = useState(false);
+  const [overrideScores, setOverrideScores]     = useState<Record<string, string>>({});
+  const [overrideReasoning, setOverrideReasoning] = useState<Record<string, string>>({});
+  const [overrideNote, setOverrideNote]         = useState('');
+  const [saving, setSaving]                     = useState(false);
+  const [saveMsg, setSaveMsg]                   = useState('');
+  const [savedIqs, setSavedIqs]                 = useState<number | null>(null);
+
+  function openOverride() {
+    setOverrideScores({ ...data.callScores });
+    setOverrideReasoning({ ...data.callReasoning });
+    setOverrideNote('');
+    setSaveMsg('');
+    setOverrideOpen(true);
+  }
+
+  async function saveOverride() {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const res = await fetch('/api/call-quality/override-scores', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: data.chat_id,
+          scores: overrideScores,
+          reasoning: overrideReasoning,
+          note: overrideNote,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Save failed');
+      setSavedIqs(d.callIqsScore);
+      setSaveMsg('Saved!');
+      setTimeout(() => { setOverrideOpen(false); setSaveMsg(''); }, 1000);
+    } catch (e: any) {
+      setSaveMsg(e.message || 'Error saving');
+    }
+    setSaving(false);
+  }
+
+  // No call recording case
+  if (!data.hasCallRecording) {
+    return (
+      <div className="space-y-4">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-6 py-5 flex items-center gap-3">
+          <span className="text-amber-500 text-2xl">📵</span>
+          <div>
+            <p className="font-semibold text-amber-800">No call recordings found for this chat</p>
+            <p className="text-sm text-amber-600 mt-0.5">
+              Chat ID <span className="font-mono font-bold">{data.chat_id}</span> has no linked call recordings.
+            </p>
+          </div>
+        </div>
+        <div className="flex justify-center pt-2">
+          <button
+            onClick={onReset}
+            className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors"
+          >
+            🔄 Score another
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const iqs = savedIqs ?? data.callIqs ?? 0;
+  const t   = iqsTheme(iqs);
+
+  // Use per-call recordings if available, else fall back to merged
+  const recordings: CallRecording[] = data.callRecordings?.length
+    ? data.callRecordings
+    : [{ id: 'merged', calledAt: null, durationSeconds: null, recordingUrl: null,
+         segments: data.callSegments, interruptionCount: data.interruptionCount,
+         deadAirCount: data.deadAirCount }];
 
   return (
     <div className="space-y-4">
-      {/* Summary bar */}
+      {/* Summary card */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
         <div className="flex flex-wrap items-center gap-4">
           <div
             className="flex items-center justify-center rounded-full w-16 h-16 text-2xl font-black tabular-nums shrink-0"
             style={{ background: t.bg, color: t.text }}
           >
-            {data.iqs}
+            {savedIqs ?? (data.callIqs != null ? data.callIqs : '—')}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-slate-800">{t.label} — Call IQS</p>
-            <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{data.summary}</p>
+            <p className="font-semibold text-slate-800">
+              {(savedIqs ?? data.callIqs) != null ? `${t.label} — Call IQS` : 'Call IQS unavailable'}
+              {savedIqs !== null && <span className="ml-2 text-xs font-normal text-emerald-500">(overridden)</span>}
+            </p>
+            {data.callSummary && (
+              <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{data.callSummary}</p>
+            )}
           </div>
           <div className="flex flex-wrap gap-3 text-sm text-slate-600 shrink-0">
-            <span className="flex items-center gap-1">🌐 {data.language}</span>
-            <span className="flex items-center gap-1">⚡ {data.interruptionCount}</span>
-            <span className="flex items-center gap-1">⏸ {data.deadAirCount}</span>
-            {data.poorListeningCount > 0 && (
-              <span className="flex items-center gap-1">👂 {data.poorListeningCount}</span>
+            {data.language && <span className="flex items-center gap-1">🌐 {data.language}</span>}
+            <span title="Interruptions">⚡ {data.interruptionCount}</span>
+            <span title="Dead air events">⏸ {data.deadAirCount}</span>
+            {data.callRecordingCount > 1 && (
+              <span className="text-blue-600" title="Number of call recordings">📞 {data.callRecordingCount} calls</span>
             )}
           </div>
         </div>
-
-        {/* IDs + disposition row */}
-        <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-4 text-xs text-slate-500">
-          <span><span className="font-medium text-slate-600">Call ID:</span> {data.call_id}</span>
+        <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-500">
           <span><span className="font-medium text-slate-600">Chat ID:</span> {data.chat_id}</span>
-          {data.callDisposition && (
-            <span><span className="font-medium text-slate-600">Call:</span> {data.callDisposition}{data.callSubDisposition ? ` › ${data.callSubDisposition}` : ''}</span>
-          )}
-          {data.chatDisposition && (
-            <span><span className="font-medium text-slate-600">Chat:</span> {data.chatDisposition}</span>
-          )}
           <span className="ml-auto text-slate-400">
-            Transcribed {(data.transcriptionMs / 1000).toFixed(1)}s · Scored {(data.scoringMs / 1000).toFixed(1)}s · Total {(data.totalMs / 1000).toFixed(1)}s
+            Scored {(data.scoringMs / 1000).toFixed(1)}s · Total {(data.totalMs / 1000).toFixed(1)}s
           </span>
         </div>
       </div>
 
-      {/* Transcript + Parameters */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Transcript */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Call Transcript</p>
-          </div>
-          <div className="overflow-y-auto max-h-[520px]">
-            <table className="w-full">
-              <tbody>
-                {data.segments.map((seg, i) => <SegmentRow key={i} seg={seg} />)}
-                {data.segments.length === 0 && (
-                  <tr><td colSpan={2} className="px-5 py-8 text-center text-slate-400 text-sm">No transcript segments.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {/* Per-call cards */}
+      {recordings.map((rec, i) => (
+        <CallCard
+          key={rec.id}
+          recording={rec}
+          index={i}
+          callScores={data.callScores}
+          callReasoning={data.callReasoning}
+          callKbCitation={data.callKbCitation}
+          isQuality={isQuality}
+          savedIqs={savedIqs}
+          onOverride={openOverride}
+        />
+      ))}
 
-        {/* IQS Parameters */}
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-3 border-b border-slate-100 bg-slate-50">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Call IQS Parameters</p>
-          </div>
-          <div className="overflow-y-auto max-h-[520px] divide-y divide-slate-50">
-            {Object.entries(CALL_PARAM_GROUPS).map(([groupKey, group]) => (
-              <div key={groupKey}>
-                <div className="px-5 py-2 bg-slate-50/70">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{group.label}</p>
-                </div>
-                {group.keys.map(key => {
-                  const score  = data.scores[key];
-                  const reason = data.reasoning[key];
-                  const weight = Math.round((CALL_WEIGHTS[key] || 0) * 100);
-                  const isOpen = expandedParam === key;
-                  return (
-                    <div key={key} className="px-5 py-2.5">
-                      <button
-                        className="w-full flex items-center justify-between gap-2 text-left"
-                        onClick={() => setExpandedParam(isOpen ? null : key)}
-                      >
-                        <span className="text-sm text-slate-700 font-medium flex-1">{CALL_PARAM_NAMES[key]}</span>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[10px] text-slate-400">{weight}%</span>
-                          <ScoreBadge score={score} />
-                          {reason && <span className="text-slate-300 text-xs">{isOpen ? '▲' : '▼'}</span>}
-                        </div>
-                      </button>
-                      {isOpen && reason && (
-                        <p className="mt-1.5 text-xs text-slate-500 leading-relaxed pl-1">{reason}</p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
+      {/* Reset */}
       <div className="flex justify-center pt-2">
         <button
           onClick={onReset}
           className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors"
         >
-          🔄 Test another call
+          🔄 Score another
         </button>
       </div>
-    </div>
-  );
-}
 
-// ── Progress step ─────────────────────────────────────────────────────────────
-
-function ProgressStep({ n, label, sub, done, active }: {
-  n: number; label: string; sub: string; done: boolean; active: boolean;
-}) {
-  return (
-    <div className={`flex items-start gap-3 p-4 rounded-xl transition-all ${
-      active ? 'bg-amber-50 border border-amber-200'
-      : done  ? 'bg-emerald-50 border border-emerald-100'
-      :         'bg-slate-50 border border-slate-100 opacity-50'
-    }`}>
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
-        done ? 'bg-emerald-500 text-white'
-        : active ? 'bg-amber-500 text-white animate-pulse'
-        : 'bg-slate-200 text-slate-400'
-      }`}>
-        {done ? '✓' : n}
-      </div>
-      <div>
-        <p className="font-semibold text-sm text-slate-800">{label}</p>
-        <p className="text-xs text-slate-500 mt-0.5">{sub}</p>
-      </div>
+      {/* ── Override Score Modal ── */}
+      {overrideOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setOverrideOpen(false)}
+        >
+          <div
+            className="bg-white w-full sm:rounded-2xl sm:max-w-2xl max-h-[94vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900">Override Call Score</h2>
+                <p className="text-xs text-slate-400">Chat {data.chat_id}</p>
+              </div>
+              <button
+                onClick={() => setOverrideOpen(false)}
+                className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 transition"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M2 2l12 12M14 2L2 14"/>
+                </svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Parameter Scores</p>
+              <div className="space-y-3">
+                {Object.entries(CALL_PARAM_GROUPS).map(([gk, group]) => (
+                  <div key={gk}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">{group.label}</p>
+                    {group.keys.map(key => (
+                      <div key={key} className="rounded-xl border border-slate-100 p-3 bg-slate-50/60 mb-2">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-xs font-semibold text-slate-700 flex-1">{CALL_PARAM_NAMES[key]}</span>
+                          <div className="flex gap-1">
+                            {(['Yes', 'No', 'NA'] as const).map(v => (
+                              <button
+                                key={v}
+                                onClick={() => setOverrideScores(s => ({ ...s, [key]: v }))}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                                  overrideScores[key] === v
+                                    ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'
+                                    : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-400'
+                                }`}
+                              >
+                                {v}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <textarea
+                          value={overrideReasoning[key] || ''}
+                          onChange={e => setOverrideReasoning(r => ({ ...r, [key]: e.target.value }))}
+                          placeholder="Reasoning…"
+                          rows={2}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-300/40 resize-y bg-white"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Note (internal)
+                </label>
+                <textarea
+                  value={overrideNote}
+                  onChange={e => setOverrideNote(e.target.value)}
+                  placeholder="Reason for override…"
+                  rows={2}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300/40 resize-y"
+                />
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={saveOverride}
+                  disabled={saving}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition"
+                >
+                  {saving ? 'Saving…' : 'Save Override'}
+                </button>
+                <button
+                  onClick={() => setOverrideOpen(false)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                {saveMsg && (
+                  <span className={`text-sm font-medium ${saveMsg === 'Saved!' ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {saveMsg}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-type Stage = 'idle' | 'running' | 'done' | 'error';
+interface Props {
+  userRole?: string;
+}
 
-export default function CallLinkTestClient() {
-  const [callId, setCallId]           = useState('');
-  const [chatId, setChatId]           = useState('');
-  const [recordingUrl, setRecordingUrl] = useState('');
-  const [stage, setStage]             = useState<Stage>('idle');
-  const [step, setStep]               = useState(0);
-  const [error, setError]             = useState('');
-  const [result, setResult]           = useState<ResultData | null>(null);
+export default function CallLinkTestClient({ userRole }: Props) {
+  const [chatId, setChatId]   = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+  const [result, setResult]   = useState<UnifiedScoreResult | null>(null);
 
-  async function run() {
-    if (!callId.trim() || !chatId.trim() || !recordingUrl.trim()) return;
-    setStage('running');
-    setStep(1);
+  async function handleSubmit() {
+    if (!chatId.trim()) return;
+    setLoading(true);
     setError('');
     setResult(null);
 
-    // Advance progress visually while the single request runs
-    const t1 = setTimeout(() => setStep(2), 15_000);
-    const t2 = setTimeout(() => setStep(3), 35_000);
-
     try {
-      const res = await fetch('/api/call-quality/link-test', {
+      const res = await fetch('/api/call-quality/unified-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ call_id: callId.trim(), chat_id: chatId.trim(), recording_url: recordingUrl.trim() }),
+        body: JSON.stringify({ chat_id: chatId.trim() }),
       });
-      clearTimeout(t1);
-      clearTimeout(t2);
 
       const data = await res.json();
       if (!res.ok || !data.ok) {
         throw new Error(data.error || `Server error ${res.status}`);
       }
 
-      setResult(data as ResultData);
-      setStage('done');
+      setResult(data as UnifiedScoreResult);
     } catch (e: any) {
-      clearTimeout(t1);
-      clearTimeout(t2);
       setError(e.message || 'Unknown error');
-      setStage('error');
+    } finally {
+      setLoading(false);
     }
   }
 
   function reset() {
-    setStage('idle');
-    setStep(0);
     setResult(null);
-    setCallId('');
+    setError('');
     setChatId('');
-    setRecordingUrl('');
   }
 
-  if (stage === 'done' && result) {
+  if (result) {
     return (
-      <div className="max-w-6xl mx-auto px-4 py-6">
-        <ResultPanel data={result} onReset={reset} />
+      <div className="max-w-3xl mx-auto px-4 py-6">
+        <ResultPanel data={result} onReset={reset} userRole={userRole} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-10">
-      {/* Header */}
+    <div className="max-w-md mx-auto px-4 py-10">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-100 text-3xl mb-4">🔗</div>
-        <h1 className="text-2xl font-bold text-slate-800">Call Link Test</h1>
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-amber-100 text-3xl mb-4">📞</div>
+        <h1 className="text-2xl font-bold text-slate-800">Call Transcript Test</h1>
         <p className="text-slate-500 mt-1.5 text-sm">
-          Link a call recording to a WhatsApp chat and run the full scoring pipeline.<br />
-          Results are saved to the database just like production.
+          Enter a Chat ID to fetch its call recording(s), run transcription and IQS scoring.
         </p>
       </div>
 
-      {/* Input form */}
-      {(stage === 'idle' || stage === 'error') && (
-        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Call ID <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition font-mono"
-              placeholder="e.g. CC-12345"
-              value={callId}
-              onChange={e => setCallId(e.target.value)}
-            />
-            <p className="text-xs text-slate-400 mt-1">The Exotel/Robylon call ticket ID stored in call_recordings.</p>
-          </div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-5">
+        <div>
+          <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+            Chat ID <span className="text-red-400">*</span>
+          </label>
+          <input
+            type="text"
+            className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition font-mono"
+            placeholder="e.g. 40502"
+            value={chatId}
+            onChange={e => setChatId(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && !loading && handleSubmit()}
+            disabled={loading}
+          />
+          <p className="text-xs text-slate-400 mt-1">The WhatsApp conversation ID from the conversations table.</p>
+        </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Chat ID <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition font-mono"
-              placeholder="e.g. 40502"
-              value={chatId}
-              onChange={e => setChatId(e.target.value)}
-            />
-            <p className="text-xs text-slate-400 mt-1">The WhatsApp conversation ID from the conversations table.</p>
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
+            ❌ {error}
           </div>
+        )}
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              Recording URL <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="url"
-              className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 transition"
-              placeholder="https://…/recording.mp3"
-              value={recordingUrl}
-              onChange={e => setRecordingUrl(e.target.value)}
-            />
-            <p className="text-xs text-slate-400 mt-1">Direct URL to the call audio file (S3, Exotel, etc.).</p>
-          </div>
-
-          {stage === 'error' && (
-            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-              ❌ {error}
-            </div>
+        <button
+          onClick={handleSubmit}
+          disabled={!chatId.trim() || loading}
+          className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors flex items-center justify-center gap-2"
+        >
+          {loading ? (
+            <>
+              <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              Fetching transcripts and scoring call...
+            </>
+          ) : (
+            'Fetch Transcripts'
           )}
-
-          <button
-            onClick={run}
-            disabled={!callId.trim() || !chatId.trim() || !recordingUrl.trim()}
-            className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
-          >
-            🚀 Run Full Pipeline
-          </button>
-
-          <p className="text-xs text-slate-400 text-center">
-            This runs transcription + energy/tone + IQS scoring and saves results to the DB.
-          </p>
-        </div>
-      )}
-
-      {/* Progress */}
-      {stage === 'running' && (
-        <div className="space-y-3">
-          <ProgressStep
-            n={1}
-            label="Transcribing audio"
-            sub="Fetching recording and running Gemini speech-to-text with speaker detection"
-            done={step > 1}
-            active={step === 1}
-          />
-          <ProgressStep
-            n={2}
-            label="Scoring energy & tone"
-            sub="Running audio-based energy and enthusiasm analysis"
-            done={step > 2}
-            active={step === 2}
-          />
-          <ProgressStep
-            n={3}
-            label="Scoring call IQS"
-            sub="Evaluating all parameters and saving results to the database"
-            done={false}
-            active={step === 3}
-          />
-          <p className="text-center text-xs text-slate-400 mt-4">
-            This usually takes 30–90 seconds depending on call length.
-          </p>
-        </div>
-      )}
+        </button>
+      </div>
     </div>
   );
 }

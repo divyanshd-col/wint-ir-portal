@@ -164,14 +164,17 @@ SPEAKER IDENTIFICATION
 ══════════════════════════════════════════
 There are exactly two speakers: IR EXECUTIVE and INVESTOR.
 
-IR EXECUTIVE: Says their own name + "Wint Wealth" in their introduction. Explains products and resolves queries.
-INVESTOR: Often speaks first — answers with "Hello?", "Haan?", or silence. Asks questions, raises problems.
+IR EXECUTIVE: The Wint Wealth employee on the call. Introduces themselves by name AND says "Wint Wealth" (e.g. "This is Priya calling from Wint Wealth"). Professional tone. Explains products and answers queries.
+INVESTOR: The customer. May speak first OR second. May ask "Hello, is this Wint Wealth?" — this is still the INVESTOR asking a question, NOT the IR introducing themselves.
 
-DECISION PROCEDURE:
-1. Listen to the whole call first.
-2. Whoever says their name + "Wint Wealth" = IR EXECUTIVE for the entire call.
-3. The other voice = INVESTOR for the entire call.
-4. A short "Hello?" or "Haan?" with no introduction at the start = INVESTOR.
+DECISION PROCEDURE (follow in order):
+1. Listen to the ENTIRE call before labelling any speaker.
+2. Use VOICE CHARACTERISTICS as the PRIMARY identifier: distinguish the two voices by pitch, gender, accent, and speaking style. The same voice must get the same label throughout.
+3. The speaker who says their OWN NAME + "Wint Wealth" in a self-introduction = IR EXECUTIVE (e.g. "This is Rahul from Wint Wealth calling"). Assign that voice as IR EXECUTIVE for the whole call.
+4. The other voice = INVESTOR for the entire call.
+5. CRITICAL EDGE CASE: If the INVESTOR speaks first and says "Hello, is this Wint Wealth?" or similar — that is the INVESTOR asking, not the IR introducing. Do NOT label this voice IR EXECUTIVE.
+6. Do NOT rely on who speaks first. Either speaker may initiate. Use the self-introduction ("I am [Name] from Wint Wealth") as the definitive marker.
+7. Once you have identified both voices, apply the correct label to EVERY segment — never mix labels for the same voice.
 
 Pay close attention to names — IR executives introduce themselves by name (e.g. "This is Priya from Wint Wealth").
 Transcribe that name EXACTLY as heard. Similarly transcribe bond names, fund names, and product names exactly as spoken.
@@ -431,6 +434,25 @@ Speech segments are numbered [1], [2], [3]... for reference.
 
 ---
 
+## PARAMETER ISOLATION — CRITICAL
+Each parameter is fully independent. Its reasoning must stay within its own criteria only.
+
+RULES:
+1. The reasoning for parameter X must ONLY discuss the criteria defined for parameter X — nothing else.
+2. NEVER mention another parameter's name inside a reasoning field.
+3. NEVER evaluate CallOpening, CallClosing, Grammar, Fillers, ActiveListening, etc. inside the TechnicalLegal reasoning — each has its own separate scoring field.
+4. If you find yourself writing about one parameter while filling in another parameter's reasoning, stop and remove it.
+
+EXAMPLES OF WHAT NOT TO DO:
+- TechnicalLegal reasoning: "The call closing was appropriate and the agent signed off well..." → WRONG. Call Closing belongs in CallClosing.reasoning only.
+- CallOpening reasoning: "The agent's grammar was poor throughout..." → WRONG. Grammar belongs in Grammar.reasoning only.
+- Expectation reasoning: "All investor questions were also addressed clearly..." → WRONG. That belongs in AllQuestions.reasoning.
+- ActiveListening reasoning: "The IR gave incorrect product information about the bond..." → WRONG. Factual errors belong in TechnicalLegal.reasoning only.
+
+Score each parameter as if you are filling in a completely separate evaluation form with no visibility into the others.
+
+---
+
 ## GROUP 1: PROCESS (50%)
 
 ### 1. Call Opening (5%) — key: CallOpening
@@ -443,9 +465,11 @@ Speech segments are numbered [1], [2], [3]... for reference.
 - No: Abrupt hang-up with no closing greeting, or call was cut off.
 - NA: Call was disconnected before closing was possible.
 
-### 3. Technically / Legally Correct (15%) — key: TechnicalLegal
+### 3. Technically / Legally Correct (15%) — key: TechnicalLegal ⚠️ HIGHEST PRIORITY PARAMETER
+Technical and legal correctness is the utmost crucial point for IQS evaluation. There must not be even a hint of incorrect information in any customer conversation. Every factual claim the IR makes about products, rates, timelines, or regulations must be verifiably accurate — no exceptions.
 - Yes: All product information stated by the IR EXECUTIVE matches the WINT KNOWLEDGE BASE REFERENCE below — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms, registered entity names. In your reasoning, name the specific KB document and section that confirms each fact.
 - No: A statement contradicts the KB, or the KB has no relevant entry to verify a significant product claim the IR made. State exactly what was claimed and what the KB says (or that it is absent from the KB).
+  Also No — SEBI / Regulatory violation (automatic fail, no KB needed): IR gave a personalised investment recommendation (e.g. "You should invest in this bond", "I suggest putting your money here"), implied guaranteed returns, or provided investment advisory services that would constitute unregistered advisory activity under SEBI regulations.
 - NA: No substantive product information was exchanged on this call.
 
 ### 4. All Questions Addressed (10%) — key: AllQuestions
@@ -523,7 +547,7 @@ Respond with EXACTLY this JSON — no other text:
   "reasoning": {
     "CallOpening":     "brief reason",
     "CallClosing":     "brief reason",
-    "TechnicalLegal":  "brief reason",
+    "TechnicalLegal":  "brief reason — cite the KB document and section used",
     "AllQuestions":    "brief reason",
     "Expectation":     "brief reason",
     "Process":         "brief reason",
@@ -533,6 +557,7 @@ Respond with EXACTLY this JSON — no other text:
     "ActiveListening": "brief reason",
     "Simplifying":     "brief reason"
   },
+  "kbCitation": "Document Name > Section Heading (null if KB was not relevant)",
   "poor_listening_segments": [
     {"segment_index": 7, "phrase": "Could you please repeat that?"}
   ],
@@ -540,7 +565,7 @@ Respond with EXACTLY this JSON — no other text:
   "summary": "1-2 sentence overall assessment"
 }
 \`\`\`
-CRITICAL: Output ONLY the JSON.`;
+CRITICAL: Output ONLY the JSON. For kbCitation, use the exact document name and section heading from the KB context provided (e.g. "Wint Fixed Deposits > Lock-in Period"). Set to null if no KB lookup was needed.`;
 
 // ── Build call scoring prompt ─────────────────────────────────────────────────
 export function buildCallScoringPrompt(
@@ -577,13 +602,29 @@ Score all 11 parameters. Output ONLY the JSON.`;
 }
 
 // ── Deterministic speaker-label correction ────────────────────────────────────
-// The LLM sometimes swaps IR EXECUTIVE and INVESTOR. We detect this by checking
-// whether any INVESTOR segment contains "Wint" (only the IR says "Wint Wealth").
-// If detected, swap every IR EXECUTIVE ↔ INVESTOR label in the entire array.
+// Detects swapped IR EXECUTIVE / INVESTOR labels via two heuristics:
+// 1. INVESTOR segment says "Wint [Wealth]" in a self-introduction context
+//    — only the IR introduces themselves as calling from Wint.
+// 2. IR EXECUTIVE segment phrases "is this Wint Wealth?" or "are you from Wint"
+//    — investor phrasing, not an IR self-introduction.
 function fixSpeakerLabels(segments: CallSegment[]): CallSegment[] {
-  const labelsReversed = segments.some(
-    s => s.type === 'speech' && s.speaker === 'INVESTOR' && /wint/i.test(s.text || ''),
+  const speechSegs = segments.filter(s => s.type === 'speech');
+
+  // Heuristic 1: INVESTOR says "from Wint" / introduces as Wint Wealth employee
+  const investorClaimsWint = speechSegs.some(
+    s => s.speaker === 'INVESTOR' &&
+         /\bwint\b/i.test(s.text || '') &&
+         // Confirm it looks like a self-introduction, not a question about Wint
+         !/is\s+this\s+wint|are\s+you\s+(from\s+)?wint|this\s+is\s+wint\?/i.test(s.text || ''),
   );
+
+  // Heuristic 2: IR EXECUTIVE asks "is this Wint Wealth?" — investor question pattern
+  const irAsksIfWint = speechSegs.some(
+    s => s.speaker === 'IR EXECUTIVE' &&
+         /is\s+this\s+(wint|wint\s+wealth)|are\s+you\s+(from\s+)?wint/i.test(s.text || ''),
+  );
+
+  const labelsReversed = investorClaimsWint || irAsksIfWint;
   if (!labelsReversed) return segments;
 
   console.warn('[fixSpeakerLabels] Detected reversed labels — swapping IR EXECUTIVE ↔ INVESTOR');
@@ -696,13 +737,17 @@ export function parseCallScoringResponse(raw: string): {
   poorListeningSegments: PoorListeningSegment[];
   iqs: number;
   summary: string;
+  kbCitation: string | null;
 } {
   const data = robustJsonParse(raw);
   const scores: Record<string, CallParamScore> = data?.scores || {};
   const reasoning: Record<string, string> = data?.reasoning || {};
   const poorListeningSegments: PoorListeningSegment[] = data?.poor_listening_segments || [];
   const iqs = calculateCallIQS(scores);
-  return { scores, reasoning, poorListeningSegments, iqs, summary: data?.summary || '' };
+  const kbCitation = typeof data?.kbCitation === 'string' && data.kbCitation.toLowerCase() !== 'null'
+    ? data.kbCitation
+    : null;
+  return { scores, reasoning, poorListeningSegments, iqs, summary: data?.summary || '', kbCitation };
 }
 
 // ── Robust JSON parser (5-step fallback) ──────────────────────────────────────
