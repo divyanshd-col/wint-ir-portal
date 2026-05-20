@@ -1027,12 +1027,17 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   const [reviewing, setReviewing] = useState<Record<string, boolean>>({});
   const [transcripts, setTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
   const [transcriptLoading, setTranscriptLoading] = useState<Record<string, boolean>>({});
-  const [overrideItem, setOverrideItem] = useState<PendingReviewItem | null>(null);
-  const [overrideForm, setOverrideForm] = useState<{
-    agentName: string; scores: Record<string, string>; reasoning: Record<string, string>; note: string;
-  } | null>(null);
-  const [savingOverride, setSavingOverride] = useState(false);
-  const [overrideSaved, setOverrideSaved] = useState(false);
+  // Inline edit state — keyed by chatId
+  const [inlineEdit, setInlineEdit] = useState<Record<string, { scores: Record<string, string>; reasoning: Record<string, string>; note: string }>>({});
+  const [overrideSaving, setOverrideSaving] = useState<Record<string, boolean>>({});
+  const [overrideSaved, setOverrideSaved]   = useState<Record<string, boolean>>({});
+  // Prior chat history
+  const [histories, setHistories]           = useState<Record<string, any[] | null>>({});
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
+  const [showHistory, setShowHistory]       = useState<Record<string, boolean>>({});
+  const [priorTranscripts, setPriorTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
+  const [priorTranscriptLoading, setPriorTranscriptLoading] = useState<Record<string, boolean>>({});
+  const [expandedPriorChat, setExpandedPriorChat] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -1066,11 +1071,64 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
     setTranscriptLoading(t => ({ ...t, [chatId]: false }));
   };
 
+  const loadHistory = async (chatId: string) => {
+    if (histories[chatId] !== undefined) return;
+    setHistoryLoading(h => ({ ...h, [chatId]: true }));
+    try {
+      const d = await fetch(`/api/quality/history?chatId=${encodeURIComponent(chatId)}`).then(r => r.json());
+      setHistories(h => ({ ...h, [chatId]: d.history || [] }));
+    } catch { setHistories(h => ({ ...h, [chatId]: [] })); }
+    setHistoryLoading(h => ({ ...h, [chatId]: false }));
+  };
+
+  const loadPriorTranscript = async (priorChatId: string) => {
+    if (priorTranscripts[priorChatId] !== undefined) return;
+    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: true }));
+    try {
+      const d = await fetch(`/api/quality/transcript?chatId=${encodeURIComponent(priorChatId)}`).then(r => r.json());
+      setPriorTranscripts(t => ({ ...t, [priorChatId]: d.found ? { timedMessages: d.timedMessages, rawTranscript: d.rawTranscript } : {} }));
+    } catch { setPriorTranscripts(t => ({ ...t, [priorChatId]: {} })); }
+    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: false }));
+  };
+
+  const togglePriorChat = (parentChatId: string, priorChatId: string) => {
+    setExpandedPriorChat(s => {
+      const next = s[parentChatId] === priorChatId ? null : priorChatId;
+      if (next) loadPriorTranscript(next);
+      return { ...s, [parentChatId]: next };
+    });
+  };
+
+  const saveOverride = async (item: PendingReviewItem) => {
+    const edit = inlineEdit[item.chatId];
+    if (!edit) return;
+    setOverrideSaving(s => ({ ...s, [item.chatId]: true }));
+    try {
+      const res = await fetch('/api/quality/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId: item.chatId, scores: edit.scores, reasoning: edit.reasoning, note: edit.note }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      setItems(prev => prev.map(i => i.chatId === item.chatId ? { ...i, scores: edit.scores, reasoning: edit.reasoning } : i));
+      setOverrideSaved(s => ({ ...s, [item.chatId]: true }));
+      setTimeout(() => setOverrideSaved(s => ({ ...s, [item.chatId]: false })), 3000);
+    } catch (e: any) { alert(e?.message || 'Failed to save override'); }
+    setOverrideSaving(s => ({ ...s, [item.chatId]: false }));
+  };
+
   const expand = (chatId: string, flagId?: string) => {
     if (expandedId === chatId) { setExpandedId(null); return; }
     setExpandedId(chatId);
     loadTranscript(chatId);
+    loadHistory(chatId);
     if (flagId) loadThread(flagId);
+    // Initialise inline edit from current item scores
+    setItems(prev => {
+      const it = prev.find(i => i.chatId === chatId);
+      if (it) setInlineEdit(s => s[chatId] ? s : { ...s, [chatId]: { scores: { ...(it.scores || {}) }, reasoning: { ...(it.reasoning || {}) }, note: '' } });
+      return prev;
+    });
   };
 
   const sendReply = async (flagId: string) => {
@@ -1170,6 +1228,8 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 
     const failedParams = PARAM_ORDER.filter(p => item.scores?.[p] === 'No');
     const borderColor  = hasFlag ? 'border-blue-200' : hasUncertain && !isReviewed ? 'border-amber-200' : isReviewed ? 'border-gray-100' : 'border-orange-200';
+    const canEdit      = userRole === 'quality' || userRole === 'admin';
+    const edit         = inlineEdit[item.chatId];
 
     return (
       <div key={item.chatId} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${borderColor}`}>
@@ -1207,29 +1267,47 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
                 <div className="p-4 space-y-1">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Parameter Scores</p>
                   {PARAM_ORDER.map(p => {
-                    const val = item.scores![p] as string | undefined;
-                    const reason = item.reasoning?.[p];
+                    const val    = canEdit ? (edit?.scores[p] ?? item.scores?.[p]) : (item.scores?.[p] as string | undefined);
                     const isFail = val === 'No';
                     const isUnc  = !!(item.uncertainParameters?.some(u => u.parameter === p));
                     return (
                       <div key={p} className={`rounded-xl px-3 py-2 ${isFail ? 'bg-red-50 border border-red-100' : isUnc ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
                         <div className="flex items-center gap-2">
-                          <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                            val === 'Yes' ? 'bg-emerald-100 text-emerald-700'
-                            : val === 'No' ? 'bg-red-100 text-red-700'
-                            : isUnc ? 'bg-amber-100 text-amber-700'
-                            : 'bg-gray-200 text-gray-500'
-                          }`}>{isUnc && val === 'NA' ? '?' : (val || 'NA')}</span>
+                          {canEdit ? (
+                            <div className="flex gap-1 shrink-0">
+                              {(['Yes', 'No', 'NA'] as const).map(v => (
+                                <button key={v}
+                                  onClick={() => setInlineEdit(s => ({ ...s, [item.chatId]: { ...s[item.chatId], scores: { ...s[item.chatId].scores, [p]: v } } }))}
+                                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${
+                                    val === v
+                                      ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-gray-400 text-white'
+                                      : 'bg-white border border-gray-200 text-gray-400 hover:border-gray-400'
+                                  }`}>{v}</button>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                              val === 'Yes' ? 'bg-emerald-100 text-emerald-700'
+                              : val === 'No' ? 'bg-red-100 text-red-700'
+                              : isUnc ? 'bg-amber-100 text-amber-700'
+                              : 'bg-gray-200 text-gray-500'
+                            }`}>{isUnc && val === 'NA' ? '?' : (val || 'NA')}</span>
+                          )}
                           <span className="text-xs font-medium text-gray-700 flex-1 leading-tight">{PARAM_NAMES[p]}</span>
                           <span className="text-[10px] text-gray-400 shrink-0">{Math.round(WEIGHTS[p] * 100)}%</span>
                         </div>
-                        {isFail && reason && (
-                          <p className="text-[11px] text-red-700/80 mt-1.5 ml-7 leading-relaxed">{reason}</p>
-                        )}
-                        {isUnc && (
-                          <p className="text-[11px] text-amber-700/80 mt-1.5 ml-7 leading-relaxed">
-                            {item.uncertainParameters!.find(u => u.parameter === p)?.question}
-                          </p>
+                        {canEdit ? (
+                          <textarea
+                            value={edit?.reasoning[p] || ''}
+                            onChange={e => setInlineEdit(s => ({ ...s, [item.chatId]: { ...s[item.chatId], reasoning: { ...s[item.chatId].reasoning, [p]: e.target.value } } }))}
+                            placeholder="Reasoning…" rows={2}
+                            className="mt-1.5 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-400/30 resize-none bg-white"
+                          />
+                        ) : (
+                          <>
+                            {isFail && item.reasoning?.[p] && <p className="text-[11px] text-red-700/80 mt-1.5 ml-7 leading-relaxed">{item.reasoning[p]}</p>}
+                            {isUnc && <p className="text-[11px] text-amber-700/80 mt-1.5 ml-7 leading-relaxed">{item.uncertainParameters!.find(u => u.parameter === p)?.question}</p>}
+                          </>
                         )}
                       </div>
                     );
@@ -1285,51 +1363,133 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
               )}
 
               {/* Review action — sticky at bottom */}
-              <div className="mt-auto border-t border-gray-100 p-4">
-                {canReview && !isReviewed ? (
-                  <>
-                    <input type="text" value={reviewNotes[item.chatId] || ''} onChange={e => setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
-                      placeholder="Review note (optional)…" className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 mb-2" />
+              <div className="mt-auto border-t border-gray-100 p-4 space-y-2">
+                {canReview && (
+                  <input
+                    type="text"
+                    value={canEdit ? (inlineEdit[item.chatId]?.note || '') : (reviewNotes[item.chatId] || '')}
+                    onChange={e => canEdit
+                      ? setInlineEdit(s => ({ ...s, [item.chatId]: { ...s[item.chatId], note: e.target.value } }))
+                      : setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
+                    placeholder="Review note (optional)…"
+                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                  />
+                )}
+                <div className="flex gap-2">
+                  {canReview && !isReviewed && (
                     <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
-                      className="w-full px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
+                      className="flex-1 px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
                       {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
                     </button>
-                  </>
-                ) : isReviewed ? (
-                  <div className="text-center">
-                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
-                      ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
-                    </span>
-                    {item.qaStatus?.reviewNote && <p className="text-xs text-gray-500 mt-2">{item.qaStatus.reviewNote}</p>}
-                  </div>
-                ) : null}
-                {canReview && (
-                  <button onClick={(e) => { e.stopPropagation(); startOverride(item); }}
-                    className="w-full mt-2 px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold rounded-xl hover:bg-amber-100 transition">
-                    Override Score
-                  </button>
+                  )}
+                  {canEdit && (
+                    <button onClick={() => saveOverride(item)} disabled={overrideSaving[item.chatId]}
+                      className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                      {overrideSaving[item.chatId] ? 'Saving…' : overrideSaved[item.chatId] ? 'Saved ✓' : 'Save Override'}
+                    </button>
+                  )}
+                </div>
+                {isReviewed && (
+                  <p className="text-[10px] text-center text-emerald-600 font-semibold">
+                    ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
+                    {item.qaStatus?.reviewNote && ` · ${item.qaStatus.reviewNote}`}
+                  </p>
                 )}
               </div>
             </div>
 
-            {/* Right: transcript */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Transcript</p>
-              {transcriptLoading[item.chatId] && (
-                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-                  Loading…
+            {/* Right: prior chats + transcript */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+
+              {/* Prior chats — inline expandable above current transcript */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Customer's Prior Chats</p>
+                  {(histories[item.chatId]?.length ?? 0) > 0 && (
+                    <button onClick={() => setShowHistory(s => ({ ...s, [item.chatId]: !s[item.chatId] }))}
+                      className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1">
+                      {showHistory[item.chatId] ? 'Hide' : `Show (${histories[item.chatId]!.length})`}
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                        className={`transition-transform ${showHistory[item.chatId] ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+                    </button>
+                  )}
+                  {historyLoading[item.chatId] && (
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin text-gray-400"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                  )}
                 </div>
-              )}
-              {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
-                <TranscriptBubbles messages={txData.timedMessages} />
-              )}
-              {txData && txData.rawTranscript && !txData.timedMessages?.length && (
-                <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
-              )}
-              {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
-                <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
-              )}
+                {showHistory[item.chatId] && (
+                  <div className="space-y-1">
+                    {(histories[item.chatId] || []).length === 0 && (
+                      <p className="text-xs text-gray-400 text-center py-2">No prior chats found.</p>
+                    )}
+                    {(histories[item.chatId] || []).map((h: any) => {
+                      const isPriorExpanded = expandedPriorChat[item.chatId] === h.chatId;
+                      const ptx = priorTranscripts[h.chatId];
+                      return (
+                        <div key={h.chatId} className="rounded-xl border border-gray-100 overflow-hidden">
+                          <button
+                            onClick={() => togglePriorChat(item.chatId, h.chatId)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${isPriorExpanded ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                            <IQSRing iqs={h.iqs} size={28} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-semibold text-gray-700">{h.chatId}</span>
+                                <span className="text-[10px] text-gray-500">{h.agentName}</span>
+                                {h.disposition && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{h.disposition}</span>}
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{h.date}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {h.csat === '5' && <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded-full">Good</span>}
+                              {h.csat === '3' && <span className="text-[10px] bg-yellow-50 text-yellow-600 font-bold px-1.5 py-0.5 rounded-full">CBB</span>}
+                              {h.csat === '1' && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full">Bad</span>}
+                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                                className={`text-gray-400 transition-transform ${isPriorExpanded ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+                            </div>
+                          </button>
+                          {isPriorExpanded && (
+                            <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-3 max-h-80 overflow-y-auto">
+                              {priorTranscriptLoading[h.chatId] && (
+                                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-4">
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                                  Loading transcript…
+                                </div>
+                              )}
+                              {ptx?.timedMessages && ptx.timedMessages.length > 0 && <TranscriptBubbles messages={ptx.timedMessages} />}
+                              {ptx?.rawTranscript && !ptx.timedMessages?.length && (
+                                <pre className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed font-sans">{ptx.rawTranscript}</pre>
+                              )}
+                              {ptx && !ptx.timedMessages?.length && !ptx.rawTranscript && !priorTranscriptLoading[h.chatId] && (
+                                <p className="text-xs text-gray-400 text-center py-3">No transcript saved for this chat.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Current transcript */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Transcript</p>
+                {transcriptLoading[item.chatId] && (
+                  <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                    Loading…
+                  </div>
+                )}
+                {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
+                  <TranscriptBubbles messages={txData.timedMessages} />
+                )}
+                {txData && txData.rawTranscript && !txData.timedMessages?.length && (
+                  <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
+                )}
+                {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
+                  <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
+                )}
+              </div>
             </div>
           </div>
         )}
