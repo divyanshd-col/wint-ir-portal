@@ -3514,7 +3514,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── UNIFIED SCORE TAB ── */}
           {tab === 'unified' && (
             <div className="overflow-y-auto flex-1">
-              <UnifiedScoringClient />
+              <UnifiedScoringClient userRole={userRole} />
             </div>
           )}
 

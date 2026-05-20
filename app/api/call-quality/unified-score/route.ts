@@ -166,6 +166,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let hasCallRecording = false;
   let callRecordingCount = 0;
   const recordingMeta: Array<{ calledAt: string | null; durationSeconds: number | null; segmentCount: number }> = [];
+  const perCallRecordings: Array<{
+    id: string;
+    calledAt: string | null;
+    durationSeconds: number | null;
+    recordingUrl: string | null;
+    segments: CallSegment[];
+    interruptionCount: number;
+    deadAirCount: number;
+  }> = [];
 
   function parseRecordingSegments(rec: any): CallSegment[] {
     if (!rec.transcript) return [];
@@ -214,6 +223,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const segs = parseRecordingSegments(rec);
         mergedSegs.push(...segs);
         recordingMeta.push({ calledAt: rec.called_at ?? null, durationSeconds: rec.duration_seconds ?? null, segmentCount: segs.length });
+        perCallRecordings.push({
+          id: String(rec.id),
+          calledAt: rec.called_at ?? null,
+          durationSeconds: rec.duration_seconds ?? null,
+          recordingUrl: rec.recording_url ?? null,
+          segments: segs,
+          interruptionCount: segs.filter((s: CallSegment) => s.type === 'interruption').length,
+          deadAirCount: segs.filter((s: CallSegment) => s.type === 'dead_air').length,
+        });
         if (!language) {
           const t = typeof rec.transcript === 'object' ? rec.transcript : null;
           language = rec.language || t?.language || '';
@@ -254,7 +272,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, kbQuery, 5);
-      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+      if (relevant.length) {
+        // Use readable label for each chunk. Raw Google Drive file IDs (25+ char base62)
+        // are not human-readable — extract the first heading line from the content instead.
+        const chunkLabel = (c: { fileName: string; content: string }) => {
+          if (/^[A-Za-z0-9_-]{25,}$/.test(c.fileName.trim())) {
+            const firstLine = c.content.split('\n')[0].trim();
+            return firstLine.length > 3 ? firstLine : 'KB Document';
+          }
+          return c.fileName;
+        };
+        kbContext = relevant.map(c => `[${chunkLabel(c)}]\n${c.content}`).join('\n---\n');
+      }
     } catch {}
   }
 
@@ -313,9 +342,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } catch {}
   }
 
-  // Rebuild recordingMeta segment counts if poor-listening flags were inserted
-  // (callResult?.segments may have extra segments vs original callSegments).
-  // We use the original counts since poorListening flags don't change call timing.
+  // Build per-call recordings with poor-listening flags applied proportionally.
+  // We re-split the flagged merged segments back into per-call buckets using original counts.
+  const flaggedMerged: CallSegment[] = callResult?.segments ?? callSegments;
+  let segCursor = 0;
+  const callRecordingsOut = perCallRecordings.map((rec, idx) => {
+    const originalCount = rec.segments.length;
+    // Count how many segments (including inserted poor_listening flags) belong to this recording.
+    // Flags are inserted immediately after their parent speech segment, so advance until we've
+    // consumed `originalCount` non-poor_listening segments.
+    let consumed = 0;
+    let end = segCursor;
+    while (end < flaggedMerged.length && consumed < originalCount) {
+      if (flaggedMerged[end].type !== 'poor_listening') consumed++;
+      end++;
+    }
+    // Also consume any trailing poor_listening flags
+    while (end < flaggedMerged.length && flaggedMerged[end].type === 'poor_listening') end++;
+    const segs = flaggedMerged.slice(segCursor, end);
+    segCursor = end;
+    return {
+      id: rec.id,
+      label: perCallRecordings.length > 1 ? `Call ${idx + 1}` : 'Call',
+      calledAt: rec.calledAt,
+      durationSeconds: rec.durationSeconds,
+      recordingUrl: rec.recordingUrl,
+      segments: segs,
+      interruptionCount: rec.interruptionCount,
+      deadAirCount: rec.deadAirCount,
+    };
+  });
+
   const mergedTimeline = buildMergedTimeline(
     callResult?.segments ?? callSegments,
     chatMessages,
@@ -344,7 +401,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     callReasoning:      callResult?.reasoning ?? {},
     callSummary:        callResult?.summary ?? '',
     callKbCitation:     callResult?.kbCitation ?? null,
-    callSegments:       callResult?.segments ?? callSegments,
+    callSegments:       flaggedMerged,
+    callRecordings:     callRecordingsOut,
     poorListeningCount: (callResult?.poorListeningSegments ?? []).length,
     mergedTimeline,
     scoringMs,
