@@ -270,44 +270,12 @@ function cleanKbCitation(raw: string): string {
 
 // ── Per-call transcript card ──────────────────────────────────────────────────
 function CallTranscriptCard({
-  rec, index, canEdit, onSaved,
+  rec, index,
 }: {
   rec: { id: string; label: string; calledAt: string | null; durationSeconds: number | null; segments: any[]; interruptionCount: number; deadAirCount: number };
   index: number;
-  canEdit: boolean;
-  onSaved?: (id: string, segments: any[]) => void;
 }) {
   const [open, setOpen] = useState(index === 0);
-  const [editing, setEditing] = useState(false);
-  const [editSegs, setEditSegs] = useState<any[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState('');
-
-  function startEdit() {
-    // Deep-copy segments for editing
-    setEditSegs(rec.segments.map(s => ({ ...s })));
-    setEditing(true);
-    setSaveMsg('');
-  }
-
-  async function saveEdit() {
-    setSaving(true);
-    try {
-      const res = await fetch('/api/call-quality/update-transcript', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ call_id: rec.id, segments: editSegs }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || 'Save failed');
-      setSaveMsg('Saved!');
-      onSaved?.(rec.id, editSegs);
-      setTimeout(() => { setEditing(false); setSaveMsg(''); }, 1000);
-    } catch (e: any) {
-      setSaveMsg(e.message || 'Error saving');
-    }
-    setSaving(false);
-  }
 
   const callDate = rec.calledAt
     ? new Date(rec.calledAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
@@ -344,105 +312,59 @@ function CallTranscriptCard({
             <div className="flex-1 h-px bg-amber-200" />
           </div>
 
-          {/* Edit mode or read-only transcript */}
-          {editing ? (
-            <div className="px-4 pb-3 space-y-2">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">Edit Transcript — fix speaker labels or text</p>
-              {editSegs.map((seg, i) => {
-                if (seg.type !== 'speech') return (
-                  <div key={i} className="text-[11px] text-slate-400 italic px-2">
-                    [{seg.type}{seg.duration ? ` ${seg.duration}` : ''}{seg.interrupted_speaker ? ` — ${seg.interrupted_speaker} cut by ${seg.interrupted_by}` : ''}]
-                  </div>
-                );
-                return (
-                  <div key={i} className="border border-slate-200 rounded-xl p-3 space-y-2 bg-slate-50">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-slate-500">Speaker:</span>
-                      {(['IR EXECUTIVE', 'INVESTOR'] as const).map(sp => (
-                        <button key={sp} onClick={() => setEditSegs(s => s.map((x, j) => j === i ? { ...x, speaker: sp } : x))}
-                          className={`px-2 py-0.5 rounded text-[10px] font-bold transition ${
-                            seg.speaker === sp
-                              ? sp === 'IR EXECUTIVE' ? 'bg-amber-500 text-white' : 'bg-emerald-500 text-white'
-                              : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-400'
-                          }`}
-                        >{sp}</button>
-                      ))}
-                    </div>
-                    <textarea
-                      value={seg.text || ''}
-                      onChange={e => setEditSegs(s => s.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
-                      rows={2}
-                      className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-300/40 resize-y bg-white"
-                    />
-                  </div>
-                );
-              })}
-              <div className="flex items-center gap-2 pt-1">
-                <button onClick={saveEdit} disabled={saving}
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-xs font-bold rounded-xl transition">
-                  {saving ? 'Saving…' : 'Save Transcript'}
-                </button>
-                <button onClick={() => setEditing(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-semibold rounded-xl transition">
-                  Cancel
-                </button>
-                {saveMsg && <span className={`text-xs font-medium ${saveMsg === 'Saved!' ? 'text-emerald-600' : 'text-red-500'}`}>{saveMsg}</span>}
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <tbody>
-                  {rec.segments.map((seg: any, i: number) => {
-                    if (seg.type === 'interruption') return (
-                      <tr key={i}>
-                        <td colSpan={2} className="px-4 py-1.5">
-                          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-red-50 border border-red-100">
-                            <span className="text-red-500 text-xs">⚡</span>
-                            <span className="text-xs text-red-700"><strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` — ${seg.words_spoken} words` : ''}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                    if (seg.type === 'dead_air') return (
-                      <tr key={i}>
-                        <td colSpan={2} className="px-4 py-1.5">
-                          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-50 border border-slate-200">
-                            <span className="text-slate-400 text-xs">⏸</span>
-                            <span className="text-xs text-slate-500">Dead air{seg.duration ? ` — ${seg.duration}` : ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                    if (seg.type === 'poor_listening') return (
-                      <tr key={i}>
-                        <td colSpan={2} className="px-4 py-1.5">
-                          <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-orange-50 border border-orange-100">
-                            <span className="text-orange-500 text-xs">👂</span>
-                            <span className="text-xs text-orange-700">Poor listening{seg.phrase ? `: "${seg.phrase}"` : ''}</span>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                    const isIR = seg.speaker === 'IR EXECUTIVE';
-                    return (
-                      <tr key={i} className="border-b border-slate-50 align-top hover:bg-slate-50/50">
-                        <td className="px-4 py-2.5 w-36 shrink-0">
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isIR ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                            {isIR ? '🟡' : '🟢'} {seg.speaker}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2.5 text-sm text-slate-700 leading-relaxed">
-                          {seg.text}
-                          {seg.translated && <span className="ml-2 px-1 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-500">🌐 translated</span>}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {/* Read-only transcript */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <tbody>
+                {rec.segments.map((seg: any, i: number) => {
+                  if (seg.type === 'interruption') return (
+                    <tr key={i}>
+                      <td colSpan={2} className="px-4 py-1.5">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-red-50 border border-red-100">
+                          <span className="text-red-500 text-xs">⚡</span>
+                          <span className="text-xs text-red-700"><strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` — ${seg.words_spoken} words` : ''}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                  if (seg.type === 'dead_air') return (
+                    <tr key={i}>
+                      <td colSpan={2} className="px-4 py-1.5">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-50 border border-slate-200">
+                          <span className="text-slate-400 text-xs">⏸</span>
+                          <span className="text-xs text-slate-500">Dead air{seg.duration ? ` — ${seg.duration}` : ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                  if (seg.type === 'poor_listening') return (
+                    <tr key={i}>
+                      <td colSpan={2} className="px-4 py-1.5">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-orange-50 border border-orange-100">
+                          <span className="text-orange-500 text-xs">👂</span>
+                          <span className="text-xs text-orange-700">Poor listening{seg.phrase ? `: "${seg.phrase}"` : ''}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                  const isIR = seg.speaker === 'IR EXECUTIVE';
+                  return (
+                    <tr key={i} className="border-b border-slate-50 align-top hover:bg-slate-50/50">
+                      <td className="px-4 py-2.5 w-36 shrink-0">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isIR ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                          {isIR ? '🟡' : '🟢'} {seg.speaker}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-sm text-slate-700 leading-relaxed">
+                        {seg.text}
+                        {seg.translated && <span className="ml-2 px-1 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-500">🌐 translated</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {/* End marker */}
           <div className="flex items-center gap-3 px-4 py-2">
@@ -452,16 +374,6 @@ function CallTranscriptCard({
             </span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
-
-          {/* Edit button */}
-          {canEdit && !editing && (
-            <div className="px-4 pb-3 flex justify-end">
-              <button onClick={startEdit}
-                className="px-3 py-1.5 text-xs font-semibold rounded-xl border border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100 transition">
-                ✏️ Edit Transcript
-              </button>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -481,7 +393,6 @@ export default function UnifiedScoringClient({ userRole }: { userRole?: string }
   const [timelineView, setTimelineView] = useState<'merged' | 'calls' | 'chat'>('merged');
   const [callRecordings, setCallRecordings] = useState<any[]>([]);
 
-  const canEditTranscript = ['admin', 'quality', 'tl', 'agent'].includes(userRole || '');
 
   async function run() {
     if (!chatId.trim()) return;
@@ -601,8 +512,6 @@ export default function UnifiedScoringClient({ userRole }: { userRole?: string }
                         key={rec.id}
                         rec={rec}
                         index={i}
-                        canEdit={canEditTranscript}
-                        onSaved={(id, segs) => setCallRecordings(prev => prev.map(r => r.id === id ? { ...r, segments: segs } : r))}
                       />
                     ))}
                   </div>

@@ -122,7 +122,49 @@ function ResultPanel({
   userRole?: string;
 }) {
   const [expandedParam, setExpandedParam] = useState<string | null>(null);
-  const isQuality = userRole === 'quality' || userRole === 'admin';
+  const isQuality = ['quality', 'admin', 'tl'].includes(userRole || '');
+
+  // ── Override modal state ────────────────────────────────────────────────────
+  const [overrideOpen, setOverrideOpen]   = useState(false);
+  const [overrideScores, setOverrideScores]     = useState<Record<string, string>>({});
+  const [overrideReasoning, setOverrideReasoning] = useState<Record<string, string>>({});
+  const [overrideNote, setOverrideNote]   = useState('');
+  const [saving, setSaving]               = useState(false);
+  const [saveMsg, setSaveMsg]             = useState('');
+  const [savedIqs, setSavedIqs]           = useState<number | null>(null);
+
+  function openOverride() {
+    setOverrideScores({ ...data.callScores });
+    setOverrideReasoning({ ...data.callReasoning });
+    setOverrideNote('');
+    setSaveMsg('');
+    setOverrideOpen(true);
+  }
+
+  async function saveOverride() {
+    setSaving(true);
+    setSaveMsg('');
+    try {
+      const res = await fetch('/api/call-quality/override-scores', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: data.chat_id,
+          scores: overrideScores,
+          reasoning: overrideReasoning,
+          note: overrideNote,
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Save failed');
+      setSavedIqs(d.callIqsScore);
+      setSaveMsg('Saved!');
+      setTimeout(() => { setOverrideOpen(false); setSaveMsg(''); }, 1000);
+    } catch (e: any) {
+      setSaveMsg(e.message || 'Error saving');
+    }
+    setSaving(false);
+  }
 
   // No call recording case
   if (!data.hasCallRecording) {
@@ -233,15 +275,14 @@ function ResultPanel({
         {/* Right: Call IQS parameters */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Call IQS Parameters</p>
-            {/* TODO: Implement override for call IQS params — requires a dedicated API endpoint
-                that can persist call_scores / call_reasoning to the iqs_scores table.
-                The existing /api/quality/update only handles chat IQS params (PARAM_KEYS). */}
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              Call IQS Parameters
+              {savedIqs !== null && <span className="ml-2 text-emerald-600 font-bold">→ {savedIqs} (overridden)</span>}
+            </p>
             {isQuality && (
               <button
-                disabled
-                title="Override coming soon"
-                className="px-3 py-1 rounded-lg text-[11px] font-semibold bg-slate-100 text-slate-400 cursor-not-allowed"
+                onClick={openOverride}
+                className="px-3 py-1 rounded-lg text-[11px] font-semibold border border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 transition"
               >
                 Override Score
               </button>
@@ -294,6 +335,78 @@ function ResultPanel({
           🔄 Score another
         </button>
       </div>
+
+      {/* ── Override Score Modal ── */}
+      {overrideOpen && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setOverrideOpen(false)}>
+          <div className="bg-white w-full sm:rounded-2xl sm:max-w-2xl max-h-[94vh] overflow-y-auto shadow-2xl"
+            onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-slate-900">Override Call Score</h2>
+                <p className="text-xs text-slate-400">Chat {data.chat_id}</p>
+              </div>
+              <button onClick={() => setOverrideOpen(false)}
+                className="p-2 rounded-xl hover:bg-slate-100 text-slate-400 transition">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14"/></svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Parameter Scores</p>
+              <div className="space-y-3">
+                {Object.entries(CALL_PARAM_GROUPS).map(([gk, group]) => (
+                  <div key={gk}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wide mb-2">{group.label}</p>
+                    {group.keys.map(key => (
+                      <div key={key} className="rounded-xl border border-slate-100 p-3 bg-slate-50/60 mb-2">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-xs font-semibold text-slate-700 flex-1">{CALL_PARAM_NAMES[key]}</span>
+                          <div className="flex gap-1">
+                            {(['Yes', 'No', 'NA'] as const).map(v => (
+                              <button key={v}
+                                onClick={() => setOverrideScores(s => ({ ...s, [key]: v }))}
+                                className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                                  overrideScores[key] === v
+                                    ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-slate-400 text-white'
+                                    : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-400'
+                                }`}>{v}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <textarea
+                          value={overrideReasoning[key] || ''}
+                          onChange={e => setOverrideReasoning(r => ({ ...r, [key]: e.target.value }))}
+                          placeholder="Reasoning…"
+                          rows={2}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-amber-300/40 resize-y bg-white"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Note (internal)</label>
+                <textarea value={overrideNote} onChange={e => setOverrideNote(e.target.value)}
+                  placeholder="Reason for override…" rows={2}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300/40 resize-y" />
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button onClick={saveOverride} disabled={saving}
+                  className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-white text-sm font-bold rounded-xl transition">
+                  {saving ? 'Saving…' : 'Save Override'}
+                </button>
+                <button onClick={() => setOverrideOpen(false)}
+                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition">
+                  Cancel
+                </button>
+                {saveMsg && <span className={`text-sm font-medium ${saveMsg === 'Saved!' ? 'text-emerald-600' : 'text-red-500'}`}>{saveMsg}</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
