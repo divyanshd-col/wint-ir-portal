@@ -284,17 +284,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // ── KB chunks (shared for both scorers) ──────────────────────────────────
   // Use the best available signal: call disposition > chat disposition > first 400 chars of call transcript
   let kbContext = '';
-  let kbDebug: { query: string; totalChunks: number; retrievedCount: number; chunks: { label: string; preview: string }[] } = {
-    query: '', totalChunks: 0, retrievedCount: 0, chunks: [],
-  };
   const kbQuery = callDisposition || chatDisposition || callTranscriptText.slice(0, 400);
   if (kbQuery) {
     try {
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, kbQuery, 5);
-      kbDebug.query        = kbQuery.slice(0, 200);
-      kbDebug.totalChunks  = allChunks.length;
-      kbDebug.retrievedCount = relevant.length;
       if (relevant.length) {
         // Use readable label for each chunk. Raw Google Drive file IDs (25+ char base62)
         // are not human-readable — extract the first heading line from the content instead.
@@ -306,21 +300,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           return c.fileName;
         };
         kbContext = relevant.map(c => `[${chunkLabel(c)}]\n${c.content}`).join('\n---\n');
-        kbDebug.chunks = relevant.map(c => ({
-          label:   chunkLabel(c),
-          preview: c.content.split('\n').slice(0, 2).join(' ').slice(0, 120),
-        }));
       }
-      console.log(`[unified-score] KB: totalChunks=${allChunks.length} retrieved=${relevant.length} query="${kbQuery.slice(0, 100)}"`);
-      if (relevant.length) {
-        relevant.forEach((c, i) => console.log(`  chunk[${i}]: ${kbDebug.chunks[i]?.label} — ${kbDebug.chunks[i]?.preview}`));
-      }
-    } catch (err: any) {
-      console.error('[unified-score] KB fetch failed:', err?.message);
-      kbDebug.query = kbQuery.slice(0, 200);
-    }
-  } else {
-    console.warn('[unified-score] KB skipped — no kbQuery (no disposition, no call transcript)');
+    } catch {}
   }
 
   // ── Score BOTH in parallel ────────────────────────────────────────────────
@@ -441,7 +422,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     callRecordings:     callRecordingsOut,
     poorListeningCount: (callResult?.poorListeningSegments ?? []).length,
     mergedTimeline,
-    kbDebug,
     scoringMs,
     totalMs: Date.now() - t0,
   });
