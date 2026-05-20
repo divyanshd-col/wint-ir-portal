@@ -433,6 +433,25 @@ Speech segments are numbered [1], [2], [3]... for reference.
 
 ---
 
+## PARAMETER ISOLATION — CRITICAL
+Each parameter is fully independent. Its reasoning must stay within its own criteria only.
+
+RULES:
+1. The reasoning for parameter X must ONLY discuss the criteria defined for parameter X — nothing else.
+2. NEVER mention another parameter's name inside a reasoning field.
+3. NEVER evaluate CallOpening, CallClosing, Grammar, Fillers, ActiveListening, etc. inside the TechnicalLegal reasoning — each has its own separate scoring field.
+4. If you find yourself writing about one parameter while filling in another parameter's reasoning, stop and remove it.
+
+EXAMPLES OF WHAT NOT TO DO:
+- TechnicalLegal reasoning: "The call closing was appropriate and the agent signed off well..." → WRONG. Call Closing belongs in CallClosing.reasoning only.
+- CallOpening reasoning: "The agent's grammar was poor throughout..." → WRONG. Grammar belongs in Grammar.reasoning only.
+- Expectation reasoning: "All investor questions were also addressed clearly..." → WRONG. That belongs in AllQuestions.reasoning.
+- ActiveListening reasoning: "The IR gave incorrect product information about the bond..." → WRONG. Factual errors belong in TechnicalLegal.reasoning only.
+
+Score each parameter as if you are filling in a completely separate evaluation form with no visibility into the others.
+
+---
+
 ## GROUP 1: PROCESS (50%)
 
 ### 1. Call Opening (5%) — key: CallOpening
@@ -448,6 +467,7 @@ Speech segments are numbered [1], [2], [3]... for reference.
 ### 3. Technically / Legally Correct (15%) — key: TechnicalLegal
 - Yes: All product information stated by the IR EXECUTIVE matches the WINT KNOWLEDGE BASE REFERENCE below — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms, registered entity names. In your reasoning, name the specific KB document and section that confirms each fact.
 - No: A statement contradicts the KB, or the KB has no relevant entry to verify a significant product claim the IR made. State exactly what was claimed and what the KB says (or that it is absent from the KB).
+  Also No — SEBI / Regulatory violation (automatic fail, no KB needed): IR gave a personalised investment recommendation (e.g. "You should invest in this bond", "I suggest putting your money here"), implied guaranteed returns, or provided investment advisory services that would constitute unregistered advisory activity under SEBI regulations.
 - NA: No substantive product information was exchanged on this call.
 
 ### 4. All Questions Addressed (10%) — key: AllQuestions

@@ -65,16 +65,30 @@ function buildMergedTimeline(
     items.push({ source: 'chat', ts: ts || undefined, sortKey, data: m });
   });
 
+  // Compute the latest timestamp seen across all chat messages so that calls
+  // with a NULL called_at can be placed safely after all chat activity.
+  const lastChatTs = chatMessages.reduce((max, m) => {
+    const ts = m.created_at || m.timestamp;
+    const t  = ts ? new Date(ts).getTime() : 0;
+    return t > max ? t : max;
+  }, chatBase);
+
   // Spread each recording's segments proportionally across its actual duration so
   // post-call chat messages (timestamped after call end) sort correctly.
   // Insert a boundary marker before each call after the first.
   const totalCalls = recordingMeta.length;
   let segOffset = 0;
+  // Track the estimated end of the previous call so NULL-called_at calls chain correctly.
+  let prevCallEnd = lastChatTs + 60_000;
   for (let recIdx = 0; recIdx < totalCalls; recIdx++) {
-    const rec        = recordingMeta[recIdx];
-    const callBase   = rec.calledAt ? new Date(rec.calledAt).getTime() : (chatBase || Date.now());
-    // Fall back to ~8s per segment when duration_seconds is null in DB
-    const durationMs = ((rec.durationSeconds ?? Math.max(rec.segmentCount * 8, 60))) * 1000;
+    const rec = recordingMeta[recIdx];
+    // When called_at is NULL, place this call 60s after the last known chat activity
+    // (or after the previous call ended). This prevents call segments from being
+    // sorted into the middle of chat messages that occurred before the call.
+    const callBase = rec.calledAt ? new Date(rec.calledAt).getTime() : prevCallEnd;
+    // Use 3s per segment as a conservative estimate when duration_seconds is NULL.
+    // 8s was too generous and caused post-call chat messages to appear inside the call window.
+    const durationMs = ((rec.durationSeconds ?? Math.max(rec.segmentCount * 3, 60))) * 1000;
     const callEnd    = callBase + durationMs;
     const count      = rec.segmentCount;
     const callLabel  = totalCalls > 1 ? `Call ${recIdx + 1}` : 'Call';
@@ -100,6 +114,9 @@ function buildMergedTimeline(
       sortKey: callEnd + 1,
       data: { label: `📞 ${callLabel} ended`, calledAt: rec.calledAt, kind: 'end' },
     });
+
+    // Update so next NULL-called_at call chains after this one
+    prevCallEnd = callEnd + 60_000;
   }
 
   items.sort((a, b) => a.sortKey - b.sortKey);

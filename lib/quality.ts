@@ -237,6 +237,23 @@ When you are unsure how to score a parameter because the transcript is ambiguous
 4. Score all parameters where you ARE confident as normal (Yes/No/NA as appropriate).
 5. Only add to \`uncertain_parameters\` when your uncertainty would change the score from NA to No if resolved.
 
+## PARAMETER ISOLATION — CRITICAL
+Each parameter is fully independent. Its reasoning must stay within its own criteria only.
+
+RULES:
+1. The reasoning for parameter X must ONLY discuss the criteria defined for parameter X — nothing else.
+2. NEVER mention another parameter's name inside a reasoning field.
+3. NEVER evaluate Opening, Grammar, Empathy, Process, Expectation, etc. inside the Technical reasoning — each has its own separate scoring field.
+4. If you find yourself writing about one parameter while filling in another parameter's reasoning, stop and remove it.
+
+EXAMPLES OF WHAT NOT TO DO:
+- Technical reasoning: "The agent also had a good opening and introduced themselves well..." → WRONG. Opening belongs in Opening.reasoning only.
+- Expectation reasoning: "All customer questions were also addressed clearly..." → WRONG. That belongs in AllQuestions.reasoning.
+- Process reasoning: "The agent's grammar was poor throughout the conversation..." → WRONG. Grammar belongs in Grammar.reasoning only.
+- Empathy reasoning: "The agent gave incorrect information about the timeline..." → WRONG. Factual errors belong in Technical.reasoning only.
+
+Score each parameter as if you are filling in a completely separate evaluation form with no visibility into the others.
+
 ## THE 11 PARAMETERS (ordered by weight)
 
 ### 1. Technically / Legally Correct (20%)
@@ -245,8 +262,9 @@ Score based on whether the agent's information is factually correct per Wint Wea
 - **No** — mark No if ANY of these failures are visible:
   - **Technically wrong**: Agent stated a wrong fact, wrong amount, wrong formula, wrong product rule, or wrong process step — a clear factual error (not just a communication gap).
   - **Dependent upon KB but contradicts it**: Agent gave guidance that directly contradicts what the Wint Wealth KB or Slack resolution says about the topic.
+  - **SEBI / Regulatory violation**: Agent gave a personalised investment recommendation (e.g. "You should invest in X bond"), implied guaranteed returns, or provided investment advisory services — this is an automatic No regardless of KB. It is a standalone regulatory compliance failure under SEBI.
 - **NA**: Only if the chat has zero substantive information exchange.
-- **RULE**: Must be a CLEAR, VERIFIABLE factual error. Do not fail for ambiguity.
+- **RULE**: Must be a CLEAR, VERIFIABLE factual error or regulatory violation. Do not fail for ambiguity.
 
 ### 2. All Questions Answered (10%)
 - **Yes**: Every explicit customer question was answered or deliberately deferred with a reason.
