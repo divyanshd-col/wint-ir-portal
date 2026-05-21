@@ -1171,6 +1171,10 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
     const failedParams = PARAM_ORDER.filter(p => item.scores?.[p] === 'No');
     const borderColor  = hasFlag ? 'border-blue-200' : hasUncertain && !isReviewed ? 'border-amber-200' : isReviewed ? 'border-gray-100' : 'border-orange-200';
 
+    const prevChatKeywords = /previous (chat|conversation|text|ticket)|last (chat|conversation|time we (spoke|talked|spoke))|earlier (chat|ticket|conversation)|as (discussed|mentioned) (before|earlier|last time|previously)|as per (our last|previous)|continuing from (before|last|previous)|referring to (my|our|the) (earlier|previous|last)/i;
+    const txText = txData?.timedMessages?.map((m: any) => m.content || '').join(' ') || txData?.rawTranscript || '';
+    const hasPrevChatRef = txText ? prevChatKeywords.test(txText) : false;
+
     return (
       <div key={item.chatId} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${borderColor}`}>
         {/* Row header */}
@@ -1199,7 +1203,14 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 
         {/* Expanded: details + transcript side-by-side */}
         {isExpanded && (
-          <div className="border-t border-gray-100 flex divide-x divide-gray-100" style={{ maxHeight: 560, minHeight: 220 }}>
+          <div className="border-t border-gray-100 flex flex-col">
+          {hasPrevChatRef && (
+            <div className="flex items-start gap-2 bg-amber-50 border-b border-amber-200 px-4 py-2.5">
+              <svg className="shrink-0 mt-0.5 text-amber-500" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7.5a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/></svg>
+              <p className="text-xs text-amber-800 flex-1"><span className="font-semibold">Previous conversation referenced</span> — this transcript refers to a prior chat. Scores may not reflect the full context. Review carefully and override if needed.</p>
+            </div>
+          )}
+          <div className="flex divide-x divide-gray-100" style={{ maxHeight: 560, minHeight: 220 }}>
             {/* Left panel: scores + actions */}
             <div className="w-[42%] shrink-0 overflow-y-auto flex flex-col">
               {/* IQS parameter breakdown */}
@@ -1331,6 +1342,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
                 <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
               )}
             </div>
+          </div>
           </div>
         )}
       </div>
