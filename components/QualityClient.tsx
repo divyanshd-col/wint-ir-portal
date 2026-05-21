@@ -1210,6 +1210,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
           ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: note } }
           : item
       ));
+      setSection('reviewed');
     } catch (e: any) { alert(e?.message || 'Failed to mark reviewed'); }
     setReviewing(r => ({ ...r, [chatId]: false }));
   };
