@@ -1123,12 +1123,14 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
     loadTranscript(chatId);
     loadHistory(chatId);
     if (flagId) loadThread(flagId);
-    // Initialise inline edit from current item scores
-    setItems(prev => {
-      const it = prev.find(i => i.chatId === chatId);
-      if (it) setInlineEdit(s => s[chatId] ? s : { ...s, [chatId]: { scores: { ...(it.scores || {}) }, reasoning: { ...(it.reasoning || {}) }, note: '' } });
-      return prev;
-    });
+    // Initialise inline edit from current item scores (only once per chatId)
+    const it = items.find(i => i.chatId === chatId);
+    if (it) {
+      setInlineEdit(s => s[chatId] ? s : {
+        ...s,
+        [chatId]: { scores: { ...(it.scores || {}) }, reasoning: { ...(it.reasoning || {}) }, note: '' },
+      });
+    }
   };
 
   const sendReply = async (flagId: string) => {
@@ -1149,19 +1151,23 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   };
 
   const markReviewed = async (chatId: string) => {
+    // For quality/admin the note is stored in inlineEdit; for TL it's in reviewNotes
+    const canEdit = userRole === 'quality' || userRole === 'admin';
+    const note = canEdit ? (inlineEdit[chatId]?.note || '') : (reviewNotes[chatId] || '');
     setReviewing(r => ({ ...r, [chatId]: true }));
     try {
-      await fetch('/api/quality/pending-review', {
+      const res = await fetch('/api/quality/pending-review', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, reviewNote: reviewNotes[chatId] || '' }),
+        body: JSON.stringify({ chatId, reviewNote: note }),
       });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
       const now = new Date().toISOString();
       setItems(prev => prev.map(item =>
         item.chatId === chatId
-          ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: reviewNotes[chatId] || '' } }
+          ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: note } }
           : item
       ));
-    } catch {}
+    } catch (e: any) { alert(e?.message || 'Failed to mark reviewed'); }
     setReviewing(r => ({ ...r, [chatId]: false }));
   };
 
