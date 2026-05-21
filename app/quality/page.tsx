@@ -5,7 +5,7 @@ import { readConfig } from '@/lib/config';
 import QualityClient from '@/components/QualityClient';
 import AgentQualityClient from '@/components/AgentQualityClient';
 
-export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string } }) {
+export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string; section?: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
@@ -15,7 +15,11 @@ export default async function QualityPage({ searchParams }: { searchParams?: { a
   if (!role || !['admin', 'quality', 'tl', 'agent'].includes(role)) redirect('/');
 
   const initialAgent = searchParams?.agent || undefined;
-  const initialTab   = searchParams?.tab === 'log' ? 'log' : undefined;
+
+  const VALID_TABS = ['performance', 'log', 'upload', 'reports', 'pending', 'calls', 'call-test', 'unified'];
+  const tabParam = searchParams?.tab || '';
+  const initialTab = VALID_TABS.includes(tabParam) ? tabParam as any : undefined;
+  const initialSection = searchParams?.section === 'reviewed' ? 'reviewed' as const : undefined;
 
   // Agents get their personal quality dashboard
   if (role === 'agent') {
@@ -32,6 +36,7 @@ export default async function QualityPage({ searchParams }: { searchParams?: { a
       userEmail={email}
       initialAgent={initialAgent}
       initialTab={initialTab}
+      initialSection={initialSection}
     />
   );
 }

@@ -79,12 +79,14 @@ interface AgentStat {
   csatBad?: number;
 }
 
+type QualityTab = 'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test' | 'unified';
 interface QualityClientProps {
   userRole?: string;
   userEmail?: string;
   selfAgentName?: string;
   initialAgent?: string;
-  initialTab?: 'log';
+  initialTab?: QualityTab;
+  initialSection?: 'pending' | 'reviewed';
 }
 interface ParsedRow {
   chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string; contactPhone?: string;
@@ -1041,10 +1043,21 @@ function buildPendingParams(f: LogFilters): URLSearchParams {
   return p;
 }
 
-function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
+function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: string; userEmail?: string; initialSection?: 'pending' | 'reviewed' }) {
   const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
-  const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
+  const [section, setSection] = useState<'pending' | 'reviewed'>(initialSection || 'pending');
+
+  const switchSection = (s: 'pending' | 'reviewed') => {
+    setSection(s);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', 'pending');
+      if (s === 'reviewed') url.searchParams.set('section', 'reviewed');
+      else url.searchParams.delete('section');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
   const [items, setItems] = useState<PendingReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -1160,8 +1173,9 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
           ? { ...i, scores: edit.scores, reasoning: edit.reasoning, ...(newIqs !== undefined ? { iqs: newIqs } : {}) }
           : i
       ));
-      // Clear inlineEdit so re-expanding the item re-initialises from the updated items state
-      setInlineEdit(s => { const next = { ...s }; delete next[item.chatId]; return next; });
+      // Reinitialise inlineEdit with the saved values (note cleared) so the open card
+      // keeps showing reasoning/scores and re-expansion also shows fresh saved data
+      setInlineEdit(s => ({ ...s, [item.chatId]: { scores: edit.scores, reasoning: edit.reasoning, note: '' } }));
       setOverrideSaved(s => ({ ...s, [item.chatId]: true }));
       setTimeout(() => setOverrideSaved(s => ({ ...s, [item.chatId]: false })), 3000);
     } catch (e: any) { alert(e?.message || 'Failed to save override'); }
@@ -1218,7 +1232,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
           ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: note } }
           : item
       ));
-      setSection('reviewed');
+      switchSection('reviewed');
     } catch (e: any) { alert(e?.message || 'Failed to mark reviewed'); }
     setReviewing(r => ({ ...r, [chatId]: false }));
   };
@@ -1280,7 +1294,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
               {item.date || item.scoredAt?.slice(0, 10)}
-              {isReviewed && item.qaStatus?.reviewedAt && ` · Reviewed ${new Date(item.qaStatus.reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
+              {isReviewed && item.qaStatus?.reviewedAt && ` · Reviewed by ${(item.qaStatus.reviewedBy || '').split('@')[0] || 'QA'} · ${new Date(item.qaStatus.reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
             </p>
           </div>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
@@ -1576,12 +1590,12 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
         </div>
         {/* Pending / Reviewed section */}
         <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
-          <button onClick={() => setSection('pending')}
+          <button onClick={() => switchSection('pending')}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition ${section === 'pending' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             Pending
             {pendingItems.length > 0 && <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{pendingItems.length}</span>}
           </button>
-          <button onClick={() => setSection('reviewed')}
+          <button onClick={() => switchSection('reviewed')}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition ${section === 'reviewed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             Reviewed
             {reviewedItems.length > 0 && <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{reviewedItems.length}</span>}
@@ -1713,8 +1727,8 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   );
 }
 
-export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test' | 'unified'>(initialTab || 'performance');
+export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab, initialSection }: QualityClientProps = {}) {
+  const [tab, setTab] = useState<QualityTab>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
 
   // Fresh agentName from config (overrides stale JWT value)
@@ -2006,8 +2020,14 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     setLogsLoading(false);
   }, []);
 
-  const switchTab = (t: typeof tab) => {
+  const switchTab = (t: QualityTab) => {
     setTab(t);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', t);
+      url.searchParams.delete('section');
+      window.history.replaceState({}, '', url.toString());
+    }
     if (t === 'log' && !logsLoaded) loadScores(0, appliedFilters);
   };
 
@@ -2520,18 +2540,18 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               collapsed={!sidebarExpanded} onClick={() => switchTab('upload')} />
           )}
           <NavItem icon={icons.reports} label="Reports" active={tab === 'reports'}
-            collapsed={!sidebarExpanded} onClick={() => setTab('reports')} />
+            collapsed={!sidebarExpanded} onClick={() => switchTab('reports')} />
           <NavItem icon={icons.challenges} label="Chats Pending" active={tab === 'pending'}
-            collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => setTab('pending')} />
+            collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => switchTab('pending')} />
           <NavItem icon={icons.calls} label="Call Quality" active={tab === 'calls'}
-            collapsed={!sidebarExpanded} onClick={() => setTab('calls')} />
+            collapsed={!sidebarExpanded} onClick={() => switchTab('calls')} />
           {!selfAgentName && (
             <NavItem icon={icons.callTest} label="Call Test" active={tab === 'call-test'}
-              collapsed={!sidebarExpanded} onClick={() => setTab('call-test')} />
+              collapsed={!sidebarExpanded} onClick={() => switchTab('call-test')} />
           )}
           {!selfAgentName && (
             <NavItem icon={icons.unified} label="Unified Score" active={tab === 'unified'}
-              collapsed={!sidebarExpanded} onClick={() => setTab('unified')} />
+              collapsed={!sidebarExpanded} onClick={() => switchTab('unified')} />
           )}
         </nav>
 
@@ -2713,7 +2733,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                 <div className="flex flex-col items-center justify-center h-48 text-center">
                   <p className="text-gray-400 text-sm">No scored chats yet.</p>
                   <p className="text-xs text-gray-300 mt-1">Upload transcripts in the Upload & Score tab.</p>
-                  <button onClick={() => setTab('upload')}
+                  <button onClick={() => switchTab('upload')}
                     className="mt-4 text-xs px-4 py-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition">
                     Go to Upload →
                   </button>
@@ -3746,7 +3766,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
           {/* ── CHATS PENDING TAB ── */}
           {tab === 'pending' && (
-            <PendingChatsTab userRole={userRole} userEmail={userEmail} />
+            <PendingChatsTab userRole={userRole} userEmail={userEmail} initialSection={initialSection} />
           )}
 
           {/* ── CALL QUALITY TAB ── */}
