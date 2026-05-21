@@ -1153,7 +1153,15 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
         body: JSON.stringify({ chatId: item.chatId, scores: edit.scores, reasoning: edit.reasoning, note: edit.note }),
       });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
-      setItems(prev => prev.map(i => i.chatId === item.chatId ? { ...i, scores: edit.scores, reasoning: edit.reasoning } : i));
+      const data = await res.json();
+      const newIqs = data.entry?.iqs;
+      setItems(prev => prev.map(i =>
+        i.chatId === item.chatId
+          ? { ...i, scores: edit.scores, reasoning: edit.reasoning, ...(newIqs !== undefined ? { iqs: newIqs } : {}) }
+          : i
+      ));
+      // Clear inlineEdit so re-expanding the item re-initialises from the updated items state
+      setInlineEdit(s => { const next = { ...s }; delete next[item.chatId]; return next; });
       setOverrideSaved(s => ({ ...s, [item.chatId]: true }));
       setTimeout(() => setOverrideSaved(s => ({ ...s, [item.chatId]: false })), 3000);
     } catch (e: any) { alert(e?.message || 'Failed to save override'); }

@@ -94,9 +94,9 @@ export async function PATCH(req: NextRequest) {
       if (rowExists) {
         await query(
           `UPDATE iqs_scores
-           SET parameters = $1, iqs_score = $2, review_note = $4
-           WHERE chat_id = $3`,
-          [JSON.stringify(params), newIqs, chatId, note || null]
+           SET parameters = $1, iqs_score = $2, review_note = $3
+           WHERE chat_id = $4`,
+          [JSON.stringify(params), newIqs, note || null, chatId]
         );
       } else {
         await query(
