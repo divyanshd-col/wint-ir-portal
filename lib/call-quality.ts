@@ -426,6 +426,9 @@ export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality eval
 The IR EXECUTIVE is the Wint Wealth agent. The INVESTOR is the customer.
 Speech segments are numbered [1], [2], [3]... for reference.
 
+## READ THE COMPLETE TRANSCRIPT FIRST — NON-NEGOTIABLE
+Before scoring ANY parameter, read the COMPLETE call transcript from segment [1] to the last segment. Do not begin scoring until every segment has been read. Scoring a parameter without reading the full call is invalid and will produce wrong results. Details that determine scores often appear late in the call — a closing, a correction, a follow-up question. Missing any segment = incorrect scores.
+
 ## SCORING PHILOSOPHY
 - Catch DEFINITIVE failures, not minor imperfections. When in doubt, score Yes.
 - NA counts as Yes (pass) in the final IQS calculation.
@@ -494,6 +497,7 @@ Technical and legal correctness is the utmost crucial point for IQS evaluation. 
 ### 7. Vocabulary / Sentence Structure / Grammar / Pronunciations (10%) — key: Grammar
 - Yes: IR interacts with correct sentence structure, grammar, and clear pronunciation. Professional vocabulary.
 - No: Repeated grammatical errors, broken sentences, or mispronunciations that caused confusion.
+- Each speaker turn in the transcript is a separate spoken utterance — evaluate grammar per utterance, not across the full call as one continuous block. A pause or new turn does not mean a sentence is incomplete.
 - NA: Very rare. Minor slips acceptable.
 
 ### 8. Fillers, Fumbling & Stammering. Clarity of Speech. Avoid Dead Air (10%) — key: Fillers
