@@ -2141,7 +2141,19 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         throw new Error(errData?.error || `Server error ${res.status}`);
       }
       const data = await res.json();
-      const updated: IQSScoreEntry = data.entry || { ...editEntry, ...editForm, updatedAt: new Date().toISOString(), updatedBy: userEmail };
+      const updated: IQSScoreEntry = {
+        ...editEntry,
+        agentName:      editForm.agentName,
+        csat:           editForm.csat,
+        disposition:    editForm.disposition,
+        subDisposition: editForm.subDisposition,
+        scores:         editForm.scores as Record<string, ParamScore>,
+        reasoning:      editForm.reasoning,
+        iqs:            data.entry?.iqs ?? editEntry.iqs,
+        updatedBy:      userEmail,
+        updatedAt:      new Date().toISOString(),
+        ...(editForm.note ? { reviewNote: editForm.note } : {}),
+      };
       setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
       setDetailEntry(prev => prev?.id === editEntry.id ? updated : prev);
       setEditSaved(true);
