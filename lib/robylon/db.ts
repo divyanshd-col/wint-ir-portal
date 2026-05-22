@@ -260,7 +260,7 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMax?: number; includeUncertain?: boolean } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMin?: number; iqsMax?: number; includeUncertain?: boolean; disposition?: string; subDisposition?: string } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
@@ -272,6 +272,10 @@ export async function getAllScoredConversations(
   if (opts.dateTo) {
     params.push(opts.dateTo);
     conditions.push(`c.started_at::date <= $${params.length}`);
+  }
+  if (opts.iqsMin !== undefined && opts.iqsMin > 0) {
+    params.push(opts.iqsMin);
+    conditions.push(`s.iqs_score >= $${params.length}`);
   }
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
@@ -293,26 +297,36 @@ export async function getAllScoredConversations(
     // Scoped role with no assigned agents — return nothing
     conditions.push(`1=0`);
   }
+  if (opts.disposition) {
+    params.push(opts.disposition);
+    conditions.push(`(c.tags->>'disposition') = $${params.length}`);
+  }
+  if (opts.subDisposition) {
+    params.push(opts.subDisposition);
+    conditions.push(`(c.tags->>'sub_disposition') = $${params.length}`);
+  }
 
   const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const limitSql = limit > 0 ? `LIMIT ${limit}` : '';
 
   return query(`
     SELECT
-      c.id                  AS "chatId",
-      c.started_at::date    AS "date",
-      c.conversation_type   AS "conversationType",
-      c.frt_seconds         AS "frt",
-      c.bot_to_team_seconds AS "botToTeamSecs",
-      c.resolution_seconds  AS "resolutionTime",
+      c.id                        AS "chatId",
+      c.started_at::date          AS "date",
+      c.conversation_type         AS "conversationType",
+      c.frt_seconds               AS "frt",
+      c.bot_to_team_seconds       AS "botToTeamSecs",
+      c.resolution_seconds        AS "resolutionTime",
       c.csat_score,
       c.csat_label,
       c.tags,
-      a.name                AS "agentName",
-      s.iqs_score           AS "iqs",
+      c.tags->>'disposition'      AS "disposition",
+      c.tags->>'sub_disposition'  AS "subDisposition",
+      a.name                      AS "agentName",
+      s.iqs_score                 AS "iqs",
       s.parameters,
-      s.model_version       AS "modelVersion",
-      s.scored_at           AS "scoredAt"
+      s.model_version             AS "modelVersion",
+      s.scored_at                 AS "scoredAt"
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id

@@ -581,7 +581,7 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const chatId          = String(body.chat_id || '');
   const classifications: any[] = body.data?.classifications || [];
 
-  const primary = [...classifications].sort((a, b) => (b.level_number ?? 0) - (a.level_number ?? 0))[0];
+  const primary = classifications[0];
   if (!primary) {
     return NextResponse.json({ ok: true, scored: false, reason: 'No classifications in payload' });
   }

@@ -1004,11 +1004,41 @@ interface IQSFlagComment {
 }
 interface PendingReviewItem {
   chatId: string; agentName: string; iqs: number; scoredAt: string; date: string;
+  disposition?: string; subDisposition?: string;
   flag?: IQSFlagData | null;
   qaStatus?: { reviewedBy: string; reviewedAt: string; reviewNote: string } | null;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
   scores?: Record<string, string>;
   reasoning?: Record<string, string>;
+}
+
+const PENDING_DEFAULT_FILTERS: LogFilters = {
+  agent: '', minScore: 0, maxScore: 100,
+  disposition: '', subDisposition: '', csat: '', type: '',
+  dateRange: 'today', dateFrom: '', dateTo: '',
+  chatId: '',
+};
+
+function buildPendingParams(f: LogFilters): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.minScore > 0)    p.set('minScore', String(f.minScore));
+  if (f.maxScore < 100)  p.set('maxScore', String(f.maxScore));
+  if (f.disposition)     p.set('tag', f.disposition);
+  if (f.subDisposition)  p.set('subTag', f.subDisposition);
+  if (f.dateRange === 'today') {
+    const d = new Date().toISOString().slice(0, 10);
+    p.set('dateFrom', d); p.set('dateTo', d);
+  } else if (f.dateRange === 'yesterday') {
+    const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    p.set('dateFrom', d); p.set('dateTo', d);
+  } else if (f.dateRange === '1w') {
+    p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
+    p.set('dateTo', new Date().toISOString().slice(0, 10));
+  } else if (f.dateRange === 'custom') {
+    if (f.dateFrom) p.set('dateFrom', f.dateFrom);
+    if (f.dateTo)   p.set('dateTo', f.dateTo);
+  }
+  return p;
 }
 
 function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
@@ -1028,15 +1058,28 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   const [transcripts, setTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
   const [transcriptLoading, setTranscriptLoading] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
+  // Filter state
+  const [pendingFilters, setPendingFilters] = useState<LogFilters>(PENDING_DEFAULT_FILTERS);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
+  const [dispositionSubMap, setDispositionSubMap] = useState<Record<string, string[]>>({});
+
+  const fetchPending = useCallback(async (filters: LogFilters) => {
     setLoading(true);
     setLoadError('');
-    fetch('/api/quality/pending-review')
-      .then(r => r.json())
-      .then(d => setItems(d.items || []))
-      .catch(() => setLoadError('Failed to load pending chats'))
-      .finally(() => setLoading(false));
+    try {
+      const params = buildPendingParams(filters);
+      const d = await fetch(`/api/quality/pending-review?${params}`).then(r => r.json());
+      setItems(d.items || []);
+      setAvailableDispositions(d.availableDispositions || []);
+      setDispositionSubMap(d.dispositionSubMap || {});
+    } catch {
+      setLoadError('Failed to load pending chats');
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => { fetchPending(PENDING_DEFAULT_FILTERS); }, [fetchPending]);
 
   const loadThread = async (flagId: string) => {
     if (threads[flagId] !== undefined) return;
@@ -1295,6 +1338,18 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 
   const displayItems = section === 'pending' ? pendingItems : reviewedItems;
 
+  const activeFilterCount = [
+    pendingFilters.dateRange !== 'today',
+    pendingFilters.minScore > 0,
+    pendingFilters.maxScore < 100,
+    !!pendingFilters.disposition,
+    !!pendingFilters.subDisposition,
+  ].filter(Boolean).length;
+
+  const subDispositionOptions = pendingFilters.disposition
+    ? (dispositionSubMap[pendingFilters.disposition] || [])
+    : Object.values(dispositionSubMap).flat().filter((v, i, a) => a.indexOf(v) === i).sort();
+
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
       {/* Header row */}
@@ -1337,7 +1392,112 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
         <input type="text" value={chatIdSearch} onChange={e => setChatIdSearch(e.target.value)}
           placeholder="Filter by Chat ID…"
           className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+        {/* Filter toggle */}
+        <button
+          onClick={() => setShowFilterPanel(v => !v)}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl font-semibold border transition ${
+            showFilterPanel ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+          }`}>
+          Filters
+          {activeFilterCount > 0 && (
+            <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${showFilterPanel ? 'bg-white text-emerald-700' : 'bg-emerald-600 text-white'}`}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
       </div>
+
+      {/* Filter panel */}
+      {showFilterPanel && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+          {/* Row 1: Date Range */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Date Range</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {(['today', 'yesterday', '1w'] as const).map(r => (
+                <button key={r}
+                  onClick={() => setPendingFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' }))}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                    pendingFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                </button>
+              ))}
+              <button
+                onClick={() => setPendingFilters(f => ({ ...f, dateRange: 'custom' }))}
+                className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                  pendingFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}>
+                Custom
+              </button>
+              {pendingFilters.dateRange === 'custom' && (
+                <div className="flex items-center gap-2 ml-1">
+                  <input type="date" value={pendingFilters.dateFrom}
+                    onChange={e => setPendingFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                  <span className="text-gray-400 text-xs">→</span>
+                  <input type="date" value={pendingFilters.dateTo}
+                    onChange={e => setPendingFilters(f => ({ ...f, dateTo: e.target.value }))}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: IQS Range */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
+            <div className="flex items-center gap-2">
+              <input type="number" min={0} max={100} value={pendingFilters.minScore}
+                onChange={e => setPendingFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 }))}
+                className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              <span className="text-gray-400 text-xs">–</span>
+              <input type="number" min={0} max={100} value={pendingFilters.maxScore}
+                onChange={e => setPendingFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 }))}
+                className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+            </div>
+          </div>
+
+          {/* Row 3: Disposition + Sub-Disposition */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+              <select value={pendingFilters.disposition}
+                onChange={e => setPendingFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' }))}
+                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
+                <option value="">All</option>
+                {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+              <select value={pendingFilters.subDisposition}
+                onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
+                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
+                <option value="">All</option>
+                {subDispositionOptions.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Action row */}
+          <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
+            <button onClick={() => { fetchPending(pendingFilters); setShowFilterPanel(false); }} disabled={loading}
+              className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+              {loading ? 'Loading…' : 'Apply Filters'}
+            </button>
+            <button
+              onClick={() => {
+                setPendingFilters(PENDING_DEFAULT_FILTERS);
+                fetchPending(PENDING_DEFAULT_FILTERS);
+                setShowFilterPanel(false);
+              }}
+              className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
+              Reset all
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Items */}
       {displayItems.length === 0 ? (
