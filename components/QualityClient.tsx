@@ -1328,7 +1328,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
                             <div className="flex gap-1 shrink-0">
                               {(['Yes', 'No', 'NA'] as const).map(v => (
                                 <button key={v}
-                                  onClick={() => setInlineEdit(s => ({ ...s, [item.chatId]: { ...s[item.chatId], scores: { ...s[item.chatId].scores, [p]: v } } }))}
+                                  onClick={() => setInlineEdit(s => { const cur = s[item.chatId] ?? { scores: { ...(item.scores || {}) }, reasoning: { ...(item.reasoning || {}) }, note: '' }; return { ...s, [item.chatId]: { ...cur, scores: { ...cur.scores, [p]: v } } }; })}
                                   className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${
                                     val === v
                                       ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-gray-400 text-white'
@@ -1350,7 +1350,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
                         {canEdit ? (
                           <textarea
                             value={edit?.reasoning[p] || ''}
-                            onChange={e => setInlineEdit(s => ({ ...s, [item.chatId]: { ...s[item.chatId], reasoning: { ...s[item.chatId].reasoning, [p]: e.target.value } } }))}
+                            onChange={e => setInlineEdit(s => { const cur = s[item.chatId] ?? { scores: { ...(item.scores || {}) }, reasoning: { ...(item.reasoning || {}) }, note: '' }; return { ...s, [item.chatId]: { ...cur, reasoning: { ...cur.reasoning, [p]: e.target.value } } }; })}
                             placeholder="Reasoning…" rows={2}
                             className="mt-1.5 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-400/30 resize-none bg-white"
                           />
@@ -1420,7 +1420,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
                     type="text"
                     value={canEdit ? (inlineEdit[item.chatId]?.note || '') : (reviewNotes[item.chatId] || '')}
                     onChange={e => canEdit
-                      ? setInlineEdit(s => ({ ...s, [item.chatId]: { ...s[item.chatId], note: e.target.value } }))
+                      ? setInlineEdit(s => { const cur = s[item.chatId] ?? { scores: { ...(item.scores || {}) }, reasoning: { ...(item.reasoning || {}) }, note: '' }; return { ...s, [item.chatId]: { ...cur, note: e.target.value } }; })
                       : setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
                     placeholder="Review note (optional)…"
                     className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
