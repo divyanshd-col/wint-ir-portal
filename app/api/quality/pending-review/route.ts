@@ -53,8 +53,13 @@ export async function GET(req: NextRequest) {
   const dateTo       = url.searchParams.get('dateTo') || '';
   const tag          = url.searchParams.get('tag') || '';
   const subTag       = url.searchParams.get('subTag') || '';
-  const minScore     = parseInt(url.searchParams.get('minScore') || '0') || 0;
-  const maxScore     = parseInt(url.searchParams.get('maxScore') || '79') || 79;
+  const minScoreRaw  = parseInt(url.searchParams.get('minScore') ?? '', 10);
+  const maxScoreRaw  = parseInt(url.searchParams.get('maxScore') ?? '', 10);
+  const minScore     = isNaN(minScoreRaw) ? 0  : Math.max(0,   Math.min(100, minScoreRaw));
+  const maxScore     = isNaN(maxScoreRaw) ? 79 : Math.max(0,   Math.min(100, maxScoreRaw));
+  // Clamp so an inverted range doesn't silently return zero results
+  const effectiveMin = Math.min(minScore, maxScore);
+  const effectiveMax = Math.max(minScore, maxScore);
 
   // Base opts shared by all queries
   const baseOpts: Parameters<typeof getAllScoredConversations>[1] = { iqsMax: 79, includeUncertain: true };
@@ -84,8 +89,8 @@ export async function GET(req: NextRequest) {
   // Apply filters to get final set
   const filteredOpts: Parameters<typeof getAllScoredConversations>[1] = {
     ...baseOpts,
-    iqsMin: minScore > 0 ? minScore : undefined,
-    iqsMax: maxScore < 100 ? maxScore : 79,
+    iqsMin: effectiveMin > 0 ? effectiveMin : undefined,
+    iqsMax: effectiveMax < 100 ? effectiveMax : 79,
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
     ...(tag && { disposition: tag }),
@@ -93,7 +98,7 @@ export async function GET(req: NextRequest) {
   };
 
   let rows: any[] = [];
-  if (dateFrom || dateTo || tag || subTag || minScore > 0 || maxScore < 79) {
+  if (dateFrom || dateTo || tag || subTag || effectiveMin > 0 || effectiveMax < 79) {
     try {
       rows = await getAllScoredConversations(0, filteredOpts);
     } catch (e: any) {
