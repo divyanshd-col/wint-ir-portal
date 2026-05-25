@@ -34,11 +34,15 @@ export async function GET(req: NextRequest) {
 
   let selfAgentName = '';
   let scopedAgentNames: string[] | null = null;
+  let assignedDispositions: string[] | null = null;
 
   if (['tl', 'quality'].includes(role)) {
     const config = await readConfig();
     const configUser = config.users.find((u: any) => (u.email || u.username) === email);
     selfAgentName = configUser?.agentName || '';
+    if (role === 'quality' && configUser?.assignedDispositions?.length) {
+      assignedDispositions = configUser.assignedDispositions;
+    }
   }
 
   if (role === 'tl' && selfAgentName) {
@@ -49,6 +53,7 @@ export async function GET(req: NextRequest) {
 
   // Parse filter params
   const url = new URL(req.url);
+  const agentFilter  = url.searchParams.get('agent') || '';
   const dateFrom     = url.searchParams.get('dateFrom') || '';
   const dateTo       = url.searchParams.get('dateTo') || '';
   const tag          = url.searchParams.get('tag') || '';
@@ -58,7 +63,14 @@ export async function GET(req: NextRequest) {
 
   // Base opts shared by all queries
   const baseOpts: Parameters<typeof getAllScoredConversations>[1] = { iqsMax: 79, includeUncertain: true };
-  if (scopedAgentNames !== null) baseOpts.agentNames = scopedAgentNames;
+  if (scopedAgentNames !== null) {
+    if (agentFilter) baseOpts.agentName = agentFilter;
+    else baseOpts.agentNames = scopedAgentNames;
+  } else if (agentFilter) {
+    baseOpts.agentName = agentFilter;
+  }
+  // Soft disposition default for QA: pre-filter unless QA explicitly overrides with a tag
+  if (assignedDispositions && !tag) baseOpts.dispositions = assignedDispositions;
 
   // Fetch unfiltered set to build dropdown options
   let allRows: any[] = [];
@@ -88,12 +100,12 @@ export async function GET(req: NextRequest) {
     iqsMax: maxScore < 100 ? maxScore : 79,
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
-    ...(tag && { disposition: tag }),
+    ...(tag && { disposition: tag, dispositions: undefined }), // user override clears the default
     ...(subTag && { subDisposition: subTag }),
   };
 
   let rows: any[] = [];
-  if (dateFrom || dateTo || tag || subTag || minScore > 0 || maxScore < 79) {
+  if (dateFrom || dateTo || tag || subTag || minScore > 0 || maxScore < 79 || agentFilter) {
     try {
       rows = await getAllScoredConversations(0, filteredOpts);
     } catch (e: any) {
@@ -152,8 +164,13 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  const availableAgents = [...new Set(allRows.map((r: any) => r.agentName).filter(Boolean))].sort() as string[];
   const uncertainCount = items.filter(i => !!(i as any).uncertainParameters && !(i as any).qaStatus).length;
-  return NextResponse.json({ items, uncertainCount, availableDispositions, availableSubDispositions, dispositionSubMap });
+  return NextResponse.json({
+    items, uncertainCount, availableDispositions, availableSubDispositions, dispositionSubMap,
+    availableAgents,
+    ...(assignedDispositions && { assignedDispositions }),
+  });
 }
 
 export async function PATCH(req: NextRequest) {
