@@ -100,6 +100,7 @@ export function transcriptFromJsonb(messages: any[]): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
   for (const m of messages) {
+    if (m.sender_name === 'Robylon AI' && m.sender_type === 'agent') continue;
     const role = m.sender_type === 'customer' ? 'Customer'
                : m.sender_type === 'bot'      ? 'Bot'
                : 'Agent';
