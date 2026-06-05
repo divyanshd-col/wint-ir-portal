@@ -91,7 +91,22 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
                   onMouseEnter={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}
                 >
-                  <td style={tdMono}>{d.chatId}</td>
+                  <td style={tdMono}>
+                    {/^\d+$/.test(d.chatId.trim()) ? (
+                      <a
+                        href={`https://app.robylon.ai/unified-inbox/share/${d.chatId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                      >
+                        {d.chatId}
+                      </a>
+                    ) : (
+                      d.chatId
+                    )}
+                  </td>
                   <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
                   <td style={{ ...td, fontSize: 13 }}>
                     <span style={{

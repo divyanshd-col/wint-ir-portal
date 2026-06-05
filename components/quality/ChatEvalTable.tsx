@@ -360,7 +360,22 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
                     onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                     onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                   >
-                    <td style={tdMono}>{chat.chatId}</td>
+                    <td style={tdMono}>
+                      {/^\d+$/.test(chat.chatId.trim()) ? (
+                        <a
+                          href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                        >
+                          {chat.chatId}
+                        </a>
+                      ) : (
+                        chat.chatId
+                      )}
+                    </td>
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                     <td style={tdNum}>
                       <span style={{
