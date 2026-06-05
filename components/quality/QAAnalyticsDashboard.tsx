@@ -54,15 +54,19 @@ export default function QAAnalyticsDashboard() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo,   setCustomTo]   = useState('');
   const [showPicker, setShowPicker] = useState(false);
-  const [pendingCustom, setPendingCustom] = useState<{ from: string; to: string } | null>(null);
 
   const [data,    setData]    = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState('');
 
+  function fmtDate(iso: string) {
+    const d = new Date(iso + 'T00:00:00Z');
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+
   const periodLabel = period === '7' ? 'Last 7 days'
     : period === 'custom' && customFrom && customTo
-      ? `${customFrom} – ${customTo}`
+      ? `${fmtDate(customFrom)} – ${fmtDate(customTo)}`
       : 'Last 30 days';
 
   const fetchData = useCallback(async () => {

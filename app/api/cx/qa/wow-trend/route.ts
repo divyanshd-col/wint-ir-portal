@@ -106,7 +106,7 @@ export async function GET(req: NextRequest) {
        SUM(c.resolution_seconds)   FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS sum_resolution,
        COUNT(c.resolution_seconds) FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS resolution_count
      FROM conversations c
-     JOIN iqs_scores i ON c.id = i.chat_id
+     LEFT JOIN iqs_scores i ON c.id = i.chat_id
      WHERE c.tags->>'disposition' = ANY($1)
        AND c.closed_at >= $2 AND c.closed_at <= $3
      GROUP BY 1
