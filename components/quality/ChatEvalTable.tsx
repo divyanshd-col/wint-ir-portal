@@ -66,10 +66,11 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
   const [openDrop, setOpenDrop] = useState<string | null>(null);
 
   // ── Data state ────────────────────────────────────────────────────────────
-  const [chats,   setChats]   = useState<ChatToReviewRow[]>([]);
-  const [total,   setTotal]   = useState(0);
-  const [page,    setPage]    = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [chats,    setChats]    = useState<ChatToReviewRow[]>([]);
+  const [total,    setTotal]    = useState(0);
+  const [page,     setPage]     = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [loading,  setLoading]  = useState(true);
 
   // ── Expanded row state ────────────────────────────────────────────────────
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -77,10 +78,10 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
   // ── Sub-disposition map ───────────────────────────────────────────────────
   const [subMap, setSubMap] = useState<Record<string, string[]>>({});
 
-  const fetchData = useCallback(async (pg = 1) => {
+  const fetchData = useCallback(async (pg = 1, ps = pageSize) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(pg), limit: '50' });
+      const params = new URLSearchParams({ page: String(pg), limit: String(ps) });
       if (dispFilter)    params.set('disposition_filter', dispFilter);
       if (subDispFilter) params.set('sub_disposition',    subDispFilter);
       if (iqsMin)        params.set('iqs_min',            iqsMin);
@@ -101,7 +102,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, customFrom, customTo, onCountChange]);
+  }, [dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, customFrom, customTo, onCountChange, pageSize]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -140,12 +141,13 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
   const hasFilters = !!(dispFilter || subDispFilter || iqsMin || iqsMax || csatFilter.length || paramFail || customFrom);
 
   return (
-    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
 
-      {/* Filter bar */}
+      {/* Filter bar — overflow: visible so dropdowns are not clipped */}
       <div style={{
-        height: 56, background: 'var(--qa-card)', borderBottom: '1px solid var(--qa-border)',
-        display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px', overflowX: 'auto',
+        minHeight: 56, background: 'var(--qa-card)', borderBottom: '1px solid var(--qa-border)',
+        display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 16px',
+        borderRadius: '8px 8px 0 0',
       }}>
 
         {/* Disposition filter */}
@@ -282,13 +284,46 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
         )}
 
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
-          {loading ? 'Loading…' : `Showing ${chats.length} of ${total}`}
-        </span>
+
+        {/* Per-page selector + count */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
+            {loading ? 'Loading…' : `Showing ${chats.length} of ${total}`}
+          </span>
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button
+              title="Rows per page"
+              onClick={() => setOpenDrop(openDrop === 'pagesize' ? null : 'pagesize')}
+              style={{
+                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            {openDrop === 'pagesize' && (
+              <div style={{ ...dropdown, right: 0, left: 'auto', minWidth: 120 }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                  Rows per page
+                </div>
+                {[5, 10, 25, 50].map(n => (
+                  <div key={n} style={{ ...dropItem, fontWeight: pageSize === n ? 600 : 400 }}
+                    onClick={() => { setPageSize(n); fetchData(1, n); setOpenDrop(null); }}>
+                    {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Table */}
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -387,19 +422,19 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
       </div>
 
       {/* Pagination */}
-      {total > 50 && !loading && (
+      {total > pageSize && !loading && (
         <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Page {page} of {Math.ceil(total / 50)}</span>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Page {page} of {Math.ceil(total / pageSize)}</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button disabled={page <= 1} onClick={() => fetchData(page - 1)} style={{
               height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
               background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page <= 1 ? 'not-allowed' : 'pointer',
               color: page <= 1 ? 'var(--qa-text-3)' : 'var(--qa-text)',
             }}>← Prev</button>
-            <button disabled={page >= Math.ceil(total / 50)} onClick={() => fetchData(page + 1)} style={{
+            <button disabled={page >= Math.ceil(total / pageSize)} onClick={() => fetchData(page + 1)} style={{
               height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
-              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page >= Math.ceil(total / 50) ? 'not-allowed' : 'pointer',
-              color: page >= Math.ceil(total / 50) ? 'var(--qa-text-3)' : 'var(--qa-text)',
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page >= Math.ceil(total / pageSize) ? 'not-allowed' : 'pointer',
+              color: page >= Math.ceil(total / pageSize) ? 'var(--qa-text-3)' : 'var(--qa-text)',
             }}>Next →</button>
           </div>
         </div>
