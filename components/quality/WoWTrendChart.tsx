@@ -11,9 +11,6 @@ interface WeekData {
 }
 
 interface Props {
-  period:      string;
-  customFrom:  string;
-  customTo:    string;
   dispositions: string[];
 }
 
@@ -48,7 +45,7 @@ function downloadCSV(weeks: WeekData[], disposition: string) {
   URL.revokeObjectURL(url);
 }
 
-export default function WoWTrendChart({ period, customFrom, customTo, dispositions }: Props) {
+export default function WoWTrendChart({ dispositions }: Props) {
   const [selectedDispo, setSelectedDispo] = useState('all');
   const [weeks,   setWeeks]   = useState<WeekData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,10 +55,7 @@ export default function WoWTrendChart({ period, customFrom, customTo, dispositio
     async function load() {
       setLoading(true);
       try {
-        let url = `/api/cx/qa/wow-trend?period=${period}&disposition=${encodeURIComponent(selectedDispo)}`;
-        if (period === 'custom' && customFrom && customTo) {
-          url += `&from=${customFrom}&to=${customTo}`;
-        }
+        const url = `/api/cx/qa/wow-trend?disposition=${encodeURIComponent(selectedDispo)}`;
         const res = await fetch(url);
         if (!res.ok) return;
         const data = await res.json();
@@ -72,7 +66,7 @@ export default function WoWTrendChart({ period, customFrom, customTo, dispositio
     }
     load();
     return () => { cancelled = true; };
-  }, [period, customFrom, customTo, selectedDispo]);
+  }, [selectedDispo]);
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>

@@ -1,5 +1,5 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { DispositionRow } from './QAAnalyticsDashboard';
 
 interface Props {
@@ -77,8 +77,12 @@ const DownloadIcon = () => (
   </svg>
 );
 
+type SortCol = 'count' | 'csatChat' | 'csatCall' | 'aiChatCsat' | 'pctDeflected' | 'iqsChat' | 'iqsCall' | 'resolutionSecs';
+
 export default function DispositionTreeTable({ mode, rows, loading, periodLabel }: Props) {
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
+  const [sortCol, setSortCol]   = useState<SortCol>('count');
+  const [sortDir, setSortDir]   = useState<'desc' | 'asc'>('desc');
 
   function toggle(key: string) {
     setOpenKeys(prev => {
@@ -87,6 +91,23 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
       return next;
     });
   }
+
+  function handleSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
+  }
+
+  const sortedRows = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      const av = a[sortCol] ?? -Infinity;
+      const bv = b[sortCol] ?? -Infinity;
+      return sortDir === 'desc' ? (bv as number) - (av as number) : (av as number) - (bv as number);
+    });
+  }, [rows, sortCol, sortDir]);
 
   const title = mode === 'csat'
     ? `CSAT by channel · ${periodLabel}`
@@ -99,6 +120,15 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
     fontWeight: 500, textAlign: 'left', padding: '0 16px',
   };
   const thNum: React.CSSProperties = { ...th, textAlign: 'right' };
+
+  function SortArrow({ col }: { col: SortCol }) {
+    if (sortCol !== col) return <span style={{ marginLeft: 4, opacity: 0.25, fontSize: 10 }}>⇅</span>;
+    return <span style={{ marginLeft: 4, fontSize: 10 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>;
+  }
+
+  function thSort(): React.CSSProperties {
+    return { ...thNum, cursor: 'pointer', userSelect: 'none' };
+  }
   const td: React.CSSProperties = {
     padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
     fontSize: 14, color: 'var(--qa-text)', verticalAlign: 'middle', height: 48,
@@ -137,21 +167,21 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
             {mode === 'csat' ? (
               <tr>
                 <th style={{ ...th, width: '30%' }}>Intent</th>
-                <th style={thNum}>Count</th>
-                <th style={thNum}>CSAT · Chats</th>
-                <th style={thNum}>CSAT · Calls</th>
+                <th style={thSort()} onClick={() => handleSort('count')}>Count<SortArrow col="count" /></th>
+                <th style={thSort()} onClick={() => handleSort('csatChat')}>CSAT · Chats<SortArrow col="csatChat" /></th>
+                <th style={thSort()} onClick={() => handleSort('csatCall')}>CSAT · Calls<SortArrow col="csatCall" /></th>
                 <th style={thNum}>CSAT · Emails</th>
-                <th style={thNum}>AI Chat CSAT</th>
-                <th style={thNum}>% Deflected</th>
+                <th style={thSort()} onClick={() => handleSort('aiChatCsat')}>AI Chat CSAT<SortArrow col="aiChatCsat" /></th>
+                <th style={thSort()} onClick={() => handleSort('pctDeflected')}>% Deflected<SortArrow col="pctDeflected" /></th>
               </tr>
             ) : (
               <tr>
                 <th style={{ ...th, width: '36%' }}>Intent</th>
-                <th style={thNum}>Count</th>
-                <th style={thNum}>IQS · Chats</th>
-                <th style={thNum}>IQS · Calls</th>
+                <th style={thSort()} onClick={() => handleSort('count')}>Count<SortArrow col="count" /></th>
+                <th style={thSort()} onClick={() => handleSort('iqsChat')}>IQS · Chats<SortArrow col="iqsChat" /></th>
+                <th style={thSort()} onClick={() => handleSort('iqsCall')}>IQS · Calls<SortArrow col="iqsCall" /></th>
                 <th style={thNum}>IQS · Emails</th>
-                <th style={thNum}>Resolution Time</th>
+                <th style={thSort()} onClick={() => handleSort('resolutionSecs')}>Resolution Time<SortArrow col="resolutionSecs" /></th>
               </tr>
             )}
           </thead>
@@ -175,7 +205,7 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
               </tr>
             ) : (
               <>
-                {rows.map(row => {
+                {sortedRows.map(row => {
                   const isOpen = openKeys.has(row.disposition);
                   const hasChildren = row.children.length > 0;
 

@@ -186,12 +186,7 @@ export default function QAAnalyticsDashboard() {
 
       {/* ── Week-on-Week Trends ──────────────────────────────────────── */}
       <section style={{ marginBottom: 32 }}>
-        <WoWTrendChart
-          period={period}
-          customFrom={customFrom}
-          customTo={customTo}
-          dispositions={allDispositions}
-        />
+        <WoWTrendChart dispositions={allDispositions} />
       </section>
 
       <p style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic', marginTop: 0 }}>

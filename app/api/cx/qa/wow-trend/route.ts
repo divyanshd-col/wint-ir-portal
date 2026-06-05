@@ -14,14 +14,6 @@ interface WeekRow {
   resolution_count:  string;
 }
 
-function isoWeekStart(date: Date): string {
-  const d = new Date(date);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day; // Monday-based
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
-}
-
 function weekLabel(start: string): string {
   const d = new Date(start + 'T00:00:00Z');
   const end = new Date(d);
@@ -36,6 +28,9 @@ function secsToLabel(secs: number): string {
   return `${m}m ${s.toString().padStart(2, '0')}s`;
 }
 
+// Agent names treated as bot/AI-handled
+const BOT_AGENT_NAMES = ['Robylon', 'Robylon AI', 'Myra'];
+
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -49,23 +44,18 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const dispositionFilter = searchParams.get('disposition') ?? 'all';
 
-  // Date range
-  const p = searchParams.get('period');
-  let from: Date, to: Date;
+  // Always show last 5 complete weeks regardless of the page time filter
   const now = new Date();
-  if (p === 'custom') {
-    const f = searchParams.get('from');
-    const t = searchParams.get('to');
-    if (!f || !t) return NextResponse.json({ error: 'from and to required' }, { status: 400 });
-    from = new Date(f);
-    to   = new Date(t + 'T23:59:59Z');
-  } else {
-    const days = p === '7' ? 7 : 30;
-    from = new Date(now);
-    from.setDate(from.getDate() - days);
-    from.setHours(0, 0, 0, 0);
-    to = now;
-  }
+  const todayMonday = new Date(now);
+  const dayOfWeek = todayMonday.getUTCDay();
+  const daysToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  todayMonday.setUTCDate(todayMonday.getUTCDate() - daysToMonday);
+  todayMonday.setUTCHours(0, 0, 0, 0);
+  // Go back 5 weeks from the start of this week
+  const from = new Date(todayMonday);
+  from.setUTCDate(from.getUTCDate() - 35);
+  const to = new Date(todayMonday);
+  to.setUTCMilliseconds(-1); // end of last Sunday
 
   // Resolve dispositions for this QA
   const config = await readConfig();
@@ -98,20 +88,21 @@ export async function GET(req: NextRequest) {
 
   const rows = await query<WeekRow>(
     `SELECT
-       date_trunc('week', c.closed_at)::date::text                   AS week_start,
-       SUM(i.iqs_score)    FILTER (WHERE i.iqs_score IS NOT NULL)::text AS sum_iqs,
-       COUNT(i.iqs_score)  FILTER (WHERE i.iqs_score IS NOT NULL)::text AS iqs_count,
-       COUNT(*) FILTER (WHERE c.conversation_type = 'bot')::text         AS bot_count,
-       COUNT(*)::text                                                     AS total_count,
+       date_trunc('week', c.closed_at)::date::text                        AS week_start,
+       SUM(i.iqs_score)    FILTER (WHERE i.iqs_score IS NOT NULL)::text   AS sum_iqs,
+       COUNT(i.iqs_score)  FILTER (WHERE i.iqs_score IS NOT NULL)::text   AS iqs_count,
+       COUNT(*) FILTER (WHERE a.name = ANY($4))::text                     AS bot_count,
+       COUNT(*)::text                                                      AS total_count,
        SUM(c.resolution_seconds)   FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS sum_resolution,
        COUNT(c.resolution_seconds) FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS resolution_count
      FROM conversations c
      LEFT JOIN iqs_scores i ON c.id = i.chat_id
+     LEFT JOIN agents a ON a.id = c.agent_id
      WHERE c.tags->>'disposition' = ANY($1)
        AND c.closed_at >= $2 AND c.closed_at <= $3
      GROUP BY 1
      ORDER BY 1`,
-    [effectiveDispositions, from.toISOString(), to.toISOString()]
+    [effectiveDispositions, from.toISOString(), to.toISOString(), BOT_AGENT_NAMES]
   );
 
   const result = rows.map(r => {

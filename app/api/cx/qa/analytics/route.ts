@@ -34,10 +34,13 @@ function avgOrNull(sum: number, count: number): number | null {
 
 // ── row type returned by the aggregation query ────────────────────────────
 
+// Agent names treated as bot/AI-handled
+const BOT_AGENT_NAMES = ['Robylon', 'Robylon AI', 'Myra'];
+
 interface AggRow {
   disposition:        string;
   sub_disposition:    string | null;
-  conversation_type:  string;
+  is_bot:             boolean;   // agent is a known bot agent
   has_call:           boolean;   // call_iqs_score IS NOT NULL
   total:              string;
   csat_rated:         string;
@@ -152,11 +155,11 @@ export async function GET(req: NextRequest) {
   // ── 3. Per-disposition aggregation ───────────────────────────────────────
   const aggRows = await query<AggRow>(
     `SELECT
-       COALESCE(c.tags->>'disposition', '')   AS disposition,
-       c.tags->>'sub_disposition'             AS sub_disposition,
-       COALESCE(c.conversation_type, 'agent') AS conversation_type,
-       (i.call_iqs_score IS NOT NULL)         AS has_call,
-       COUNT(*)::text                         AS total,
+       COALESCE(c.tags->>'disposition', '')                AS disposition,
+       c.tags->>'sub_disposition'                          AS sub_disposition,
+       (a.name = ANY($4))                                  AS is_bot,
+       (i.call_iqs_score IS NOT NULL)                      AS has_call,
+       COUNT(*)::text                                      AS total,
        COUNT(*) FILTER (WHERE c.csat_score IS NOT NULL)::text AS csat_rated,
        COUNT(*) FILTER (WHERE c.csat_score = 5)::text         AS csat_good,
        SUM(i.iqs_score)      FILTER (WHERE i.iqs_score      IS NOT NULL)::text AS sum_iqs,
@@ -167,11 +170,12 @@ export async function GET(req: NextRequest) {
        COUNT(c.resolution_seconds) FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS resolution_count
      FROM conversations c
      LEFT JOIN iqs_scores i ON c.id = i.chat_id
+     LEFT JOIN agents a ON a.id = c.agent_id
      WHERE c.tags->>'disposition' = ANY($1)
        AND c.closed_at >= $2 AND c.closed_at <= $3
      GROUP BY 1, 2, 3, 4
      ORDER BY 1, 2`,
-    [dispositions, fromISO, toISO]
+    [dispositions, fromISO, toISO, BOT_AGENT_NAMES]
   );
 
   // ── 4. Grand total (for pct calculation) ─────────────────────────────────
@@ -191,12 +195,12 @@ export async function GET(req: NextRequest) {
     const totalCount  = rows.reduce((s, r) => s + parseInt(r.total), 0);
     const csatRated   = rows.reduce((s, r) => s + parseInt(r.csat_rated), 0);
     const csatGood    = rows.reduce((s, r) => s + parseInt(r.csat_good), 0);
-    const botCount    = rows.filter(r => r.conversation_type === 'bot').reduce((s, r) => s + parseInt(r.total), 0);
-    const botCsatRated = rows.filter(r => r.conversation_type === 'bot').reduce((s, r) => s + parseInt(r.csat_rated), 0);
-    const botCsatGood  = rows.filter(r => r.conversation_type === 'bot').reduce((s, r) => s + parseInt(r.csat_good), 0);
+    const botCount    = rows.filter(r => r.is_bot).reduce((s, r) => s + parseInt(r.total), 0);
+    const botCsatRated = rows.filter(r => r.is_bot).reduce((s, r) => s + parseInt(r.csat_rated), 0);
+    const botCsatGood  = rows.filter(r => r.is_bot).reduce((s, r) => s + parseInt(r.csat_good), 0);
 
     // CSAT by channel
-    const humanRows = rows.filter(r => r.conversation_type !== 'bot');
+    const humanRows = rows.filter(r => !r.is_bot);
     const chatCsatRated = humanRows.reduce((s, r) => s + parseInt(r.csat_rated), 0);
     const chatCsatGood  = humanRows.reduce((s, r) => s + parseInt(r.csat_good), 0);
     // "Calls" = rows that had a call interaction (call_iqs_score present)
@@ -226,10 +230,10 @@ export async function GET(req: NextRequest) {
       const st  = sRows.reduce((s, r) => s + parseInt(r.total), 0);
       const scr = sRows.reduce((s, r) => s + parseInt(r.csat_rated), 0);
       const scg = sRows.reduce((s, r) => s + parseInt(r.csat_good), 0);
-      const sbc = sRows.filter(r => r.conversation_type === 'bot');
+      const sbc = sRows.filter(r => r.is_bot);
       const sbr = sbc.reduce((s, r) => s + parseInt(r.csat_rated), 0);
       const sbg = sbc.reduce((s, r) => s + parseInt(r.csat_good), 0);
-      const sHuman = sRows.filter(r => r.conversation_type !== 'bot');
+      const sHuman = sRows.filter(r => !r.is_bot);
       const shcr = sHuman.reduce((s, r) => s + parseInt(r.csat_rated), 0);
       const shcg = sHuman.reduce((s, r) => s + parseInt(r.csat_good), 0);
       const sCall = sRows.filter(r => r.has_call);
