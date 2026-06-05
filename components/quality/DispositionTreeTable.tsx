@@ -259,6 +259,23 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
                 {/* Total row */}
                 {totalRows > 0 && (() => {
                   const grandCount = rows.reduce((s, r) => s + r.count, 0);
+
+                  // Weighted averages — only include rows where the metric is non-null
+                  function wavg(getValue: (r: DispositionRow) => number | null): number | null {
+                    const valid = rows.filter(r => getValue(r) != null);
+                    if (!valid.length) return null;
+                    const wSum = valid.reduce((s, r) => s + (getValue(r) as number) * r.count, 0);
+                    const wCnt = valid.reduce((s, r) => s + r.count, 0);
+                    return wCnt ? Math.round(wSum / wCnt * 10) / 10 : null;
+                  }
+
+                  // % deflected: sum deflected counts / grand total
+                  const totDeflected = (() => {
+                    const deflectedCount = rows.reduce((s, r) =>
+                      s + (r.pctDeflected != null ? r.pctDeflected / 100 * r.count : 0), 0);
+                    return grandCount ? Math.round(deflectedCount / grandCount * 1000) / 10 : null;
+                  })();
+
                   const totStyle: React.CSSProperties = {
                     ...td,
                     position: 'sticky', bottom: 0, zIndex: 2,
@@ -279,9 +296,20 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
                         {' '}<span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>100%</span>
                       </td>
                       {mode === 'csat' ? (
-                        <>{[null,null,null,null,null].map((_, i) => <td key={i} style={totNumStyle}>—</td>)}</>
+                        <>
+                          <td style={totNumStyle}>{fmt(wavg(r => r.csatChat))}</td>
+                          <td style={totNumStyle}>{fmt(wavg(r => r.csatCall))}</td>
+                          <td style={totNumStyle}>—</td>
+                          <td style={totNumStyle}>{fmt(wavg(r => r.aiChatCsat))}</td>
+                          <td style={totNumStyle}>{fmt(totDeflected)}</td>
+                        </>
                       ) : (
-                        <>{[null,null,null,null].map((_, i) => <td key={i} style={totNumStyle}>—</td>)}</>
+                        <>
+                          <td style={totNumStyle}>{fmtIQS(wavg(r => r.iqsChat))}</td>
+                          <td style={totNumStyle}>{fmtIQS(wavg(r => r.iqsCall))}</td>
+                          <td style={totNumStyle}>—</td>
+                          <td style={totNumStyle}>{fmtTime(wavg(r => r.resolutionSecs))}</td>
+                        </>
                       )}
                     </tr>
                   );
