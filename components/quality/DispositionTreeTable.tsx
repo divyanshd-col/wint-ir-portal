@@ -20,8 +20,10 @@ function fmtIQS(v: number | null) {
 
 function fmtTime(secs: number | null) {
   if (secs == null) return '—';
-  const m = Math.floor(secs / 60);
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
   const s = Math.round(secs % 60);
+  if (h > 0) return `${h}h ${m.toString().padStart(2,'0')}m`;
   return `${m}m ${s.toString().padStart(2,'0')}s`;
 }
 
@@ -252,8 +254,12 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
                         )}
                       </tr>
 
-                      {/* Child rows */}
-                      {isOpen && row.children.map(child => (
+                      {/* Child rows — sorted by the same active column */}
+                      {isOpen && [...row.children].sort((a, b) => {
+                        const av = (a as any)[sortCol] ?? -Infinity;
+                        const bv = (b as any)[sortCol] ?? -Infinity;
+                        return sortDir === 'desc' ? bv - av : av - bv;
+                      }).map(child => (
                         <tr key={`${row.disposition}:${child.subDisposition}`}
                           style={{ display: isOpen ? 'table-row' : 'none' }}
                           onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
