@@ -14,7 +14,7 @@ export default async function QualityLayout({ children }: { children: React.Reac
   if (!['admin', 'quality', 'tl', 'agent'].includes(role)) redirect('/');
 
   // Only quality role gets the new sidebar shell; others fall through to existing page
-  if (role !== 'quality' && role !== 'admin') {
+  if (role !== 'quality') {
     return <>{children}</>;
   }
 
