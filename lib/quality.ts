@@ -169,6 +169,7 @@ Before scoring ANY parameter, read the COMPLETE transcript from the very first m
 - A single factual error can cascade into No on multiple parameters.
 - NA parameters are treated as Yes (pass) in the final IQS calculation.
 - **NEVER assume a failure when the transcript is ambiguous.** If you are not certain the agent did something wrong, score NA and flag for QA review.
+- **Date awareness**: Today's date is provided in CHAT METADATA. Any date on or before today is a PAST event that has already occurred. Do NOT treat a past date as a missed future commitment when scoring Expectation Setting. Only fail Expectation Setting for missing or vague timelines on genuinely unresolved future issues — never for referencing dates that have already passed.
 
 ## WINT WEALTH SPECIFIC POLICIES
 
@@ -467,10 +468,12 @@ export function buildScoringPrompt(transcript: string, tags = '', chatId = '', s
   const botNote = conversationType === 'bot'
     ? '\n- Conversation type: bot (Myra) — Process parameter MUST be scored as Yes. Myra always follows process by definition. Do not evaluate process for bot chats.'
     : '';
+  const today = new Date().toISOString().split('T')[0];
   return `Score the following customer support chat transcript.
 
 ## CHAT METADATA
 - Chat ID: ${chatId}
+- Today's date (scoring date): ${today}
 - Disposition (L1): ${tags || 'none'}
 - Sub-disposition (L2): ${subDisposition || 'none'}${botNote}
 ${kbContext ? `
