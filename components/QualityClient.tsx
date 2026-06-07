@@ -1017,7 +1017,7 @@ interface PendingReviewItem {
 const PENDING_DEFAULT_FILTERS: LogFilters = {
   agent: '', minScore: 0, maxScore: 100,
   disposition: '', subDisposition: '', csat: '', type: '',
-  dateRange: 'today', dateFrom: '', dateTo: '',
+  dateRange: '1w', dateFrom: '', dateTo: '',
   chatId: '',
 };
 
@@ -1552,7 +1552,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
   const displayItems = section === 'pending' ? pendingItems : reviewedItems;
 
   const activeFilterCount = [
-    pendingFilters.dateRange !== 'today',
+    pendingFilters.dateRange !== '1w',
     pendingFilters.minScore > 0,
     pendingFilters.maxScore < 100,
     !!pendingFilters.disposition,
