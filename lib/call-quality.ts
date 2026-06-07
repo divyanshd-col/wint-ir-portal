@@ -283,113 +283,137 @@ export const CALL_DISPOSITION_PROMPT = `You are analyzing a Wint Wealth IR call 
 Return ONLY this JSON:
 {"call_disposition":"brief topic e.g. Payout Query, TDS Form Issue, Bond Maturity, Portfolio Question","call_sub_disposition":"more specific e.g. Delay in payout credit, Unable to submit Form 121"}`;
 
-// ── Call disposition classification prompt (constrained to official 14-category list) ─
+// ── Call disposition classification prompt (synced with Robylon taxonomy) ─────
 export const CALL_DISPOSITION_CLASSIFY_PROMPT = `You are classifying a Wint Wealth IR call transcript into an official disposition and sub-disposition.
 
 You MUST choose EXACTLY one disposition and one sub-disposition from the lists below. Do not invent new values.
 If the call touches multiple topics, pick the one that consumed the most conversation time.
-If nothing fits, use disposition "OTHERS" and the closest sub-disposition.
+If nothing fits, use disposition "Others" and the closest sub-disposition.
 
 ## OFFICIAL DISPOSITION LIST
 
-LIQUIDITY
+Liquidity
   - Liquidity General Enquiry
   - Liquidity Process
   - Liquidity Status Update
   - Liquidity Charges
   - Liquidity DDPI Status
-  - Liquidity cancellation
+  - Liquidity Cancellation
   - Liquidity Funds Not Received
-  - Interest payout after selling a bond
+  - Interest Payout After Selling a Bond
 
 SGB
   - SGB Enquiry
   - SGBs Not Visible in Portfolio
 
-REFERRAL PROGRAM
+Referral Program
   - Refer & Earn Not Activated
-  - Referral reward calculation
-  - Referred User Not Showing (referral mapping)
+  - Referral Reward Calculation
+  - Referred User Not Showing
 
-TAXATION
-  - Tax deduction
+Taxation
+  - Tax Deduction
   - Taxation Statement/Reports
   - Taxation TDS Certificate
-  - Taxation 15G/H
   - Taxation Capital Gain/Loss
+  - Form 121
+  - Form 121 Status & Confirmation
+  - Form 121 bugs
+  - Form 121 Not Available
 
-BOND PURCHASE
+Bond Purchase
   - Bond Purchase Cancellation
   - Bond Purchase Order Status
-  - Bond Purchase issue
+  - Bond Purchase Issue
   - Bond Purchase Process
-  - Net Banking unavailable
+  - Net Banking Unavailable
 
 FD
   - FD Withdrawal
-  - FD Order status
-  - FD Nominee details
-  - FD Order pending
+  - FD Order Status
+  - FD Nominee Details
+  - FD Order Pending
   - FD KYC
   - FD Bugs
-  - FD not visible in the portfolio
-  - FD interest
+  - FD Not Visible in Portfolio
+  - FD Interest
 
 Interest Repayment
-  - Interest Repayment Issue
-  - Asset YTM/Coupon
-  - Interest Repayment When/Where
   - Interest Repayment Breakup
+  - Interest Repayment When/Where
+  - Asset YTM/Coupon
+  - Interest / Principal Not Credited
 
-ASSET
+Asset
+  - Asset General Enquiry
   - Asset Risk
   - Asset Specific Requirement
   - Asset Covenant Breach
   - Asset Limit
   - Asset NRI
 
-FLEXI-TENURE BOND
-  - flexi general enquiry
-  - flexi sell process
-  - flexi interest
-  - flexi tenure change
+Flexi-Tenure Bond
+  - Flexi General Enquiry
+  - Flexi Sell Process
+  - Flexi Interest
+  - Flexi Tenure Change
 
 SIP
-  - SIP general enquiry
-  - SIP modification
-  - SIP cancellation
+  - SIP General Enquiry
+  - SIP Modification
+  - SIP Cancellation
   - SIP Instalment Skip
 
-WINT WISDOM
-  - General Enquiry
-  - Bugs
+Wint Wisdom
+  - Wint Wisdom General Enquiry
+  - Wint Wisdom Bugs
   - Portfolio and Risk
   - Tax and Optimisation
 
-DIVERISIFICATION METER
+Diversification Meter
   - Diversification Meter General
 
-OTHERS
-  - Unsubscribe Whatsapp
-  - Advisory
-  - Partnership
-  - Request for RM
-  - OTP not received
-  - PT Refund Pending
-  - Bond Name Change
-
-SEBI KYC
-  - SEBI KYC HUF
-  - SEBI KYC Demat Query
-  - SEBI KYC General Enquiry
-  - SEBI KYC Delete Account
-  - SEBI KYC NSDL SPEEDE
-  - SEBI KYC Documents
-  - Profile Change
-  - SEBI KYC Details Change
-  - Selfie Capture
+KYC
+  - Bank Account linking issues
+  - Aadhar / PAN Queries
+  - KYC Status
+  - ACF Link Generation
   - Nominee
-  - ACF link generation
+  - Selfie Capture
+  - SEBI KYC Details Change
+  - Profile Change
+  - SEBI KYC Documents
+  - SEBI KYC NSDL SPEEDE
+  - SEBI KYC Delete Account
+  - KYC Process and Steps
+  - SEBI KYC Demat Query
+  - SEBI KYC HUF
+
+Dashboard and Profile Query
+  - Login & OTP Issue
+  - App and Dashboard Bugs
+  - Dashboard - General Query
+  - Dashboard - Portfolio values
+  - Dashboard and App Navigation
+
+Wint Ivory
+  - Wint Ivory Required
+  - Wint Ivory General Query
+
+Family Account
+  - Family Account General Query
+
+Junk Chats
+  - No query asked
+
+Others
+  - Bond Name Change
+  - PT Refund Pending
+  - OTP Not Received
+  - Request for RM
+  - Partnership
+  - Advisory
+  - Unsubscribe Whatsapp
 
 ## OUTPUT
 Return ONLY this JSON — no other text:
@@ -434,6 +458,7 @@ Before scoring ANY parameter, read the COMPLETE call transcript from segment [1]
 - NA counts as Yes (pass) in the final IQS calculation.
 - Never penalise for something the transcript does not clearly show.
 - You receive the CALL TRANSCRIPT (primary — score this) and optionally a WHATSAPP CHAT TRANSCRIPT (context only).
+- **Date awareness**: Today's date is provided in CALL METADATA. Any date on or before today is a PAST event that has already occurred. Do NOT treat a past date as a missed future commitment when scoring Expectation. Only fail Expectation for missing or vague timelines on genuinely unresolved future issues — never for referencing dates that have already passed.
 
 ---
 
@@ -582,10 +607,12 @@ export function buildCallScoringPrompt(
   chatDisposition = '',
   kbContext = '',
 ): string {
+  const today = new Date().toISOString().split('T')[0];
   return `Score the following Wint Wealth IR call.
 
 ## CALL METADATA
 - Call ID: ${callId}
+- Today's date (scoring date): ${today}
 - Interruptions detected: ${interruptionCount}
 - Dead air instances: ${deadAirCount}
 - Call disposition (extracted from call): ${callDisposition || 'Unknown'}
