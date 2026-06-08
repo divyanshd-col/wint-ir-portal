@@ -576,6 +576,9 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const chatId          = String(body.chat_id || '');
   const classifications: any[] = body.data?.classifications || [];
 
+  // DEBUG: log full classifications array to see if Robylon sends multiple intents
+  console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} count=${classifications.length} payload=${JSON.stringify(classifications)}`);
+
   const primary = [...classifications].sort((a, b) => (b.level_number ?? 0) - (a.level_number ?? 0))[0];
   if (!primary) {
     return NextResponse.json({ ok: true, scored: false, reason: 'No classifications in payload' });
