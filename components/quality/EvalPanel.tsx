@@ -153,7 +153,7 @@ export default function EvalPanel({
         const res = await fetch(`/api/quality/transcript?chatId=${encodeURIComponent(chatId)}`);
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
-        if (!cancelled) setTranscript(Array.isArray(data) ? data : (data.messages ?? []));
+        if (!cancelled) setTranscript(Array.isArray(data) ? data : (data.timedMessages ?? data.messages ?? []));
       } catch {
         if (!cancelled) setTranscript([]);
       } finally {
