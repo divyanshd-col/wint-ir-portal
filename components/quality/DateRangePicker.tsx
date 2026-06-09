@@ -10,7 +10,13 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 const DOW    = ['Su','Mo','Tu','We','Th','Fr','Sa'];
 
 function fmt(d: Date)      { return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
-function fmtISO(d: Date)   { return d.toISOString().slice(0, 10); }
+// Use local date components so IST dates don't shift to the previous day via UTC conversion
+function fmtISO(d: Date) {
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
 function sameDay(a: Date | null, b: Date | null) {
   return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }

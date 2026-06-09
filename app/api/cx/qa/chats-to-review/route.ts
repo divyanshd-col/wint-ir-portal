@@ -82,16 +82,17 @@ export async function GET(req: NextRequest) {
     sqlParams.push(subDispo);
   }
 
+  // Interpret dates as IST (UTC+05:30) so "June 2" means June 2 00:00 IST, not UTC midnight
   const from = searchParams.get('from');
   if (from) {
     extraWhere += ` AND c.closed_at >= $${paramIdx++}`;
-    sqlParams.push(new Date(from).toISOString());
+    sqlParams.push(new Date(from + 'T00:00:00+05:30').toISOString());
   }
 
   const to = searchParams.get('to');
   if (to) {
     extraWhere += ` AND c.closed_at <= $${paramIdx++}`;
-    sqlParams.push(new Date(to + 'T23:59:59Z').toISOString());
+    sqlParams.push(new Date(to + 'T23:59:59+05:30').toISOString());
   }
 
   const iqsMin = searchParams.get('iqs_min');

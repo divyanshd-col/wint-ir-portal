@@ -13,7 +13,8 @@ function periodDates(params: URLSearchParams): { from: Date; to: Date } {
     const from = params.get('from');
     const to   = params.get('to');
     if (!from || !to) throw new Error('from and to required for custom period');
-    return { from: new Date(from), to: new Date(to + 'T23:59:59Z') };
+    // Interpret dates as IST (UTC+05:30) so "June 2" means June 2 00:00 IST, not UTC midnight
+    return { from: new Date(from + 'T00:00:00+05:30'), to: new Date(to + 'T23:59:59+05:30') };
   }
   const days = p === '7' ? 7 : 30;
   const from = new Date(now);
