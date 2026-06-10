@@ -9,8 +9,11 @@ export default async function QualityPage({ searchParams }: { searchParams?: { a
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
-  const role  = (session.user as any)?.role as string;
-  const email = (session.user as any)?.email || '';
+  const userAny = session.user as any;
+  const rawRole = userAny?.role as string | undefined;
+  // Older sessions may have isAdmin:true but no role field — treat them as admin
+  const role    = rawRole || (userAny?.isAdmin ? 'admin' : '');
+  const email   = userAny?.email || '';
 
   if (!role || !['admin', 'quality', 'tl', 'agent'].includes(role)) redirect('/');
 

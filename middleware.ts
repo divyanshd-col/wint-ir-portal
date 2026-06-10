@@ -26,7 +26,7 @@ export async function middleware(req: NextRequest) {
 
   // Quality section: admin, quality, tl — plus agent (sees own-only dashboard)
   if (pathname.startsWith('/quality')) {
-    const role = token.role as string | undefined;
+    const role = (token.role as string | undefined) || (token.isAdmin ? 'admin' : '');
     if (!role || !['admin', 'quality', 'tl', 'agent'].includes(role)) {
       return NextResponse.redirect(new URL('/', req.url));
     }
