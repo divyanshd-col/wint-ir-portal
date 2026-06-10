@@ -291,8 +291,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   log.info(ROUTE, 'result', {
     period:           searchParams.get('period') ?? '30',
-    from:             from.toISOString().slice(0, 10),
-    to:               to.toISOString().slice(0, 10),
+    fromRaw:          searchParams.get('from'),
+    toRaw:            searchParams.get('to'),
+    fromISO,
+    toISO,
     dispositionCount: dispositions.length,
     pendingTotal:     pendingChats + pendingCalls,
     pendingChats,
