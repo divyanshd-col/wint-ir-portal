@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
 import QualityClient from '@/components/QualityClient';
 import AgentQualityClient from '@/components/AgentQualityClient';
-import QAAnalyticsDashboard from '@/components/quality/QAAnalyticsDashboard';
 
 export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string; section?: string; period?: string } }) {
   const session = await getServerSession(authOptions);
@@ -23,12 +22,7 @@ export default async function QualityPage({ searchParams }: { searchParams?: { a
     return <AgentQualityClient userEmail={email} selfAgentName={selfAgentName} />;
   }
 
-  // Quality role: new QA Analytics Dashboard
-  if (role === 'quality') {
-    return <QAAnalyticsDashboard />;
-  }
-
-  // Admin / TL: existing full team quality view
+  // Admin / TL / Quality: existing full team quality view
   const initialAgent   = searchParams?.agent || undefined;
   const VALID_TABS = ['performance', 'log', 'upload', 'reports', 'pending', 'calls', 'call-test', 'unified'];
   const tabParam   = searchParams?.tab || '';
