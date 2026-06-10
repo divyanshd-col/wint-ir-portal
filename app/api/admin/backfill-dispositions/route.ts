@@ -28,10 +28,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
-  if (!user?.isAdmin && user?.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
-  }
-
   let body: { rows?: BackfillRow[] } = {};
   try {
     body = await req.json();
@@ -99,10 +95,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
-  if (!user?.isAdmin && user?.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
-  }
-
   const url = new URL(req.url);
   const from = url.searchParams.get('from') || '2026-06-01';
   const to   = url.searchParams.get('to')   || '2026-06-10';
