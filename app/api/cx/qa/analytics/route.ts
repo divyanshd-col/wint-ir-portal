@@ -110,6 +110,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     dispositions = entry?.dispositions ?? [];
   }
 
+  log.info(ROUTE, 'dispositions', { role, email, dispositionCount: dispositions.length, sample: dispositions.slice(0, 3) });
+
   if (!dispositions.length) {
     return NextResponse.json({
       pending: { total: 0, chats: 0, calls: 0, emails: 0 },
@@ -120,6 +122,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const fromISO = from.toISOString();
   const toISO   = to.toISOString();
+
+  // Diagnostic: count total convos in range (any disposition, with or without tags)
+  const diagRows = await query<{ total_any: string; with_dispo: string; with_closed_at: string }>(
+    `SELECT
+       COUNT(*)::text AS total_any,
+       COUNT(*) FILTER (WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != '')::text AS with_dispo,
+       COUNT(*) FILTER (WHERE closed_at IS NOT NULL)::text AS with_closed_at
+     FROM conversations
+     WHERE closed_at >= $1 AND closed_at <= $2`,
+    [fromISO, toISO]
+  );
+  log.info(ROUTE, 'diag', {
+    fromISO, toISO,
+    totalAny:       diagRows[0]?.total_any,
+    withDispo:      diagRows[0]?.with_dispo,
+    withClosedAt:   diagRows[0]?.with_closed_at,
+  });
 
   // ── 1. Pending review counts (IQS < 80 and not yet reviewed) ─────────────
   const pendingRows = await query<PendingRow>(
