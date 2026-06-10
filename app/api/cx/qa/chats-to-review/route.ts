@@ -85,14 +85,18 @@ export async function GET(req: NextRequest) {
   // Interpret dates as IST (UTC+05:30) so "June 2" means June 2 00:00 IST, not UTC midnight
   const from = searchParams.get('from');
   if (from) {
+    const fromUTC = new Date(from + 'T00:00:00+05:30').toISOString();
+    console.log(`[chats-to-review] from param="${from}" → UTC="${fromUTC}" valid=${!isNaN(new Date(from + 'T00:00:00+05:30').getTime())}`);
     extraWhere += ` AND c.closed_at >= $${paramIdx++}`;
-    sqlParams.push(new Date(from + 'T00:00:00+05:30').toISOString());
+    sqlParams.push(fromUTC);
   }
 
   const to = searchParams.get('to');
   if (to) {
+    const toUTC = new Date(to + 'T23:59:59+05:30').toISOString();
+    console.log(`[chats-to-review] to param="${to}" → UTC="${toUTC}" valid=${!isNaN(new Date(to + 'T23:59:59+05:30').getTime())}`);
     extraWhere += ` AND c.closed_at <= $${paramIdx++}`;
-    sqlParams.push(new Date(to + 'T23:59:59+05:30').toISOString());
+    sqlParams.push(toUTC);
   }
 
   const iqsMin = searchParams.get('iqs_min');
@@ -138,6 +142,7 @@ export async function GET(req: NextRequest) {
     sqlParams
   );
   const total = parseInt(countRows[0]?.total ?? '0');
+  console.log(`[chats-to-review] total=${total} extraWhere="${extraWhere}" params=${JSON.stringify(sqlParams.slice(1))}`);
 
   // Data query
   sqlParams.push(limit, offset);
