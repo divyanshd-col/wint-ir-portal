@@ -342,7 +342,7 @@ export async function getAllScoredConversations(
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */
-export async function getUnscoredConversations(minHoursOld = 12): Promise<ConversationRow[]> {
+export async function getUnscoredConversations(minHoursOld = 12, limit = 50): Promise<ConversationRow[]> {
   return query<ConversationRow>(`
     SELECT c.*
     FROM conversations c
@@ -352,8 +352,8 @@ export async function getUnscoredConversations(minHoursOld = 12): Promise<Conver
       AND c.tags IS NOT NULL
       AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
     ORDER BY c.closed_at ASC
-    LIMIT 50
-  `, [minHoursOld]);
+    LIMIT $2
+  `, [minHoursOld, limit]);
 }
 
 export async function countUnscoredConversations(minHoursOld = 0): Promise<number> {
