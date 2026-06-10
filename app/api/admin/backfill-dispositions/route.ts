@@ -28,7 +28,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
-  if (user?.role !== 'admin') {
+  if (!user?.isAdmin && user?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
   }
 
@@ -99,7 +99,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
-  if (user?.role !== 'admin') {
+  if (!user?.isAdmin && user?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
   }
 
