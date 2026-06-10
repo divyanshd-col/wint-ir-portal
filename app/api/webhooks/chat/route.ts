@@ -576,11 +576,12 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const chatId          = String(body.chat_id || '');
   const classifications: any[] = body.data?.classifications || [];
 
-  // DEBUG: log full classifications array to see if Robylon sends multiple intents
-  console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} count=${classifications.length} payload=${JSON.stringify(classifications)}`);
+  console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} count=${classifications.length}`);
 
+  // Sort by level_number desc to pick the most specific classification (l2 > l1)
   const primary = [...classifications].sort((a, b) => (b.level_number ?? 0) - (a.level_number ?? 0))[0];
   if (!primary) {
+    console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} — no classifications in payload, skipping tags`);
     return NextResponse.json({ ok: true, scored: false, reason: 'No classifications in payload' });
   }
 
@@ -905,18 +906,22 @@ export async function POST(req: NextRequest) {
     console.log(`[webhook] Received event_type=${body.event_type || 'unknown'} chat_id=${body.chat_id || 'n/a'}`);
   }
 
-  // Deduplicate by event_id — Robylon retries on timeout, both can arrive
+  const eventType = String(body.event_type || '');
+
+  // Deduplicate by event_type + event_id — Robylon retries on timeout, both can arrive
   // before scoring finishes, resulting in two scores for the same chat.
+  // IMPORTANT: include eventType in the key — Robylon may send the same event_id for
+  // TICKET_CLOSED and CLASSIFICATION_UPDATED of the same ticket, and without the type
+  // prefix the second event would be silently dropped as a duplicate.
   const eventId = String(body.event_id || '');
   if (eventId) {
-    if (await storeHasProcessedEvent(eventId)) {
-      console.log(`[webhook] Duplicate event_id ${eventId} — skipping`);
+    const dedupKey = eventType ? `${eventType}:${eventId}` : eventId;
+    if (await storeHasProcessedEvent(dedupKey)) {
+      console.log(`[webhook] Duplicate ${dedupKey} — skipping`);
       return NextResponse.json({ ok: true, skipped: true, reason: 'duplicate_event_id' });
     }
-    await storeMarkProcessedEvent(eventId);
+    await storeMarkProcessedEvent(dedupKey);
   }
-
-  const eventType = String(body.event_type || '');
 
   if (eventType === 'TICKET_CLOSED')           return handleTicketClosed(body);
   if (eventType === 'CLASSIFICATION_UPDATED')  return handleClassificationUpdated(body);
