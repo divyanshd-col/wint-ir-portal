@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
+import { log, withLogging } from '@/lib/log';
+
+const ROUTE = 'cx/qa/wow-trend';
 
 interface WeekRow {
   week_start:        string;
@@ -33,7 +36,7 @@ function secsToLabel(secs: number): string {
 // Agent names treated as bot/AI-handled
 const BOT_AGENT_NAMES = ['Robylon', 'Robylon AI', 'Myra'];
 
-export async function GET(req: NextRequest) {
+export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role  = (session.user as any).role as string;
@@ -129,5 +132,13 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  log.info(ROUTE, 'result', {
+    weeks: result.length,
+    disposition: dispositionFilter,
+    dispositionCount: effectiveDispositions.length,
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  });
+
   return NextResponse.json(result);
-}
+});

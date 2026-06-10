@@ -5,6 +5,9 @@ import { query } from '@/lib/cx/db';
 import { calculateIQS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 import { storeUpdateIQSFlag } from '@/lib/store';
+import { log } from '@/lib/log';
+
+const ROUTE = 'cx/qa/review';
 
 // DB snake_case → PascalCase for calculateIQS
 const DB_TO_PASCAL: Record<string, string> = {
@@ -33,7 +36,7 @@ export async function PATCH(
   }
 
   const { chatId } = await params;
-  const email   = ((session.user as any).email || session.user?.name || 'unknown') as string;
+  const email = ((session.user as any).email || session.user?.name || 'unknown') as string;
 
   let body: {
     action:       'submit' | 'override' | 'resolve';
@@ -50,13 +53,13 @@ export async function PATCH(
 
   try {
     if (action === 'submit') {
-      // Mark as reviewed without changing parameters
       await query(
         `UPDATE iqs_scores
          SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2
          WHERE chat_id = $3`,
         [email, note ?? null, chatId]
       );
+      log.info(ROUTE, 'submit', { chatId, reviewer: email });
 
     } else if (action === 'override' || action === 'resolve') {
       if (parameters) {
@@ -67,6 +70,8 @@ export async function PATCH(
         );
         if (!existing.length) return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
 
+        const oldIqs = existing[0].iqs_score;
+
         let existingParams = existing[0].parameters ?? {};
         if (typeof existingParams === 'string') {
           try { existingParams = JSON.parse(existingParams); } catch { existingParams = {}; }
@@ -74,8 +79,11 @@ export async function PATCH(
 
         // Merge incoming parameters (snake_case) into existing
         const merged: Record<string, any> = { ...existingParams };
+        let paramChanges = 0;
         for (const [key, val] of Object.entries(parameters)) {
           if (!key.startsWith('__')) {
+            const prev = existingParams[key];
+            if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
             merged[key] = { score: val.score, reasoning: val.reasoning };
           }
         }
@@ -99,6 +107,8 @@ export async function PATCH(
            WHERE chat_id = $5`,
           [JSON.stringify(merged), newIqs, email, note ?? null, chatId]
         );
+
+        log.info(ROUTE, action, { chatId, reviewer: email, oldIqs, newIqs, paramChanges });
       } else {
         // resolve without parameter changes — just mark reviewed
         await query(
@@ -107,6 +117,7 @@ export async function PATCH(
            WHERE chat_id = $3`,
           [email, note ?? null, chatId]
         );
+        log.info(ROUTE, action, { chatId, reviewer: email, paramChanges: 0 });
       }
 
       // For resolve: mark the KV flag as reviewed
@@ -117,12 +128,13 @@ export async function PATCH(
           reviewedAt: new Date().toISOString(),
           reviewNote: note,
         });
+        log.info(ROUTE, 'flag resolved', { chatId, flagId, reviewer: email });
       }
     }
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
-    console.error('[qa/review]', e);
+    log.error(ROUTE, 'error', { chatId, action, err: e.message ?? String(e) });
     return NextResponse.json({ error: e.message ?? 'Internal error' }, { status: 500 });
   }
 }

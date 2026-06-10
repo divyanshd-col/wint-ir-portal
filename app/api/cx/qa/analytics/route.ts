@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
+import { log, withLogging } from '@/lib/log';
+
+const ROUTE = 'cx/qa/analytics';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -63,7 +66,8 @@ interface PendingRow {
 
 // ── GET handler ───────────────────────────────────────────────────────────
 
-export async function GET(req: NextRequest) {
+export const GET = withLogging(ROUTE, async (req: NextRequest) => {
+  const t0 = Date.now();
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role  = (session.user as any).role as string;
@@ -285,6 +289,18 @@ export async function GET(req: NextRequest) {
     };
   });
 
+  log.info(ROUTE, 'result', {
+    period:           searchParams.get('period') ?? '30',
+    from:             from.toISOString().slice(0, 10),
+    to:               to.toISOString().slice(0, 10),
+    dispositionCount: dispositions.length,
+    pendingTotal:     pendingChats + pendingCalls,
+    pendingChats,
+    pendingCalls,
+    byDispositionCount: byDisposition.length,
+    durationMs: Date.now() - t0,
+  });
+
   return NextResponse.json({
     pending: {
       total:  pendingChats + pendingCalls,
@@ -299,4 +315,4 @@ export async function GET(req: NextRequest) {
     },
     byDisposition,
   });
-}
+});

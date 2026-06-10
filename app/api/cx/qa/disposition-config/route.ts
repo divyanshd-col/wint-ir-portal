@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig, writeConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
+import { log } from '@/lib/log';
+
+const ROUTE = 'cx/qa/disposition-config';
 
 // GET — returns the current QA's assigned dispositions (or all mappings for admin)
 export async function GET(req: NextRequest) {
@@ -28,12 +31,13 @@ export async function GET(req: NextRequest) {
   const availableDispositions = rows.map(r => r.disposition);
 
   if (role === 'admin') {
-    // Admin sees the full map + available dispositions for the assignment UI
+    log.info(ROUTE, 'GET admin', { mapEntries: map.length, availableCount: availableDispositions.length });
     return NextResponse.json({ map, availableDispositions });
   }
 
   // QA sees only their own assigned dispositions
   const entry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
+  log.info(ROUTE, 'GET qa', { email, dispositionCount: entry?.dispositions.length ?? 0 });
   return NextResponse.json({
     dispositions: entry?.dispositions ?? [],
     availableDispositions,
@@ -64,5 +68,6 @@ export async function PATCH(req: NextRequest) {
   }
 
   await writeConfig({ ...config, qaDispositionMap: map });
+  log.info(ROUTE, 'PATCH', { by: (session.user as any).email, targetEmail: email, dispositionCount: dispositions.length });
   return NextResponse.json({ ok: true, map });
 }

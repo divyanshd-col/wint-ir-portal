@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
+import { log, withLogging } from '@/lib/log';
 
 // PascalCase param key → DB snake_case key (for param_fail filter)
 const PASCAL_TO_DB: Record<string, string> = {
@@ -19,6 +20,8 @@ const PASCAL_TO_DB: Record<string, string> = {
   Empathy:      'empathy',
 };
 
+const ROUTE = 'cx/qa/chats-to-review';
+
 export interface ChatToReviewRow {
   chatId:        string;
   agentName:     string;
@@ -31,7 +34,7 @@ export interface ChatToReviewRow {
   failedParams:  string[]; // PascalCase keys where score === false
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role  = (session.user as any).role as string;
@@ -63,7 +66,10 @@ export async function GET(req: NextRequest) {
     dispositions = entry?.dispositions ?? [];
   }
 
-  if (!dispositions.length) return NextResponse.json({ chats: [], total: 0 });
+  if (!dispositions.length) {
+    log.warn(ROUTE, 'no dispositions', { email, role });
+    return NextResponse.json({ chats: [], total: 0 });
+  }
 
   // Optional narrowing by a single disposition within the QA's set
   const dispositionFilter = searchParams.get('disposition_filter');
@@ -76,45 +82,63 @@ export async function GET(req: NextRequest) {
   let paramIdx = 2;
   let extraWhere = '';
 
+  const filters: Record<string, unknown> = {};
+
   const subDispo = searchParams.get('sub_disposition');
   if (subDispo) {
     extraWhere += ` AND c.tags->>'sub_disposition' = $${paramIdx++}`;
     sqlParams.push(subDispo);
+    filters.subDispo = subDispo;
   }
 
   // Interpret dates as IST (UTC+05:30) so "June 2" means June 2 00:00 IST, not UTC midnight
   const from = searchParams.get('from');
   if (from) {
-    const fromUTC = new Date(from + 'T00:00:00+05:30').toISOString();
-    console.log(`[chats-to-review] from param="${from}" → UTC="${fromUTC}" valid=${!isNaN(new Date(from + 'T00:00:00+05:30').getTime())}`);
-    extraWhere += ` AND c.closed_at >= $${paramIdx++}`;
-    sqlParams.push(fromUTC);
+    const fromDate = new Date(from + 'T00:00:00+05:30');
+    if (isNaN(fromDate.getTime())) {
+      log.warn(ROUTE, 'invalid from date', { from });
+    } else {
+      const fromUTC = fromDate.toISOString();
+      extraWhere += ` AND c.closed_at >= $${paramIdx++}`;
+      sqlParams.push(fromUTC);
+      filters.from = from;
+      filters.fromUTC = fromUTC;
+    }
   }
 
   const to = searchParams.get('to');
   if (to) {
-    const toUTC = new Date(to + 'T23:59:59+05:30').toISOString();
-    console.log(`[chats-to-review] to param="${to}" → UTC="${toUTC}" valid=${!isNaN(new Date(to + 'T23:59:59+05:30').getTime())}`);
-    extraWhere += ` AND c.closed_at <= $${paramIdx++}`;
-    sqlParams.push(toUTC);
+    const toDate = new Date(to + 'T23:59:59+05:30');
+    if (isNaN(toDate.getTime())) {
+      log.warn(ROUTE, 'invalid to date', { to });
+    } else {
+      const toUTC = toDate.toISOString();
+      extraWhere += ` AND c.closed_at <= $${paramIdx++}`;
+      sqlParams.push(toUTC);
+      filters.to = to;
+      filters.toUTC = toUTC;
+    }
   }
 
   const iqsMin = searchParams.get('iqs_min');
   if (iqsMin) {
     extraWhere += ` AND i.iqs_score >= $${paramIdx++}`;
     sqlParams.push(parseInt(iqsMin));
+    filters.iqsMin = parseInt(iqsMin);
   }
 
   const iqsMax = searchParams.get('iqs_max');
   if (iqsMax !== null && iqsMax !== '') {
     extraWhere += ` AND i.iqs_score <= $${paramIdx++}`;
     sqlParams.push(parseInt(iqsMax));
+    filters.iqsMax = parseInt(iqsMax);
   }
 
   const csatValues = searchParams.getAll('csat');
   if (csatValues.length) {
     extraWhere += ` AND c.csat_score = ANY($${paramIdx++})`;
     sqlParams.push(csatValues.map(Number));
+    filters.csat = csatValues;
   }
 
   // param_fail: a PascalCase key like 'Technical' — filter to chats where that param scored false
@@ -122,6 +146,7 @@ export async function GET(req: NextRequest) {
   if (paramFail && PASCAL_TO_DB[paramFail]) {
     const dbKey = PASCAL_TO_DB[paramFail];
     extraWhere += ` AND (i.parameters->'${dbKey}'->>'score')::boolean = false`;
+    filters.paramFail = paramFail;
   }
 
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
@@ -133,6 +158,8 @@ export async function GET(req: NextRequest) {
     AND i.call_iqs_score IS NULL
     AND i.iqs_score < 80`;
 
+  const t0 = Date.now();
+
   // Count query
   const countRows = await query<{ total: string }>(
     `SELECT COUNT(*) AS total
@@ -142,7 +169,6 @@ export async function GET(req: NextRequest) {
     sqlParams
   );
   const total = parseInt(countRows[0]?.total ?? '0');
-  console.log(`[chats-to-review] total=${total} extraWhere="${extraWhere}" params=${JSON.stringify(sqlParams.slice(1))}`);
 
   // Data query
   sqlParams.push(limit, offset);
@@ -169,6 +195,13 @@ export async function GET(req: NextRequest) {
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
     sqlParams
   );
+
+  log.info(ROUTE, 'query', {
+    total, page, limit,
+    dispositionCount: effectiveDispositions.length,
+    durationMs: Date.now() - t0,
+    ...filters,
+  });
 
   // Invert PASCAL_TO_DB for converting DB keys back to PascalCase
   const DB_TO_PASCAL: Record<string, string> = Object.fromEntries(
@@ -202,4 +235,4 @@ export async function GET(req: NextRequest) {
   });
 
   return NextResponse.json({ chats, total });
-}
+});

@@ -5,6 +5,9 @@ import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
+import { log, withLogging } from '@/lib/log';
+
+const ROUTE = 'cx/qa/disputes';
 
 export interface DisputeRow {
   flagId:       string;
@@ -22,7 +25,7 @@ export interface DisputeRow {
   parameters:   Record<string, { score: boolean | null; reasoning: string }>;
 }
 
-export async function GET(req: NextRequest) {
+export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role  = (session.user as any).role as string;
@@ -31,6 +34,8 @@ export async function GET(req: NextRequest) {
   if (!['quality', 'admin'].includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
+
+  const t0 = Date.now();
 
   // Resolve QA's dispositions
   const config = await readConfig();
@@ -47,13 +52,18 @@ export async function GET(req: NextRequest) {
     dispositions = entry?.dispositions ?? [];
   }
 
-  if (!dispositions.length) return NextResponse.json({ disputes: [] });
+  if (!dispositions.length) {
+    log.warn(ROUTE, 'no dispositions', { email, role });
+    return NextResponse.json({ disputes: [] });
+  }
 
   // Fetch all pending flags from KV
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .filter((f): f is IQSFlag => f !== null && f.status === 'pending');
+
+  log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 
   if (!pendingFlags.length) return NextResponse.json({ disputes: [] });
 
@@ -123,8 +133,15 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  // Sort by flaggedAt desc
+  // Sort by closedAt desc
   disputes.sort((a, b) => b.closedAt.localeCompare(a.closedAt));
 
+  log.info(ROUTE, 'result', {
+    flagCount: pendingFlags.length,
+    filteredCount: disputes.length,
+    dispositionCount: dispositions.length,
+    durationMs: Date.now() - t0,
+  });
+
   return NextResponse.json({ disputes });
-}
+});
