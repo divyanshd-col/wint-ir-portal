@@ -47,15 +47,22 @@ function buildParams(page: number, f: LogFilters): URLSearchParams {
   if (f.chatId)       p.set('chatId', f.chatId);
   // Skip date range when searching by chat ID — find the chat regardless of period
   if (!f.chatId) {
+    // Use local date components to avoid UTC midnight shift for IST users
+    const localDate = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
     if (f.dateRange === 'today') {
-      const d = new Date().toISOString().slice(0, 10);
+      const d = localDate(new Date());
       p.set('dateFrom', d); p.set('dateTo', d);
     } else if (f.dateRange === 'yesterday') {
-      const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const d = localDate(new Date(Date.now() - 86400000));
       p.set('dateFrom', d); p.set('dateTo', d);
     } else if (f.dateRange === '1w') {
-      p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
-      p.set('dateTo', new Date().toISOString().slice(0, 10));
+      p.set('dateFrom', localDate(new Date(Date.now() - 6 * 86400000)));
+      p.set('dateTo', localDate(new Date()));
     } else if (f.dateRange === 'custom') {
       if (f.dateFrom) p.set('dateFrom', f.dateFrom);
       if (f.dateTo)   p.set('dateTo', f.dateTo);

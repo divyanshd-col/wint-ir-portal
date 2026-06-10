@@ -167,7 +167,7 @@ export async function getLatestConversationByPhone(phone: string): Promise<any |
 
 export async function getConversationHistory(chatId: string, limit = 10): Promise<any[]> {
   return query(`
-    SELECT c.id AS "chatId", c.started_at::date AS "date",
+    SELECT c.id AS "chatId", COALESCE(c.closed_at, c.started_at)::date AS "date",
            c.conversation_type AS "conversationType", c.csat_score, c.tags,
            a.name AS "agentName", s.iqs_score AS "iqs", s.scored_at AS "scoredAt"
     FROM conversations c
@@ -175,7 +175,7 @@ export async function getConversationHistory(chatId: string, limit = 10): Promis
     LEFT JOIN agents a ON a.id = c.agent_id
     WHERE c.contact_id = (SELECT contact_id FROM conversations WHERE id = $1)
       AND c.id != $1 AND c.contact_id IS NOT NULL
-    ORDER BY c.started_at DESC
+    ORDER BY COALESCE(c.closed_at, c.started_at) DESC NULLS LAST
     LIMIT $2
   `, [chatId, limit]);
 }
@@ -268,11 +268,12 @@ export async function getAllScoredConversations(
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    conditions.push(`c.started_at::date >= $${params.length}`);
+    // Use closed_at for date range — always populated by webhook; started_at can be NULL
+    conditions.push(`c.closed_at::date >= $${params.length}`);
   }
   if (opts.dateTo) {
     params.push(opts.dateTo);
-    conditions.push(`c.started_at::date <= $${params.length}`);
+    conditions.push(`c.closed_at::date <= $${params.length}`);
   }
   if (opts.iqsMin !== undefined && opts.iqsMin > 0) {
     params.push(opts.iqsMin);
@@ -313,7 +314,7 @@ export async function getAllScoredConversations(
   return query(`
     SELECT
       c.id                        AS "chatId",
-      c.started_at::date          AS "date",
+      COALESCE(c.closed_at, c.started_at)::date AS "date",
       c.conversation_type         AS "conversationType",
       c.frt_seconds               AS "frt",
       c.bot_to_team_seconds       AS "botToTeamSecs",
@@ -335,7 +336,7 @@ export async function getAllScoredConversations(
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     ${where}
-    ORDER BY s.scored_at DESC
+    ORDER BY c.closed_at DESC NULLS LAST, s.scored_at DESC
     ${limitSql}
   `, params);
 }
