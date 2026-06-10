@@ -349,7 +349,11 @@ export async function getUnscoredConversations(minHoursOld = 12, limit = 50): Pr
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
     WHERE s.chat_id IS NULL
       AND c.transcript IS NOT NULL
+      AND jsonb_typeof(c.transcript) = 'array'
+      AND jsonb_array_length(c.transcript) > 0
       AND c.tags IS NOT NULL
+      AND (c.tags->>'disposition') IS NOT NULL
+      AND (c.tags->>'disposition') != ''
       AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
     ORDER BY c.closed_at ASC
     LIMIT $2
