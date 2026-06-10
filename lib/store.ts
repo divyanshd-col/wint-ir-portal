@@ -5,6 +5,7 @@
 
 import type { PortalConfig } from './config';
 import type { KnowledgeChunk, SavedConversation } from './types';
+import { log } from '@/lib/log';
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -42,7 +43,7 @@ async function kv_set(key: string, value: string): Promise<void> {
       },
       body: JSON.stringify([['SET', key, value]]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 async function kv_lpush(key: string, value: string): Promise<void> {
@@ -57,7 +58,7 @@ async function kv_lpush(key: string, value: string): Promise<void> {
       // Keep last 500 log entries
       body: JSON.stringify([['LPUSH', key, value], ['LTRIM', key, '0', '499']]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 async function kv_lrange(key: string, start: number, end: number): Promise<string[]> {
@@ -118,7 +119,7 @@ export async function storeMarkProcessedEvent(eventId: string): Promise<void> {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['SET', `wint_webhook_event:${eventId}`, '1', 'EX', '7200']]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 // --- Quality Slack alert deduplication ---
@@ -139,7 +140,7 @@ export async function storeMarkQualityAlert(chatId: string): Promise<void> {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['SET', `wint_quality_alerted:${chatId}`, '1', 'EX', '86400']]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 // --- Config ---
@@ -200,7 +201,7 @@ export async function storeAppendCorrection(entry: object): Promise<void> {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['LPUSH', CORRECTIONS_KEY, JSON.stringify(entry)], ['LTRIM', CORRECTIONS_KEY, '0', '199']]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 export async function storeGetCorrections(): Promise<string[]> {
@@ -224,7 +225,7 @@ export async function storeAppendIQSScore(entry: object): Promise<void> {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['LPUSH', IQS_SCORES_KEY, JSON.stringify(entry)]]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 export async function storeGetIQSScores(limit = 0, start = 0): Promise<string[]> {
@@ -290,7 +291,7 @@ async function kv_scanAndUpdate(
           });
           return true;
         }
-      } catch {}
+      } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
     }
   }
   return false;
@@ -345,7 +346,7 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['LPUSH', IQS_FLAGS_KEY, JSON.stringify(entry)], ['LTRIM', IQS_FLAGS_KEY, '0', '999']]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 export async function storeGetIQSFlags(): Promise<string[]> {
@@ -384,7 +385,7 @@ export async function storeAppendFlagComment(comment: IQSFlagComment): Promise<v
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['RPUSH', key, JSON.stringify(comment)], ['LTRIM', key, '-200', '-1']]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment[]> {
@@ -427,7 +428,7 @@ async function kv_sadd(key: string, member: string): Promise<void> {
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['SADD', key, member]]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 export async function storeSavePendingScore(state: PendingScoreState): Promise<void> {
@@ -452,7 +453,7 @@ export async function storeDeletePendingScore(chatId: string): Promise<void> {
         ['SREM', PENDING_SCORE_IDS_KEY, chatId],
       ]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 export async function storeGetAllPendingScoreIds(): Promise<string[]> {
@@ -516,7 +517,7 @@ export async function storeGetAndClearPendingTags(
         headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify([['DEL', `${PENDING_TAGS_PREFIX}${chatId}`]]),
       });
-    } catch {}
+    } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
     try { return JSON.parse(val); } catch {}
   }
   return null;
@@ -540,7 +541,7 @@ export async function storeGetAndClearPendingCsat(chatId: string | number): Prom
         headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
         body: JSON.stringify([['DEL', `${PENDING_CSAT_PREFIX}${chatId}`]]),
       });
-    } catch {}
+    } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
   }
   return val;
 }
@@ -600,7 +601,7 @@ export async function storeAppendCallSkipped(entry: CallSkippedEntry): Promise<v
       headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify([['LPUSH', CALL_SKIPPED_KEY, JSON.stringify(entry)], ['LTRIM', CALL_SKIPPED_KEY, '0', '999']]),
     });
-  } catch {}
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
 }
 
 // --- QA Review Status (per-chat review tracking for pending IQS < 80% chats) ---

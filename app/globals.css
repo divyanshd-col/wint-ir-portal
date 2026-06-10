@@ -6,6 +6,21 @@
   --background: #ffffff;
   --foreground: #171717;
 
+  /* ── QA Analytics design tokens (wireframe) ─────────────────────────── */
+  --qa-bg:           #F7F7F8;
+  --qa-card:         #FFFFFF;
+  --qa-border:       #E4E4E7;
+  --qa-border-sub:   #F0F0F2;
+  --qa-fill-light:   #F4F4F5;
+  --qa-fill-med:     #E4E4E7;
+  --qa-text:         #111111;
+  --qa-text-2:       #6B6B6B;
+  --qa-text-3:       #A1A1AA;
+  --qa-text-4:       #C7C7CC;
+  --qa-gray-700:     #2D2D31;
+  --qa-gray-50:      #FAFAFB;
+  --qa-gray-100:     #F4F4F5;
+
   /* ── Design system tokens ─────────────────────────────────────────── */
   --color-background-primary:   #ffffff;
   --color-background-secondary: #f8fafc;

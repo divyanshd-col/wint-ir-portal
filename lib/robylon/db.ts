@@ -268,7 +268,7 @@ export async function getAllScoredConversations(
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    // Use closed_at for date range — always populated by webhook; started_at can be NULL
+    // Use closed_at — always populated; started_at can be NULL causing silent 0 results
     conditions.push(`c.closed_at::date >= $${params.length}`);
   }
   if (opts.dateTo) {

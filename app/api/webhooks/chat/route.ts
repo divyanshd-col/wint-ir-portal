@@ -584,7 +584,8 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
 
   console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} count=${classifications.length}`);
 
-  const primary = classifications[0];
+  // Sort by level_number desc to pick the most specific classification (l2 > l1)
+  const primary = [...classifications].sort((a, b) => (b.level_number ?? 0) - (a.level_number ?? 0))[0];
   if (!primary) {
     console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} — no classifications in payload, skipping tags`);
     return NextResponse.json({ ok: true, scored: false, reason: 'No classifications in payload' });

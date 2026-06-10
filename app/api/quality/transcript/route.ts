@@ -3,6 +3,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { storeGetTranscript } from '@/lib/store';
 import { query } from '@/lib/cx/db';
+import { log } from '@/lib/log';
+
+const ROUTE = 'quality/transcript';
 
 function qualityAccess(session: any): boolean {
   const role = session?.user?.role;
@@ -44,9 +47,12 @@ export async function GET(req: NextRequest) {
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
   try {
+    const t0 = Date.now();
+
     // Check KV first
     const kvData = await storeGetTranscript(chatId);
     if (kvData?.timedMessages?.length || kvData?.rawTranscript) {
+      log.info(ROUTE, 'hit', { chatId, source: 'kv', messageCount: kvData.timedMessages?.length ?? 0, durationMs: Date.now() - t0 });
       return NextResponse.json({ ok: true, found: true, ...kvData });
     }
 
@@ -85,12 +91,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (!messages.length) return NextResponse.json({ ok: true, found: false });
+    if (!messages.length) {
+      log.warn(ROUTE, 'not found', { chatId, durationMs: Date.now() - t0 });
+      return NextResponse.json({ ok: true, found: false });
+    }
 
     const timedMessages = dbMessagesToTimedMessages(messages);
+    log.info(ROUTE, 'hit', { chatId, source: 'db', messageCount: timedMessages.length, durationMs: Date.now() - t0 });
     return NextResponse.json({ ok: true, found: true, timedMessages });
   } catch (err: any) {
-    console.error('[transcript] DB error for chatId', chatId, err?.message);
+    log.error(ROUTE, 'db error', { chatId, err: err?.message });
     return NextResponse.json({ error: 'DB error', detail: err?.message }, { status: 500 });
   }
 }

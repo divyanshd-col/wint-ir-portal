@@ -35,6 +35,13 @@ export interface PortalConfig {
   iqsScoringPrompt?: string;
   analyticsPlannerPrompt?: string;
   analyticsSynthesizerPrompt?: string;
+  // ── QA disposition mapping ───────────────────────────────────────────────
+  qaDispositionMap?: QADispositionEntry[];
+}
+
+export interface QADispositionEntry {
+  email: string;
+  dispositions: string[];
 }
 
 const DEFAULT_CONFIG: PortalConfig = {
