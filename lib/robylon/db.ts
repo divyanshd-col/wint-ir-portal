@@ -342,7 +342,11 @@ export async function getAllScoredConversations(
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */
-export async function getUnscoredConversations(minHoursOld = 12, limit = 50): Promise<ConversationRow[]> {
+export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fromDate?: string): Promise<ConversationRow[]> {
+  const params: any[] = [minHoursOld, limit];
+  const fromClause = fromDate ? `AND c.closed_at >= $3::timestamptz` : '';
+  if (fromDate) params.push(fromDate);
+
   return query<ConversationRow>(`
     SELECT c.*
     FROM conversations c
@@ -355,9 +359,10 @@ export async function getUnscoredConversations(minHoursOld = 12, limit = 50): Pr
       AND (c.tags->>'disposition') IS NOT NULL
       AND (c.tags->>'disposition') != ''
       AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
+      ${fromClause}
     ORDER BY c.closed_at ASC
     LIMIT $2
-  `, [minHoursOld, limit]);
+  `, params);
 }
 
 /**

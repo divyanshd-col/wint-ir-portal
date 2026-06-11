@@ -39,9 +39,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const url = new URL(req.url);
   const limit    = Math.min(parseInt(url.searchParams.get('limit')    ?? '200', 10), 500);
   const minHours = parseInt(url.searchParams.get('minHours') ?? '0',   10);
+  const from     = url.searchParams.get('from') ?? undefined; // e.g. "2026-06-03"
 
   const config = await readConfig();
-  const convs  = await getUnscoredConversations(minHours, limit);
+  const convs  = await getUnscoredConversations(minHours, limit, from);
 
   const results: { chatId: string; iqs?: number; reason?: string }[] = [];
 
@@ -99,7 +100,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const marked     = results.filter(r => r.reason?.startsWith('marked-unscoreable')).length;
   const errors     = results.filter(r => r.reason?.startsWith('error')).length;
 
-  console.log(`[admin/score-pending] processed=${processed} marked=${marked} errors=${errors} total=${convs.length} limit=${limit} minHours=${minHours}`);
+  console.log(`[admin/score-pending] processed=${processed} marked=${marked} errors=${errors} total=${convs.length} limit=${limit} minHours=${minHours} from=${from ?? 'any'}`);
 
   return NextResponse.json({
     ok: true,
