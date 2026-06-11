@@ -15,14 +15,22 @@
  * Auth: any logged-in session
  *
  * Call repeatedly until response shows total: 0 to fully drain the queue.
+ *
+ * Differences from the daily cron:
+ *  - Clears the 30-min scoring lock before each attempt so previously
+ *    failed/locked chats are retried immediately.
+ *  - Permanently-unscoreable chats (call interaction, unreadable transcript)
+ *    are written to iqs_scores as a sentinel row so they never re-appear.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { getUnscoredConversations, getAgentName } from '@/lib/robylon/db';
+import { getUnscoredConversations, getAgentName, markChatUnscoreable } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
+import { storeDeleteScoringLock } from '@/lib/store';
 import { executeScoring, scoreLinkedCallsForChat, transcriptFromJsonb } from '@/app/api/webhooks/chat/route';
+import { hasCallInteraction } from '@/lib/quality-alert';
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
@@ -43,9 +51,35 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const subDisposition = tags?.sub_disposition || '';
 
     try {
-      const agentName = conv.agent_id ? await getAgentName(conv.agent_id) : '';
+      // ── Pre-flight: detect permanently-unscoreable chats ──────────────────
+      // These chats will ALWAYS return null from executeScoring. Mark them in
+      // iqs_scores now so getUnscoredConversations never picks them up again.
 
-      // Score the chat transcript
+      const transcriptMessages = Array.isArray(conv.transcript) ? conv.transcript
+        : Array.isArray((conv.transcript as any)?.messages) ? (conv.transcript as any).messages : [];
+      const chatTranscriptText = transcriptFromJsonb(transcriptMessages);
+
+      if (!chatTranscriptText) {
+        await markChatUnscoreable(conv.id, 'empty-transcript');
+        results.push({ chatId: conv.id, reason: 'marked-unscoreable: empty transcript' });
+        continue;
+      }
+
+      if (hasCallInteraction(chatTranscriptText, conv.tags)) {
+        await markChatUnscoreable(conv.id, 'call-interaction');
+        results.push({ chatId: conv.id, reason: 'marked-unscoreable: call interaction detected' });
+        continue;
+      }
+
+      // ── Release any stale scoring lock before attempting ──────────────────
+      // The 30-min lock prevents the same chat from being scored twice by
+      // concurrent webhook events. For admin batch scoring there is no
+      // concurrency risk, so we clear it so a previously-failed attempt
+      // doesn't block this run.
+      await storeDeleteScoringLock(conv.id);
+
+      // ── Score the chat transcript ─────────────────────────────────────────
+      const agentName = conv.agent_id ? await getAgentName(conv.agent_id) : '';
       const scored = await executeScoring(conv, agentName, disposition, subDisposition);
       if (!scored) {
         results.push({ chatId: conv.id, reason: 'skipped — executeScoring returned null' });
@@ -53,9 +87,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       }
 
       // Also score any linked calls
-      const transcriptMessages = Array.isArray(conv.transcript) ? conv.transcript
-        : Array.isArray((conv.transcript as any)?.messages) ? (conv.transcript as any).messages : [];
-      const chatTranscriptText = transcriptFromJsonb(transcriptMessages);
       await scoreLinkedCallsForChat(conv.id, chatTranscriptText, disposition, subDisposition, config).catch(() => {});
 
       results.push({ chatId: conv.id, iqs: scored.iqs });
@@ -64,15 +95,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const processed = results.filter(r => r.iqs !== undefined).length;
-  const errors    = results.filter(r => r.reason?.startsWith('error')).length;
+  const processed  = results.filter(r => r.iqs !== undefined).length;
+  const marked     = results.filter(r => r.reason?.startsWith('marked-unscoreable')).length;
+  const errors     = results.filter(r => r.reason?.startsWith('error')).length;
 
-  console.log(`[admin/score-pending] processed=${processed}/${convs.length} errors=${errors} limit=${limit} minHours=${minHours}`);
+  console.log(`[admin/score-pending] processed=${processed} marked=${marked} errors=${errors} total=${convs.length} limit=${limit} minHours=${minHours}`);
 
   return NextResponse.json({
     ok: true,
     total: convs.length,
     processed,
+    marked,
     errors,
     results,
   });

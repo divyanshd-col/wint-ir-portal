@@ -101,6 +101,20 @@ export async function storeAcquireScoringLock(chatId: string): Promise<boolean> 
   }
 }
 
+/** Release a scoring lock manually — used by admin batch scoring so that
+ *  a lock held from a previous failed attempt doesn't block the next batch. */
+export async function storeDeleteScoringLock(chatId: string): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/del/wint_scoring_lock:${chatId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
+    });
+  } catch {
+    // Non-critical — if DEL fails the lock will simply expire after 30 min
+  }
+}
+
 // --- Webhook event_id deduplication ---
 // Prevents the same Robylon webhook event from being processed twice
 // (Robylon retries on timeout — both can arrive before scoring completes).

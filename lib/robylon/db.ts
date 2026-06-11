@@ -360,6 +360,20 @@ export async function getUnscoredConversations(minHoursOld = 12, limit = 50): Pr
   `, [minHoursOld, limit]);
 }
 
+/**
+ * Insert a sentinel iqs_scores row for chats that can never be scored (e.g.
+ * call-interaction chats, chats with no readable transcript). This prevents
+ * getUnscoredConversations from picking them up on every subsequent batch.
+ * iqs_score is left NULL — callers that aggregate scores already handle NULLs.
+ */
+export async function markChatUnscoreable(chatId: string, reason: string): Promise<void> {
+  await query(`
+    INSERT INTO iqs_scores (chat_id, model_version, scored_at)
+    VALUES ($1, $2, NOW())
+    ON CONFLICT (chat_id) DO NOTHING
+  `, [chatId, `skipped:${reason.slice(0, 80)}`]);
+}
+
 export async function countUnscoredConversations(minHoursOld = 0): Promise<number> {
   const rows = await query<{ count: string }>(`
     SELECT COUNT(*) AS count
