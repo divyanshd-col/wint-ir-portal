@@ -7,17 +7,18 @@ export default async function QualityLayout({ children }: { children: React.Reac
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
-  const role  = (session.user as any)?.role as string;
-  const email = (session.user as any)?.email || '';
-  const name  = (session.user as any)?.name  || email;
+  const userAny = session.user as any;
+  const rawRole = userAny?.role as string | undefined;
+  const role    = rawRole || (userAny?.isAdmin ? 'admin' : '');
+  const email   = userAny?.email || '';
+  const name    = userAny?.name  || email;
 
   if (!['admin', 'quality', 'tl', 'agent'].includes(role)) redirect('/');
 
-  // Only quality role gets the new sidebar shell; others fall through to existing page
-  if (role !== 'quality') {
-    return <>{children}</>;
-  }
+  // Agent: no sidebar, just pass through
+  if (role === 'agent') return <>{children}</>;
 
+  // Admin / QA / TL: new QualityShell with sidebar nav
   return (
     <QualityShell role={role} email={email} name={name}>
       {children}
