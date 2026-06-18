@@ -36,6 +36,8 @@ export interface PortalConfig {
   iqsScoringPrompt?: string;
   analyticsPlannerPrompt?: string;
   analyticsSynthesizerPrompt?: string;
+  // ── KB document display names (Drive ID → human-readable name) ──────────────
+  knowledgeBaseDocNames?: Record<string, string>;
 }
 
 const DEFAULT_CONFIG: PortalConfig = {

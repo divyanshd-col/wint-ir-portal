@@ -1789,6 +1789,12 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
   // On-demand per-call scoring state
   const [callScoreResults, setCallScoreResults] = useState<Record<string, any>>({});
   const [callScoreLoading, setCallScoreLoading] = useState<Record<string, boolean>>({});
+  // Call parameter override modal
+  const [callOverrideItem, setCallOverrideItem] = useState<CallQueueItem | null>(null);
+  const [callOverrideForm, setCallOverrideForm] = useState<{
+    scores: Record<string, string>; reasoning: Record<string, string>; note: string;
+  } | null>(null);
+  const [callOverrideSaving, setCallOverrideSaving] = useState(false);
 
   // Filters
   const [dateRange, setDateRange] = useState<'today' | 'yesterday' | '1w' | 'custom'>('1w');
@@ -1885,6 +1891,49 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
       alert('Failed to mark as reviewed');
     }
     setReviewing(r => ({ ...r, [item.callId]: false }));
+  };
+
+  const openCallOverride = (item: CallQueueItem, activeScores: Record<string, string>, activeReasoning: Record<string, string>) => {
+    setCallOverrideItem(item);
+    setCallOverrideForm({
+      scores: { ...activeScores },
+      reasoning: { ...activeReasoning },
+      note: '',
+    });
+  };
+
+  const saveCallOverride = async () => {
+    if (!callOverrideItem || !callOverrideForm) return;
+    if (!callOverrideItem.chatId) { alert('Cannot override: no chat ID linked to this call'); return; }
+    setCallOverrideSaving(true);
+    try {
+      const res = await fetch('/api/call-quality/override-scores', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: callOverrideItem.chatId,
+          scores: callOverrideForm.scores,
+          reasoning: callOverrideForm.reasoning,
+          note: callOverrideForm.note,
+        }),
+      });
+      if (!res.ok) throw new Error('Server error');
+      const data = await res.json();
+      // Update callScoreResults for this call so the card immediately reflects the override
+      setCallScoreResults(r => ({
+        ...r,
+        [callOverrideItem.callId]: {
+          scores: callOverrideForm.scores,
+          reasoning: callOverrideForm.reasoning,
+          iqs: data.callIqsScore ?? callOverrideItem.iqs,
+        },
+      }));
+      setCallOverrideItem(null);
+      setCallOverrideForm(null);
+    } catch {
+      alert('Failed to save override');
+    }
+    setCallOverrideSaving(false);
   };
 
   const displayItems = section === 'pending' ? items : reviewedItems;
@@ -1990,13 +2039,23 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
             <div className="px-5 py-4 space-y-3">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Quality Scores</p>
-                <button
-                  onClick={() => scoreCall(item.callId)}
-                  disabled={callScoreLoading[item.callId]}
-                  className="text-xs px-3 py-1 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50 font-semibold transition-colors"
-                >
-                  {callScoreLoading[item.callId] ? '⏳ Scoring…' : '⚡ Score This Call'}
-                </button>
+                <div className="flex gap-2">
+                  {canReview && (
+                    <button
+                      onClick={() => openCallOverride(item, activeScores, activeReasoning)}
+                      className="text-xs px-3 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold transition-colors"
+                    >
+                      ✏️ Override
+                    </button>
+                  )}
+                  <button
+                    onClick={() => scoreCall(item.callId)}
+                    disabled={callScoreLoading[item.callId]}
+                    className="text-xs px-3 py-1 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50 font-semibold transition-colors"
+                  >
+                    {callScoreLoading[item.callId] ? '⏳ Scoring…' : '⚡ Score This Call'}
+                  </button>
+                </div>
               </div>
               {activeResult?.iqs !== undefined && (
                 <p className="text-sm font-bold text-violet-700">Per-call IQS: {activeResult.iqs}</p>
@@ -2062,6 +2121,77 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
+      {/* ── Call Override Modal ── */}
+      {callOverrideItem && callOverrideForm && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setCallOverrideItem(null); setCallOverrideForm(null); }}>
+          <div className="bg-white w-full sm:rounded-2xl sm:max-w-3xl max-h-[94vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between">
+              <div>
+                <h2 className="font-bold text-gray-900">Override Call Scores</h2>
+                <p className="text-xs text-gray-400">{callOverrideItem.agentName} · {callOverrideItem.date}</p>
+              </div>
+              <button onClick={() => { setCallOverrideItem(null); setCallOverrideForm(null); }} className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 2l12 12M14 2L2 14" /></svg>
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-5">
+              {/* Parameter scores */}
+              <div>
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">Parameter Scores</p>
+                <div className="space-y-3">
+                  {CALL_PARAM_ORDER.map(p => (
+                    <div key={p} className="rounded-xl border border-gray-100 p-3 bg-gray-50/60">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-xs font-semibold text-gray-700 flex-1">{CALL_QUEUE_PARAM_NAMES[p] ?? p}</span>
+                        <div className="flex gap-1">
+                          {(['Yes', 'No', 'NA'] as const).map(v => (
+                            <button key={v} onClick={() => setCallOverrideForm(f => f ? { ...f, scores: { ...f.scores, [p]: v } } : f)}
+                              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                                callOverrideForm.scores[p] === v
+                                  ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-gray-400 text-white'
+                                  : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-400'
+                              }`}>{v}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <textarea
+                        value={callOverrideForm.reasoning[p] || ''}
+                        onChange={e => setCallOverrideForm(f => f ? { ...f, reasoning: { ...f.reasoning, [p]: e.target.value } } : f)}
+                        placeholder="Reasoning…"
+                        rows={2}
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-y bg-white"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Note */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">Quality Reviewer Note</label>
+                <textarea value={callOverrideForm.note} onChange={e => setCallOverrideForm(f => f ? { ...f, note: e.target.value } : f)} rows={3}
+                  placeholder="Internal note for this override…"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/30 resize-y" />
+              </div>
+              {!callOverrideItem.chatId && (
+                <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
+                  ⚠️ This call has no linked chat — override cannot be saved until the call is linked to a chat.
+                </p>
+              )}
+              <div className="flex gap-3 pt-1">
+                <button onClick={saveCallOverride} disabled={callOverrideSaving || !callOverrideItem.chatId}
+                  className="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition text-sm">
+                  {callOverrideSaving ? 'Saving…' : 'Save Override'}
+                </button>
+                <button onClick={() => { setCallOverrideItem(null); setCallOverrideForm(null); }}
+                  className="px-5 border border-gray-200 text-gray-600 font-medium py-2.5 rounded-xl hover:bg-gray-50 transition text-sm">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="shrink-0 px-6 pt-5 pb-3 space-y-3">
         {/* Section tabs + filter toggle */}

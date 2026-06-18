@@ -15,6 +15,7 @@ interface SafeConfig {
   hasIqsGeminiKey?: boolean;
   hasIqsAnthropicKey?: boolean;
   knowledgeBaseUrls?: string[];
+  knowledgeBaseDocNames?: Record<string, string>;
   systemPrompt?: string;
   iqsScoringPrompt?: string;
   analyticsPlannerPrompt?: string;
@@ -102,9 +103,13 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
 
   // ── KB state ───────────────────────────────────────────────────────────────
   const [docs, setDocs] = useState<string[]>(config.knowledgeBaseUrls || []);
+  const [docNames, setDocNames] = useState<Record<string, string>>(config.knowledgeBaseDocNames || {});
   const [newUrl, setNewUrl] = useState('');
+  const [newDocName, setNewDocName] = useState('');
   const [addingDoc, setAddingDoc] = useState(false);
   const [docError, setDocError] = useState('');
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [editingDocName, setEditingDocName] = useState('');
   const [refreshingKB, setRefreshingKB] = useState(false);
   const [kbRefreshed, setKbRefreshed] = useState(false);
 
@@ -266,12 +271,14 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       const res = await fetch('/api/documents', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: newUrl.trim() }),
+        body: JSON.stringify({ url: newUrl.trim(), name: newDocName.trim() }),
       });
       const data = await res.json();
       if (!res.ok) { setDocError(data.error || 'Failed to add'); return; }
       setDocs(data.knowledgeBaseUrls);
+      setDocNames(data.knowledgeBaseDocNames || {});
       setNewUrl('');
+      setNewDocName('');
       showToast('Document added');
     } catch { setDocError('Network error'); }
     finally { setAddingDoc(false); }
@@ -285,7 +292,27 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
         body: JSON.stringify({ url }),
       });
       const data = await res.json();
-      if (res.ok) { setDocs(data.knowledgeBaseUrls); showToast('Document removed'); }
+      if (res.ok) {
+        setDocs(data.knowledgeBaseUrls);
+        setDocNames(data.knowledgeBaseDocNames || {});
+        showToast('Document removed');
+      }
+    } catch {}
+  };
+
+  const saveDocName = async (url: string) => {
+    try {
+      const res = await fetch('/api/documents', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, name: editingDocName.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDocNames(data.knowledgeBaseDocNames || {});
+        setEditingDocId(null);
+        showToast('Document name saved');
+      }
     } catch {}
   };
 
@@ -541,10 +568,16 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     } finally { setChangingPassword(false); }
   };
 
-  function shortLabel(url: string): string {
+  function extractDriveId(url: string): string {
+    const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : url;
+  }
+
+  function docDisplayName(url: string): string {
+    const driveId = extractDriveId(url);
+    if (docNames[driveId]) return docNames[driveId];
     try {
-      const match = url.match(/\/d\/([a-zA-Z0-9_-]+)/);
-      if (match) return match[1].slice(0, 20) + '…';
+      if (driveId !== url) return driveId.slice(0, 20) + '…';
       return url.slice(0, 40) + '…';
     } catch { return url; }
   }
@@ -756,26 +789,67 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               )}
 
               <div className="space-y-2">
-                {docs.map(url => (
-                  <div key={url} className="flex items-center gap-3 px-4 py-3 bg-gray-50 rounded-xl group">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0">
-                      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <span className="text-sm text-gray-700 flex-1 truncate" title={url}>{shortLabel(url)}</span>
-                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2d9e4f] hover:underline shrink-0 opacity-0 group-hover:opacity-100 transition">Open</a>
-                    <button onClick={() => removeDoc(url)} className="text-gray-400 hover:text-red-500 transition shrink-0 opacity-0 group-hover:opacity-100" title="Remove">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 4h12M5 4V2h6v2M6 7v6M10 7v6M3 4l1 10h8l1-10" /></svg>
-                    </button>
-                  </div>
-                ))}
+                {docs.map(url => {
+                  const driveId = extractDriveId(url);
+                  const isEditing = editingDocId === driveId;
+                  return (
+                    <div key={url} className="flex items-start gap-3 px-4 py-3 bg-gray-50 rounded-xl group">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0 mt-0.5">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />
+                      </svg>
+                      <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editingDocName}
+                              onChange={e => setEditingDocName(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') saveDocName(url); if (e.key === 'Escape') setEditingDocId(null); }}
+                              placeholder="Document name…"
+                              autoFocus
+                              className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                            />
+                            <button onClick={() => saveDocName(url)} className="text-xs px-2 py-1 bg-[#2d9e4f] text-white rounded-lg font-semibold hover:bg-[#25883f] transition">Save</button>
+                            <button onClick={() => setEditingDocId(null)} className="text-xs px-2 py-1 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-100 transition">Cancel</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-800 truncate" title={url}>{docDisplayName(url)}</span>
+                            <button
+                              onClick={() => { setEditingDocId(driveId); setEditingDocName(docNames[driveId] || ''); }}
+                              className="text-[10px] text-gray-400 hover:text-[#2d9e4f] opacity-0 group-hover:opacity-100 transition shrink-0"
+                              title="Rename"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        )}
+                        {!isEditing && (
+                          <p className="text-[11px] text-gray-400 truncate mt-0.5" title={url}>{url.slice(0, 55)}{url.length > 55 ? '…' : ''}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition">
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2d9e4f] hover:underline">Open</a>
+                        <button onClick={() => removeDoc(url)} className="text-gray-400 hover:text-red-500 transition" title="Remove">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 4h12M5 4V2h6v2M6 7v6M10 7v6M3 4l1 10h8l1-10" /></svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
-              <div className="border-t border-gray-100 pt-4">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Add Google Doc URL</label>
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">Add Google Doc</label>
                 <div className="flex gap-2">
                   <input type="url" value={newUrl} onChange={e => setNewUrl(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && addDoc()}
                     placeholder="https://docs.google.com/document/d/..."
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                </div>
+                <div className="flex gap-2">
+                  <input type="text" value={newDocName} onChange={e => setNewDocName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addDoc()}
+                    placeholder="Display name (e.g. KYC Process Guide)"
                     className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
                   <button onClick={addDoc} disabled={addingDoc || !newUrl.trim()}
                     className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">

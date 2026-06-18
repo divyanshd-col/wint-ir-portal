@@ -4,6 +4,7 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { CALL_IQS_SYSTEM_PROMPT, buildCallScoringPrompt, parseCallScoringResponse, segmentsToText } from '@/lib/call-quality';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { readConfig } from '@/lib/config';
 
 function qualityAccess(role: string | undefined) {
@@ -24,14 +25,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const { callId } = body;
   if (!callId?.trim()) return NextResponse.json({ error: 'callId is required' }, { status: 400 });
 
-  // Load Gemini config
-  let geminiKeys: string[];
-  try {
-    const config = await readConfig();
-    geminiKeys = getIQSGeminiKeys(config);
-  } catch (err: any) {
-    return NextResponse.json({ error: `Config error: ${err.message}` }, { status: 500 });
-  }
+  // Load config
+  const config = await readConfig();
+  const geminiKeys = getIQSGeminiKeys(config);
   if (!geminiKeys.length) {
     return NextResponse.json({ error: 'No Gemini API key configured' }, { status: 503 });
   }
@@ -89,6 +85,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const deadAirCount = callRec.dead_air_count ?? 0;
   const callDisposition = callRec.call_disposition || '';
 
+  // KB chunks for TechnicalLegal grounding
+  let kbContext = '';
+  const kbQuery = callDisposition || chatDisposition || callTranscriptText.slice(0, 400);
+  if (kbQuery) {
+    try {
+      const allChunks = await fetchKnowledgeChunks();
+      const relevant = retrieveRelevantChunks(allChunks, kbQuery, 5);
+      if (relevant.length) {
+        const docNames = config.knowledgeBaseDocNames || {};
+        kbContext = relevant.map(c => {
+          const driveId = c.fileName.trim();
+          const label = docNames[driveId]
+            || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
+          return `[${label}]\n${c.content}`;
+        }).join('\n---\n');
+      }
+    } catch {}
+  }
+
   // Score
   let raw: string;
   try {
@@ -102,7 +117,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         deadAirCount,
         callDisposition,
         chatDisposition,
-        '',
+        kbContext,
       )}] }],
       undefined, 60_000,
     );

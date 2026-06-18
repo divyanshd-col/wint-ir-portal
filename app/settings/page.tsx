@@ -28,6 +28,7 @@ export default async function SettingsPage() {
     hasIqsGeminiKey: !!config.iqsGeminiApiKey,
     hasIqsAnthropicKey: !!config.iqsAnthropicApiKey,
     knowledgeBaseUrls: config.knowledgeBaseUrls || [],
+    knowledgeBaseDocNames: config.knowledgeBaseDocNames || {},
     systemPrompt: config.systemPrompt || '',
     iqsScoringPrompt: config.iqsScoringPrompt || '',
     analyticsPlannerPrompt: config.analyticsPlannerPrompt || '',
