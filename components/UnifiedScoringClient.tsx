@@ -608,7 +608,7 @@ export default function UnifiedScoringClient({ userRole, initialChatId }: { user
           )}
 
           <button
-            onClick={run}
+            onClick={() => run()}
             disabled={!chatId.trim()}
             className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
           >
