@@ -87,6 +87,7 @@ interface QualityClientProps {
   initialAgent?: string;
   initialTab?: QualityTab;
   initialSection?: 'pending' | 'reviewed';
+  initialChatId?: string;
 }
 interface ParsedRow {
   chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string; contactPhone?: string;
@@ -2107,7 +2108,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
   );
 }
 
-export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab, initialSection }: QualityClientProps = {}) {
+export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab, initialSection, initialChatId }: QualityClientProps = {}) {
   const [tab, setTab] = useState<QualityTab>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
 
@@ -4174,7 +4175,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── UNIFIED SCORE TAB ── */}
           {tab === 'unified' && (
             <div className="overflow-y-auto flex-1">
-              <UnifiedScoringClient userRole={userRole} />
+              <UnifiedScoringClient userRole={userRole} initialChatId={initialChatId} />
             </div>
           )}
 

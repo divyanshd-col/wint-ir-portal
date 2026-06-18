@@ -636,7 +636,7 @@ export async function getAllScoredCalls(opts: {
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
@@ -667,7 +667,7 @@ export async function getAllScoredCalls(opts: {
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
     ${where}
     ORDER BY r.called_at DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}

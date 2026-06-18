@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   CALL_PARAM_NAMES, CALL_PARAM_GROUPS, CALL_WEIGHTS,
 } from '@/lib/call-quality';
@@ -384,8 +384,8 @@ function CallTranscriptCard({
 
 type Stage = 'idle' | 'running' | 'done' | 'error';
 
-export default function UnifiedScoringClient({ userRole }: { userRole?: string }) {
-  const [chatId, setChatId]           = useState('');
+export default function UnifiedScoringClient({ userRole, initialChatId }: { userRole?: string; initialChatId?: string }) {
+  const [chatId, setChatId]           = useState(initialChatId || '');
   const [stage, setStage]             = useState<Stage>('idle');
   const [step, setStep]               = useState(0);
   const [error, setError]             = useState('');
@@ -393,9 +393,10 @@ export default function UnifiedScoringClient({ userRole }: { userRole?: string }
   const [timelineView, setTimelineView] = useState<'merged' | 'calls' | 'chat'>('merged');
   const [callRecordings, setCallRecordings] = useState<any[]>([]);
 
-
-  async function run() {
-    if (!chatId.trim()) return;
+  // Accepts an explicit id to avoid stale-closure issues when called from useEffect
+  async function run(idOverride?: string) {
+    const id = (idOverride ?? chatId).trim();
+    if (!id) return;
     setStage('running');
     setStep(1);
     setError('');
@@ -408,7 +409,7 @@ export default function UnifiedScoringClient({ userRole }: { userRole?: string }
       const res = await fetch('/api/call-quality/unified-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId.trim() }),
+        body: JSON.stringify({ chat_id: id }),
       });
       [t1, t2].forEach(clearTimeout);
 
@@ -424,11 +425,21 @@ export default function UnifiedScoringClient({ userRole }: { userRole?: string }
     }
   }
 
+  // Auto-run once when opened with a pre-filled chat ID (e.g. from Call Queue link)
+  const autoRanRef = useRef(false);
+  useEffect(() => {
+    if (initialChatId && !autoRanRef.current) {
+      autoRanRef.current = true;
+      run(initialChatId);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function reset() {
     setStage('idle');
     setStep(0);
     setResult(null);
-    setChatId('');
+    setChatId(initialChatId || '');
   }
 
   // ── Results view ────────────────────────────────────────────────────────────
