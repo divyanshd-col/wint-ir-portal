@@ -9,6 +9,7 @@ export interface PortalUser {
   role?: UserRole;    // new role field
   email?: string;     // Google email (primary identifier for OAuth users)
   agentName?: string;
+  assignedCallDispositions?: string[];
 }
 
 export interface PortalConfig {

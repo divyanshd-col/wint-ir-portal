@@ -8,6 +8,8 @@ import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
 import CallLinkTestClient from '@/components/CallLinkTestClient';
 import UnifiedScoringClient from '@/components/UnifiedScoringClient';
+import { CallTranscriptCard } from '@/components/CallTranscriptCard';
+import { CALL_PARAM_ORDER } from '@/lib/call-quality';
 
 const ALL_LOG_COLS: readonly string[] = ['Agent', 'Chat ID', 'Mobile', 'CSAT', 'FRT', 'Handoff', 'Resolution', 'Closure', 'IQS', 'Fails', 'Disposition', 'Sub-Disposition', 'Last Updated', 'Date'];
 
@@ -1775,11 +1777,18 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
   const [items, setItems] = useState<CallQueueItem[]>([]);
   const [reviewedItems, setReviewedItems] = useState<CallQueueItem[]>([]);
   const [availableAgents, setAvailableAgents] = useState<string[]>([]);
+  const [assignedCallDispositions, setAssignedCallDispositions] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [reviewing, setReviewing] = useState<Record<string, boolean>>({});
+  // Inline transcript state (lazy-loaded on expand)
+  const [transcripts, setTranscripts] = useState<Record<string, any[]>>({});
+  const [transcriptLoading, setTranscriptLoading] = useState<Record<string, boolean>>({});
+  // On-demand per-call scoring state
+  const [callScoreResults, setCallScoreResults] = useState<Record<string, any>>({});
+  const [callScoreLoading, setCallScoreLoading] = useState<Record<string, boolean>>({});
 
   // Filters
   const [dateRange, setDateRange] = useState<'today' | 'yesterday' | '1w' | 'custom'>('1w');
@@ -1821,6 +1830,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
       setItems(d.items || []);
       setReviewedItems(d.reviewedItems || []);
       setAvailableAgents(d.availableAgents || []);
+      setAssignedCallDispositions(d.assignedCallDispositions || []);
     } catch {
       setLoadError('Failed to load call queue');
     }
@@ -1830,14 +1840,41 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
+  const onExpandCard = useCallback(async (callId: string) => {
+    setExpandedId(prev => prev === callId ? null : callId);
+    if (transcripts[callId] !== undefined || transcriptLoading[callId]) return;
+    setTranscriptLoading(t => ({ ...t, [callId]: true }));
+    try {
+      const data = await fetch(`/api/call-quality/transcript?callId=${callId}`).then(r => r.json());
+      setTranscripts(t => ({ ...t, [callId]: data.found ? (data.segments || []) : [] }));
+    } catch {
+      setTranscripts(t => ({ ...t, [callId]: [] }));
+    }
+    setTranscriptLoading(t => ({ ...t, [callId]: false }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcripts, transcriptLoading]);
+
+  const scoreCall = async (callId: string) => {
+    setCallScoreLoading(s => ({ ...s, [callId]: true }));
+    try {
+      const res = await fetch('/api/call-quality/score-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callId }),
+      });
+      const data = await res.json();
+      if (data.ok) setCallScoreResults(r => ({ ...r, [callId]: data }));
+    } catch {}
+    setCallScoreLoading(s => ({ ...s, [callId]: false }));
+  };
+
   const markReviewed = async (item: CallQueueItem) => {
-    if (!item.chatId) return;
     setReviewing(r => ({ ...r, [item.callId]: true }));
     try {
       const res = await fetch('/api/call-quality/pending-review', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: item.chatId, reviewNote: reviewNotes[item.callId] || '' }),
+        body: JSON.stringify({ callId: item.callId, reviewNote: reviewNotes[item.callId] || '' }),
       });
       if (!res.ok) throw new Error('Server error');
       const now = new Date().toISOString();
@@ -1864,12 +1901,16 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
     const isExpanded = expandedId === item.callId;
     const color = iqsColorQ(item.iqs);
     const isReviewed = !!item.qaStatus;
+    const activeResult = callScoreResults[item.callId];
+    const activeScores = activeResult?.scores || item.scores;
+    const activeReasoning = activeResult?.reasoning || item.reasoning;
+    const activeFailedParams = CALL_PARAM_ORDER.filter(k => activeScores[k] === 'No');
 
     return (
       <div key={item.callId} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         {/* Card header */}
         <button
-          onClick={() => setExpandedId(isExpanded ? null : item.callId)}
+          onClick={() => onExpandCard(item.callId)}
           className="w-full text-left px-5 py-4 flex items-start gap-4 hover:bg-gray-50/60 transition"
         >
           {/* IQS badge */}
@@ -1916,78 +1957,103 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
 
         {/* Expanded detail */}
         {isExpanded && (
-          <div className="border-t border-gray-100 px-5 py-4 space-y-4">
-            {/* Parameter scores */}
-            <div>
-              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Parameter Scores</p>
+          <div className="border-t border-gray-100 divide-y divide-gray-50">
+
+            {/* Section 1: Call Transcript */}
+            <div className="px-5 py-4">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">Call Transcript</p>
+              {transcriptLoading[item.callId] ? (
+                <p className="text-xs text-gray-400 animate-pulse">Loading transcript…</p>
+              ) : transcripts[item.callId]?.length ? (
+                <CallTranscriptCard
+                  rec={{
+                    id: item.callId,
+                    label: 'Call',
+                    calledAt: item.calledAt || null,
+                    durationSeconds: item.durationSeconds,
+                    recordingUrl: null,
+                    segments: transcripts[item.callId],
+                    interruptionCount: item.interruptionCount,
+                    deadAirCount: item.deadAirCount,
+                  }}
+                  index={0}
+                  defaultOpen
+                />
+              ) : transcripts[item.callId] ? (
+                <p className="text-xs text-gray-400 italic">No transcript available for this call</p>
+              ) : (
+                <p className="text-xs text-gray-400 italic">Loading…</p>
+              )}
+            </div>
+
+            {/* Section 2: Quality Scores */}
+            <div className="px-5 py-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Quality Scores</p>
+                <button
+                  onClick={() => scoreCall(item.callId)}
+                  disabled={callScoreLoading[item.callId]}
+                  className="text-xs px-3 py-1 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50 font-semibold transition-colors"
+                >
+                  {callScoreLoading[item.callId] ? '⏳ Scoring…' : '⚡ Score This Call'}
+                </button>
+              </div>
+              {activeResult?.iqs !== undefined && (
+                <p className="text-sm font-bold text-violet-700">Per-call IQS: {activeResult.iqs}</p>
+              )}
               <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
-                {Object.entries(item.scores).map(([k, v]) => (
+                {Object.entries(activeScores).map(([k, v]) => (
                   <div key={k} className="flex items-center justify-between gap-2">
                     <span className="text-xs text-gray-600 truncate">{CALL_QUEUE_PARAM_NAMES[k] ?? k}</span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${v === 'Yes' ? 'bg-emerald-50 text-emerald-700' : v === 'No' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{v}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${v === 'Yes' ? 'bg-emerald-50 text-emerald-700' : v === 'No' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-500'}`}>{v as string}</span>
                   </div>
                 ))}
               </div>
-            </div>
-
-            {/* Reasoning for failed params */}
-            {item.failedParams.length > 0 && (
-              <div>
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Failure Reasoning</p>
+              {activeFailedParams.length > 0 && (
                 <div className="space-y-2">
-                  {item.failedParams.map(p => (
+                  {activeFailedParams.map(p => activeReasoning[p] ? (
                     <div key={p} className="bg-red-50/60 rounded-xl px-3 py-2">
                       <p className="text-[10px] font-bold text-red-700 mb-0.5">{CALL_QUEUE_PARAM_NAMES[p] ?? p}</p>
-                      <p className="text-[11px] text-gray-600 leading-relaxed">{item.reasoning[p] || '—'}</p>
+                      <p className="text-[11px] text-gray-600 leading-relaxed">{activeReasoning[p]}</p>
                     </div>
-                  ))}
+                  ) : null)}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
-            {/* Links */}
-            {item.chatId && (
-              <div className="flex items-center gap-3">
-                <a
-                  href={`/quality?tab=unified&chatId=${item.chatId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-emerald-600 font-semibold hover:underline"
-                >
-                  Open in Unified Score ↗
-                </a>
-                <span className="text-gray-300">|</span>
-                <span className="text-xs text-gray-400 font-mono">Chat {item.chatId}</span>
-              </div>
-            )}
+            {/* Section 3: Review */}
+            <div className="px-5 py-4 space-y-3">
+              {item.chatId && (
+                <p className="text-xs text-gray-400">
+                  Chat: <span className="font-mono text-gray-600">{item.chatId}</span>
+                </p>
+              )}
+              {isReviewed ? (
+                <div className="bg-emerald-50 rounded-xl px-4 py-3">
+                  <p className="text-xs font-bold text-emerald-800">Reviewed by {item.qaStatus!.reviewedBy}</p>
+                  <p className="text-[11px] text-emerald-700 mt-0.5">{new Date(item.qaStatus!.reviewedAt).toLocaleString('en-IN')}</p>
+                  {item.qaStatus!.reviewNote && <p className="text-[11px] text-gray-600 mt-1 italic">"{item.qaStatus!.reviewNote}"</p>}
+                </div>
+              ) : canReview ? (
+                <div className="space-y-2">
+                  <textarea
+                    rows={2}
+                    value={reviewNotes[item.callId] || ''}
+                    onChange={e => setReviewNotes(n => ({ ...n, [item.callId]: e.target.value }))}
+                    placeholder="Optional review note…"
+                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
+                  />
+                  <button
+                    onClick={() => markReviewed(item)}
+                    disabled={reviewing[item.callId]}
+                    className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition"
+                  >
+                    {reviewing[item.callId] ? 'Saving…' : 'Mark as Reviewed'}
+                  </button>
+                </div>
+              ) : null}
+            </div>
 
-            {/* QA status / mark reviewed */}
-            {isReviewed ? (
-              <div className="bg-emerald-50 rounded-xl px-4 py-3">
-                <p className="text-xs font-bold text-emerald-800">Reviewed by {item.qaStatus!.reviewedBy}</p>
-                <p className="text-[11px] text-emerald-700 mt-0.5">{new Date(item.qaStatus!.reviewedAt).toLocaleString('en-IN')}</p>
-                {item.qaStatus!.reviewNote && <p className="text-[11px] text-gray-600 mt-1 italic">"{item.qaStatus!.reviewNote}"</p>}
-              </div>
-            ) : canReview && item.chatId ? (
-              <div className="space-y-2">
-                <textarea
-                  rows={2}
-                  value={reviewNotes[item.callId] || ''}
-                  onChange={e => setReviewNotes(n => ({ ...n, [item.callId]: e.target.value }))}
-                  placeholder="Optional review note…"
-                  className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
-                />
-                <button
-                  onClick={() => markReviewed(item)}
-                  disabled={reviewing[item.callId]}
-                  className="px-4 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition"
-                >
-                  {reviewing[item.callId] ? 'Saving…' : 'Mark as Reviewed'}
-                </button>
-              </div>
-            ) : !item.chatId ? (
-              <p className="text-xs text-gray-400 italic">No linked chat — cannot mark reviewed</p>
-            ) : null}
           </div>
         )}
       </div>
@@ -2017,6 +2083,13 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
             Filters
           </button>
         </div>
+
+        {/* QA disposition scope label */}
+        {assignedCallDispositions.length > 0 && (
+          <p className="text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">
+            Default scope: {assignedCallDispositions.join(', ')} — select a different filter to override
+          </p>
+        )}
 
         {/* Filter panel */}
         {showFilters && (

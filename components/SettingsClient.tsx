@@ -137,6 +137,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<'agent' | 'tl' | 'quality' | 'admin'>('agent');
   const [newAgentName, setNewAgentName] = useState('');
+  const [newAssignedCallDispositions, setNewAssignedCallDispositions] = useState('');
   const [addingUser, setAddingUser] = useState(false);
   const [userError, setUserError] = useState('');
   const [editingAgentName, setEditingAgentName] = useState<Record<string, string>>({});
@@ -388,13 +389,21 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newEmail.trim(), role: newRole, agentName: newAgentName.trim() || undefined }),
+        body: JSON.stringify({
+          email: newEmail.trim(),
+          role: newRole,
+          agentName: newAgentName.trim() || undefined,
+          assignedCallDispositions: newAssignedCallDispositions.trim()
+            ? newAssignedCallDispositions.split(',').map(s => s.trim()).filter(Boolean)
+            : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setUserError(data.error || 'Failed'); return; }
       await loadUsers();
       setNewEmail('');
       setNewAgentName('');
+      setNewAssignedCallDispositions('');
       setNewRole('agent');
       showToast('User added');
     } finally { setAddingUser(false); }
@@ -1135,6 +1144,12 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Name (optional)</label>
                 <input type="text" value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Display name for quality reports…"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Assigned Call Dispositions <span className="normal-case font-normal text-gray-400">(QA only, comma-separated)</span></label>
+                <input type="text" value={newAssignedCallDispositions} onChange={e => setNewAssignedCallDispositions(e.target.value)}
+                  placeholder="e.g. LIQUIDITY, BOND PURCHASE"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
               </div>
               {userError && <p className="text-xs text-red-500">{userError}</p>}

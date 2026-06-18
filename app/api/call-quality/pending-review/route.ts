@@ -38,8 +38,10 @@ export async function GET(req: NextRequest) {
   const email = (session.user as any)?.email || '';
   if (!qualityAccess(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  // Resolve scoped agent names
+  // Resolve scoped agent names and assigned call dispositions
   let scopedAgentNames: string[] | null = null;
+  let assignedCallDispositions: string[] | null = null;
+
   if (role === 'tl') {
     const config = await readConfig();
     const configUser = config.users.find((u: any) => (u.email || u.username) === email);
@@ -50,14 +52,18 @@ export async function GET(req: NextRequest) {
     const configUser = config.users.find((u: any) => (u.email || u.username) === email);
     const selfAgentName = configUser?.agentName || '';
     if (selfAgentName) scopedAgentNames = await getAgentNamesByQA(selfAgentName);
+    if ((configUser as any)?.assignedCallDispositions?.length) {
+      assignedCallDispositions = (configUser as any).assignedCallDispositions as string[];
+    }
   }
 
-  const url       = new URL(req.url);
-  const dateFrom  = url.searchParams.get('dateFrom') || '';
-  const dateTo    = url.searchParams.get('dateTo') || '';
-  const agentFilter = url.searchParams.get('agent') || '';
-  const minScore  = url.searchParams.get('minScore') ? parseInt(url.searchParams.get('minScore')!, 10) : undefined;
-  const maxScore  = url.searchParams.get('maxScore') ? parseInt(url.searchParams.get('maxScore')!, 10) : undefined;
+  const url           = new URL(req.url);
+  const dateFrom      = url.searchParams.get('dateFrom') || '';
+  const dateTo        = url.searchParams.get('dateTo') || '';
+  const agentFilter   = url.searchParams.get('agent') || '';
+  const dispositionFilter = url.searchParams.get('disposition') || '';
+  const minScore      = url.searchParams.get('minScore') ? parseInt(url.searchParams.get('minScore')!, 10) : undefined;
+  const maxScore      = url.searchParams.get('maxScore') ? parseInt(url.searchParams.get('maxScore')!, 10) : undefined;
 
   // Build agent name opts — admin sees all, tl/qa are scoped
   let agentNames: string[] | undefined;
@@ -69,6 +75,11 @@ export async function GET(req: NextRequest) {
     agentNames = undefined; // admin with specific filter — pass as agentName below
   }
 
+  // QA disposition scoping: apply assigned dispositions as default when no explicit filter
+  const effectiveDispositions = assignedCallDispositions && !dispositionFilter
+    ? assignedCallDispositions
+    : dispositionFilter ? [dispositionFilter] : undefined;
+
   const baseOpts = {
     agentName:      (!scopedAgentNames && agentFilter) ? agentFilter : undefined,
     agentNames:     agentNames,
@@ -76,6 +87,7 @@ export async function GET(req: NextRequest) {
     dateTo:         dateTo || undefined,
     minScore,
     maxScore,
+    dispositions:   effectiveDispositions,
     unreviewedOnly: false,
   };
 
@@ -119,26 +131,58 @@ export async function GET(req: NextRequest) {
   const items         = unreviewedRows.map(mapRow);
   const reviewedItems = allRows.filter((r: any) => !!r.reviewedBy).map(mapRow);
 
-  return NextResponse.json({ items, reviewedItems, availableAgents });
+  return NextResponse.json({
+    items,
+    reviewedItems,
+    availableAgents,
+    assignedCallDispositions: assignedCallDispositions || [],
+  });
 }
 
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const role = (session.user as any)?.role;
+  const role  = (session.user as any)?.role;
+  const email = (session.user as any)?.email || '';
   if (!qualityAccess(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const { chatId, reviewNote } = await req.json();
-  if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
+  const body = await req.json();
+  const { callId, chatId, reviewNote } = body;
+
+  if (!callId && !chatId) return NextResponse.json({ error: 'callId or chatId required' }, { status: 400 });
 
   try {
-    await query(
-      `UPDATE iqs_scores
-       SET reviewed_by = $2, reviewed_at = NOW(), review_note = $3
-       WHERE chat_id = $1`,
-      [String(chatId), (session.user as any)?.email || '', reviewNote || ''],
-    );
+    if (callId) {
+      // Per-call review: mark the call recording itself
+      await query(
+        `UPDATE call_recordings
+         SET reviewed_by = $2, reviewed_at = NOW(), review_note = $3
+         WHERE id = $1`,
+        [String(callId), email, reviewNote || ''],
+      );
+      // Also mark the chat-level iqs_scores row so the "reviewed" state is consistent across tabs
+      const chatRows = await query<{ chat_id: string }>(
+        `SELECT chat_id FROM call_recordings WHERE id = $1`,
+        [String(callId)],
+      );
+      if (chatRows.length && chatRows[0].chat_id) {
+        await query(
+          `UPDATE iqs_scores
+           SET reviewed_by = $2, reviewed_at = NOW(), review_note = $3
+           WHERE chat_id = $1`,
+          [chatRows[0].chat_id, email, reviewNote || ''],
+        );
+      }
+    } else {
+      // Legacy: mark by chatId
+      await query(
+        `UPDATE iqs_scores
+         SET reviewed_by = $2, reviewed_at = NOW(), review_note = $3
+         WHERE chat_id = $1`,
+        [String(chatId), email, reviewNote || ''],
+      );
+    }
   } catch (e: any) {
     return NextResponse.json({ error: 'DB error', detail: e?.message }, { status: 500 });
   }

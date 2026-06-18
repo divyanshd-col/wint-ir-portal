@@ -567,6 +567,18 @@ export async function linkCallToChat(callId: string, chatId: string): Promise<vo
      WHERE id = $2`,
     [chatId, callId],
   );
+  // Propagate the conversation's IR to the call recording when the call has no agent set.
+  // Fixes "Robylon Automation" appearing as agent name in the Call Queue.
+  await query(
+    `UPDATE call_recordings cr
+     SET agent_id = conv.agent_id, updated_at = NOW()
+     FROM conversations conv
+     WHERE conv.id = $1
+       AND cr.id = $2
+       AND cr.agent_id IS NULL
+       AND conv.agent_id IS NOT NULL`,
+    [chatId, callId],
+  );
 }
 
 /** Update only the status field on a call recording (e.g. 'scored'). */
@@ -593,6 +605,7 @@ export async function getAllScoredCalls(opts: {
   minScore?: number;
   maxScore?: number;
   unreviewedOnly?: boolean;
+  dispositions?: string[];
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
@@ -628,6 +641,10 @@ export async function getAllScoredCalls(opts: {
   if (opts.unreviewedOnly) {
     conditions.push(`s.reviewed_at IS NULL`);
   }
+  if (opts.dispositions?.length) {
+    params.push(opts.dispositions);
+    conditions.push(`r.call_disposition = ANY($${params.length})`);
+  }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
@@ -656,7 +673,7 @@ export async function getAllScoredCalls(opts: {
       r.language,
       r.interruption_count                    AS "interruptionCount",
       r.dead_air_count                        AS "deadAirCount",
-      COALESCE(a.name, '')                    AS "agentName",
+      NULLIF(COALESCE(a.name, ''), 'Robylon Automation') AS "agentName",
       s.call_iqs_score                        AS "iqs",
       s.call_parameters                       AS "parameters",
       s.call_model_version                    AS "modelVersion",
