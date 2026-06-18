@@ -592,6 +592,7 @@ export async function getAllScoredCalls(opts: {
   dateTo?: string;
   minScore?: number;
   maxScore?: number;
+  unreviewedOnly?: boolean;
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
@@ -623,6 +624,9 @@ export async function getAllScoredCalls(opts: {
     conditions.push(`COALESCE(a.name, '') = ANY($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');
+  }
+  if (opts.unreviewedOnly) {
+    conditions.push(`s.reviewed_at IS NULL`);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
@@ -656,7 +660,10 @@ export async function getAllScoredCalls(opts: {
       s.call_iqs_score                        AS "iqs",
       s.call_parameters                       AS "parameters",
       s.call_model_version                    AS "modelVersion",
-      s.call_scored_at                        AS "scoredAt"
+      s.call_scored_at                        AS "scoredAt",
+      s.reviewed_by                           AS "reviewedBy",
+      s.reviewed_at                           AS "reviewedAt",
+      s.review_note                           AS "reviewNote"
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
