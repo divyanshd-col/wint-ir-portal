@@ -329,14 +329,21 @@ export interface IQSChallengedParam {
 
 export interface IQSFlag {
   id: string;
-  scoreId: string;
+  scoreId?: string;
   chatId: string;
   agentName: string;
   agentEmail: string;
   agentNote: string;           // overall note
   challengedParams?: IQSChallengedParam[];  // per-parameter challenges
   flaggedAt: string;           // ISO
-  status: 'pending' | 'reviewed';
+  updatedAt?: string;          // ISO — last state transition
+  /** who created this flag */
+  raisedByRole: 'ir' | 'tl';
+  /** category of challenged params after split (ir mixed → two flags) */
+  paramCategory: 'cat1' | 'cat2';
+  /** links the CAT1 and CAT2 sibling flags created from the same mixed IR dispute */
+  parentFlagId?: string;
+  status: 'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
@@ -369,7 +376,7 @@ export async function storeGetIQSFlags(): Promise<string[]> {
 
 export async function storeUpdateIQSFlag(
   id: string,
-  updates: Partial<Pick<IQSFlag, 'status' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
+  updates: Partial<Pick<IQSFlag, 'status' | 'updatedAt' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
 ): Promise<boolean> {
   if (!ready()) return false;
   const all = await storeGetIQSFlags();
@@ -405,6 +412,47 @@ export async function storeAppendFlagComment(comment: IQSFlagComment): Promise<v
 export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment[]> {
   const raw = await kv_lrange(flagThreadKey(flagId), 0, -1);
   return raw.map(r => { try { return JSON.parse(r) as IQSFlagComment; } catch { return null; } }).filter(Boolean) as IQSFlagComment[];
+}
+
+// --- IQS Audit Trail ---
+
+const IQS_AUDIT_KEY = 'wint_iqs_audit';
+
+export interface IQSAuditEntry {
+  id: string;
+  action:
+    | 'bot_scored'
+    | 'dispute_raised'
+    | 'ir_dispute_raised'
+    | 'tl_dispute_raised'
+    | 'review_submitted'
+    | 'score_overridden'
+    | 'dispute_resolved'
+    | 'tl_forwarded_dispute'
+    | 'tl_resolved_cat2'
+    | 'tl_override'
+    | 'tl_submit';
+  chatId: string;
+  actorEmail: string;
+  actorRole: string;
+  ts: string;
+  meta?: Record<string, any>;
+}
+
+export async function storeAppendAuditEntry(entry: IQSAuditEntry): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LPUSH', IQS_AUDIT_KEY, JSON.stringify(entry)], ['LTRIM', IQS_AUDIT_KEY, '0', '1999']]),
+    });
+  } catch (e: any) { log.warn('store', 'kv audit error', { err: e?.message ?? String(e) }); }
+}
+
+export async function storeGetAuditEntries(limit = 200): Promise<IQSAuditEntry[]> {
+  const raw = await kv_lrange(IQS_AUDIT_KEY, 0, limit - 1);
+  return raw.map(r => { try { return JSON.parse(r) as IQSAuditEntry; } catch { return null; } }).filter(Boolean) as IQSAuditEntry[];
 }
 
 // --- Pending Score State (accumulates TICKET_CLOSED + CLASSIFICATION + CSAT before scoring) ---
