@@ -7,10 +7,11 @@ import ReviewedChatsTable from './ReviewedChatsTable';
 type Tab = 'pending' | 'disputes' | 'reviewed';
 
 export default function ChatEvaluationPage() {
-  const [dispositions, setDispositions] = useState<string[]>([]);
-  const [pendingCount, setPendingCount]  = useState<number | null>(null);
-  const [loadingDisp,  setLoadingDisp]   = useState(true);
-  const [tab,          setTab]           = useState<Tab>('pending');
+  const [dispositions,  setDispositions]  = useState<string[]>([]);
+  const [pendingCount,  setPendingCount]  = useState<number | null>(null);
+  const [disputeCount, setDisputeCount]  = useState<number | null>(null);
+  const [loadingDisp,   setLoadingDisp]   = useState(true);
+  const [tab,           setTab]           = useState<Tab>('pending');
 
   useEffect(() => {
     (async () => {
@@ -30,25 +31,28 @@ export default function ChatEvaluationPage() {
     background: active ? 'var(--qa-gray-700)' : 'transparent',
     color: active ? '#fff' : 'var(--qa-text-2)',
     fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 500 : 400,
-    cursor: 'pointer',
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
+
+  function CountBadge({ count, active }: { count: number; active: boolean }) {
+    return (
+      <span style={{
+        fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px',
+        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100)',
+        color: active ? '#fff' : 'var(--qa-text-2)',
+      }}>
+        {count}
+      </span>
+    );
+  }
 
   return (
     <div>
       {/* Page header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+      <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
           Chat Evaluation
         </h1>
-        {pendingCount !== null && (
-          <span style={{
-            background: 'var(--qa-gray-100)', borderRadius: 6,
-            fontSize: 12, color: 'var(--qa-text-2)', padding: '4px 10px',
-            fontWeight: 500, whiteSpace: 'nowrap',
-          }}>
-            {pendingCount} pending
-          </span>
-        )}
       </div>
 
       {/* Tab bar */}
@@ -57,8 +61,14 @@ export default function ChatEvaluationPage() {
         background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
         borderRadius: 10, padding: 4, width: 'fit-content',
       }}>
-        <button style={tabStyle(tab === 'pending')}  onClick={() => setTab('pending')}>Pending Review</button>
-        <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>Disputes</button>
+        <button style={tabStyle(tab === 'pending')} onClick={() => setTab('pending')}>
+          Pending Review
+          {pendingCount !== null && <CountBadge count={pendingCount} active={tab === 'pending'} />}
+        </button>
+        <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
+          Disputes
+          {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
+        </button>
         <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>Reviewed Chats</button>
       </div>
 
@@ -71,7 +81,7 @@ export default function ChatEvaluationPage() {
       )}
 
       {tab === 'disputes' && (
-        <DisputesTable dispositions={loadingDisp ? [] : dispositions} />
+        <DisputesTable dispositions={loadingDisp ? [] : dispositions} onCountChange={setDisputeCount} />
       )}
 
       {tab === 'reviewed' && (

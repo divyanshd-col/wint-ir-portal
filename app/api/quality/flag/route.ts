@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag } from '@/lib/store';
-import type { IQSFlag, IQSChallengedParam } from '@/lib/store';
+import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
+import type { IQSFlag, IQSChallengedParam, IQSAuditEntry } from '@/lib/store';
 import { randomUUID } from 'crypto';
 
 function qualityAccess(session: any) {
@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
   const { readConfig } = await import('@/lib/config');
   const config = await readConfig();
   const email = (session.user as any)?.email || '';
+  const role  = (session.user as any)?.role  || '';
   const configUser = config.users.find(u => (u.email || u.username) === email);
   const agentName = configUser?.agentName || email.split('@')[0];
 
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
   };
 
   await storeAppendIQSFlag(flag);
+  await storeAppendAuditEntry({ id: randomUUID(), action: 'dispute_raised', chatId, actorEmail: email, actorRole: role, ts: flag.flaggedAt, meta: { agentNote, challengedParams, agentName } } as IQSAuditEntry);
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
 

@@ -79,11 +79,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // Reviewed vs pending mode
   const reviewedMode = searchParams.get('reviewed') === 'true';
 
-  // Optional narrowing by a single disposition within the QA's set
-  const dispositionFilter = searchParams.get('disposition_filter');
-  const effectiveDispositions = dispositionFilter && dispositions.includes(dispositionFilter)
-    ? [dispositionFilter]
-    : dispositions;
+  // Optional narrowing by one or more dispositions within the QA's set
+  const dispositionFilters = searchParams.getAll('disposition_filter').filter(d => dispositions.includes(d));
+  const effectiveDispositions = dispositionFilters.length ? dispositionFilters : dispositions;
 
   // Build dynamic WHERE clauses
   const sqlParams: unknown[] = [effectiveDispositions];
@@ -92,11 +90,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const filters: Record<string, unknown> = {};
 
-  const subDispo = searchParams.get('sub_disposition');
-  if (subDispo) {
-    extraWhere += ` AND c.tags->>'sub_disposition' = $${paramIdx++}`;
-    sqlParams.push(subDispo);
-    filters.subDispo = subDispo;
+  const subDispos = searchParams.getAll('sub_disposition');
+  if (subDispos.length) {
+    extraWhere += ` AND c.tags->>'sub_disposition' = ANY($${paramIdx++})`;
+    sqlParams.push(subDispos);
+    filters.subDispo = subDispos;
   }
 
   // Interpret dates as IST (UTC+05:30) so "June 2" means June 2 00:00 IST, not UTC midnight

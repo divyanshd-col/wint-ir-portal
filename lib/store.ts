@@ -640,3 +640,33 @@ export async function storeUpdateCallSkipped(
     return true;
   } catch { return false; }
 }
+
+// --- IQS Audit Trail ---
+
+const IQS_AUDIT_KEY = 'wint_iqs_audit';
+
+export interface IQSAuditEntry {
+  id: string;
+  action: 'dispute_raised' | 'review_submitted' | 'score_overridden' | 'dispute_resolved';
+  chatId: string;
+  actorEmail: string;
+  actorRole: string;
+  ts: string;
+  meta?: Record<string, any>;
+}
+
+export async function storeAppendAuditEntry(entry: IQSAuditEntry): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LPUSH', IQS_AUDIT_KEY, JSON.stringify(entry)], ['LTRIM', IQS_AUDIT_KEY, '0', '1999']]),
+    });
+  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+}
+
+export async function storeGetAuditLog(limit = 200): Promise<IQSAuditEntry[]> {
+  const raw = await kv_lrange(IQS_AUDIT_KEY, 0, limit - 1);
+  return raw.map(r => { try { return JSON.parse(r) as IQSAuditEntry; } catch { return null; } }).filter(Boolean) as IQSAuditEntry[];
+}

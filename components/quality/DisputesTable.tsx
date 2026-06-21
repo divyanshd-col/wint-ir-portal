@@ -5,6 +5,7 @@ import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 
 interface Props {
   dispositions: string[];
+  onCountChange?: (count: number) => void;
 }
 
 interface FlagComment {
@@ -24,7 +25,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ dispositions: _dispositions }: Props) {
+export default function DisputesTable({ dispositions: _dispositions, onCountChange }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
@@ -42,7 +43,10 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
         const res = await fetch('/api/cx/qa/disputes');
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setDisputes(data.disputes ?? []);
+        if (!cancelled) {
+          setDisputes(data.disputes ?? []);
+          onCountChange?.(data.disputes?.length ?? 0);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

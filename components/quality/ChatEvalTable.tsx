@@ -52,8 +52,8 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
 
 export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
   // ── Filter state ──────────────────────────────────────────────────────────
-  const [dispFilter,    setDispFilter]    = useState('');
-  const [subDispFilter, setSubDispFilter] = useState('');
+  const [dispFilter,    setDispFilter]    = useState<string[]>([]);
+  const [subDispFilter, setSubDispFilter] = useState<string[]>([]);
   const [iqsMin,        setIqsMin]        = useState('');
   const [iqsMax,        setIqsMax]        = useState('');
   const [csatFilter,    setCsatFilter]    = useState<number[]>([]);
@@ -69,7 +69,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
   const [chats,    setChats]    = useState<ChatToReviewRow[]>([]);
   const [total,    setTotal]    = useState(0);
   const [page,     setPage]     = useState(1);
-  const [pageSize, setPageSize] = useState(50);
+  const [pageSize, setPageSize] = useState(5);
   const [loading,  setLoading]  = useState(true);
 
   // ── Expanded row state ────────────────────────────────────────────────────
@@ -82,8 +82,8 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(pg), limit: String(ps) });
-      if (dispFilter)    params.set('disposition_filter', dispFilter);
-      if (subDispFilter) params.set('sub_disposition',    subDispFilter);
+      dispFilter.forEach(d => params.append('disposition_filter', d));
+      subDispFilter.forEach(s => params.append('sub_disposition', s));
       if (iqsMin)        params.set('iqs_min',            iqsMin);
       if (iqsMax)        params.set('iqs_max',            iqsMax);
       if (paramFail)     params.set('param_fail',         paramFail);
@@ -138,7 +138,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
   const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13 };
   const tdAct: React.CSSProperties  = { ...td, textAlign: 'right' };
 
-  const hasFilters = !!(dispFilter || subDispFilter || iqsMin || iqsMax || csatFilter.length || paramFail || customFrom);
+  const hasFilters = !!(dispFilter.length || subDispFilter.length || iqsMin || iqsMax || csatFilter.length || paramFail || customFrom);
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
@@ -150,45 +150,55 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
         borderRadius: '8px 8px 0 0',
       }}>
 
-        {/* Disposition filter */}
+        {/* Disposition filter — multi-select */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button style={dispFilter ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'disp' ? null : 'disp')}>
-            {dispFilter || 'Disposition'} <span style={{ fontSize: 9 }}>▾</span>
+          <button style={dispFilter.length ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'disp' ? null : 'disp')}>
+            {dispFilter.length > 0 ? `${dispFilter.length} disposition${dispFilter.length > 1 ? 's' : ''}` : 'Disposition'}
+            <span style={{ fontSize: 9 }}>▾</span>
           </button>
           {openDrop === 'disp' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
-              <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setDispFilter(''); setSubDispFilter(''); setOpenDrop(null); }}>
-                All
+              <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setDispFilter([]); setSubDispFilter([]); }}>
+                Clear
               </div>
-              {dispositions.map(d => (
-                <div key={d} style={{ ...dropItem, fontWeight: dispFilter === d ? 600 : 400 }}
-                  onClick={() => { setDispFilter(d); setSubDispFilter(''); setOpenDrop(null); }}>
-                  {dispFilter === d && <span style={{ fontSize: 10 }}>✓</span>} {d}
-                </div>
-              ))}
+              {dispositions.map(d => {
+                const checked = dispFilter.includes(d);
+                return (
+                  <div key={d} style={dropItem} onClick={() => setDispFilter(prev => checked ? prev.filter(x => x !== d) : [...prev, d])}>
+                    <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span> {d}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Sub-disposition filter */}
-        {dispFilter && (subMap[dispFilter] ?? []).length > 0 && (
-          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-            <button style={subDispFilter ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'sub' ? null : 'sub')}>
-              {subDispFilter || 'Sub-disposition'} <span style={{ fontSize: 9 }}>▾</span>
-            </button>
-            {openDrop === 'sub' && (
-              <div style={dropdown} onClick={e => e.stopPropagation()}>
-                <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setSubDispFilter(''); setOpenDrop(null); }}>All</div>
-                {(subMap[dispFilter] ?? []).map(s => (
-                  <div key={s} style={{ ...dropItem, fontWeight: subDispFilter === s ? 600 : 400 }}
-                    onClick={() => { setSubDispFilter(s); setOpenDrop(null); }}>
-                    {s}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Sub-disposition filter — multi-select, shown when dispositions selected */}
+        {dispFilter.length > 0 && (() => {
+          const allSubs = [...new Set(dispFilter.flatMap(d => subMap[d] ?? []))];
+          if (!allSubs.length) return null;
+          return (
+            <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+              <button style={subDispFilter.length ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'sub' ? null : 'sub')}>
+                {subDispFilter.length > 0 ? `${subDispFilter.length} sub-disp` : 'Sub-disposition'}
+                <span style={{ fontSize: 9 }}>▾</span>
+              </button>
+              {openDrop === 'sub' && (
+                <div style={dropdown} onClick={e => e.stopPropagation()}>
+                  <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setSubDispFilter([]); setOpenDrop(null); }}>Clear</div>
+                  {allSubs.map(s => {
+                    const checked = subDispFilter.includes(s);
+                    return (
+                      <div key={s} style={dropItem} onClick={() => setSubDispFilter(prev => checked ? prev.filter(x => x !== s) : [...prev, s])}>
+                        <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span> {s}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Date range */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
@@ -208,30 +218,24 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
           )}
         </div>
 
-        {/* IQS range */}
-        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button style={(iqsMin || iqsMax) ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'iqs' ? null : 'iqs')}>
-            {(iqsMin || iqsMax) ? `IQS ${iqsMin || '0'}–${iqsMax || '79'}` : 'IQS range'} <span style={{ fontSize: 9 }}>▾</span>
-          </button>
-          {openDrop === 'iqs' && (
-            <div style={{ ...dropdown, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }} onClick={e => e.stopPropagation()}>
-              <label style={{ fontSize: 12, color: 'var(--qa-text-2)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                Min IQS
-                <input type="number" min={0} max={79} value={iqsMin}
-                  onChange={e => setIqsMin(e.target.value)}
-                  style={{ height: 30, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', width: 80 }} />
-              </label>
-              <label style={{ fontSize: 12, color: 'var(--qa-text-2)', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                Max IQS
-                <input type="number" min={0} max={79} value={iqsMax}
-                  onChange={e => setIqsMax(e.target.value)}
-                  style={{ height: 30, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, fontSize: 13, fontFamily: 'inherit', width: 80 }} />
-              </label>
-              <button onClick={() => setOpenDrop(null)} style={{ height: 28, border: '1px solid var(--qa-border)', borderRadius: 6, background: 'var(--qa-gray-700)', color: '#fff', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                Apply
-              </button>
-            </div>
-          )}
+        {/* IQS range — inline inputs, no spinner arrows */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: 12, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>IQS</span>
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*"
+            placeholder="min"
+            value={iqsMin}
+            onChange={e => setIqsMin(e.target.value.replace(/[^0-9]/g, ''))}
+            style={{ height: 32, width: 52, padding: '0 8px', textAlign: 'center', border: `1px solid ${iqsMin ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+          />
+          <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>–</span>
+          <input
+            type="text" inputMode="numeric" pattern="[0-9]*"
+            placeholder="max"
+            value={iqsMax}
+            onChange={e => setIqsMax(e.target.value.replace(/[^0-9]/g, ''))}
+            style={{ height: 32, width: 52, padding: '0 8px', textAlign: 'center', border: `1px solid ${iqsMax ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit', outline: 'none' }}
+          />
         </div>
 
         {/* CSAT filter */}
@@ -276,7 +280,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
 
         {hasFilters && (
           <button style={{ ...chip, color: 'var(--qa-text-3)' }} onClick={() => {
-            setDispFilter(''); setSubDispFilter(''); setIqsMin(''); setIqsMax('');
+            setDispFilter([]); setSubDispFilter([]); setIqsMin(''); setIqsMax('');
             setCsatFilter([]); setParamFail(''); setCustomFrom(''); setCustomTo('');
           }}>
             Clear filters
@@ -330,7 +334,6 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
               <th style={th}>Chat ID</th>
               <th style={th}>Agent</th>
               <th style={{ ...th, textAlign: 'right' }}>IQS</th>
-              <th style={th}>Disposition</th>
               <th style={th}>CSAT</th>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
@@ -339,7 +342,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 6 }).map((_, j) => (
+                  {Array.from({ length: 5 }).map((_, j) => (
                     <td key={j} style={td}>
                       <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '30%' : '60%' }} />
                     </td>
@@ -348,7 +351,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
               ))
             ) : chats.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+                <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                   No chats pending review
                 </td>
               </tr>
@@ -356,7 +359,8 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
               chats.map(chat => (
                 <React.Fragment key={chat.chatId}>
                   <tr
-                    style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
+                    onClick={() => toggleExpand(chat.chatId)}
+                    style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
                     onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                     onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                   >
@@ -366,6 +370,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
                           href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
                           target="_blank"
                           rel="noopener noreferrer"
+                          onClick={e => e.stopPropagation()}
                           style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
                           onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
                           onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
@@ -388,12 +393,6 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
                         {chat.iqsScore}
                       </span>
                     </td>
-                    <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
-                      {chat.disposition}
-                      {chat.subDisposition && (
-                        <span style={{ color: 'var(--qa-text-3)' }}> › {chat.subDisposition}</span>
-                      )}
-                    </td>
                     <td style={td}>
                       {chat.csatScore == null ? (
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
@@ -411,7 +410,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
                     </td>
                     <td style={tdAct}>
                       <button
-                        onClick={() => toggleExpand(chat.chatId)}
+                        onClick={e => { e.stopPropagation(); toggleExpand(chat.chatId); }}
                         style={{
                           background: 'none', border: 0, padding: 0,
                           fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
@@ -441,7 +440,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
                       mode="submit"
                       onDone={() => removeChat(chat.chatId)}
                       onClose={() => setExpandedId(null)}
-                      colSpan={6}
+                      colSpan={5}
                     />
                   )}
                 </React.Fragment>

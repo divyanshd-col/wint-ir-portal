@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import EvalPanel from './EvalPanel';
+import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 
 interface Props {
@@ -9,6 +10,9 @@ interface Props {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function fmtDateShort(iso: string) {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
 export default function ReviewedChatsTable({ dispositions }: Props) {
@@ -25,6 +29,7 @@ export default function ReviewedChatsTable({ dispositions }: Props) {
   const [agentSearch,  setAgentSearch]  = useState('');
   const [customFrom,   setCustomFrom]   = useState('');
   const [customTo,     setCustomTo]     = useState('');
+  const [showPicker,   setShowPicker]   = useState(false);
 
   const fetchData = useCallback(async (pg = 1) => {
     setLoading(true);
@@ -92,12 +97,27 @@ export default function ReviewedChatsTable({ dispositions }: Props) {
           value={agentSearch}
           onChange={e => setAgentSearch(e.target.value)}
         />
-        <input type="date" style={inputStyle} value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
-        <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>to</span>
-        <input type="date" style={inputStyle} value={customTo} onChange={e => setCustomTo(e.target.value)} />
+        {/* Date range picker */}
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => setShowPicker(v => !v)}
+            style={{ ...inputStyle, cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {customFrom && customTo ? `${fmtDateShort(customFrom)} – ${fmtDateShort(customTo)}` : 'Date range'}
+            <span style={{ fontSize: 9, color: 'var(--qa-text-3)' }}>▾</span>
+          </button>
+          {showPicker && (
+            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
+              <DateRangePicker
+                onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowPicker(false); }}
+                onCancel={() => setShowPicker(false)}
+              />
+            </div>
+          )}
+        </div>
         {(chatIdSearch || agentSearch || customFrom) && (
           <button
-            onClick={() => { setChatIdSearch(''); setAgentSearch(''); setCustomFrom(''); setCustomTo(''); }}
+            onClick={() => { setChatIdSearch(''); setAgentSearch(''); setCustomFrom(''); setCustomTo(''); setShowPicker(false); }}
             style={{ ...inputStyle, cursor: 'pointer', color: 'var(--qa-text-2)' }}
           >
             Clear

@@ -4,8 +4,10 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { calculateIQS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
-import { storeUpdateIQSFlag } from '@/lib/store';
+import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
+import type { IQSAuditEntry } from '@/lib/store';
 import { log } from '@/lib/log';
+import { randomUUID } from 'crypto';
 
 const ROUTE = 'cx/qa/review';
 
@@ -60,6 +62,7 @@ export async function PATCH(
         [email, note ?? null, chatId]
       );
       log.info(ROUTE, 'submit', { chatId, reviewer: email });
+      await storeAppendAuditEntry({ id: randomUUID(), action: 'review_submitted', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { note: note ?? null } } as IQSAuditEntry);
 
     } else if (action === 'override' || action === 'resolve') {
       if (parameters) {
@@ -109,6 +112,7 @@ export async function PATCH(
         );
 
         log.info(ROUTE, action, { chatId, reviewer: email, oldIqs, newIqs, paramChanges });
+        await storeAppendAuditEntry({ id: randomUUID(), action: 'score_overridden', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { oldIqs, newIqs, paramChanges, note: note ?? null } } as IQSAuditEntry);
       } else {
         // resolve without parameter changes — just mark reviewed
         await query(
@@ -118,6 +122,7 @@ export async function PATCH(
           [email, note ?? null, chatId]
         );
         log.info(ROUTE, action, { chatId, reviewer: email, paramChanges: 0 });
+        await storeAppendAuditEntry({ id: randomUUID(), action: 'review_submitted', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { note: note ?? null } } as IQSAuditEntry);
       }
 
       // For resolve: mark the KV flag as reviewed
@@ -129,6 +134,7 @@ export async function PATCH(
           reviewNote: note,
         });
         log.info(ROUTE, 'flag resolved', { chatId, flagId, reviewer: email });
+        await storeAppendAuditEntry({ id: randomUUID(), action: 'dispute_resolved', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { flagId, note: note ?? null } } as IQSAuditEntry);
       }
     }
 
