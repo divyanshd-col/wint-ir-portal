@@ -315,14 +315,21 @@ export interface IQSChallengedParam {
 
 export interface IQSFlag {
   id: string;
-  scoreId: string;
+  scoreId?: string;
   chatId: string;
   agentName: string;
   agentEmail: string;
-  agentNote: string;           // overall note
-  challengedParams?: IQSChallengedParam[];  // per-parameter challenges
+  agentNote: string;
+  challengedParams?: IQSChallengedParam[];
   flaggedAt: string;           // ISO
-  status: 'pending' | 'tl_forwarded' | 'reviewed';
+  updatedAt?: string;          // ISO — last state transition
+  /** who created this flag */
+  raisedByRole: 'ir' | 'tl';
+  /** category of challenged params after split (ir mixed → two flags) */
+  paramCategory: 'cat1' | 'cat2';
+  /** links the CAT1 and CAT2 sibling flags created from the same mixed IR dispute */
+  parentFlagId?: string;
+  status: 'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed';
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
@@ -355,7 +362,7 @@ export async function storeGetIQSFlags(): Promise<string[]> {
 
 export async function storeUpdateIQSFlag(
   id: string,
-  updates: Partial<Pick<IQSFlag, 'status' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
+  updates: Partial<Pick<IQSFlag, 'status' | 'updatedAt' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
 ): Promise<boolean> {
   if (!ready()) return false;
   const all = await storeGetIQSFlags();
@@ -647,7 +654,18 @@ const IQS_AUDIT_KEY = 'wint_iqs_audit';
 
 export interface IQSAuditEntry {
   id: string;
-  action: 'dispute_raised' | 'review_submitted' | 'score_overridden' | 'dispute_resolved' | 'tl_forwarded_dispute' | 'tl_override' | 'tl_submit';
+  action:
+    | 'bot_scored'
+    | 'dispute_raised'
+    | 'ir_dispute_raised'
+    | 'tl_dispute_raised'
+    | 'review_submitted'
+    | 'score_overridden'
+    | 'dispute_resolved'
+    | 'tl_forwarded_dispute'
+    | 'tl_resolved_cat2'
+    | 'tl_override'
+    | 'tl_submit';
   chatId: string;
   actorEmail: string;
   actorRole: string;

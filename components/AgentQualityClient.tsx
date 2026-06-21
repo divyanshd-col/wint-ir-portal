@@ -152,6 +152,7 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
           scoreId: entry.id, chatId: entry.chatId,
           agentNote: generalNote.trim(),
           challengedParams,
+          raisedByRole: 'ir',
         }),
       });
       const d = await res.json();

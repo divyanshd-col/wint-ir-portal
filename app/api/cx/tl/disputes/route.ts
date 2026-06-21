@@ -22,7 +22,8 @@ export interface TLDisputeRow {
   raisedBy:         string;
   raisedByName:     string;
   raisedAt:         string;
-  status:           'pending' | 'tl_forwarded' | 'reviewed';
+  status:           'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed';
+  paramCategory:    'cat1' | 'cat2';
   reviewNote:       string | null;
   tlForwarded:      boolean;
   agentNote:        string;
@@ -62,13 +63,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const t0 = Date.now();
   const rawFlags = await storeGetIQSFlags();
 
-  // Filter by requested status
+  // Filter by requested status — TL only sees IR-raised flags (ir_pending_tl)
+  // TL-raised flags (status: 'pending') go directly to QA, TL doesn't manage them here
   const flags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .filter((f): f is IQSFlag => {
       if (!f) return false;
-      if (statusFilter === 'pending') return f.status === 'pending' || f.status === 'tl_forwarded';
-      if (statusFilter === 'resolved') return f.status === 'reviewed';
+      if (statusFilter === 'pending') return f.status === 'ir_pending_tl';
+      if (statusFilter === 'resolved') return f.status === 'tl_resolved' || f.status === 'reviewed';
       return false;
     });
 
@@ -132,6 +134,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       raisedByName:     flag.agentName,
       raisedAt:         flag.flaggedAt,
       status:           flag.status,
+      paramCategory:    flag.paramCategory ?? 'cat1',
       reviewNote:       flag.reviewNote ?? null,
       tlForwarded:      flag.status === 'tl_forwarded',
       agentNote:        flag.agentNote,

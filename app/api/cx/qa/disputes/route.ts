@@ -61,10 +61,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   // Fetch all pending flags from KV
+  // QA sees: tl_forwarded (IR-raised, forwarded by TL) + pending (TL-raised, goes directly to QA)
+  // QA does NOT see ir_pending_tl — those are still with TL
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
-    .filter((f): f is IQSFlag => f !== null && (f.status === 'pending' || f.status === 'tl_forwarded'));
+    .filter((f): f is IQSFlag => f !== null && (f.status === 'tl_forwarded' || f.status === 'pending'));
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 

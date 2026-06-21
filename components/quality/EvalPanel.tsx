@@ -317,6 +317,7 @@ export default function EvalPanel({
             chatId,
             agentNote: '',
             challengedParams: cat1Params.map(p => ({ param: p, note: (tlParamNotes[p] ?? '').trim() })),
+            raisedByRole: 'tl',
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
