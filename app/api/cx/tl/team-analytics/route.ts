@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
+import { readConfig } from '@/lib/config';
 
 // Canonical parameter definitions (order matches quality.ts PARAM_ORDER)
 export const PARAM_DEFS = [
@@ -97,7 +98,10 @@ export async function GET(req: NextRequest) {
   // ── Resolve agent names ──────────────────────────────────────────────────────
   let agentNames: string[];
   if (role === 'tl') {
-    agentNames = await getAgentNamesByTL(email);
+    const config = await readConfig();
+    const configUser = config.users.find(u => (u.email || u.username) === email);
+    const tlAgentName = configUser?.agentName ?? email;
+    agentNames = await getAgentNamesByTL(tlAgentName);
   } else {
     const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`, []);
     agentNames = rows.map(r => r.name);
