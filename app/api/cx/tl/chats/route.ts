@@ -1,0 +1,166 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/auth';
+import { query } from '@/lib/cx/db';
+import { getAgentNamesByTL } from '@/lib/robylon/db';
+import { log, withLogging } from '@/lib/log';
+
+const PASCAL_TO_DB: Record<string, string> = {
+  Technical: 'technical', AllQuestions: 'all_questions', Expectation: 'expectation',
+  Contextual: 'contextual', FollowUp: 'follow_up', Sentences: 'sentences',
+  Process: 'process', Opening: 'opening', Call: 'call', Grammar: 'grammar', Empathy: 'empathy',
+};
+const DB_TO_PASCAL: Record<string, string> = Object.fromEntries(
+  Object.entries(PASCAL_TO_DB).map(([p, d]) => [d, p])
+);
+
+const ROUTE = 'cx/tl/chats';
+
+export interface TLChatRow {
+  chatId:        string;
+  agentName:     string;
+  iqsScore:      number;
+  closedAt:      string;
+  disposition:   string;
+  subDisposition: string | null;
+  csatScore:     number | null;
+  mobileNumber:  string | null;
+  parameters:    Record<string, { score: boolean | null; reasoning: string }>;
+  failedParams:  string[];
+  reviewedBy:    string | null;
+  reviewedAt:    string | null;
+}
+
+export const GET = withLogging(ROUTE, async (req: NextRequest) => {
+  const session = await getServerSession(authOptions);
+  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const role  = (session.user as any).role as string;
+  const email = ((session.user as any).email || '') as string;
+
+  if (!['tl', 'admin'].includes(role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  const { searchParams } = new URL(req.url);
+
+  // Resolve TL's agents
+  let agentNames: string[];
+  if (role === 'admin') {
+    const explicit = searchParams.get('agent');
+    if (explicit) {
+      agentNames = [explicit];
+    } else {
+      const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`);
+      agentNames = rows.map(r => r.name);
+    }
+  } else {
+    agentNames = await getAgentNamesByTL(email);
+    const agentFilter = searchParams.get('agent');
+    if (agentFilter) agentNames = agentNames.filter(n => n === agentFilter);
+  }
+
+  if (!agentNames.length) {
+    return NextResponse.json({ chats: [], total: 0, agents: [] });
+  }
+
+  const sqlParams: unknown[] = [agentNames];
+  let paramIdx = 2;
+  let extraWhere = '';
+
+  const from = searchParams.get('from');
+  if (from) {
+    const fromDate = new Date(from + 'T00:00:00+05:30');
+    if (!isNaN(fromDate.getTime())) {
+      extraWhere += ` AND c.closed_at >= $${paramIdx++}`;
+      sqlParams.push(fromDate.toISOString());
+    }
+  }
+  const to = searchParams.get('to');
+  if (to) {
+    const toDate = new Date(to + 'T23:59:59+05:30');
+    if (!isNaN(toDate.getTime())) {
+      extraWhere += ` AND c.closed_at <= $${paramIdx++}`;
+      sqlParams.push(toDate.toISOString());
+    }
+  }
+  const iqsMin = searchParams.get('iqs_min');
+  if (iqsMin) { extraWhere += ` AND i.iqs_score >= $${paramIdx++}`; sqlParams.push(parseInt(iqsMin)); }
+  const iqsMax = searchParams.get('iqs_max');
+  if (iqsMax) { extraWhere += ` AND i.iqs_score <= $${paramIdx++}`; sqlParams.push(parseInt(iqsMax)); }
+  const csatValues = searchParams.getAll('csat');
+  if (csatValues.length) {
+    extraWhere += ` AND c.csat_score = ANY($${paramIdx++})`;
+    sqlParams.push(csatValues.map(Number));
+  }
+
+  const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
+  const offset = (page - 1) * limit;
+
+  const baseWhere = `a.name = ANY($1) AND i.call_iqs_score IS NULL AND i.iqs_score < 80`;
+  const t0 = Date.now();
+
+  const [countRow] = await query<{ total: string }>(
+    `SELECT COUNT(*) AS total
+     FROM conversations c
+     JOIN iqs_scores i ON i.chat_id = c.id
+     LEFT JOIN agents a ON a.id = c.agent_id
+     WHERE ${baseWhere}${extraWhere}`,
+    sqlParams
+  );
+  const total = parseInt(countRow?.total ?? '0');
+
+  sqlParams.push(limit, offset);
+  const rows = await query<{
+    chat_id: string; agent_name: string | null; iqs_score: string;
+    closed_at: string; disposition: string; sub_disposition: string | null;
+    csat_score: string | null; parameters: any; mobile_number: string | null;
+    reviewed_by: string | null; reviewed_at: string | null;
+  }>(
+    `SELECT c.id AS chat_id, a.name AS agent_name,
+            i.iqs_score, c.closed_at,
+            c.tags->>'disposition'     AS disposition,
+            c.tags->>'sub_disposition' AS sub_disposition,
+            c.csat_score, i.parameters,
+            ct.phone AS mobile_number,
+            i.reviewed_by, i.reviewed_at
+     FROM conversations c
+     JOIN iqs_scores i ON i.chat_id = c.id
+     LEFT JOIN agents a ON a.id = c.agent_id
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
+     WHERE ${baseWhere}${extraWhere}
+     ORDER BY i.iqs_score ASC, c.closed_at DESC
+     LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+    sqlParams
+  );
+
+  log.info(ROUTE, 'query', { total, page, limit, agentCount: agentNames.length, durationMs: Date.now() - t0 });
+
+  const chats: TLChatRow[] = rows.map(r => {
+    let params = r.parameters ?? {};
+    if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
+    const failedParams: string[] = [];
+    for (const [dbKey, val] of Object.entries(params) as [string, any][]) {
+      if (!dbKey.startsWith('__') && val?.score === false) {
+        const pascal = DB_TO_PASCAL[dbKey];
+        if (pascal) failedParams.push(pascal);
+      }
+    }
+    return {
+      chatId:         r.chat_id,
+      agentName:      r.agent_name ?? 'Unknown',
+      iqsScore:       parseInt(r.iqs_score),
+      closedAt:       r.closed_at,
+      disposition:    r.disposition,
+      subDisposition: r.sub_disposition,
+      csatScore:      r.csat_score ? parseInt(r.csat_score) : null,
+      mobileNumber:   r.mobile_number ?? null,
+      parameters:     params,
+      failedParams,
+      reviewedBy:     r.reviewed_by ?? null,
+      reviewedAt:     r.reviewed_at ?? null,
+    };
+  });
+
+  return NextResponse.json({ chats, total, agents: agentNames });
+});

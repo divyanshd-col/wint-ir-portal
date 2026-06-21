@@ -30,8 +30,13 @@ export interface ChatToReviewRow {
   disposition:   string;
   subDisposition: string | null;
   csatScore:     number | null;
+  mobileNumber:  string | null;
   parameters:    Record<string, { score: boolean | null; reasoning: string }>;
   failedParams:  string[]; // PascalCase keys where score === false
+  // reviewed mode only
+  reviewedBy?:   string | null;
+  reviewedAt?:   string | null;
+  reviewNote?:   string | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -70,6 +75,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     log.warn(ROUTE, 'no dispositions', { email, role });
     return NextResponse.json({ chats: [], total: 0 });
   }
+
+  // Reviewed vs pending mode
+  const reviewedMode = searchParams.get('reviewed') === 'true';
 
   // Optional narrowing by a single disposition within the QA's set
   const dispositionFilter = searchParams.get('disposition_filter');
@@ -153,10 +161,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
 
-  const baseWhere = `c.tags->>'disposition' = ANY($1)
-    AND i.reviewed_by IS NULL
-    AND i.call_iqs_score IS NULL
-    AND i.iqs_score < 80`;
+  const baseWhere = reviewedMode
+    ? `c.tags->>'disposition' = ANY($1)
+       AND i.reviewed_by IS NOT NULL
+       AND i.call_iqs_score IS NULL`
+    : `c.tags->>'disposition' = ANY($1)
+       AND i.reviewed_by IS NULL
+       AND i.call_iqs_score IS NULL
+       AND i.iqs_score < 80`;
 
   const t0 = Date.now();
 
@@ -181,17 +193,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     sub_disposition: string | null;
     csat_score: string | null;
     parameters: any;
+    mobile_number: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    review_note: string | null;
   }>(
     `SELECT c.id AS chat_id, a.name AS agent_name,
             i.iqs_score, c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
-            c.csat_score, i.parameters
+            c.csat_score, i.parameters,
+            ct.phone AS mobile_number,
+            i.reviewed_by, i.reviewed_at, i.review_note
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}
-     ORDER BY i.iqs_score ASC, c.closed_at DESC
+     ORDER BY ${reviewedMode ? 'i.reviewed_at DESC' : 'i.iqs_score ASC, c.closed_at DESC'}
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
     sqlParams
   );
@@ -229,8 +248,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       disposition:    r.disposition,
       subDisposition: r.sub_disposition,
       csatScore:      r.csat_score ? parseInt(r.csat_score) : null,
+      mobileNumber:   r.mobile_number ?? null,
       parameters:     params,
       failedParams,
+      reviewedBy:     r.reviewed_by ?? null,
+      reviewedAt:     r.reviewed_at ?? null,
+      reviewNote:     r.review_note ?? null,
     };
   });
 

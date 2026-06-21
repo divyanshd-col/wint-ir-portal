@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 
@@ -43,23 +43,27 @@ interface ParamState {
 }
 
 export interface EvalPanelProps {
-  chatId:       string;
-  agentName:    string;
-  iqsScore:     number;
-  closedAt:     string;
-  disposition:  string;
-  parameters:   Record<string, { score: boolean | null; reasoning: string }>;
-  mode:         'submit' | 'resolve';
+  chatId:        string;
+  agentName:     string;
+  iqsScore:      number;
+  closedAt:      string;
+  disposition:   string;
+  parameters:    Record<string, { score: boolean | null; reasoning: string }>;
+  mode:          'submit' | 'resolve' | 'view' | 'tl-browse';
   dispute?: {
     raisedBy:       string;
     raisedByName:   string;
     agentNote:      string;
     challengedParams: { param: string; note: string }[];  // PascalCase param keys
   };
-  flagId?:      string;
-  onDone:       () => void;
-  onClose:      () => void;
-  colSpan:      number;
+  flagId?:       string;
+  mobileNumber?: string | null;
+  reviewedBy?:   string | null;
+  reviewedAt?:   string | null;
+  reviewNote?:   string | null;
+  onDone:        () => void;
+  onClose:       () => void;
+  colSpan:       number;
 }
 
 // ── Message transcript types ──────────────────────────────────────────────────
@@ -91,11 +95,25 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+// ── History entry ─────────────────────────────────────────────────────────────
+
+interface HistoryEntry {
+  chatId: string;
+  date: string;
+  agentName: string;
+  iqs: number | null;
+  csat: string;
+  disposition: string;
+  subDisposition: string;
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function EvalPanel({
   chatId, agentName, iqsScore, closedAt, disposition,
-  parameters, mode, dispute, flagId, onDone, onClose, colSpan,
+  parameters, mode, dispute, flagId,
+  mobileNumber, reviewedBy, reviewedAt, reviewNote,
+  onDone, onClose, colSpan,
 }: EvalPanelProps) {
 
   // Initialise param state from DB parameters (snake_case keys)
@@ -109,11 +127,27 @@ export default function EvalPanel({
     return state;
   }
 
+  const isReadOnly = mode === 'view' || mode === 'tl-browse';
+
   const [paramState, setParamState] = useState<Record<string, ParamState>>(initParams);
   const [transcript, setTranscript]  = useState<TMessage[] | null>(null);
   const [txLoading,  setTxLoading]   = useState(true);
   const [submitting, setSubmitting]  = useState(false);
   const [submitErr,  setSubmitErr]   = useState('');
+  const [noteText,   setNoteText]    = useState(reviewNote ?? '');
+
+  // History (previous conversations for this contact)
+  const [history,        setHistory]        = useState<HistoryEntry[] | null>(null);
+  const [historyOpen,    setHistoryOpen]    = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // TL-browse: raise dispute
+  const [disputeOpen,   setDisputeOpen]   = useState(false);
+  const [tlNote,        setTlNote]        = useState('');
+  const [tlParams,      setTlParams]      = useState<string[]>([]);
+  const [tlSubmitting,  setTlSubmitting]  = useState(false);
+  const [tlErr,         setTlErr]         = useState('');
+  const [tlDone,        setTlDone]        = useState(false);
 
   // Build challenged params map (keyed by PascalCase)
   const disputeMap = new Map<string, { note: string }>(
@@ -163,6 +197,17 @@ export default function EvalPanel({
     return () => { cancelled = true; };
   }, [chatId]);
 
+  // Fetch history lazily when user opens the panel
+  function loadHistory() {
+    if (history !== null || historyLoading) return;
+    setHistoryLoading(true);
+    fetch(`/api/quality/history?chatId=${encodeURIComponent(chatId)}`)
+      .then(r => r.json())
+      .then(d => setHistory(d.history ?? []))
+      .catch(() => setHistory([]))
+      .finally(() => setHistoryLoading(false));
+  }
+
   // Update a single param
   function setScore(pascal: string, score: boolean | null) {
     setParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], score } }));
@@ -186,6 +231,7 @@ export default function EvalPanel({
         : (isModified ? 'override' : 'submit');
 
       const body: any = { action, flagId };
+      if (noteText.trim()) body.note = noteText.trim();
 
       if (isModified) {
         const params: Record<string, { score: boolean | null; reasoning: string }> = {};
@@ -207,6 +253,30 @@ export default function EvalPanel({
       setSubmitErr(e.message ?? 'Submit failed');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // TL: raise dispute
+  async function submitTLDispute() {
+    if (!tlNote.trim()) { setTlErr('Please add a note explaining the dispute.'); return; }
+    setTlSubmitting(true);
+    setTlErr('');
+    try {
+      const res = await fetch('/api/quality/flag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId,
+          agentNote: tlNote.trim(),
+          challengedParams: tlParams.map(p => ({ param: p, note: '' })),
+        }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+      setTlDone(true);
+    } catch (e: any) {
+      setTlErr(e.message ?? 'Failed to raise dispute');
+    } finally {
+      setTlSubmitting(false);
     }
   }
 
@@ -274,12 +344,24 @@ export default function EvalPanel({
                     <span>{fmtDate(closedAt)}</span>
                     <span>·</span>
                     <span>{disposition}</span>
+                    {mobileNumber && (
+                      <>
+                        <span>·</span>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{mobileNumber}</span>
+                      </>
+                    )}
                     {dispute && (
                       <>
                         <span>·</span>
                         <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
                           Disputed by {dispute.raisedBy} ({dispute.raisedByName})
                         </span>
+                      </>
+                    )}
+                    {mode === 'view' && reviewedBy && (
+                      <>
+                        <span>·</span>
+                        <span>Reviewed by <strong style={{ color: 'var(--qa-text)' }}>{reviewedBy}</strong></span>
                       </>
                     )}
                   </div>
@@ -353,12 +435,14 @@ export default function EvalPanel({
                           const label = val === true ? 'Yes' : val === false ? 'No' : 'NA';
                           const isSel = st.score === val;
                           return (
-                            <button key={i} onClick={() => setScore(pascal, val)} style={{
+                            <button key={i} onClick={() => !isReadOnly && setScore(pascal, val)} style={{
                               height: 28, padding: '0 9px', borderRadius: 8,
                               border: '1px solid var(--qa-border)',
                               background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
                               color: isSel ? '#fff' : 'var(--qa-text-2)',
-                              fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+                              fontSize: 12, fontFamily: 'inherit',
+                              cursor: isReadOnly ? 'default' : 'pointer',
+                              opacity: isReadOnly && !isSel ? 0.4 : 1,
                             }}>
                               {label}
                             </button>
@@ -371,28 +455,34 @@ export default function EvalPanel({
                     </div>
 
                     {/* Reasoning */}
-                    <textarea
-                      value={st.reasoning}
-                      onChange={e => setReasoning(pascal, e.target.value)}
-                      placeholder="Add reasoning…"
-                      rows={st.reasoning ? undefined : 1}
-                      style={{
-                        marginTop: 8, width: '100%', resize: 'vertical',
-                        border: '1px solid transparent', borderRadius: 6,
-                        padding: '6px 8px', fontSize: 12, color: 'var(--qa-text-2)',
-                        lineHeight: 1.5, fontFamily: 'inherit',
-                        background: 'transparent', outline: 'none',
-                        transition: 'background 0.12s, border-color 0.12s',
-                      }}
-                      onFocus={e => {
-                        e.target.style.background = 'var(--qa-card)';
-                        e.target.style.borderColor = 'var(--qa-text)';
-                      }}
-                      onBlur={e => {
-                        e.target.style.background = 'transparent';
-                        e.target.style.borderColor = 'transparent';
-                      }}
-                    />
+                    {(st.reasoning || !isReadOnly) && (
+                      <textarea
+                        value={st.reasoning}
+                        onChange={e => !isReadOnly && setReasoning(pascal, e.target.value)}
+                        readOnly={isReadOnly}
+                        placeholder={isReadOnly ? '' : 'Add reasoning…'}
+                        rows={st.reasoning ? undefined : 1}
+                        style={{
+                          marginTop: 8, width: '100%', resize: isReadOnly ? 'none' : 'vertical',
+                          border: '1px solid transparent', borderRadius: 6,
+                          padding: '6px 8px', fontSize: 12, color: 'var(--qa-text-2)',
+                          lineHeight: 1.5, fontFamily: 'inherit',
+                          background: 'transparent', outline: 'none',
+                          transition: 'background 0.12s, border-color 0.12s',
+                          cursor: isReadOnly ? 'default' : 'text',
+                        }}
+                        onFocus={e => {
+                          if (!isReadOnly) {
+                            e.target.style.background = 'var(--qa-card)';
+                            e.target.style.borderColor = 'var(--qa-text)';
+                          }
+                        }}
+                        onBlur={e => {
+                          e.target.style.background = 'transparent';
+                          e.target.style.borderColor = 'transparent';
+                        }}
+                      />
+                    )}
 
                     {/* Dispute claim */}
                     {disputed && (
@@ -418,6 +508,36 @@ export default function EvalPanel({
               })}
             </div>
 
+            {/* Review note */}
+            {!isReadOnly && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
+                  Review Note
+                </div>
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  placeholder="Add your evaluation comment…"
+                  rows={2}
+                  style={{
+                    width: '100%', resize: 'vertical',
+                    border: '1px solid var(--qa-border)', borderRadius: 6,
+                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                    lineHeight: 1.5, fontFamily: 'inherit',
+                    background: 'var(--qa-card)', outline: 'none',
+                  }}
+                />
+              </div>
+            )}
+            {isReadOnly && reviewNote && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 4 }}>
+                  Review Note
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>{reviewNote}</div>
+              </div>
+            )}
+
             {/* Footer */}
             {submitErr && (
               <div style={{ margin: '0 16px', padding: '8px 12px', background: '#fee2e2', borderRadius: 6, fontSize: 12, color: '#b91c1c' }}>
@@ -436,34 +556,79 @@ export default function EvalPanel({
               <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
                 {transcript == null ? '…' : `${transcript.length} messages`}
               </span>
-              {/* Reset button */}
-              <button onClick={reset} title="Reset to original" style={{
-                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
-                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>
-                </svg>
-              </button>
-              <div style={{ flex: 1 }} />
-              {/* Primary action */}
+              {/* History toggle */}
               <button
-                onClick={submit}
-                disabled={submitting}
+                onClick={() => {
+                  const next = !historyOpen;
+                  setHistoryOpen(next);
+                  if (next) loadHistory();
+                }}
+                title="Previous conversations"
                 style={{
-                  height: 36, padding: '0 16px', borderRadius: 8,
-                  fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  display: 'inline-flex', alignItems: 'center',
-                  border: '1px solid var(--qa-gray-700)',
-                  background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
-                  color: '#fff',
-                  opacity: submitting ? 0.7 : 1,
+                  height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
+                  background: historyOpen ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                  color: historyOpen ? '#fff' : 'var(--qa-text-2)',
+                  cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
                 }}
               >
-                {submitting ? 'Saving…' : primaryLabel}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 3h18v4H3z"/><path d="M3 9h18v4H3z"/><path d="M3 15h10v4H3z"/>
+                </svg>
+                History
               </button>
+              {/* Reset button (only for editing modes) */}
+              {!isReadOnly && (
+                <button onClick={reset} title="Reset to original" style={{
+                  width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
+                  background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>
+                  </svg>
+                </button>
+              )}
+              <div style={{ flex: 1 }} />
+              {/* TL: raise dispute button */}
+              {mode === 'tl-browse' && !tlDone && (
+                <button
+                  onClick={() => setDisputeOpen(v => !v)}
+                  style={{
+                    height: 36, padding: '0 16px', borderRadius: 8,
+                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center',
+                    border: '1px solid var(--qa-gray-700)',
+                    background: disputeOpen ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                    color: disputeOpen ? '#fff' : 'var(--qa-text)',
+                  }}
+                >
+                  {disputeOpen ? 'Cancel' : 'Raise Dispute'}
+                </button>
+              )}
+              {mode === 'tl-browse' && tlDone && (
+                <span style={{ fontSize: 13, color: '#15803d', fontWeight: 500 }}>Dispute raised ✓</span>
+              )}
+              {/* Primary action (submit/resolve modes) */}
+              {(mode === 'submit' || mode === 'resolve') && (
+                <button
+                  onClick={submit}
+                  disabled={submitting}
+                  style={{
+                    height: 36, padding: '0 16px', borderRadius: 8,
+                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                    cursor: submitting ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex', alignItems: 'center',
+                    border: '1px solid var(--qa-gray-700)',
+                    background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
+                    color: '#fff',
+                    opacity: submitting ? 0.7 : 1,
+                  }}
+                >
+                  {submitting ? 'Saving…' : primaryLabel}
+                </button>
+              )}
               {/* Close */}
               <button onClick={onClose} style={{
                 width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
@@ -472,6 +637,106 @@ export default function EvalPanel({
                 fontSize: 16, lineHeight: 1,
               }}>×</button>
             </div>
+
+            {/* TL dispute form */}
+            {mode === 'tl-browse' && disputeOpen && !tlDone && (
+              <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                  Parameters to Challenge (optional)
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                  {PARAM_ORDER.map(p => (
+                    <label key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={tlParams.includes(p)}
+                        onChange={e => setTlParams(prev => e.target.checked ? [...prev, p] : prev.filter(x => x !== p))}
+                      />
+                      {PARAM_NAMES[p]}
+                    </label>
+                  ))}
+                </div>
+                <textarea
+                  value={tlNote}
+                  onChange={e => setTlNote(e.target.value)}
+                  placeholder="Explain why this score should be reviewed…"
+                  rows={2}
+                  style={{
+                    width: '100%', resize: 'vertical',
+                    border: '1px solid var(--qa-border)', borderRadius: 6,
+                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                    lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
+                    marginBottom: 8,
+                  }}
+                />
+                {tlErr && <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 6 }}>{tlErr}</div>}
+                <button
+                  onClick={submitTLDispute}
+                  disabled={tlSubmitting}
+                  style={{
+                    height: 32, padding: '0 14px', borderRadius: 6,
+                    fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                    cursor: tlSubmitting ? 'not-allowed' : 'pointer',
+                    border: '1px solid var(--qa-gray-700)',
+                    background: 'var(--qa-gray-700)', color: '#fff',
+                    opacity: tlSubmitting ? 0.7 : 1,
+                  }}
+                >
+                  {tlSubmitting ? 'Submitting…' : 'Submit Dispute'}
+                </button>
+              </div>
+            )}
+
+            {/* History panel */}
+            {historyOpen && (
+              <div style={{ borderBottom: '1px solid var(--qa-border)', flexShrink: 0, maxHeight: 180, overflowY: 'auto' }}>
+                {historyLoading ? (
+                  <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--qa-text-3)' }}>Loading history…</div>
+                ) : !history?.length ? (
+                  <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--qa-text-3)' }}>No previous conversations found</div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--qa-gray-50)' }}>
+                        {['Date', 'Agent', 'Disposition', 'IQS', 'CSAT'].map(h => (
+                          <th key={h} style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--qa-text-3)', fontWeight: 500, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((h, i) => (
+                        <tr key={i} style={{ borderTop: '1px solid var(--qa-border-sub)' }}>
+                          <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>{h.date}</td>
+                          <td style={{ padding: '6px 12px', color: 'var(--qa-text)' }}>{h.agentName}</td>
+                          <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.disposition}</td>
+                          <td style={{ padding: '6px 12px' }}>
+                            {h.iqs != null ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                minWidth: 30, height: 18, borderRadius: 4, fontSize: 11,
+                                fontFamily: 'ui-monospace, monospace',
+                                background: h.iqs < 60 ? '#fee2e2' : '#fef9c3',
+                                color: h.iqs < 60 ? '#b91c1c' : '#713f12',
+                              }}>{h.iqs}</span>
+                            ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                          </td>
+                          <td style={{ padding: '6px 12px' }}>
+                            {h.csat ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                minWidth: 24, height: 18, borderRadius: 4, fontSize: 11, fontWeight: 600,
+                                background: h.csat === '1' ? '#fee2e2' : h.csat === '3' ? '#fef9c3' : '#dcfce7',
+                                color: h.csat === '1' ? '#b91c1c' : h.csat === '3' ? '#713f12' : '#15803d',
+                              }}>{h.csat}</span>
+                            ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
 
             {/* Transcript */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 0 }}>

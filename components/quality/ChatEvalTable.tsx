@@ -331,7 +331,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
               <th style={th}>Agent</th>
               <th style={{ ...th, textAlign: 'right' }}>IQS</th>
               <th style={th}>Disposition</th>
-              <th style={th}>Date</th>
+              <th style={th}>CSAT</th>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
@@ -394,7 +394,21 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
                         <span style={{ color: 'var(--qa-text-3)' }}> › {chat.subDisposition}</span>
                       )}
                     </td>
-                    <td style={{ ...td, fontSize: 13 }}>{fmtDate(chat.closedAt)}</td>
+                    <td style={td}>
+                      {chat.csatScore == null ? (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
+                          fontFamily: 'ui-monospace, monospace',
+                          background: chat.csatScore === 1 ? '#fee2e2' : chat.csatScore === 3 ? '#fef9c3' : '#dcfce7',
+                          color:      chat.csatScore === 1 ? '#b91c1c' : chat.csatScore === 3 ? '#713f12' : '#15803d',
+                        }}>
+                          {chat.csatScore === 1 ? 'Bad' : chat.csatScore === 3 ? 'Neutral' : 'Good'}
+                        </span>
+                      )}
+                    </td>
                     <td style={tdAct}>
                       <button
                         onClick={() => toggleExpand(chat.chatId)}
@@ -423,6 +437,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
                       closedAt={chat.closedAt}
                       disposition={chat.disposition}
                       parameters={chat.parameters}
+                      mobileNumber={chat.mobileNumber}
                       mode="submit"
                       onDone={() => removeChat(chat.chatId)}
                       onClose={() => setExpandedId(null)}
