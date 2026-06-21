@@ -38,7 +38,7 @@ const UsersIcon = () => (
   </svg>
 );
 
-const NAV_ICONS: Record<string, () => JSX.Element> = {
+const NAV_ICONS: Record<string, () => React.ReactElement> = {
   '/quality':                BarChartIcon,
   '/quality/chat-evaluation': ChatIcon,
   '/quality/call-evaluation': PhoneIcon,
