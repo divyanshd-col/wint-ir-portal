@@ -433,7 +433,7 @@ export default function TLTeamAnalyticsDashboard() {
                       <tr>
                         <th style={stickyTh}>Agent</th>
                         {breakdownParams.map(p => (
-                          <th key={p.key} title={p.name} style={paramTh}>{p.name}</th>
+                          <th key={p.key} title={p.label} style={paramTh}>{p.label}</th>
                         ))}
                       </tr>
                     </thead>
