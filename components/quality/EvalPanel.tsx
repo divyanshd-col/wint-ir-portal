@@ -144,10 +144,11 @@ export default function EvalPanel({
   const [historyLoading, setHistoryLoading] = useState(false);
 
   // TL-browse: submit / override / raise-dispute
-  const [tlNote,        setTlNote]        = useState('');
-  const [tlSubmitting,  setTlSubmitting]  = useState(false);
-  const [tlErr,         setTlErr]         = useState('');
-  const [tlDone,        setTlDone]        = useState<'submit' | 'override' | 'dispute' | null>(null);
+  const [tlGeneralNote,  setTlGeneralNote]  = useState('');  // for Submit / Override
+  const [tlParamNotes,   setTlParamNotes]   = useState<Record<string, string>>({});  // per-param notes for Raise Dispute
+  const [tlSubmitting,   setTlSubmitting]   = useState(false);
+  const [tlErr,          setTlErr]          = useState('');
+  const [tlDone,         setTlDone]         = useState<'submit' | 'override' | 'dispute' | null>(null);
 
   // QA submit/override: Prompt/KB update flag
   const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
@@ -273,7 +274,7 @@ export default function EvalPanel({
 
   // TL: submit / override / raise dispute
   async function submitTLAction() {
-    if (tlActionLabel !== 'Submit' && !tlNote.trim()) {
+    if (tlActionLabel === 'Override' && !tlGeneralNote.trim()) {
       setTlErr('Please add a note explaining your change.');
       return;
     }
@@ -284,7 +285,7 @@ export default function EvalPanel({
         const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'tl-submit', note: tlNote.trim() || undefined }),
+          body: JSON.stringify({ action: 'tl-submit', note: tlGeneralNote.trim() || undefined }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
         setTlDone('submit');
@@ -296,21 +297,26 @@ export default function EvalPanel({
         const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'tl-override', parameters: params, note: tlNote.trim() || undefined }),
+          body: JSON.stringify({ action: 'tl-override', parameters: params, note: tlGeneralNote.trim() || undefined }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
         setTlDone('override');
       } else {
-        // Raise Dispute — post flag with CAT1 changed params
+        // Raise Dispute — require a note per CAT1 changed param
+        const cat1Params = changedParamsInTL.filter(p => CAT1_PARAMS.has(p));
+        const missing = cat1Params.filter(p => !(tlParamNotes[p] ?? '').trim());
+        if (missing.length) {
+          setTlErr('Add a note for each challenged parameter.');
+          setTlSubmitting(false);
+          return;
+        }
         const res = await fetch('/api/quality/flag', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chatId,
-            agentNote: tlNote.trim(),
-            challengedParams: changedParamsInTL
-              .filter(p => CAT1_PARAMS.has(p))
-              .map(p => ({ param: p, note: tlNote.trim() })),
+            agentNote: '',
+            challengedParams: cat1Params.map(p => ({ param: p, note: (tlParamNotes[p] ?? '').trim() })),
           }),
         });
         if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
@@ -613,7 +619,7 @@ export default function EvalPanel({
 
             {/* Footer */}
             {submitErr && (
-              <div style={{ margin: '0 16px', padding: '8px 12px', background: '#fee2e2', borderRadius: 6, fontSize: 12, color: '#b91c1c' }}>
+              <div style={{ margin: '0 16px', padding: '8px 12px', background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)', borderRadius: 6, fontSize: 12, color: 'var(--qa-text)' }}>
                 {submitErr}
               </div>
             )}
@@ -682,7 +688,7 @@ export default function EvalPanel({
                 </button>
               )}
               {mode === 'tl-browse' && tlDone && (
-                <span style={{ fontSize: 13, color: '#15803d', fontWeight: 500 }}>
+                <span style={{ fontSize: 13, color: 'var(--qa-text-2)', fontWeight: 500 }}>
                   {tlDone === 'dispute' ? 'Dispute raised ✓' : tlDone === 'override' ? 'Override saved ✓' : 'Submitted ✓'}
                 </span>
               )}
@@ -717,19 +723,46 @@ export default function EvalPanel({
             {/* TL note area (shown when params are changed) */}
             {mode === 'tl-browse' && changedParamsInTL.length > 0 && !tlDone && (
               <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
-                <textarea
-                  value={tlNote}
-                  onChange={e => setTlNote(e.target.value)}
-                  placeholder={tlActionLabel === 'Submit' ? 'Optional comment…' : 'Required: explain your change…'}
-                  rows={2}
-                  style={{
-                    width: '100%', resize: 'vertical',
-                    border: '1px solid var(--qa-border)', borderRadius: 6,
-                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                    lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
-                  }}
-                />
-                {tlErr && <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{tlErr}</div>}
+                {tlActionLabel === 'Raise Dispute' ? (
+                  // Per-param note for each CAT1 param being disputed
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>
+                      Note required per challenged parameter
+                    </div>
+                    {changedParamsInTL.filter(p => CAT1_PARAMS.has(p)).map(p => (
+                      <div key={p}>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--qa-text-2)', marginBottom: 3 }}>{p}</div>
+                        <textarea
+                          value={tlParamNotes[p] ?? ''}
+                          onChange={e => setTlParamNotes(prev => ({ ...prev, [p]: e.target.value }))}
+                          placeholder={`Why should ${p} be corrected?`}
+                          rows={2}
+                          style={{
+                            width: '100%', resize: 'vertical',
+                            border: '1px solid var(--qa-border)', borderRadius: 6,
+                            padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                            lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    value={tlGeneralNote}
+                    onChange={e => setTlGeneralNote(e.target.value)}
+                    placeholder={tlActionLabel === 'Submit' ? 'Optional comment…' : 'Required: explain your change…'}
+                    rows={2}
+                    style={{
+                      width: '100%', resize: 'vertical',
+                      border: '1px solid var(--qa-border)', borderRadius: 6,
+                      padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                      lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
+                    }}
+                  />
+                )}
+                {tlErr && <div style={{ fontSize: 12, color: 'var(--qa-text)', marginTop: 4 }}>{tlErr}</div>}
               </div>
             )}
 
@@ -761,8 +794,8 @@ export default function EvalPanel({
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                 minWidth: 30, height: 18, borderRadius: 4, fontSize: 11,
                                 fontFamily: 'ui-monospace, monospace',
-                                background: h.iqs < 60 ? '#fee2e2' : '#fef9c3',
-                                color: h.iqs < 60 ? '#b91c1c' : '#713f12',
+                                background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                                border: '1px solid var(--qa-border)',
                               }}>{h.iqs}</span>
                             ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                           </td>
@@ -771,8 +804,8 @@ export default function EvalPanel({
                               <span style={{
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                 minWidth: 36, height: 18, borderRadius: 4, fontSize: 11, fontWeight: 600,
-                                background: h.csat === '1' ? '#fee2e2' : h.csat === '3' ? '#fef9c3' : '#dcfce7',
-                                color: h.csat === '1' ? '#b91c1c' : h.csat === '3' ? '#713f12' : '#15803d',
+                                background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                                border: '1px solid var(--qa-border)',
                               }}>
                                 {h.csat === '1' ? 'Bad' : h.csat === '3' ? 'Neutral' : 'Good'}
                               </span>

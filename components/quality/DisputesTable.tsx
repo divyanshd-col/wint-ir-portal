@@ -206,8 +206,8 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
                       <span style={{
                         marginLeft: 8, display: 'inline-block', fontSize: 10, fontWeight: 600,
                         textTransform: 'uppercase', letterSpacing: '0.04em',
-                        background: '#f0fdf4', border: '1px solid #86efac',
-                        borderRadius: 4, padding: '1px 5px', color: '#15803d',
+                        background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                        borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
                       }}>TL Endorsed</span>
                     )}
                   </td>
@@ -216,8 +216,8 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
                       fontFamily: 'ui-monospace, monospace',
-                      background: d.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                      color:      d.iqsScore < 60 ? '#b91c1c' : '#713f12',
+                      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                      border: '1px solid var(--qa-border)',
                     }}>
                       {d.iqsScore}
                     </span>
@@ -230,8 +230,8 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
                         fontFamily: 'ui-monospace, monospace',
-                        background: d.csatScore === 1 ? '#fee2e2' : d.csatScore === 3 ? '#fef9c3' : '#dcfce7',
-                        color:      d.csatScore === 1 ? '#b91c1c' : d.csatScore === 3 ? '#713f12' : '#15803d',
+                        background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                        border: '1px solid var(--qa-border)',
                       }}>
                         {d.csatScore === 1 ? 'Bad' : d.csatScore === 3 ? 'Neutral' : 'Good'}
                       </span>

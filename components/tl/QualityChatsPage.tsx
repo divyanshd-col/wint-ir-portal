@@ -40,8 +40,8 @@ function IQSBadge({ score }: { score: number }) {
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
       fontFamily: 'ui-monospace, monospace',
-      background: score < 60 ? '#fee2e2' : '#fef9c3',
-      color:      score < 60 ? '#b91c1c' : '#713f12',
+      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+      border: '1px solid var(--qa-border)',
     }}>{score}</span>
   );
 }
@@ -54,8 +54,8 @@ function CSATBadge({ score }: { score: number | null }) {
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
       minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
       fontFamily: 'ui-monospace, monospace',
-      background: score === 1 ? '#fee2e2' : score === 3 ? '#fef9c3' : '#dcfce7',
-      color:      score === 1 ? '#b91c1c' : score === 3 ? '#713f12' : '#15803d',
+      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+      border: '1px solid var(--qa-border)',
     }}>{score === 1 ? 'Bad' : score === 3 ? 'Neutral' : 'Good'}</span>
   );
 }
@@ -74,22 +74,6 @@ function ChatIdCell({ chatId }: { chatId: string }) {
     );
   }
   return <>{chatId}</>;
-}
-
-// ─── Param fail chips ─────────────────────────────────────────────────────────
-function ParamChips({ params }: { params: string[] }) {
-  if (!params.length) return null;
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-      {params.map(p => (
-        <span key={p} style={{
-          fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-          background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 4,
-          padding: '1px 5px', color: '#b91c1c',
-        }}>{p}</span>
-      ))}
-    </div>
-  );
 }
 
 // ─── Section A — Evaluated Chats ──────────────────────────────────────────────
@@ -193,7 +177,6 @@ function EvaluatedChatsSection() {
           <tr>
             <th style={th}>Chat ID</th>
             <th style={th}>Agent</th>
-            <th style={th}>Failed Params</th>
             <th style={{ ...th, textAlign: 'right' }}>IQS</th>
             <th style={th}>CSAT</th>
             <th style={th}>Closed</th>
@@ -204,7 +187,7 @@ function EvaluatedChatsSection() {
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <tr key={i}>
-                {Array.from({ length: 7 }).map((_, j) => (
+                {Array.from({ length: 6 }).map((_, j) => (
                   <td key={j} style={td}>
                     <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '30%' : '60%' }} />
                   </td>
@@ -213,7 +196,7 @@ function EvaluatedChatsSection() {
             ))
           ) : chats.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+              <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                 No chats pending TL review
               </td>
             </tr>
@@ -227,9 +210,6 @@ function EvaluatedChatsSection() {
                 >
                   <td style={tdMono}><ChatIdCell chatId={chat.chatId} /></td>
                   <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
-                  <td style={td}>
-                    <ParamChips params={chat.failedParams} />
-                  </td>
                   <td style={tdNum}><IQSBadge score={chat.iqsScore} /></td>
                   <td style={td}><CSATBadge score={chat.csatScore} /></td>
                   <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)' }}>
@@ -268,7 +248,7 @@ function EvaluatedChatsSection() {
                     mode="tl-browse"
                     onDone={() => removeChat(chat.chatId)}
                     onClose={() => setExpandedId(null)}
-                    colSpan={7}
+                    colSpan={6}
                   />
                 )}
               </React.Fragment>
@@ -388,8 +368,8 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     <span style={{
                       marginLeft: 8, display: 'inline-block', fontSize: 10, fontWeight: 600,
                       textTransform: 'uppercase', letterSpacing: '0.04em',
-                      background: '#f0fdf4', border: '1px solid #86efac',
-                      borderRadius: 4, padding: '1px 5px', color: '#15803d',
+                      background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                      borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
                     }}>Forwarded</span>
                   )}
                 </td>
@@ -431,7 +411,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                         </button>
                       )}
                       {(fwdDone.has(d.flagId) || d.tlForwarded) && (
-                        <span style={{ fontSize: 12, color: '#15803d', fontWeight: 500 }}>✓ Forwarded</span>
+                        <span style={{ fontSize: 12, color: 'var(--qa-text-2)', fontWeight: 500 }}>✓ Forwarded</span>
                       )}
                     </div>
                   </td>
@@ -477,8 +457,8 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                           {d.challengedParams.map(cp => (
                             <span key={cp.param} title={cp.note} style={{
                               fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                              background: '#fef9c3', border: '1px solid #fde047',
-                              borderRadius: 4, padding: '2px 6px', color: '#713f12', cursor: cp.note ? 'help' : 'default',
+                              background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                              borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
                             }}>{cp.param}</span>
                           ))}
                         </div>
