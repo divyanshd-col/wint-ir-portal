@@ -329,7 +329,7 @@ export interface IQSFlag {
   paramCategory: 'cat1' | 'cat2';
   /** links the CAT1 and CAT2 sibling flags created from the same mixed IR dispute */
   parentFlagId?: string;
-  status: 'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed';
+  status: 'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;

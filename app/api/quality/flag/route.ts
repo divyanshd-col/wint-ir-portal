@@ -112,17 +112,36 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ flags });
 }
 
-// PATCH — quality/admin reviews a flag
+// PATCH — review a flag (quality/admin/tl) or cancel own flag (agent)
 export async function PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
-  if (!session || !reviewAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
-  const { id, status, reviewNote } = await req.json();
+  const { id, status, reviewNote, action } = await req.json();
   if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 });
+
+  const role = (session.user as any)?.role;
+  const email = (session.user as any)?.email || '';
+
+  // Agent can cancel their own ir_pending_tl flag
+  if (action === 'cancel' || status === 'cancelled') {
+    if (role !== 'agent' && role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    const raw = await storeGetIQSFlags();
+    const flags = raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+    const flag = flags.find((f: any) => f.id === id);
+    if (!flag) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
+    if (role === 'agent' && flag.agentEmail !== email) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (flag.status !== 'ir_pending_tl') return NextResponse.json({ error: 'Can only cancel pending disputes' }, { status: 400 });
+    const ok = await storeUpdateIQSFlag(id, { status: 'cancelled', updatedAt: new Date().toISOString() });
+    if (!ok) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
+    return NextResponse.json({ ok: true });
+  }
+
+  if (!reviewAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const ok = await storeUpdateIQSFlag(id, {
     status,
-    reviewedBy: (session.user as any)?.email || '',
+    reviewedBy: email,
     reviewedAt: new Date().toISOString(),
     reviewNote: reviewNote || '',
   });
