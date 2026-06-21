@@ -4,6 +4,7 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { log, withLogging } from '@/lib/log';
+import { readConfig } from '@/lib/config';
 
 const PASCAL_TO_DB: Record<string, string> = {
   Technical: 'technical', AllQuestions: 'all_questions', Expectation: 'expectation',
@@ -54,7 +55,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       agentNames = rows.map(r => r.name);
     }
   } else {
-    agentNames = await getAgentNamesByTL(email);
+    const config = await readConfig();
+    const configUser = config.users.find(u => (u.email || u.username) === email);
+    const tlAgentName = configUser?.agentName ?? email;
+    agentNames = await getAgentNamesByTL(tlAgentName);
     const agentFilter = searchParams.get('agent');
     if (agentFilter) agentNames = agentNames.filter(n => n === agentFilter);
   }
