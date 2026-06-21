@@ -101,7 +101,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
 
-  const baseWhere = `a.name = ANY($1) AND i.call_iqs_score IS NULL AND i.iqs_score < 80`;
+  // IQS < 85: anything below needs TL verification per the QA flow
+  // Only surface chats with at least one CAT 2 param failure (TL's domain)
+  const CAT2_DB_KEYS = ['contextual', 'sentences', 'grammar', 'empathy'];
+  const cat2Filter = CAT2_DB_KEYS.map(k =>
+    `(i.parameters->>'${k}' IS NOT NULL AND (i.parameters->'${k}'->>'score')::boolean = false)`
+  ).join(' OR ');
+  // tl_reviewed_by stored in parameters JSON as __tl_reviewed_by to avoid DB migration
+  const baseWhere = `a.name = ANY($1) AND i.call_iqs_score IS NULL AND i.iqs_score < 85 AND (i.parameters->>'__tl_reviewed_by' IS NULL) AND (${cat2Filter})`;
   const t0 = Date.now();
 
   const [countRow] = await query<{ total: string }>(

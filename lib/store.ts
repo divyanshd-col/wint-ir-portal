@@ -322,7 +322,7 @@ export interface IQSFlag {
   agentNote: string;           // overall note
   challengedParams?: IQSChallengedParam[];  // per-parameter challenges
   flaggedAt: string;           // ISO
-  status: 'pending' | 'reviewed';
+  status: 'pending' | 'tl_forwarded' | 'reviewed';
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
@@ -647,7 +647,7 @@ const IQS_AUDIT_KEY = 'wint_iqs_audit';
 
 export interface IQSAuditEntry {
   id: string;
-  action: 'dispute_raised' | 'review_submitted' | 'score_overridden' | 'dispute_resolved';
+  action: 'dispute_raised' | 'review_submitted' | 'score_overridden' | 'dispute_resolved' | 'tl_forwarded_dispute' | 'tl_override' | 'tl_submit';
   chatId: string;
   actorEmail: string;
   actorRole: string;

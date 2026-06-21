@@ -25,6 +25,7 @@ export interface DisputeRow {
   agentNote:    string;
   challengedParams: { param: string; note: string }[];
   parameters:   Record<string, { score: boolean | null; reasoning: string }>;
+  tlForwarded:  boolean;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -63,7 +64,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
-    .filter((f): f is IQSFlag => f !== null && f.status === 'pending');
+    .filter((f): f is IQSFlag => f !== null && (f.status === 'pending' || f.status === 'tl_forwarded'));
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 
@@ -139,6 +140,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       agentNote:        flag.agentNote,
       challengedParams: flag.challengedParams ?? [],
       parameters:       params,
+      tlForwarded:      flag.status === 'tl_forwarded',
     });
   }
 

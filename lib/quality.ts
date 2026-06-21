@@ -38,6 +38,16 @@ export const PARAM_ORDER = [
   'Call', 'Grammar', 'Empathy',
 ];
 
+// CAT 1: QA-owned — bot + QA score these; TL can only dispute, not override
+export const CAT1_PARAMS = new Set([
+  'Technical', 'AllQuestions', 'Expectation', 'Process', 'FollowUp', 'Opening', 'Call',
+]);
+
+// CAT 2: TL-owned — TL can override these directly
+export const CAT2_PARAMS = new Set([
+  'Contextual', 'Sentences', 'Grammar', 'Empathy',
+]);
+
 export type ParamScore = 'Yes' | 'No' | 'NA';
 
 export interface IQSScoreEntry {

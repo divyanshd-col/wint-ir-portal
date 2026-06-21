@@ -34,7 +34,7 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
   const [threadLoad,  setThreadLoad]  = useState<string | null>(null);
   const [newComment,  setNewComment]  = useState('');
   const [posting,     setPosting]     = useState(false);
-  const [raiserFilter, setRaiserFilter] = useState<'all' | 'TL' | 'IR'>('all');
+  const [raiserFilter, setRaiserFilter] = useState<'all' | 'tl_endorsed' | 'TL' | 'IR'>('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +100,9 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
     }
   }
 
-  const visibleDisputes = raiserFilter === 'all' ? disputes : disputes.filter(d => d.raisedBy === raiserFilter);
+  const visibleDisputes = raiserFilter === 'all' ? disputes
+    : raiserFilter === 'tl_endorsed' ? disputes.filter(d => d.tlForwarded)
+    : disputes.filter(d => d.raisedBy === raiserFilter);
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -130,9 +132,9 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)' }}>
         <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>Raised by</span>
-        {(['all', 'TL', 'IR'] as const).map(v => (
+        {(['all', 'tl_endorsed', 'TL', 'IR'] as const).map(v => (
           <button key={v} style={raiserFilter === v ? chipActive : chip} onClick={() => setRaiserFilter(v)}>
-            {v === 'all' ? 'All' : v}
+            {v === 'all' ? 'All' : v === 'tl_endorsed' ? 'TL Endorsed ★' : v}
           </button>
         ))}
       </div>
@@ -200,6 +202,14 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
                       {d.raisedBy}
                     </span>
                     {d.raisedByName}
+                    {d.tlForwarded && (
+                      <span style={{
+                        marginLeft: 8, display: 'inline-block', fontSize: 10, fontWeight: 600,
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                        background: '#f0fdf4', border: '1px solid #86efac',
+                        borderRadius: 4, padding: '1px 5px', color: '#15803d',
+                      }}>TL Endorsed</span>
+                    )}
                   </td>
                   <td style={tdNum}>
                     <span style={{

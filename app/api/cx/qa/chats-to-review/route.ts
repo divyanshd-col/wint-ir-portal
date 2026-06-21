@@ -166,7 +166,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     : `c.tags->>'disposition' = ANY($1)
        AND i.reviewed_by IS NULL
        AND i.call_iqs_score IS NULL
-       AND i.iqs_score < 80`;
+       AND i.iqs_score < 85
+       AND EXISTS (
+         SELECT 1 FROM jsonb_each(i.parameters) AS p(k,v)
+         WHERE k = ANY(ARRAY['technical','all_questions','expectation','process','follow_up','opening','call'])
+           AND (v->>'score')::boolean = false
+       )`;
 
   const t0 = Date.now();
 

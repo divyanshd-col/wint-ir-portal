@@ -1,6 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
@@ -127,7 +127,9 @@ export default function EvalPanel({
     return state;
   }
 
-  const isReadOnly = mode === 'view' || mode === 'tl-browse';
+  // tl-browse: TL can edit params to trigger Submit/Override/Raise Dispute
+  // view: purely read-only
+  const isReadOnly = mode === 'view';
 
   const [paramState, setParamState] = useState<Record<string, ParamState>>(initParams);
   const [transcript, setTranscript]  = useState<TMessage[] | null>(null);
@@ -141,13 +143,14 @@ export default function EvalPanel({
   const [historyOpen,    setHistoryOpen]    = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // TL-browse: raise dispute
-  const [disputeOpen,   setDisputeOpen]   = useState(false);
+  // TL-browse: submit / override / raise-dispute
   const [tlNote,        setTlNote]        = useState('');
-  const [tlParams,      setTlParams]      = useState<string[]>([]);
   const [tlSubmitting,  setTlSubmitting]  = useState(false);
   const [tlErr,         setTlErr]         = useState('');
-  const [tlDone,        setTlDone]        = useState(false);
+  const [tlDone,        setTlDone]        = useState<'submit' | 'override' | 'dispute' | null>(null);
+
+  // QA submit/override: Prompt/KB update flag
+  const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
 
   // Build challenged params map (keyed by PascalCase)
   const disputeMap = new Map<string, { note: string }>(
@@ -178,6 +181,17 @@ export default function EvalPanel({
 
   const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve')
     : (isModified ? 'Override' : 'Submit');
+
+  // TL-browse: dynamic action button based on which category of params changed
+  const changedParamsInTL = mode === 'tl-browse' ? PARAM_ORDER.filter(p => {
+    const orig = initParams()[p];
+    return paramState[p].score !== orig.score;
+  }) : [];
+  const tlCat1Changed = changedParamsInTL.some(p => CAT1_PARAMS.has(p));
+  const tlCat2Changed = changedParamsInTL.some(p => CAT2_PARAMS.has(p));
+  const tlActionLabel = tlCat1Changed ? 'Raise Dispute'
+    : tlCat2Changed ? 'Override'
+    : 'Submit';
 
   // Fetch transcript on mount
   useEffect(() => {
@@ -239,6 +253,7 @@ export default function EvalPanel({
           const dbKey = PASCAL_TO_DB[pascal];
           params[dbKey] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
         }
+        if (needsKbUpdate) params['__needs_kb_update'] = { score: true, reasoning: '' } as any;
         body.parameters = params;
       }
 
@@ -256,25 +271,54 @@ export default function EvalPanel({
     }
   }
 
-  // TL: raise dispute
-  async function submitTLDispute() {
-    if (!tlNote.trim()) { setTlErr('Please add a note explaining the dispute.'); return; }
+  // TL: submit / override / raise dispute
+  async function submitTLAction() {
+    if (tlActionLabel !== 'Submit' && !tlNote.trim()) {
+      setTlErr('Please add a note explaining your change.');
+      return;
+    }
     setTlSubmitting(true);
     setTlErr('');
     try {
-      const res = await fetch('/api/quality/flag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId,
-          agentNote: tlNote.trim(),
-          challengedParams: tlParams.map(p => ({ param: p, note: '' })),
-        }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-      setTlDone(true);
+      if (tlActionLabel === 'Submit') {
+        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'tl-submit', note: tlNote.trim() || undefined }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+        setTlDone('submit');
+      } else if (tlActionLabel === 'Override') {
+        const params: Record<string, { score: boolean | null; reasoning: string }> = {};
+        for (const pascal of changedParamsInTL) {
+          params[PASCAL_TO_DB[pascal]] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
+        }
+        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'tl-override', parameters: params, note: tlNote.trim() || undefined }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+        setTlDone('override');
+      } else {
+        // Raise Dispute — post flag with CAT1 changed params
+        const res = await fetch('/api/quality/flag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId,
+            agentNote: tlNote.trim(),
+            challengedParams: changedParamsInTL
+              .filter(p => CAT1_PARAMS.has(p))
+              .map(p => ({ param: p, note: tlNote.trim() })),
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+        setTlDone('dispute');
+      }
+      onDone();
     } catch (e: any) {
-      setTlErr(e.message ?? 'Failed to raise dispute');
+      setTlErr(e.message ?? 'Action failed');
     } finally {
       setTlSubmitting(false);
     }
@@ -405,6 +449,12 @@ export default function EvalPanel({
               {PARAM_ORDER.map(pascal => {
                 const st       = paramState[pascal];
                 const disputed = disputeMap.get(pascal);
+                // QA modes: CAT2 params are TL's domain — read-only for QA
+                const isTLParam = CAT2_PARAMS.has(pascal);
+                const qaReadOnly = (mode === 'submit' || mode === 'resolve') && isTLParam;
+                // In tl-browse, CAT1 changed params get a highlight
+                const tlChanged = mode === 'tl-browse' && changedParamsInTL.includes(pascal);
+                const paramReadOnly = isReadOnly || qaReadOnly;
                 return (
                   <div key={pascal} style={{
                     padding: '14px 16px',
@@ -412,10 +462,12 @@ export default function EvalPanel({
                     ...(disputed ? {
                       background: 'var(--qa-gray-50)',
                       boxShadow: 'inset 3px 0 0 var(--qa-gray-700)',
+                    } : tlChanged ? {
+                      background: 'var(--qa-gray-50)',
                     } : {}),
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: tlChanged ? 600 : 500, flex: 1, minWidth: 0 }}>
                         {PARAM_NAMES[pascal]}
                         {disputed && (
                           <span style={{
@@ -428,6 +480,16 @@ export default function EvalPanel({
                             {dispute?.raisedBy} disputes
                           </span>
                         )}
+                        {qaReadOnly && (
+                          <span style={{
+                            marginLeft: 8, height: 16, padding: '0 6px', borderRadius: 4,
+                            background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                            fontSize: 10, fontWeight: 500, color: 'var(--qa-text-3)',
+                            display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle',
+                          }}>
+                            TL
+                          </span>
+                        )}
                       </span>
                       {/* Yes / No / NA buttons */}
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -435,14 +497,14 @@ export default function EvalPanel({
                           const label = val === true ? 'Yes' : val === false ? 'No' : 'NA';
                           const isSel = st.score === val;
                           return (
-                            <button key={i} onClick={() => !isReadOnly && setScore(pascal, val)} style={{
+                            <button key={i} onClick={() => !paramReadOnly && setScore(pascal, val)} style={{
                               height: 28, padding: '0 9px', borderRadius: 8,
                               border: '1px solid var(--qa-border)',
                               background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
                               color: isSel ? '#fff' : 'var(--qa-text-2)',
                               fontSize: 12, fontFamily: 'inherit',
-                              cursor: isReadOnly ? 'default' : 'pointer',
-                              opacity: isReadOnly && !isSel ? 0.4 : 1,
+                              cursor: paramReadOnly ? 'default' : 'pointer',
+                              opacity: paramReadOnly && !isSel ? 0.4 : 1,
                             }}>
                               {label}
                             </button>
@@ -455,24 +517,24 @@ export default function EvalPanel({
                     </div>
 
                     {/* Reasoning */}
-                    {(st.reasoning || !isReadOnly) && (
+                    {(st.reasoning || !paramReadOnly) && (
                       <textarea
                         value={st.reasoning}
-                        onChange={e => !isReadOnly && setReasoning(pascal, e.target.value)}
-                        readOnly={isReadOnly}
-                        placeholder={isReadOnly ? '' : 'Add reasoning…'}
+                        onChange={e => !paramReadOnly && setReasoning(pascal, e.target.value)}
+                        readOnly={paramReadOnly}
+                        placeholder={paramReadOnly ? '' : 'Add reasoning…'}
                         rows={st.reasoning ? undefined : 1}
                         style={{
-                          marginTop: 8, width: '100%', resize: isReadOnly ? 'none' : 'vertical',
+                          marginTop: 8, width: '100%', resize: paramReadOnly ? 'none' : 'vertical',
                           border: '1px solid transparent', borderRadius: 6,
                           padding: '6px 8px', fontSize: 12, color: 'var(--qa-text-2)',
                           lineHeight: 1.5, fontFamily: 'inherit',
                           background: 'transparent', outline: 'none',
                           transition: 'background 0.12s, border-color 0.12s',
-                          cursor: isReadOnly ? 'default' : 'text',
+                          cursor: paramReadOnly ? 'default' : 'text',
                         }}
                         onFocus={e => {
-                          if (!isReadOnly) {
+                          if (!paramReadOnly) {
                             e.target.style.background = 'var(--qa-card)';
                             e.target.style.borderColor = 'var(--qa-text)';
                           }
@@ -508,8 +570,8 @@ export default function EvalPanel({
               })}
             </div>
 
-            {/* Review note */}
-            {!isReadOnly && (
+            {/* Review note (QA modes) */}
+            {(mode === 'submit' || mode === 'resolve') && (
               <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
                   Review Note
@@ -527,6 +589,17 @@ export default function EvalPanel({
                     background: 'var(--qa-card)', outline: 'none',
                   }}
                 />
+                {isModified && (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={needsKbUpdate}
+                      onChange={e => setNeedsKbUpdate(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Mark for Prompt / KB update
+                  </label>
+                )}
               </div>
             )}
             {isReadOnly && reviewNote && (
@@ -590,25 +663,28 @@ export default function EvalPanel({
                 </button>
               )}
               <div style={{ flex: 1 }} />
-              {/* TL: raise dispute button */}
+              {/* TL: dynamic action button */}
               {mode === 'tl-browse' && !tlDone && (
                 <button
-                  onClick={() => setDisputeOpen(v => !v)}
+                  onClick={submitTLAction}
+                  disabled={tlSubmitting}
                   style={{
                     height: 36, padding: '0 16px', borderRadius: 8,
                     fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                    cursor: 'pointer',
+                    cursor: tlSubmitting ? 'not-allowed' : 'pointer',
                     display: 'inline-flex', alignItems: 'center',
                     border: '1px solid var(--qa-gray-700)',
-                    background: disputeOpen ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                    color: disputeOpen ? '#fff' : 'var(--qa-text)',
+                    background: 'var(--qa-gray-700)', color: '#fff',
+                    opacity: tlSubmitting ? 0.7 : 1,
                   }}
                 >
-                  {disputeOpen ? 'Cancel' : 'Raise Dispute'}
+                  {tlSubmitting ? 'Saving…' : tlActionLabel}
                 </button>
               )}
               {mode === 'tl-browse' && tlDone && (
-                <span style={{ fontSize: 13, color: '#15803d', fontWeight: 500 }}>Dispute raised ✓</span>
+                <span style={{ fontSize: 13, color: '#15803d', fontWeight: 500 }}>
+                  {tlDone === 'dispute' ? 'Dispute raised ✓' : tlDone === 'override' ? 'Override saved ✓' : 'Submitted ✓'}
+                </span>
               )}
               {/* Primary action (submit/resolve modes) */}
               {(mode === 'submit' || mode === 'resolve') && (
@@ -638,52 +714,22 @@ export default function EvalPanel({
               }}>×</button>
             </div>
 
-            {/* TL dispute form */}
-            {mode === 'tl-browse' && disputeOpen && !tlDone && (
-              <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                  Parameters to Challenge (optional)
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-                  {PARAM_ORDER.map(p => (
-                    <label key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={tlParams.includes(p)}
-                        onChange={e => setTlParams(prev => e.target.checked ? [...prev, p] : prev.filter(x => x !== p))}
-                      />
-                      {PARAM_NAMES[p]}
-                    </label>
-                  ))}
-                </div>
+            {/* TL note area (shown when params are changed) */}
+            {mode === 'tl-browse' && changedParamsInTL.length > 0 && !tlDone && (
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
                 <textarea
                   value={tlNote}
                   onChange={e => setTlNote(e.target.value)}
-                  placeholder="Explain why this score should be reviewed…"
+                  placeholder={tlActionLabel === 'Submit' ? 'Optional comment…' : 'Required: explain your change…'}
                   rows={2}
                   style={{
                     width: '100%', resize: 'vertical',
                     border: '1px solid var(--qa-border)', borderRadius: 6,
                     padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
                     lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
-                    marginBottom: 8,
                   }}
                 />
-                {tlErr && <div style={{ fontSize: 12, color: '#b91c1c', marginBottom: 6 }}>{tlErr}</div>}
-                <button
-                  onClick={submitTLDispute}
-                  disabled={tlSubmitting}
-                  style={{
-                    height: 32, padding: '0 14px', borderRadius: 6,
-                    fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                    cursor: tlSubmitting ? 'not-allowed' : 'pointer',
-                    border: '1px solid var(--qa-gray-700)',
-                    background: 'var(--qa-gray-700)', color: '#fff',
-                    opacity: tlSubmitting ? 0.7 : 1,
-                  }}
-                >
-                  {tlSubmitting ? 'Submitting…' : 'Submit Dispute'}
-                </button>
+                {tlErr && <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 4 }}>{tlErr}</div>}
               </div>
             )}
 
