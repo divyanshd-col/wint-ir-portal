@@ -12,12 +12,13 @@ function fmtDate(iso: string) {
 }
 
 export default function ReviewedChatsTable({ dispositions }: Props) {
-  const [chats,      setChats]      = useState<ChatToReviewRow[]>([]);
-  const [total,      setTotal]      = useState(0);
-  const [page,       setPage]       = useState(1);
-  const [pageSize]                  = useState(50);
-  const [loading,    setLoading]    = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
+  const [total,         setTotal]         = useState(0);
+  const [filteredCount, setFilteredCount] = useState(0);
+  const [page,          setPage]          = useState(1);
+  const [pageSize]                        = useState(50);
+  const [loading,       setLoading]       = useState(true);
+  const [expandedId,    setExpandedId]    = useState<string | null>(null);
 
   // Filters
   const [chatIdSearch, setChatIdSearch] = useState('');
@@ -42,6 +43,8 @@ export default function ReviewedChatsTable({ dispositions }: Props) {
       }
       setChats(rows);
       setTotal(data.total ?? 0);
+      // When agent search is active, total from API is unfiltered — track separately
+      setFilteredCount(agentSearch ? rows.length : (data.total ?? 0));
       setPage(pg);
     } finally {
       setLoading(false);
@@ -101,7 +104,7 @@ export default function ReviewedChatsTable({ dispositions }: Props) {
           </button>
         )}
         <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--qa-text-3)' }}>
-          {loading ? 'Loading…' : `${total} reviewed`}
+          {loading ? 'Loading…' : agentSearch ? `${filteredCount} of ${total} reviewed` : `${total} reviewed`}
         </span>
       </div>
 

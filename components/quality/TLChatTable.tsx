@@ -3,11 +3,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import EvalPanel from './EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 
-function fmtDateShort(iso: string) {
-  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-  });
-}
 
 export default function TLChatTable() {
   const [chats,       setChats]       = useState<TLChatRow[]>([]);

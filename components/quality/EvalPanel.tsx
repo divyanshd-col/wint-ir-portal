@@ -724,10 +724,12 @@ export default function EvalPanel({
                             {h.csat ? (
                               <span style={{
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                minWidth: 24, height: 18, borderRadius: 4, fontSize: 11, fontWeight: 600,
+                                minWidth: 36, height: 18, borderRadius: 4, fontSize: 11, fontWeight: 600,
                                 background: h.csat === '1' ? '#fee2e2' : h.csat === '3' ? '#fef9c3' : '#dcfce7',
                                 color: h.csat === '1' ? '#b91c1c' : h.csat === '3' ? '#713f12' : '#15803d',
-                              }}>{h.csat}</span>
+                              }}>
+                                {h.csat === '1' ? 'Bad' : h.csat === '3' ? 'Neutral' : 'Good'}
+                              </span>
                             ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                           </td>
                         </tr>

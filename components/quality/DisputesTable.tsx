@@ -65,6 +65,7 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
     if (threadId === flagId) { setThreadId(null); return; }
     setExpandedId(null);
     setThreadId(flagId);
+    setNewComment('');
     if (threads[flagId]) return;
     setThreadLoad(flagId);
     try {
@@ -227,13 +228,13 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
                     <button
                       onClick={() => openThread(d.flagId)}
                       style={{
-                        background: 'none', border: '1px solid var(--qa-border)', padding: '0 10px',
+                        border: '1px solid var(--qa-border)', padding: '0 10px',
                         height: 28, borderRadius: 8,
                         fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                         color: threadId === d.flagId ? 'var(--qa-text)' : 'var(--qa-text-2)',
                         cursor: 'pointer', background: threadId === d.flagId ? 'var(--qa-gray-100)' : 'transparent',
                         display: 'inline-flex', alignItems: 'center', gap: 4,
-                      } as React.CSSProperties}
+                      }}
                     >
                       💬 Comment
                     </button>
