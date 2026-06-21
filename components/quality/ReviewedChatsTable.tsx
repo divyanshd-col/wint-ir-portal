@@ -107,12 +107,10 @@ export default function ReviewedChatsTable({ dispositions }: Props) {
             <span style={{ fontSize: 9, color: 'var(--qa-text-3)' }}>▾</span>
           </button>
           {showPicker && (
-            <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, zIndex: 50 }}>
-              <DateRangePicker
-                onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowPicker(false); }}
-                onCancel={() => setShowPicker(false)}
-              />
-            </div>
+            <DateRangePicker
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowPicker(false); }}
+              onCancel={() => setShowPicker(false)}
+            />
           )}
         </div>
         {(chatIdSearch || agentSearch || customFrom) && (

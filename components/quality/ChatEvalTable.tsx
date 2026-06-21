@@ -209,12 +209,10 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
             <span style={{ fontSize: 9 }}>▾</span>
           </button>
           {showPicker && (
-            <div style={{ position: 'absolute', top: '100%', left: 0, zIndex: 50, marginTop: 4 }}>
-              <DateRangePicker
-                onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowPicker(false); }}
-                onCancel={() => setShowPicker(false)}
-              />
-            </div>
+            <DateRangePicker
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowPicker(false); }}
+              onCancel={() => setShowPicker(false)}
+            />
           )}
         </div>
 
