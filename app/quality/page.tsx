@@ -2,7 +2,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
-import AgentQualityClient from '@/components/AgentQualityClient';
+import AgentAnalyticsDashboard from '@/components/quality/AgentAnalyticsDashboard';
 import QAAnalyticsDashboard from '@/components/quality/QAAnalyticsDashboard';
 
 export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string; period?: string } }) {
@@ -21,7 +21,7 @@ export default async function QualityPage({ searchParams }: { searchParams?: { a
     const config = await readConfig();
     const configUser = config.users.find(u => (u.email || u.username) === email);
     const selfAgentName = configUser?.agentName || undefined;
-    return <AgentQualityClient userEmail={email} selfAgentName={selfAgentName} />;
+    return <AgentAnalyticsDashboard userEmail={email} selfAgentName={selfAgentName} />;
   }
 
   // Admin / QA / TL: new QA Analytics Dashboard
