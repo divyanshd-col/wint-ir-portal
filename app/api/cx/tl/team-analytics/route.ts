@@ -20,6 +20,14 @@ export const PARAM_DEFS = [
   { key: 'empathy',       label: 'Empathy',                        weight: 10 },
 ];
 
+// DB stores param keys in two historical formats: PascalCase (older) and snake_case (newer)
+const PASCAL_TO_SNAKE: Record<string, string> = {
+  Technical: 'technical', AllQuestions: 'all_questions', Expectation: 'expectation',
+  Contextual: 'contextual', FollowUp: 'follow_up', Sentences: 'sentences',
+  Process: 'process', Opening: 'opening', Call: 'call', Grammar: 'grammar', Empathy: 'empathy',
+};
+const normKey = (k: string) => PASCAL_TO_SNAKE[k] ?? k;
+
 function getDateRange(period: string, from?: string | null, to?: string | null) {
   const today = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -251,7 +259,13 @@ export async function GET(req: NextRequest) {
   // ── Build response ────────────────────────────────────────────────────────────
 
   function mapToParamScores(rows: { param_key: string; pass_rate: number | null }[]) {
-    return Object.fromEntries(rows.map(r => [r.param_key, r.pass_rate]));
+    const out: Record<string, number | null> = {};
+    for (const r of rows) {
+      const k = normKey(r.param_key);
+      // keep the first non-null value if both formats appear for the same logical key
+      if (out[k] == null) out[k] = r.pass_rate;
+    }
+    return out;
   }
 
   const teamChatPM = mapToParamScores(teamChatParams);
@@ -262,13 +276,15 @@ export async function GET(req: NextRequest) {
   // Per-agent params grouped by channel
   const agentChatPM: Record<string, Record<string, number | null>> = {};
   for (const r of agentChatParamRows) {
+    const k = normKey(r.param_key);
     if (!agentChatPM[r.agent_name]) agentChatPM[r.agent_name] = {};
-    agentChatPM[r.agent_name][r.param_key] = r.pass_rate;
+    if (agentChatPM[r.agent_name][k] == null) agentChatPM[r.agent_name][k] = r.pass_rate;
   }
   const agentCallPM: Record<string, Record<string, number | null>> = {};
   for (const r of agentCallParamRows) {
+    const k = normKey(r.param_key);
     if (!agentCallPM[r.agent_name]) agentCallPM[r.agent_name] = {};
-    agentCallPM[r.agent_name][r.param_key] = r.pass_rate;
+    if (agentCallPM[r.agent_name][k] == null) agentCallPM[r.agent_name][k] = r.pass_rate;
   }
 
   // Summaries keyed by agent name
