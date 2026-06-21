@@ -6,12 +6,12 @@ import DateRangePicker from '@/components/quality/DateRangePicker';
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type Channel = 'chats' | 'calls' | 'emails';
-type Period  = '7' | 'current' | 'last' | 'custom';
+type Period  = '7' | '30' | 'custom';
 
 interface ChannelStats { csat_pct: number | null; iqs: number | null; volume: number; }
 
 interface ParamData {
-  key: string; name: string; weight: number;
+  key: string; label: string; weight: number;
   team_score: number | null; cx_score: number | null;
 }
 
@@ -43,7 +43,7 @@ const fmtVol  = (v: number)        => v.toLocaleString('en-IN');
 
 const CHANNEL_LABELS: Record<Channel, string> = { chats: 'Chats', calls: 'Calls', emails: 'Emails' };
 const PERIOD_LABELS: Record<Period, string>   = {
-  '7': 'Last 7 days', current: 'Current month', last: 'Last month', custom: '',
+  '7': '7 days', '30': '30 days', custom: '',
 };
 
 function fmtDateDisplay(iso: string) {
@@ -117,7 +117,7 @@ function ParamRow({ p }: { p: ParamData }) {
       padding: '8px 0', borderBottom: '1px solid var(--qa-border-sub)',
     }}>
       <span style={{ width: 230, flexShrink: 0, fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
-        {p.name}
+        {p.label}
       </span>
       <span style={{ width: 44, flexShrink: 0, fontSize: 12, color: 'var(--qa-text-3)', fontFamily: 'ui-monospace, monospace', textAlign: 'right' }}>
         {p.weight}%
@@ -150,7 +150,7 @@ function EmptyChannelState({ channel }: { channel: Channel }) {
 
 export default function TLTeamAnalyticsDashboard() {
   const [channel, setChannel]               = useState<Channel>('chats');
-  const [period,  setPeriod]                = useState<Period>('current');
+  const [period,  setPeriod]                = useState<Period>('30');
   const [customFrom, setCustomFrom]         = useState('');
   const [customTo,   setCustomTo]           = useState('');
   const [showPicker, setShowPicker]         = useState(false);
@@ -217,7 +217,7 @@ export default function TLTeamAnalyticsDashboard() {
             display: 'inline-flex', border: '1px solid var(--qa-border)',
             borderRadius: 8, overflow: 'hidden', background: 'var(--qa-card)',
           }}>
-            {(['7', 'current', 'last', 'custom'] as const).map(p => (
+            {(['7', '30', 'custom'] as const).map(p => (
               <button key={p} onClick={() => {
                 if (p === 'custom') { setShowPicker(true); return; }
                 setPeriod(p);
@@ -229,7 +229,7 @@ export default function TLTeamAnalyticsDashboard() {
                 border: 0, borderRight: '1px solid var(--qa-border)', fontSize: 13,
                 color: period === p ? '#fff' : 'var(--qa-text-2)', cursor: 'pointer', fontFamily: 'inherit',
               }}>
-                {p === '7' ? '7 days' : p === 'current' ? 'Current month' : p === 'last' ? 'Last month' : period === 'custom' && customFrom ? `${fmtDateDisplay(customFrom)} – ${fmtDateDisplay(customTo)}` : 'Custom range'}
+                {p === '7' ? '7 days' : p === '30' ? '30 days' : period === 'custom' && customFrom ? `${fmtDateDisplay(customFrom)} – ${fmtDateDisplay(customTo)}` : 'Custom range'}
               </button>
             ))}
           </div>

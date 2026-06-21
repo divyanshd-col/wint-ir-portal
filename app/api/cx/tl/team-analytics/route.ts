@@ -29,16 +29,11 @@ function getDateRange(period: string, from?: string | null, to?: string | null) 
     const start = new Date(today.getTime() - 6 * 86400_000);
     return { dateFrom: fmt(start), dateTo: fmt(today) };
   }
-  if (period === 'last') {
-    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const end   = new Date(today.getFullYear(), today.getMonth(), 0);
-    return { dateFrom: fmt(start), dateTo: fmt(end) };
-  }
   if (period === 'custom' && from && to) {
     return { dateFrom: from, dateTo: to };
   }
-  // 'current' (default)
-  const start = new Date(today.getFullYear(), today.getMonth(), 1);
+  // '30' (default)
+  const start = new Date(today.getTime() - 29 * 86400_000);
   return { dateFrom: fmt(start), dateTo: fmt(today) };
 }
 
@@ -183,9 +178,9 @@ export async function GET(req: NextRequest) {
       ROUND(AVG(s.call_iqs_score)::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
-    JOIN agents a ON a.id = cr.agent_id
     LEFT JOIN conversations c ON c.id = cr.chat_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = ANY($3)
   `, [dateFrom, dateTo, agentNames]);
 
@@ -207,7 +202,8 @@ export async function GET(req: NextRequest) {
     SELECT ${CHAT_PARAM_SELECT}
     FROM iqs_scores s
     JOIN call_recordings cr ON cr.chat_id = s.chat_id
-    JOIN agents a ON a.id = cr.agent_id
+    LEFT JOIN conversations c ON c.id = cr.chat_id
+    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
     ${CALL_PARAM_LATERAL}
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
       AND a.name = ANY($3) AND s.call_parameters IS NOT NULL
@@ -233,9 +229,9 @@ export async function GET(req: NextRequest) {
       ROUND(AVG(s.call_iqs_score)::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
-    JOIN agents a ON a.id = cr.agent_id
     LEFT JOIN conversations c ON c.id = cr.chat_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = ANY($3)
     GROUP BY a.name ORDER BY a.name
   `, [dateFrom, dateTo, agentNames]);
@@ -244,7 +240,8 @@ export async function GET(req: NextRequest) {
     SELECT a.name AS agent_name, ${CHAT_PARAM_SELECT}
     FROM iqs_scores s
     JOIN call_recordings cr ON cr.chat_id = s.chat_id
-    JOIN agents a ON a.id = cr.agent_id
+    LEFT JOIN conversations c ON c.id = cr.chat_id
+    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
     ${CALL_PARAM_LATERAL}
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
       AND a.name = ANY($3) AND s.call_parameters IS NOT NULL
