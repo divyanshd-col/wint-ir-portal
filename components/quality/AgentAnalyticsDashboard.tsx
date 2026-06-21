@@ -583,7 +583,7 @@ export default function AgentAnalyticsDashboard({ userEmail, selfAgentName }: Pr
                             </tr>
                           </thead>
                           <tbody>
-                            {(wowChannel !== 'emails' && (wowChannel === 'calls' ? data.wowParams.calls : data.wowParams.chats)).map(param => (
+                            {(wowChannel === 'emails' ? [] : wowChannel === 'calls' ? data.wowParams.calls : data.wowParams.chats).map(param => (
                               <tr key={param.name} style={S({ borderBottom: '1px solid var(--qa-border-sub)' })}>
                                 <td style={S({ padding: '0 16px', height: 46, fontSize: 14, fontWeight: 500, color: 'var(--qa-text)' })}>{param.name}</td>
                                 {param.vals.map((v, i) => (
