@@ -50,9 +50,9 @@ interface AIResult { summary: string; items: AIInsightItem[]; }
 
 function fmtSecs(s: number | null): string {
   if (s == null || s < 0) return '—';
-  const m = Math.floor(s / 60), r = Math.round(s % 60);
-  if (s < 60) return `${Math.round(s)}s`;
-  return r > 0 ? `${m}m ${r}s` : `${m}m`;
+  const h = s / 3600;
+  if (h < 1) return `${h.toFixed(2)}h`;
+  return `${h.toFixed(1)}h`;
 }
 
 function numOrDash(v: number | null, suffix = ''): string {
