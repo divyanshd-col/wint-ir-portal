@@ -239,7 +239,7 @@ export default function TLTeamAnalyticsDashboard() {
               onApply={applyCustom}
               onCancel={() => {
                 setShowPicker(false);
-                if (period === 'custom' && !customFrom) setPeriod('current');
+                if (period === 'custom' && !customFrom) setPeriod('30');
               }}
             />
           )}
