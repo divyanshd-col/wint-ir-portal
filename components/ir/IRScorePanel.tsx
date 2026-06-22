@@ -100,7 +100,12 @@ export default function IRScorePanel({
     fetch(`/api/quality/transcript?chatId=${encodeURIComponent(chatId)}`)
       .then(r => r.json())
       .then(d => {
-        const msgs: TranscriptMsg[] = Array.isArray(d.messages) ? d.messages : Array.isArray(d.transcript) ? d.transcript : [];
+        const raw: any[] = d.timedMessages ?? d.messages ?? d.transcript ?? [];
+        const msgs: TranscriptMsg[] = Array.isArray(raw) ? raw.map(m => ({
+          role: m.role ?? (m.sender === 'user' ? 'user' : m.sender === 'bot' ? 'bot' : 'assistant'),
+          content: m.content ?? m.text ?? '',
+          timestamp: m.timestamp,
+        })) : [];
         setTranscript(msgs);
       })
       .catch(() => {})

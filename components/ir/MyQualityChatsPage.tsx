@@ -244,7 +244,7 @@ const TH_BASE: CSSProperties = {
   whiteSpace: 'nowrap',
 };
 const TD_BASE: CSSProperties = {
-  height: 52, padding: '0 16px', fontSize: 14, color: '#111111', verticalAlign: 'middle',
+  height: 52, padding: '0 12px', fontSize: 14, color: '#111111', verticalAlign: 'middle',
 };
 
 // ─── Section A: Evaluated Chats ───────────────────────────────────────────────
@@ -466,7 +466,13 @@ function EvaluatedSection({ agentName }: { agentName: string }) {
         </div>
 
         {/* Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: 200 }} />
+            <col style={{ width: 72 }} />
+            <col style={{ width: 120 }} />
+            <col style={{ width: 100 }} />
+          </colgroup>
           <thead>
             <tr>
               <th style={TH_BASE}>Chat ID</th>
@@ -516,6 +522,27 @@ function EvaluatedSection({ agentName }: { agentName: string }) {
   );
 }
 
+const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
+
+function ChatIdCell({ chatId }: { chatId: string }) {
+  const id = chatId ?? '';
+  const display = id.length > 16 ? id.slice(0, 16) + '…' : id;
+  const isRobylon = /^\d+$/.test(id.trim());
+  if (isRobylon) {
+    return (
+      <a
+        href={`${ROBYLON_BASE}/${id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: '#111111', textDecoration: 'underline', textDecorationColor: '#C7C7CC', fontFamily: MONO, fontSize: 13 }}
+      >
+        {display}
+      </a>
+    );
+  }
+  return <span style={{ color: '#6B6B6B', fontFamily: MONO, fontSize: 13 }}>{display}</span>;
+}
+
 function EvalRow({ entry: e, isOpen, isLast, onToggle }: {
   entry: IQSScoreEntry; isOpen: boolean; isLast: boolean; onToggle: () => void;
 }) {
@@ -526,8 +553,8 @@ function EvalRow({ entry: e, isOpen, isLast, onToggle }: {
       onMouseLeave={() => setHovered(false)}
       style={{ background: isOpen ? '#FAFAFB' : hovered ? '#F4F4F5' : '#FFFFFF' }}
     >
-      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontFamily: MONO, fontSize: 13, color: '#6B6B6B' }}>
-        {e.chatId?.slice(0, 16)}…
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontFamily: MONO, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <ChatIdCell chatId={e.chatId} />
       </td>
       <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right', fontFamily: MONO, fontSize: 13 }}>
         {e.iqs != null ? e.iqs : '—'}
@@ -637,7 +664,14 @@ function DisputesSection() {
         </div>
 
         {/* Table */}
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+            <col style={{ width: 200 }} />
+            <col style={{ width: 72 }} />
+            <col style={{ width: 120 }} />
+            <col />
+            <col style={{ width: 160 }} />
+          </colgroup>
           <thead>
             <tr>
               <th style={TH_BASE}>Chat ID</th>
@@ -712,8 +746,8 @@ function DisputeRowComp({ row, tab, statusText, isOpen, isLast, cancelling, onCa
       onMouseLeave={() => setHovered(false)}
       style={{ background: isOpen ? '#FAFAFB' : hovered ? '#F4F4F5' : '#FFFFFF' }}
     >
-      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontFamily: MONO, fontSize: 13, color: '#6B6B6B' }}>
-        {row.chatId?.slice(0, 16)}…
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontFamily: MONO, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <ChatIdCell chatId={row.chatId} />
       </td>
       <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right', fontFamily: MONO, fontSize: 13 }}>
         {row.iqsScore != null ? row.iqsScore : '—'}
@@ -759,7 +793,7 @@ function buildParams(e: IQSScoreEntry): Record<string, { score: boolean | null; 
 
 export default function MyQualityChatsPage({ agentName }: Props) {
   return (
-    <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS }}>
+    <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       <div style={{ fontSize: 24, fontWeight: 600, color: '#111111', margin: '0 0 24px' }}>
         My Quality Chats
       </div>
