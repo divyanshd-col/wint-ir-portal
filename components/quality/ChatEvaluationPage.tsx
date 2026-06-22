@@ -19,7 +19,10 @@ export default function ChatEvaluationPage() {
         const res = await fetch('/api/cx/qa/disposition-config');
         if (!res.ok) return;
         const data = await res.json();
-        setDispositions(data.dispositions ?? []);
+        // Admin response has no `dispositions` key; QA with no assignment returns [].
+        // Fall back to availableDispositions (live DB values) in both cases.
+        const assigned: string[] = data.dispositions ?? [];
+        setDispositions(assigned.length ? assigned : (data.availableDispositions ?? []));
       } finally {
         setLoadingDisp(false);
       }
