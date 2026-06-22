@@ -29,7 +29,7 @@ export async function GET() {
     systemPrompt: config.systemPrompt || '',
     conversationHistoryEnabled: config.conversationHistoryEnabled ?? false,
     slackUserToken: config.slackUserToken ? '••••••••' : '',
-    users: config.users.map(u => ({ username: u.username, password: '••••••••', isAdmin: u.isAdmin })),
+    users: session?.user?.isAdmin ? config.users.map(u => ({ username: u.username, password: '••••••••', isAdmin: u.isAdmin })) : [],
     isConfigured: config.isConfigured,
   });
 }

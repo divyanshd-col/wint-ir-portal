@@ -80,7 +80,9 @@ export async function readConfig(): Promise<PortalConfig> {
       const parsed = JSON.parse(raw);
       if (parsed.isConfigured) return { ...DEFAULT_CONFIG, ...parsed };
     }
-  } catch {}
+  } catch (err: any) {
+    console.error('[config] Failed to read portal-config.json:', err?.message ?? String(err));
+  }
 
   return DEFAULT_CONFIG;
 }
