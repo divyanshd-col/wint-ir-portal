@@ -1,6 +1,6 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS } from '@/lib/quality';
+import React, { useState, useEffect } from 'react';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
@@ -43,23 +43,27 @@ interface ParamState {
 }
 
 export interface EvalPanelProps {
-  chatId:       string;
-  agentName:    string;
-  iqsScore:     number;
-  closedAt:     string;
-  disposition:  string;
-  parameters:   Record<string, { score: boolean | null; reasoning: string }>;
-  mode:         'submit' | 'resolve';
+  chatId:        string;
+  agentName:     string;
+  iqsScore:      number;
+  closedAt:      string;
+  disposition:   string;
+  parameters:    Record<string, { score: boolean | null; reasoning: string }>;
+  mode:          'submit' | 'resolve' | 'view' | 'tl-browse';
   dispute?: {
     raisedBy:       string;
     raisedByName:   string;
     agentNote:      string;
     challengedParams: { param: string; note: string }[];  // PascalCase param keys
   };
-  flagId?:      string;
-  onDone:       () => void;
-  onClose:      () => void;
-  colSpan:      number;
+  flagId?:       string;
+  mobileNumber?: string | null;
+  reviewedBy?:   string | null;
+  reviewedAt?:   string | null;
+  reviewNote?:   string | null;
+  onDone:        () => void;
+  onClose:       () => void;
+  colSpan:       number;
 }
 
 // ── Message transcript types ──────────────────────────────────────────────────
@@ -91,11 +95,25 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
+// ── History entry ─────────────────────────────────────────────────────────────
+
+interface HistoryEntry {
+  chatId: string;
+  date: string;
+  agentName: string;
+  iqs: number | null;
+  csat: string;
+  disposition: string;
+  subDisposition: string;
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function EvalPanel({
   chatId, agentName, iqsScore, closedAt, disposition,
-  parameters, mode, dispute, flagId, onDone, onClose, colSpan,
+  parameters, mode, dispute, flagId,
+  mobileNumber, reviewedBy, reviewedAt, reviewNote,
+  onDone, onClose, colSpan,
 }: EvalPanelProps) {
 
   // Initialise param state from DB parameters (snake_case keys)
@@ -109,11 +127,31 @@ export default function EvalPanel({
     return state;
   }
 
+  // tl-browse: TL can edit params to trigger Submit/Override/Raise Dispute
+  // view: purely read-only
+  const isReadOnly = mode === 'view';
+
   const [paramState, setParamState] = useState<Record<string, ParamState>>(initParams);
   const [transcript, setTranscript]  = useState<TMessage[] | null>(null);
   const [txLoading,  setTxLoading]   = useState(true);
   const [submitting, setSubmitting]  = useState(false);
   const [submitErr,  setSubmitErr]   = useState('');
+  const [noteText,   setNoteText]    = useState(reviewNote ?? '');
+
+  // History (previous conversations for this contact)
+  const [history,        setHistory]        = useState<HistoryEntry[] | null>(null);
+  const [historyOpen,    setHistoryOpen]    = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // TL-browse: submit / override / raise-dispute
+  const [tlGeneralNote,  setTlGeneralNote]  = useState('');  // for Submit / Override
+  const [tlParamNotes,   setTlParamNotes]   = useState<Record<string, string>>({});  // per-param notes for Raise Dispute
+  const [tlSubmitting,   setTlSubmitting]   = useState(false);
+  const [tlErr,          setTlErr]          = useState('');
+  const [tlDone,         setTlDone]         = useState<'submit' | 'override' | 'dispute' | null>(null);
+
+  // QA submit/override: Prompt/KB update flag
+  const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
 
   // Build challenged params map (keyed by PascalCase)
   const disputeMap = new Map<string, { note: string }>(
@@ -145,6 +183,17 @@ export default function EvalPanel({
   const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve')
     : (isModified ? 'Override' : 'Submit');
 
+  // TL-browse: dynamic action button based on which category of params changed
+  const changedParamsInTL = mode === 'tl-browse' ? PARAM_ORDER.filter(p => {
+    const orig = initParams()[p];
+    return paramState[p].score !== orig.score;
+  }) : [];
+  const tlCat1Changed = changedParamsInTL.some(p => CAT1_PARAMS.has(p));
+  const tlCat2Changed = changedParamsInTL.some(p => CAT2_PARAMS.has(p));
+  const tlActionLabel = tlCat1Changed ? 'Raise Dispute'
+    : tlCat2Changed ? 'Override'
+    : 'Submit';
+
   // Fetch transcript on mount
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +211,17 @@ export default function EvalPanel({
     })();
     return () => { cancelled = true; };
   }, [chatId]);
+
+  // Fetch history lazily when user opens the panel
+  function loadHistory() {
+    if (history !== null || historyLoading) return;
+    setHistoryLoading(true);
+    fetch(`/api/quality/history?chatId=${encodeURIComponent(chatId)}`)
+      .then(r => r.json())
+      .then(d => setHistory(d.history ?? []))
+      .catch(() => setHistory([]))
+      .finally(() => setHistoryLoading(false));
+  }
 
   // Update a single param
   function setScore(pascal: string, score: boolean | null) {
@@ -186,6 +246,7 @@ export default function EvalPanel({
         : (isModified ? 'override' : 'submit');
 
       const body: any = { action, flagId };
+      if (noteText.trim()) body.note = noteText.trim();
 
       if (isModified) {
         const params: Record<string, { score: boolean | null; reasoning: string }> = {};
@@ -193,6 +254,7 @@ export default function EvalPanel({
           const dbKey = PASCAL_TO_DB[pascal];
           params[dbKey] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
         }
+        if (needsKbUpdate) params['__needs_kb_update'] = { score: true, reasoning: '' } as any;
         body.parameters = params;
       }
 
@@ -207,6 +269,65 @@ export default function EvalPanel({
       setSubmitErr(e.message ?? 'Submit failed');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  // TL: submit / override / raise dispute
+  async function submitTLAction() {
+    if (tlActionLabel === 'Override' && !tlGeneralNote.trim()) {
+      setTlErr('Please add a note explaining your change.');
+      return;
+    }
+    setTlSubmitting(true);
+    setTlErr('');
+    try {
+      if (tlActionLabel === 'Submit') {
+        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'tl-submit', note: tlGeneralNote.trim() || undefined }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+        setTlDone('submit');
+      } else if (tlActionLabel === 'Override') {
+        const params: Record<string, { score: boolean | null; reasoning: string }> = {};
+        for (const pascal of changedParamsInTL) {
+          params[PASCAL_TO_DB[pascal]] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
+        }
+        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'tl-override', parameters: params, note: tlGeneralNote.trim() || undefined }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+        setTlDone('override');
+      } else {
+        // Raise Dispute — require a note per CAT1 changed param
+        const cat1Params = changedParamsInTL.filter(p => CAT1_PARAMS.has(p));
+        const missing = cat1Params.filter(p => !(tlParamNotes[p] ?? '').trim());
+        if (missing.length) {
+          setTlErr('Add a note for each challenged parameter.');
+          setTlSubmitting(false);
+          return;
+        }
+        const res = await fetch('/api/quality/flag', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId,
+            agentNote: '',
+            challengedParams: cat1Params.map(p => ({ param: p, note: (tlParamNotes[p] ?? '').trim() })),
+            raisedByRole: 'tl',
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+        setTlDone('dispute');
+      }
+      onDone();
+    } catch (e: any) {
+      setTlErr(e.message ?? 'Action failed');
+    } finally {
+      setTlSubmitting(false);
     }
   }
 
@@ -274,12 +395,24 @@ export default function EvalPanel({
                     <span>{fmtDate(closedAt)}</span>
                     <span>·</span>
                     <span>{disposition}</span>
+                    {mobileNumber && (
+                      <>
+                        <span>·</span>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{mobileNumber}</span>
+                      </>
+                    )}
                     {dispute && (
                       <>
                         <span>·</span>
                         <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
                           Disputed by {dispute.raisedBy} ({dispute.raisedByName})
                         </span>
+                      </>
+                    )}
+                    {mode === 'view' && reviewedBy && (
+                      <>
+                        <span>·</span>
+                        <span>Reviewed by <strong style={{ color: 'var(--qa-text)' }}>{reviewedBy}</strong></span>
                       </>
                     )}
                   </div>
@@ -323,6 +456,12 @@ export default function EvalPanel({
               {PARAM_ORDER.map(pascal => {
                 const st       = paramState[pascal];
                 const disputed = disputeMap.get(pascal);
+                // QA modes: CAT2 params are TL's domain — read-only for QA
+                const isTLParam = CAT2_PARAMS.has(pascal);
+                const qaReadOnly = (mode === 'submit' || mode === 'resolve') && isTLParam;
+                // In tl-browse, CAT1 changed params get a highlight
+                const tlChanged = mode === 'tl-browse' && changedParamsInTL.includes(pascal);
+                const paramReadOnly = isReadOnly || qaReadOnly;
                 return (
                   <div key={pascal} style={{
                     padding: '14px 16px',
@@ -330,10 +469,12 @@ export default function EvalPanel({
                     ...(disputed ? {
                       background: 'var(--qa-gray-50)',
                       boxShadow: 'inset 3px 0 0 var(--qa-gray-700)',
+                    } : tlChanged ? {
+                      background: 'var(--qa-gray-50)',
                     } : {}),
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: tlChanged ? 600 : 500, flex: 1, minWidth: 0 }}>
                         {PARAM_NAMES[pascal]}
                         {disputed && (
                           <span style={{
@@ -346,6 +487,16 @@ export default function EvalPanel({
                             {dispute?.raisedBy} disputes
                           </span>
                         )}
+                        {qaReadOnly && (
+                          <span style={{
+                            marginLeft: 8, height: 16, padding: '0 6px', borderRadius: 4,
+                            background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                            fontSize: 10, fontWeight: 500, color: 'var(--qa-text-3)',
+                            display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle',
+                          }}>
+                            TL
+                          </span>
+                        )}
                       </span>
                       {/* Yes / No / NA buttons */}
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
@@ -353,12 +504,14 @@ export default function EvalPanel({
                           const label = val === true ? 'Yes' : val === false ? 'No' : 'NA';
                           const isSel = st.score === val;
                           return (
-                            <button key={i} onClick={() => setScore(pascal, val)} style={{
+                            <button key={i} onClick={() => !paramReadOnly && setScore(pascal, val)} style={{
                               height: 28, padding: '0 9px', borderRadius: 8,
                               border: '1px solid var(--qa-border)',
                               background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
                               color: isSel ? '#fff' : 'var(--qa-text-2)',
-                              fontSize: 12, fontFamily: 'inherit', cursor: 'pointer',
+                              fontSize: 12, fontFamily: 'inherit',
+                              cursor: paramReadOnly ? 'default' : 'pointer',
+                              opacity: paramReadOnly && !isSel ? 0.4 : 1,
                             }}>
                               {label}
                             </button>
@@ -371,28 +524,34 @@ export default function EvalPanel({
                     </div>
 
                     {/* Reasoning */}
-                    <textarea
-                      value={st.reasoning}
-                      onChange={e => setReasoning(pascal, e.target.value)}
-                      placeholder="Add reasoning…"
-                      rows={st.reasoning ? undefined : 1}
-                      style={{
-                        marginTop: 8, width: '100%', resize: 'vertical',
-                        border: '1px solid transparent', borderRadius: 6,
-                        padding: '6px 8px', fontSize: 12, color: 'var(--qa-text-2)',
-                        lineHeight: 1.5, fontFamily: 'inherit',
-                        background: 'transparent', outline: 'none',
-                        transition: 'background 0.12s, border-color 0.12s',
-                      }}
-                      onFocus={e => {
-                        e.target.style.background = 'var(--qa-card)';
-                        e.target.style.borderColor = 'var(--qa-text)';
-                      }}
-                      onBlur={e => {
-                        e.target.style.background = 'transparent';
-                        e.target.style.borderColor = 'transparent';
-                      }}
-                    />
+                    {(st.reasoning || !paramReadOnly) && (
+                      <textarea
+                        value={st.reasoning}
+                        onChange={e => !paramReadOnly && setReasoning(pascal, e.target.value)}
+                        readOnly={paramReadOnly}
+                        placeholder={paramReadOnly ? '' : 'Add reasoning…'}
+                        rows={st.reasoning ? undefined : 1}
+                        style={{
+                          marginTop: 8, width: '100%', resize: paramReadOnly ? 'none' : 'vertical',
+                          border: '1px solid transparent', borderRadius: 6,
+                          padding: '6px 8px', fontSize: 12, color: 'var(--qa-text-2)',
+                          lineHeight: 1.5, fontFamily: 'inherit',
+                          background: 'transparent', outline: 'none',
+                          transition: 'background 0.12s, border-color 0.12s',
+                          cursor: paramReadOnly ? 'default' : 'text',
+                        }}
+                        onFocus={e => {
+                          if (!paramReadOnly) {
+                            e.target.style.background = 'var(--qa-card)';
+                            e.target.style.borderColor = 'var(--qa-text)';
+                          }
+                        }}
+                        onBlur={e => {
+                          e.target.style.background = 'transparent';
+                          e.target.style.borderColor = 'transparent';
+                        }}
+                      />
+                    )}
 
                     {/* Dispute claim */}
                     {disputed && (
@@ -418,9 +577,50 @@ export default function EvalPanel({
               })}
             </div>
 
+            {/* Review note (QA modes) */}
+            {(mode === 'submit' || mode === 'resolve') && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
+                  Review Note
+                </div>
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  placeholder="Add your evaluation comment…"
+                  rows={2}
+                  style={{
+                    width: '100%', resize: 'vertical',
+                    border: '1px solid var(--qa-border)', borderRadius: 6,
+                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                    lineHeight: 1.5, fontFamily: 'inherit',
+                    background: 'var(--qa-card)', outline: 'none',
+                  }}
+                />
+                {isModified && (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={needsKbUpdate}
+                      onChange={e => setNeedsKbUpdate(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Mark for Prompt / KB update
+                  </label>
+                )}
+              </div>
+            )}
+            {isReadOnly && reviewNote && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 4 }}>
+                  Review Note
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>{reviewNote}</div>
+              </div>
+            )}
+
             {/* Footer */}
             {submitErr && (
-              <div style={{ margin: '0 16px', padding: '8px 12px', background: '#fee2e2', borderRadius: 6, fontSize: 12, color: '#b91c1c' }}>
+              <div style={{ margin: '0 16px', padding: '8px 12px', background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)', borderRadius: 6, fontSize: 12, color: 'var(--qa-text)' }}>
                 {submitErr}
               </div>
             )}
@@ -436,34 +636,82 @@ export default function EvalPanel({
               <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
                 {transcript == null ? '…' : `${transcript.length} messages`}
               </span>
-              {/* Reset button */}
-              <button onClick={reset} title="Reset to original" style={{
-                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
-                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>
-                </svg>
-              </button>
-              <div style={{ flex: 1 }} />
-              {/* Primary action */}
+              {/* History toggle */}
               <button
-                onClick={submit}
-                disabled={submitting}
+                onClick={() => {
+                  const next = !historyOpen;
+                  setHistoryOpen(next);
+                  if (next) loadHistory();
+                }}
+                title="Previous conversations"
                 style={{
-                  height: 36, padding: '0 16px', borderRadius: 8,
-                  fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                  cursor: submitting ? 'not-allowed' : 'pointer',
-                  display: 'inline-flex', alignItems: 'center',
-                  border: '1px solid var(--qa-gray-700)',
-                  background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
-                  color: '#fff',
-                  opacity: submitting ? 0.7 : 1,
+                  height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
+                  background: historyOpen ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                  color: historyOpen ? '#fff' : 'var(--qa-text-2)',
+                  cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
                 }}
               >
-                {submitting ? 'Saving…' : primaryLabel}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 3h18v4H3z"/><path d="M3 9h18v4H3z"/><path d="M3 15h10v4H3z"/>
+                </svg>
+                History
               </button>
+              {/* Reset button (only for editing modes) */}
+              {!isReadOnly && (
+                <button onClick={reset} title="Reset to original" style={{
+                  width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
+                  background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/>
+                  </svg>
+                </button>
+              )}
+              <div style={{ flex: 1 }} />
+              {/* TL: dynamic action button */}
+              {mode === 'tl-browse' && !tlDone && (
+                <button
+                  onClick={submitTLAction}
+                  disabled={tlSubmitting}
+                  style={{
+                    height: 36, padding: '0 16px', borderRadius: 8,
+                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                    cursor: tlSubmitting ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex', alignItems: 'center',
+                    border: '1px solid var(--qa-gray-700)',
+                    background: 'var(--qa-gray-700)', color: '#fff',
+                    opacity: tlSubmitting ? 0.7 : 1,
+                  }}
+                >
+                  {tlSubmitting ? 'Saving…' : tlActionLabel}
+                </button>
+              )}
+              {mode === 'tl-browse' && tlDone && (
+                <span style={{ fontSize: 13, color: 'var(--qa-text-2)', fontWeight: 500 }}>
+                  {tlDone === 'dispute' ? 'Dispute raised ✓' : tlDone === 'override' ? 'Override saved ✓' : 'Submitted ✓'}
+                </span>
+              )}
+              {/* Primary action (submit/resolve modes) */}
+              {(mode === 'submit' || mode === 'resolve') && (
+                <button
+                  onClick={submit}
+                  disabled={submitting}
+                  style={{
+                    height: 36, padding: '0 16px', borderRadius: 8,
+                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                    cursor: submitting ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex', alignItems: 'center',
+                    border: '1px solid var(--qa-gray-700)',
+                    background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
+                    color: '#fff',
+                    opacity: submitting ? 0.7 : 1,
+                  }}
+                >
+                  {submitting ? 'Saving…' : primaryLabel}
+                </button>
+              )}
               {/* Close */}
               <button onClick={onClose} style={{
                 width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
@@ -472,6 +720,105 @@ export default function EvalPanel({
                 fontSize: 16, lineHeight: 1,
               }}>×</button>
             </div>
+
+            {/* TL note area (shown when params are changed) */}
+            {mode === 'tl-browse' && changedParamsInTL.length > 0 && !tlDone && (
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
+                {tlActionLabel === 'Raise Dispute' ? (
+                  // Per-param note for each CAT1 param being disputed
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>
+                      Note required per challenged parameter
+                    </div>
+                    {changedParamsInTL.filter(p => CAT1_PARAMS.has(p)).map(p => (
+                      <div key={p}>
+                        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--qa-text-2)', marginBottom: 3 }}>{p}</div>
+                        <textarea
+                          value={tlParamNotes[p] ?? ''}
+                          onChange={e => setTlParamNotes(prev => ({ ...prev, [p]: e.target.value }))}
+                          placeholder={`Why should ${p} be corrected?`}
+                          rows={2}
+                          style={{
+                            width: '100%', resize: 'vertical',
+                            border: '1px solid var(--qa-border)', borderRadius: 6,
+                            padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                            lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
+                            boxSizing: 'border-box',
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    value={tlGeneralNote}
+                    onChange={e => setTlGeneralNote(e.target.value)}
+                    placeholder={tlActionLabel === 'Submit' ? 'Optional comment…' : 'Required: explain your change…'}
+                    rows={2}
+                    style={{
+                      width: '100%', resize: 'vertical',
+                      border: '1px solid var(--qa-border)', borderRadius: 6,
+                      padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                      lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
+                    }}
+                  />
+                )}
+                {tlErr && <div style={{ fontSize: 12, color: 'var(--qa-text)', marginTop: 4 }}>{tlErr}</div>}
+              </div>
+            )}
+
+            {/* History panel */}
+            {historyOpen && (
+              <div style={{ borderBottom: '1px solid var(--qa-border)', flexShrink: 0, maxHeight: 180, overflowY: 'auto' }}>
+                {historyLoading ? (
+                  <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--qa-text-3)' }}>Loading history…</div>
+                ) : !history?.length ? (
+                  <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--qa-text-3)' }}>No previous conversations found</div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ background: 'var(--qa-gray-50)' }}>
+                        {['Date', 'Agent', 'Disposition', 'IQS', 'CSAT'].map(h => (
+                          <th key={h} style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--qa-text-3)', fontWeight: 500, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {history.map((h, i) => (
+                        <tr key={i} style={{ borderTop: '1px solid var(--qa-border-sub)' }}>
+                          <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>{h.date}</td>
+                          <td style={{ padding: '6px 12px', color: 'var(--qa-text)' }}>{h.agentName}</td>
+                          <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.disposition}</td>
+                          <td style={{ padding: '6px 12px' }}>
+                            {h.iqs != null ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                minWidth: 30, height: 18, borderRadius: 4, fontSize: 11,
+                                fontFamily: 'ui-monospace, monospace',
+                                background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                                border: '1px solid var(--qa-border)',
+                              }}>{h.iqs}</span>
+                            ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                          </td>
+                          <td style={{ padding: '6px 12px' }}>
+                            {h.csat ? (
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                minWidth: 36, height: 18, borderRadius: 4, fontSize: 11, fontWeight: 600,
+                                background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                                border: '1px solid var(--qa-border)',
+                              }}>
+                                {h.csat === '1' ? 'Bad' : h.csat === '3' ? 'Neutral' : 'Good'}
+                              </span>
+                            ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )}
 
             {/* Transcript */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 0 }}>

@@ -135,6 +135,11 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
       setErr('Select at least one parameter to challenge, or add a general note.');
       return;
     }
+    const missingNotes = [...selectedParams].filter(p => !(paramNotes[p] ?? '').trim());
+    if (missingNotes.length > 0) {
+      setErr('Add a note for each challenged parameter.');
+      return;
+    }
     setBusy(true); setErr('');
     try {
       const challengedParams = [...selectedParams].map(p => ({
@@ -147,6 +152,7 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
           scoreId: entry.id, chatId: entry.chatId,
           agentNote: generalNote.trim(),
           challengedParams,
+          raisedByRole: 'ir',
         }),
       });
       const d = await res.json();
@@ -179,7 +185,7 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
                       type="text"
                       value={paramNotes[p] || ''}
                       onChange={e => setParamNotes(prev => ({ ...prev, [p]: e.target.value }))}
-                      placeholder={`Why should ${PARAM_NAMES[p]} be Yes? (optional)`}
+                      placeholder={`Required: why should ${PARAM_NAMES[p]} be Yes?`}
                       className="w-full text-xs border border-amber-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400/30"
                     />
                   </div>

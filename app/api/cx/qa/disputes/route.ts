@@ -18,11 +18,14 @@ export interface DisputeRow {
   raisedByName: string;
   iqsScore:     number;
   closedAt:     string;
+  csatScore:    number | null;
+  mobileNumber: string | null;
   disposition:  string;
   subDisposition: string | null;
   agentNote:    string;
   challengedParams: { param: string; note: string }[];
   parameters:   Record<string, { score: boolean | null; reasoning: string }>;
+  tlForwarded:  boolean;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -58,10 +61,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   // Fetch all pending flags from KV
+  // QA sees: tl_forwarded (IR-raised, forwarded by TL) + pending (TL-raised, goes directly to QA)
+  // QA does NOT see ir_pending_tl — those are still with TL
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
-    .filter((f): f is IQSFlag => f !== null && f.status === 'pending');
+    .filter((f): f is IQSFlag => f !== null && (f.status === 'tl_forwarded' || f.status === 'pending'));
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 
@@ -77,15 +82,20 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     sub_disposition: string | null;
     iqs_score: string;
     parameters: any;
+    csat_score: string | null;
+    mobile_number: string | null;
   }>(
     `SELECT c.id AS chat_id, a.name AS agent_name,
             c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
-            i.iqs_score, i.parameters
+            i.iqs_score, i.parameters,
+            c.csat_score,
+            ct.phone AS mobile_number
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
+     LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE c.id = ANY($1)`,
     [chatIds]
   );
@@ -125,11 +135,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       raisedByName:     flag.agentName,
       iqsScore:         parseInt(db.iqs_score),
       closedAt:         db.closed_at,
+      csatScore:        db.csat_score ? parseInt(db.csat_score) : null,
+      mobileNumber:     db.mobile_number ?? null,
       disposition:      db.disposition,
       subDisposition:   db.sub_disposition,
       agentNote:        flag.agentNote,
       challengedParams: flag.challengedParams ?? [],
       parameters:       params,
+      tlForwarded:      flag.status === 'tl_forwarded',
     });
   }
 

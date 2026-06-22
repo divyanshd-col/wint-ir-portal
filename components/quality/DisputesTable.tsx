@@ -5,16 +5,36 @@ import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 
 interface Props {
   dispositions: string[];
+  onCountChange?: (count: number) => void;
+}
+
+interface FlagComment {
+  id: string;
+  flagId: string;
+  authorEmail: string;
+  authorName: string;
+  role: string;
+  content: string;
+  createdAt: string;
 }
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
+function fmtTime(iso: string) {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
 
-export default function DisputesTable({ dispositions: _dispositions }: Props) {
-  const [disputes,   setDisputes]   = useState<DisputeRow[]>([]);
-  const [loading,    setLoading]    = useState(true);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+export default function DisputesTable({ dispositions: _dispositions, onCountChange }: Props) {
+  const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [expandedId,  setExpandedId]  = useState<string | null>(null);
+  const [threadId,    setThreadId]    = useState<string | null>(null);   // flagId with open thread
+  const [threads,     setThreads]     = useState<Record<string, FlagComment[]>>({});
+  const [threadLoad,  setThreadLoad]  = useState<string | null>(null);
+  const [newComment,  setNewComment]  = useState('');
+  const [posting,     setPosting]     = useState(false);
+  const [raiserFilter, setRaiserFilter] = useState<'all' | 'tl_endorsed' | 'TL' | 'IR'>('all');
 
   useEffect(() => {
     let cancelled = false;
@@ -23,7 +43,10 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
         const res = await fetch('/api/cx/qa/disputes');
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setDisputes(data.disputes ?? []);
+        if (!cancelled) {
+          setDisputes(data.disputes ?? []);
+          onCountChange?.(data.disputes?.length ?? 0);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -33,12 +56,53 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
 
   function toggleExpand(chatId: string) {
     setExpandedId(prev => prev === chatId ? null : chatId);
+    setThreadId(null);
   }
 
   function removeDispute(chatId: string) {
     setDisputes(prev => prev.filter(d => d.chatId !== chatId));
     setExpandedId(null);
+    setThreadId(null);
   }
+
+  async function openThread(flagId: string) {
+    if (threadId === flagId) { setThreadId(null); return; }
+    setExpandedId(null);
+    setThreadId(flagId);
+    setNewComment('');
+    if (threads[flagId]) return;
+    setThreadLoad(flagId);
+    try {
+      const res = await fetch(`/api/quality/flag-thread?flagId=${encodeURIComponent(flagId)}`);
+      const data = await res.json();
+      setThreads(prev => ({ ...prev, [flagId]: data.comments ?? [] }));
+    } finally {
+      setThreadLoad(null);
+    }
+  }
+
+  async function postComment(flagId: string) {
+    if (!newComment.trim() || posting) return;
+    setPosting(true);
+    try {
+      const res = await fetch('/api/quality/flag-thread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flagId, content: newComment.trim() }),
+      });
+      const data = await res.json();
+      if (data.comment) {
+        setThreads(prev => ({ ...prev, [flagId]: [...(prev[flagId] ?? []), data.comment] }));
+        setNewComment('');
+      }
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  const visibleDisputes = raiserFilter === 'all' ? disputes
+    : raiserFilter === 'tl_endorsed' ? disputes.filter(d => d.tlForwarded)
+    : disputes.filter(d => d.raisedBy === raiserFilter);
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -53,8 +117,28 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
   const tdNum: React.CSSProperties  = { ...td, textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13 };
   const tdAct: React.CSSProperties  = { ...td, textAlign: 'right' };
 
+  const chip: React.CSSProperties = {
+    height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
+    background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, fontFamily: 'inherit',
+    display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+  };
+  const chipActive: React.CSSProperties = {
+    ...chip, background: 'var(--qa-gray-700)', color: '#fff', borderColor: 'var(--qa-gray-700)',
+  };
+
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+
+      {/* Filter bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)' }}>
+        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>Raised by</span>
+        {(['all', 'tl_endorsed', 'TL', 'IR'] as const).map(v => (
+          <button key={v} style={raiserFilter === v ? chipActive : chip} onClick={() => setRaiserFilter(v)}>
+            {v === 'all' ? 'All' : v === 'tl_endorsed' ? 'TL Endorsed ★' : v}
+          </button>
+        ))}
+      </div>
+
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>
           <tr>
@@ -62,8 +146,8 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
             <th style={th}>Agent</th>
             <th style={th}>Disputed By</th>
             <th style={{ ...th, textAlign: 'right' }}>IQS</th>
-            <th style={th}>Date</th>
-            <th style={{ ...th, textAlign: 'right' }}>Action</th>
+            <th style={th}>CSAT</th>
+            <th style={{ ...th, textAlign: 'right' }}>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -77,19 +161,19 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
                 ))}
               </tr>
             ))
-          ) : disputes.length === 0 ? (
+          ) : visibleDisputes.length === 0 ? (
             <tr>
               <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
-                No disputes pending
+                {disputes.length === 0 ? 'No disputes pending' : 'No disputes match the filter'}
               </td>
             </tr>
           ) : (
-            disputes.map(d => (
+            visibleDisputes.map(d => (
               <React.Fragment key={d.chatId}>
                 <tr
-                  style={{ background: expandedId === d.chatId ? 'var(--qa-gray-50)' : undefined }}
-                  onMouseEnter={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
-                  onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}
+                  style={{ background: expandedId === d.chatId || threadId === d.flagId ? 'var(--qa-gray-50)' : undefined }}
+                  onMouseEnter={e => { if (expandedId !== d.chatId && threadId !== d.flagId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
+                  onMouseLeave={e => { if (expandedId !== d.chatId && threadId !== d.flagId) e.currentTarget.style.background = ''; }}
                 >
                   <td style={tdMono}>
                     {/^\d+$/.test(d.chatId.trim()) ? (
@@ -118,20 +202,57 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
                       {d.raisedBy}
                     </span>
                     {d.raisedByName}
+                    {d.tlForwarded && (
+                      <span style={{
+                        marginLeft: 8, display: 'inline-block', fontSize: 10, fontWeight: 600,
+                        textTransform: 'uppercase', letterSpacing: '0.04em',
+                        background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                        borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
+                      }}>TL Endorsed</span>
+                    )}
                   </td>
                   <td style={tdNum}>
                     <span style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
                       fontFamily: 'ui-monospace, monospace',
-                      background: d.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                      color:      d.iqsScore < 60 ? '#b91c1c' : '#713f12',
+                      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                      border: '1px solid var(--qa-border)',
                     }}>
                       {d.iqsScore}
                     </span>
                   </td>
-                  <td style={{ ...td, fontSize: 13 }}>{fmtDate(d.closedAt)}</td>
-                  <td style={tdAct}>
+                  <td style={td}>
+                    {d.csatScore == null ? (
+                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                    ) : (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
+                        fontFamily: 'ui-monospace, monospace',
+                        background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
+                        border: '1px solid var(--qa-border)',
+                      }}>
+                        {d.csatScore === 1 ? 'Bad' : d.csatScore === 3 ? 'Neutral' : 'Good'}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ ...tdAct, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, border: 'none', height: 52 }}>
+                    {/* Thread button */}
+                    <button
+                      onClick={() => openThread(d.flagId)}
+                      style={{
+                        border: '1px solid var(--qa-border)', padding: '0 10px',
+                        height: 28, borderRadius: 8,
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                        color: threadId === d.flagId ? 'var(--qa-text)' : 'var(--qa-text-2)',
+                        cursor: 'pointer', background: threadId === d.flagId ? 'var(--qa-gray-100)' : 'transparent',
+                        display: 'inline-flex', alignItems: 'center', gap: 4,
+                      }}
+                    >
+                      💬 Comment
+                    </button>
+                    {/* Resolve button */}
                     <button
                       onClick={() => toggleExpand(d.chatId)}
                       style={{
@@ -151,6 +272,81 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
                   </td>
                 </tr>
 
+                {/* Thread panel */}
+                {threadId === d.flagId && (
+                  <tr>
+                    <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+                      <div style={{ padding: '16px 20px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text-2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          Dispute Thread
+                        </div>
+                        {threadLoad === d.flagId ? (
+                          <div style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Loading…</div>
+                        ) : (threads[d.flagId] ?? []).length === 0 ? (
+                          <div style={{ fontSize: 13, color: 'var(--qa-text-3)', marginBottom: 10 }}>No comments yet</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                            {(threads[d.flagId] ?? []).map(c => (
+                              <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                                <div style={{
+                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                                  background: 'var(--qa-fill-med)', display: 'flex', alignItems: 'center',
+                                  justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)',
+                                }}>
+                                  {c.authorName.slice(0, 2).toUpperCase()}
+                                </div>
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{c.authorName}</span>
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                      background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                                      borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
+                                    }}>{c.role}</span>
+                                    <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtDate(c.createdAt)} {fmtTime(c.createdAt)}</span>
+                                  </div>
+                                  <div style={{ fontSize: 13, color: 'var(--qa-text)', lineHeight: 1.5 }}>{c.content}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* New comment input */}
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                          <textarea
+                            value={newComment}
+                            onChange={e => setNewComment(e.target.value)}
+                            placeholder="Add a comment…"
+                            rows={2}
+                            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) postComment(d.flagId); }}
+                            style={{
+                              flex: 1, resize: 'vertical',
+                              border: '1px solid var(--qa-border)', borderRadius: 6,
+                              padding: '6px 8px', fontSize: 13, color: 'var(--qa-text)',
+                              lineHeight: 1.5, fontFamily: 'inherit',
+                              background: 'var(--qa-card)', outline: 'none',
+                            }}
+                          />
+                          <button
+                            onClick={() => postComment(d.flagId)}
+                            disabled={posting || !newComment.trim()}
+                            style={{
+                              height: 36, padding: '0 14px', borderRadius: 6,
+                              fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                              cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer',
+                              border: '1px solid var(--qa-gray-700)',
+                              background: 'var(--qa-gray-700)', color: '#fff',
+                              opacity: posting || !newComment.trim() ? 0.5 : 1, flexShrink: 0,
+                            }}
+                          >
+                            {posting ? '…' : 'Post'}
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+
                 {expandedId === d.chatId && (
                   <EvalPanel
                     chatId={d.chatId}
@@ -159,6 +355,7 @@ export default function DisputesTable({ dispositions: _dispositions }: Props) {
                     closedAt={d.closedAt}
                     disposition={d.disposition}
                     parameters={d.parameters}
+                    mobileNumber={d.mobileNumber}
                     mode="resolve"
                     flagId={d.flagId}
                     dispute={{

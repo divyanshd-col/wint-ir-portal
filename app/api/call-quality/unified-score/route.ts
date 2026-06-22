@@ -157,9 +157,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Config ────────────────────────────────────────────────────────────────
   let geminiKeys: string[];
+  let config: Awaited<ReturnType<typeof readConfig>>;
   try {
-    const config = await readConfig();
-    geminiKeys   = getIQSGeminiKeys(config);
+    config     = await readConfig();
+    geminiKeys = getIQSGeminiKeys(config);
   } catch (err: any) {
     return NextResponse.json({ error: `Config error: ${err.message}` }, { status: 500 });
   }
@@ -303,10 +304,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, kbQuery, 5);
       if (relevant.length) {
-        // Use readable label for each chunk. Raw Google Drive file IDs (25+ char base62)
-        // are not human-readable — extract the first heading line from the content instead.
+        const docNames = config.knowledgeBaseDocNames || {};
         const chunkLabel = (c: { fileName: string; content: string }) => {
-          if (/^[A-Za-z0-9_-]{25,}$/.test(c.fileName.trim())) {
+          const driveId = c.fileName.trim();
+          if (docNames[driveId]) return docNames[driveId];
+          if (/^[A-Za-z0-9_-]{25,}$/.test(driveId)) {
             const firstLine = c.content.split('\n')[0].trim();
             return firstLine.length > 3 ? firstLine : 'KB Document';
           }

@@ -93,10 +93,12 @@ Add all .env.local variables in Vercel project settings. Set NEXTAUTH_URL to you
 
 ## Adding IR users
 
-Edit IR_USERS in .env.local:
+Use `IR_USERS_JSON` in `.env.local` (a JSON array of user objects):
 ```
-IR_USERS=alice:Pass123,bob:Pass456
+IR_USERS_JSON=[{"username":"alice@wintwealth.com","email":"alice@wintwealth.com","password":"<bcrypt-hash>","role":"agent"},{"username":"bob@wintwealth.com","email":"bob@wintwealth.com","password":"<bcrypt-hash>","role":"admin"}]
 ```
+
+In practice, use the Settings page (admin only) or `scripts/manage-users.mjs` to add users — passwords must be bcrypt-hashed before being stored in this env var.
 
 ---
 

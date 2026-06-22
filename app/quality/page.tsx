@@ -2,10 +2,10 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
-import QualityClient from '@/components/QualityClient';
-import AgentQualityClient from '@/components/AgentQualityClient';
+import AgentAnalyticsDashboard from '@/components/quality/AgentAnalyticsDashboard';
+import QAAnalyticsDashboard from '@/components/quality/QAAnalyticsDashboard';
 
-export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string; section?: string; period?: string } }) {
+export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string; section?: string; period?: string; chatId?: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
@@ -22,22 +22,12 @@ export default async function QualityPage({ searchParams }: { searchParams?: { a
     const config = await readConfig();
     const configUser = config.users.find(u => (u.email || u.username) === email);
     const selfAgentName = configUser?.agentName || undefined;
-    return <AgentQualityClient userEmail={email} selfAgentName={selfAgentName} />;
+    return <AgentAnalyticsDashboard userEmail={email} selfAgentName={selfAgentName} />;
   }
 
-  // Admin / TL / Quality: existing full team quality view
-  const initialAgent   = searchParams?.agent || undefined;
-  const VALID_TABS = ['performance', 'log', 'upload', 'reports', 'pending', 'calls', 'call-test', 'unified'];
-  const tabParam   = searchParams?.tab || '';
-  const initialTab = VALID_TABS.includes(tabParam) ? tabParam as any : undefined;
-  const initialSection = searchParams?.section === 'reviewed' ? 'reviewed' as const : undefined;
-  return (
-    <QualityClient
-      userRole={role}
-      userEmail={email}
-      initialAgent={initialAgent}
-      initialTab={initialTab}
-      initialSection={initialSection}
-    />
-  );
+  // TL: dedicated TL analytics section
+  if (role === 'tl') redirect('/tl');
+
+  // Admin / QA: new QA Analytics Dashboard
+  return <QAAnalyticsDashboard />;
 }

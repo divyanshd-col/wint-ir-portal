@@ -261,7 +261,7 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMin?: number; iqsMax?: number; includeUncertain?: boolean; disposition?: string; subDisposition?: string } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMin?: number; iqsMax?: number; includeUncertain?: boolean; disposition?: string; subDisposition?: string; dispositions?: string[] } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
@@ -302,6 +302,10 @@ export async function getAllScoredConversations(
   if (opts.disposition) {
     params.push(opts.disposition);
     conditions.push(`(c.tags->>'disposition') = $${params.length}`);
+  } else if (opts.dispositions && opts.dispositions.length > 0) {
+    // Multi-value default scope (e.g. QA's assigned dispositions)
+    params.push(opts.dispositions);
+    conditions.push(`(c.tags->>'disposition') = ANY($${params.length})`);
   }
   if (opts.subDisposition) {
     params.push(opts.subDisposition);
@@ -591,6 +595,18 @@ export async function linkCallToChat(callId: string, chatId: string): Promise<vo
      WHERE id = $2`,
     [chatId, callId],
   );
+  // Propagate the conversation's IR to the call recording when the call has no agent set.
+  // Fixes "Robylon Automation" appearing as agent name in the Call Queue.
+  await query(
+    `UPDATE call_recordings cr
+     SET agent_id = conv.agent_id, updated_at = NOW()
+     FROM conversations conv
+     WHERE conv.id = $1
+       AND cr.id = $2
+       AND cr.agent_id IS NULL
+       AND conv.agent_id IS NOT NULL`,
+    [chatId, callId],
+  );
 }
 
 /** Update only the status field on a call recording (e.g. 'scored'). */
@@ -616,6 +632,8 @@ export async function getAllScoredCalls(opts: {
   dateTo?: string;
   minScore?: number;
   maxScore?: number;
+  unreviewedOnly?: boolean;
+  dispositions?: string[];
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
@@ -648,6 +666,13 @@ export async function getAllScoredCalls(opts: {
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');
   }
+  if (opts.unreviewedOnly) {
+    conditions.push(`s.reviewed_at IS NULL`);
+  }
+  if (opts.dispositions?.length) {
+    params.push(opts.dispositions);
+    conditions.push(`r.call_disposition = ANY($${params.length})`);
+  }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
 
@@ -656,7 +681,7 @@ export async function getAllScoredCalls(opts: {
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
@@ -676,15 +701,18 @@ export async function getAllScoredCalls(opts: {
       r.language,
       r.interruption_count                    AS "interruptionCount",
       r.dead_air_count                        AS "deadAirCount",
-      COALESCE(a.name, '')                    AS "agentName",
+      NULLIF(COALESCE(a.name, ''), 'Robylon Automation') AS "agentName",
       s.call_iqs_score                        AS "iqs",
       s.call_parameters                       AS "parameters",
       s.call_model_version                    AS "modelVersion",
-      s.call_scored_at                        AS "scoredAt"
+      s.call_scored_at                        AS "scoredAt",
+      s.reviewed_by                           AS "reviewedBy",
+      s.reviewed_at                           AS "reviewedAt",
+      s.review_note                           AS "reviewNote"
     FROM call_recordings r
     JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(r.agent_id, conv.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
     ${where}
     ORDER BY r.called_at DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}

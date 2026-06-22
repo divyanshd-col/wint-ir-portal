@@ -6,8 +6,16 @@
 const UPSTASH_URL   = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
+let _warnedOnce = false;
 function ready(): boolean {
-  return !!(UPSTASH_URL && UPSTASH_TOKEN);
+  if (!(UPSTASH_URL && UPSTASH_TOKEN)) {
+    if (!_warnedOnce) {
+      console.warn('[rate-limit] Upstash KV not configured — rate limiting is DISABLED');
+      _warnedOnce = true;
+    }
+    return false;
+  }
+  return true;
 }
 
 /**

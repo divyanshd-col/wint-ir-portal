@@ -50,10 +50,24 @@ export type Period = '7' | '30' | 'custom';
 // ── Component ─────────────────────────────────────────────────────────────
 
 export default function QAAnalyticsDashboard() {
-  const [period, setPeriod]     = useState<Period>('30');
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo,   setCustomTo]   = useState('');
+  const [period, setPeriod] = useState<Period>(() => {
+    try { return (sessionStorage.getItem('qa_period') as Period) || '7'; } catch { return '7'; }
+  });
+  const [customFrom, setCustomFrom] = useState(() => {
+    try { return sessionStorage.getItem('qa_custom_from') || ''; } catch { return ''; }
+  });
+  const [customTo, setCustomTo] = useState(() => {
+    try { return sessionStorage.getItem('qa_custom_to') || ''; } catch { return ''; }
+  });
   const [showPicker, setShowPicker] = useState(false);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('qa_period', period);
+      if (customFrom) sessionStorage.setItem('qa_custom_from', customFrom); else sessionStorage.removeItem('qa_custom_from');
+      if (customTo)   sessionStorage.setItem('qa_custom_to',   customTo);   else sessionStorage.removeItem('qa_custom_to');
+    } catch {}
+  }, [period, customFrom, customTo]);
 
   const [data,    setData]    = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);

@@ -9,6 +9,7 @@ export interface PortalUser {
   role?: UserRole;    // new role field
   email?: string;     // Google email (primary identifier for OAuth users)
   agentName?: string;
+  assignedDispositions?: string[]; // QA only — soft default filter; empty/absent = no default
 }
 
 export interface PortalConfig {
@@ -37,6 +38,8 @@ export interface PortalConfig {
   analyticsSynthesizerPrompt?: string;
   // ── QA disposition mapping ───────────────────────────────────────────────
   qaDispositionMap?: QADispositionEntry[];
+  // ── KB document display names (Drive ID → human-readable name) ──────────────
+  knowledgeBaseDocNames?: Record<string, string>;
 }
 
 export interface QADispositionEntry {
@@ -80,7 +83,9 @@ export async function readConfig(): Promise<PortalConfig> {
       const parsed = JSON.parse(raw);
       if (parsed.isConfigured) return { ...DEFAULT_CONFIG, ...parsed };
     }
-  } catch {}
+  } catch (err: any) {
+    console.error('[config] Failed to read portal-config.json:', err?.message ?? String(err));
+  }
 
   return DEFAULT_CONFIG;
 }

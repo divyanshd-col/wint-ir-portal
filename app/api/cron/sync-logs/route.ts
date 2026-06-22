@@ -4,8 +4,8 @@ import { authOptions } from '@/auth';
 import { google } from 'googleapis';
 import { readLogs } from '@/lib/logger';
 
-const SHEET_ID = '1d8LE5opfdIDdsHYZ9AxaX1Z7TImUwAW_Kzk29xtzOTA';
-const SHEET_TAB = 'Logs';
+const SHEET_ID  = process.env.LOGS_SHEET_ID  || '1d8LE5opfdIDdsHYZ9AxaX1Z7TImUwAW_Kzk29xtzOTA';
+const SHEET_TAB = process.env.LOGS_SHEET_TAB || 'Logs';
 
 function getAuth() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;

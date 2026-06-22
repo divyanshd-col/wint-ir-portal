@@ -60,7 +60,7 @@ import {
   type ConversationRow,
   type IQSParameterResult,
 } from '@/lib/robylon/db';
-import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock } from '@/lib/store';
+import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock, storeAppendAuditEntry } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 import type { ParamScore } from '@/lib/quality';
 
@@ -193,7 +193,14 @@ export async function scoreLinkedCallsForChat(
     if (searchQuery) {
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
-      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+      if (relevant.length) {
+        const docNames = config.knowledgeBaseDocNames || {};
+        kbContext = relevant.map(c => {
+          const driveId = c.fileName.trim();
+          const label = docNames[driveId] || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
+          return `[${label}]\n${c.content}`;
+        }).join('\n---\n');
+      }
     }
   } catch {}
 
@@ -345,9 +352,12 @@ export async function executeScoring(
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
       if (relevant.length) {
-        kbContext = relevant
-          .map(c => `[${c.fileName}]\n${c.content}`)
-          .join('\n---\n');
+        const docNames = config.knowledgeBaseDocNames || {};
+        kbContext = relevant.map(c => {
+          const driveId = c.fileName.trim();
+          const label = docNames[driveId] || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
+          return `[${label}]\n${c.content}`;
+        }).join('\n---\n');
         console.log(`[webhook] KB context: ${relevant.length} chunks for query "${searchQuery}"`);
       }
     }
@@ -405,6 +415,17 @@ export async function executeScoring(
 
   const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
   console.log(`[webhook] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
+
+  // Audit: log every scoring event for full traceability
+  storeAppendAuditEntry({
+    id: crypto.randomUUID(),
+    action: 'bot_scored',
+    chatId,
+    actorEmail: 'bot',
+    actorRole: 'system',
+    ts: new Date().toISOString(),
+    meta: { iqs: parsed.iqs, agentName: finalAgentName, model: modelVersion },
+  }).catch(() => {});
 
   // ── Slack + Sheet alert — deduplicated via KV ─────────────────────────────────────────
   fireQualityAlert({

@@ -19,13 +19,14 @@ export async function GET() {
     role: u.role || (u.isAdmin ? 'admin' : 'agent'),
     isAdmin: u.role === 'admin' || !!u.isAdmin,
     agentName: u.agentName || '',
+    assignedDispositions: u.assignedDispositions || [],
   })));
 }
 
 // POST — add/invite a user by email with a role
 export async function POST(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const { email, role, agentName } = await req.json();
+  const { email, role, agentName, assignedDispositions } = await req.json();
   if (!email?.trim()) return NextResponse.json({ error: 'Email required' }, { status: 400 });
   if (!email.endsWith('@wintwealth.com')) return NextResponse.json({ error: 'Only @wintwealth.com emails allowed' }, { status: 400 });
 
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
     existing.role = assignedRole;
     existing.isAdmin = assignedRole === 'admin';
     if (agentName !== undefined) existing.agentName = agentName;
+    if (assignedDispositions !== undefined) existing.assignedDispositions = assignedDispositions.length ? assignedDispositions : undefined;
     await writeConfig(config);
     return NextResponse.json({ success: true, updated: true });
   }
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
     role: assignedRole,
     isAdmin: assignedRole === 'admin',
     agentName: agentName || undefined,
+    ...(assignedDispositions?.length && { assignedDispositions }),
   });
   await writeConfig(config);
   return NextResponse.json({ success: true });
@@ -57,7 +60,7 @@ export async function POST(req: NextRequest) {
 // PATCH — update a user's role and/or agentName
 export async function PATCH(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const { email, role, agentName } = await req.json();
+  const { email, role, agentName, assignedDispositions } = await req.json();
   if (!email) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
 
   const validRoles: UserRole[] = ['agent', 'admin', 'quality', 'tl'];
@@ -72,6 +75,7 @@ export async function PATCH(req: NextRequest) {
     user.isAdmin = role === 'admin';
   }
   if (agentName !== undefined) user.agentName = agentName;
+  if (assignedDispositions !== undefined) user.assignedDispositions = assignedDispositions.length ? assignedDispositions : undefined;
   await writeConfig(config);
   return NextResponse.json({ success: true });
 }

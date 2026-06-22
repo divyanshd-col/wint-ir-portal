@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/process-pending-scores",
       "schedule": "0 2 * * *"
-    },
-    {
-      "path": "/api/cron/transcribe-calls",
-      "schedule": "0 3 * * *"
     }
   ]
 }
