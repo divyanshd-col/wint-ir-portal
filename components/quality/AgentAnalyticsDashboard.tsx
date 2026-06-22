@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 
@@ -87,84 +89,12 @@ function SpinnerIcon() {
   );
 }
 
-// ─────────────────── Score Log (My Quality Chats) ─────────────────────────────
-
-function ScoreLogView() {
-  const [entries, setEntries] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    setLoading(true);
-    const from = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
-    fetch(`/api/quality/scores?page=0&dateFrom=${from}&skipStats=1`)
-      .then(r => r.json())
-      .then(d => { setEntries(d.entries || []); })
-      .catch(() => setError('Failed to load chats'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const S = (x: any): React.CSSProperties => x;
-
-  return (
-    <div>
-      <div style={S({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 })}>
-        <h1 style={S({ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' })}>My Quality Chats</h1>
-        <span style={S({ fontSize: 13, color: 'var(--qa-text-3)' })}>Last 30 days</span>
-      </div>
-
-      <div style={S({ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' })}>
-        {loading && (
-          <div style={S({ padding: 48, textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13 })}>
-            <SpinnerIcon /> <span style={S({ marginLeft: 8 })}>Loading…</span>
-          </div>
-        )}
-        {error && <div style={S({ padding: 24, color: '#b91c1c', fontSize: 13 })}>{error}</div>}
-        {!loading && !error && (
-          <div style={S({ overflowX: 'auto' })}>
-            <table style={S({ width: '100%', borderCollapse: 'collapse' })}>
-              <thead>
-                <tr>
-                  {['Chat ID', 'Date', 'IQS', 'CSAT', 'Resolution', 'Disposition'].map(h => (
-                    <th key={h} style={S({
-                      height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-                      fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-                      fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
-                    })}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {entries.length === 0 && (
-                  <tr><td colSpan={6} style={S({ textAlign: 'center', padding: '48px 16px', color: 'var(--qa-text-3)', fontSize: 13 })}>No chats found for this period.</td></tr>
-                )}
-                {entries.map((e, i) => (
-                  <tr key={e.id || i} style={S({ borderBottom: '1px solid var(--qa-border-sub)' })}>
-                    <td style={S({ padding: '0 16px', height: 46, fontSize: 13, fontFamily: 'var(--qa-mono)', color: '#15803d' })}>{e.chatId}</td>
-                    <td style={S({ padding: '0 16px', height: 46, fontSize: 13, color: 'var(--qa-text-2)' })}>{(e.scoredAt || e.date || '').slice(0, 10)}</td>
-                    <td style={S({ padding: '0 16px', height: 46, fontSize: 13, fontWeight: 600, color: e.iqs >= 80 ? '#15803d' : e.iqs >= 70 ? '#92400e' : '#b91c1c' })}>{e.iqs != null ? `${e.iqs}%` : '—'}</td>
-                    <td style={S({ padding: '0 16px', height: 46, fontSize: 13, color: 'var(--qa-text-2)' })}>{e.csat === '5' ? 'Good' : e.csat === '3' ? 'CBB' : e.csat === '1' ? 'Bad' : '—'}</td>
-                    <td style={S({ padding: '0 16px', height: 46, fontSize: 13, color: 'var(--qa-text-2)', fontFamily: 'var(--qa-mono)' })}>{fmtSecs(e.resolutionTime)}</td>
-                    <td style={S({ padding: '0 16px', height: 46, fontSize: 13, color: 'var(--qa-text-2)', maxWidth: 180 })}>{e.disposition || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ─────────────────────── Main component ───────────────────────────────────────
 
 interface Props { userEmail: string; selfAgentName?: string; }
 
 export default function AgentAnalyticsDashboard({ userEmail, selfAgentName }: Props) {
-  // ── View state ──────────────────────────────────────────────────────────────
-  const [view, setView] = useState<'analytics' | 'chats'>('analytics');
-
   // ── Time range ──────────────────────────────────────────────────────────────
   const [period, setPeriod] = useState<'7' | '30' | 'custom'>('30');
   const [customFrom, setCustomFrom] = useState('');
@@ -305,36 +235,33 @@ export default function AgentAnalyticsDashboard({ userEmail, selfAgentName }: Pr
           Agent
         </div>
 
-        {(['analytics', 'chats'] as const).map(v => {
-          const label = v === 'analytics' ? 'My Analytics' : 'My Quality Chats';
-          const active = view === v;
-          return (
-            <button key={v} onClick={() => setView(v)} style={S({
-              width: '100%', height: 44, padding: '0 16px',
-              display: 'flex', alignItems: 'center', gap: 10,
-              fontSize: 14, color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
-              cursor: 'pointer', position: 'relative', textAlign: 'left',
-              background: active ? 'var(--qa-gray-100)' : 'transparent',
-              border: 0, borderLeft: active ? '3px solid var(--qa-text)' : '3px solid transparent',
-              fontWeight: active ? 500 : 400, fontFamily: 'inherit',
-            })}>
-              <span style={S({
-                width: 16, height: 16, border: `1px solid ${active ? 'var(--qa-text)' : 'var(--qa-text-3)'}`,
-                borderRadius: 3, flexShrink: 0,
-                background: active ? 'var(--qa-fill-med)' : 'transparent',
-              })} />
-              {label}
-            </button>
-          );
-        })}
+        {([
+          { href: '/quality', label: 'My Analytics', active: true },
+          { href: '/agent/quality-chats', label: 'My Quality Chats', active: false },
+        ] as const).map(({ href, label, active }) => (
+          <Link key={href} href={href} style={S({
+            width: '100%', height: 44, padding: '0 16px',
+            display: 'flex', alignItems: 'center', gap: 10,
+            fontSize: 14, color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+            cursor: 'pointer', position: 'relative', textDecoration: 'none',
+            background: active ? 'var(--qa-gray-100)' : 'transparent',
+            borderLeft: active ? '3px solid var(--qa-text)' : '3px solid transparent',
+            fontWeight: active ? 500 : 400, fontFamily: 'inherit',
+          })}>
+            <span style={S({
+              width: 16, height: 16, border: `1px solid ${active ? 'var(--qa-text)' : 'var(--qa-text-3)'}`,
+              borderRadius: 3, flexShrink: 0,
+              background: active ? 'var(--qa-fill-med)' : 'transparent',
+            })} />
+            {label}
+          </Link>
+        ))}
       </aside>
 
       {/* ── Main ────────────────────────────────────────────────────────────── */}
       <main style={S({ flex: 1, minWidth: 0, padding: 32, overflowY: 'auto' })}>
 
-        {view === 'chats' && <ScoreLogView />}
-
-        {view === 'analytics' && (
+        {(
           <>
             {/* Page header */}
             <div style={S({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 })}>
