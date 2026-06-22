@@ -157,9 +157,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   // ── Config ────────────────────────────────────────────────────────────────
   let geminiKeys: string[];
+  let config: Awaited<ReturnType<typeof readConfig>>;
   try {
-    const config = await readConfig();
-    geminiKeys   = getIQSGeminiKeys(config);
+    config     = await readConfig();
+    geminiKeys = getIQSGeminiKeys(config);
   } catch (err: any) {
     return NextResponse.json({ error: `Config error: ${err.message}` }, { status: 500 });
   }

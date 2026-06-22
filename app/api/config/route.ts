@@ -11,9 +11,9 @@ async function getAdminSession() {
 
 export async function GET() {
   const config = await readConfig();
-  if (config.isConfigured) {
-    const session = await getServerSession(authOptions);
-    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const session = await getServerSession(authOptions);
+  if (config.isConfigured && !session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   return NextResponse.json({
     geminiApiKey: config.geminiApiKey ? '••••' + config.geminiApiKey.slice(-4) : '',
