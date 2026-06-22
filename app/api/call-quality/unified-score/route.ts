@@ -58,6 +58,15 @@ function buildMergedTimeline(
 ): Array<{ source: 'call' | 'chat' | 'call-boundary'; ts?: string; data: any }> {
   const items: Array<{ source: 'call' | 'chat' | 'call-boundary'; ts?: string; sortKey: number; data: any }> = [];
 
+  // Parse "M:SS" or "MM:SS" or "H:MM:SS" relative timestamp → milliseconds offset
+  function parseTsToMs(ts: string): number | null {
+    const parts = ts.split(':').map(Number);
+    if (parts.some(isNaN)) return null;
+    if (parts.length === 2) return (parts[0] * 60 + parts[1]) * 1000;
+    if (parts.length === 3) return (parts[0] * 3600 + parts[1] * 60 + parts[2]) * 1000;
+    return null;
+  }
+
   const chatBase = chatStartedAt ? new Date(chatStartedAt).getTime() : 0;
   chatMessages.forEach((m, i) => {
     const ts = m.created_at || m.timestamp;
@@ -65,21 +74,36 @@ function buildMergedTimeline(
     items.push({ source: 'chat', ts: ts || undefined, sortKey, data: m });
   });
 
-  // Spread each recording's segments proportionally across its actual duration so
-  // post-call chat messages (timestamped after call end) sort correctly.
-  // Insert a boundary marker before each call after the first.
+  // Compute the latest timestamp seen across all chat messages so that calls
+  // with a NULL called_at can be placed safely after all chat activity.
+  const lastChatTs = chatMessages.reduce((max, m) => {
+    const ts = m.created_at || m.timestamp;
+    const t  = ts ? new Date(ts).getTime() : 0;
+    return t > max ? t : max;
+  }, chatBase);
+
   const totalCalls = recordingMeta.length;
   let segOffset = 0;
+  // Track estimated end of previous call so NULL-called_at calls chain correctly.
+  let prevCallEnd = lastChatTs + 60_000;
   for (let recIdx = 0; recIdx < totalCalls; recIdx++) {
-    const rec        = recordingMeta[recIdx];
-    const callBase   = rec.calledAt ? new Date(rec.calledAt).getTime() : (chatBase || Date.now());
-    // Fall back to ~8s per segment when duration_seconds is null in DB
-    const durationMs = ((rec.durationSeconds ?? Math.max(rec.segmentCount * 8, 60))) * 1000;
-    const callEnd    = callBase + durationMs;
-    const count      = rec.segmentCount;
-    const callLabel  = totalCalls > 1 ? `Call ${recIdx + 1}` : 'Call';
+    const rec      = recordingMeta[recIdx];
+    // When called_at is NULL, place this call after last known chat/call activity.
+    const callBase = rec.calledAt ? new Date(rec.calledAt).getTime() : prevCallEnd;
+    const count    = rec.segmentCount;
+    const callLabel = totalCalls > 1 ? `Call ${recIdx + 1}` : 'Call';
 
-    // Start marker — visible in merged timeline so it's clear where chat ends and call begins
+    // Compute call end: prefer duration_seconds, then last real segment ts, then conservative estimate
+    const segsForRec = callSegments.slice(segOffset, segOffset + count);
+    const lastSegTs  = [...segsForRec].reverse().find(s => s.ts)?.ts;
+    const lastSegMs  = lastSegTs ? parseTsToMs(lastSegTs) : null;
+    const durationMs = rec.durationSeconds
+      ? rec.durationSeconds * 1000
+      : lastSegMs !== null
+        ? lastSegMs + 5000
+        : Math.max(count * 3, 60) * 1000;  // 3s/segment — conservative fallback
+    const callEnd = callBase + durationMs;
+
     items.push({
       source: 'call-boundary',
       sortKey: callBase - 1,
@@ -87,19 +111,25 @@ function buildMergedTimeline(
     });
 
     for (let i = 0; i < count; i++) {
-      const seg = callSegments[segOffset + i];
+      const seg = segsForRec[i];
       if (!seg) continue;
-      const fraction = count > 1 ? i / (count - 1) : 0;
-      items.push({ source: 'call', sortKey: callBase + fraction * durationMs, data: seg });
+      // Use real timestamp from Gemini if present, otherwise fall back to proportional estimate
+      const offsetMs = seg.ts ? parseTsToMs(seg.ts) : null;
+      const sortKey  = offsetMs !== null
+        ? callBase + offsetMs
+        : callBase + (count > 1 ? (i / (count - 1)) : 0) * durationMs;
+      items.push({ source: 'call', sortKey, data: seg });
     }
     segOffset += count;
 
-    // End marker so post-call chat clearly appears after the call
     items.push({
       source: 'call-boundary',
       sortKey: callEnd + 1,
       data: { label: `📞 ${callLabel} ended`, calledAt: rec.calledAt, kind: 'end' },
     });
+
+    // Update so next NULL-called_at call chains after this one
+    prevCallEnd = callEnd + 60_000;
   }
 
   items.sort((a, b) => a.sortKey - b.sortKey);
@@ -166,6 +196,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let hasCallRecording = false;
   let callRecordingCount = 0;
   const recordingMeta: Array<{ calledAt: string | null; durationSeconds: number | null; segmentCount: number }> = [];
+  const perCallRecordings: Array<{
+    id: string;
+    calledAt: string | null;
+    durationSeconds: number | null;
+    recordingUrl: string | null;
+    segments: CallSegment[];
+    interruptionCount: number;
+    deadAirCount: number;
+  }> = [];
 
   function parseRecordingSegments(rec: any): CallSegment[] {
     if (!rec.transcript) return [];
@@ -214,6 +253,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         const segs = parseRecordingSegments(rec);
         mergedSegs.push(...segs);
         recordingMeta.push({ calledAt: rec.called_at ?? null, durationSeconds: rec.duration_seconds ?? null, segmentCount: segs.length });
+        perCallRecordings.push({
+          id: String(rec.id),
+          calledAt: rec.called_at ?? null,
+          durationSeconds: rec.duration_seconds ?? null,
+          recordingUrl: rec.recording_url ?? null,
+          segments: segs,
+          interruptionCount: segs.filter((s: CallSegment) => s.type === 'interruption').length,
+          deadAirCount: segs.filter((s: CallSegment) => s.type === 'dead_air').length,
+        });
         if (!language) {
           const t = typeof rec.transcript === 'object' ? rec.transcript : null;
           language = rec.language || t?.language || '';
@@ -254,7 +302,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     try {
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, kbQuery, 5);
-      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+      if (relevant.length) {
+        // Use readable label for each chunk. Raw Google Drive file IDs (25+ char base62)
+        // are not human-readable — extract the first heading line from the content instead.
+        const chunkLabel = (c: { fileName: string; content: string }) => {
+          if (/^[A-Za-z0-9_-]{25,}$/.test(c.fileName.trim())) {
+            const firstLine = c.content.split('\n')[0].trim();
+            return firstLine.length > 3 ? firstLine : 'KB Document';
+          }
+          return c.fileName;
+        };
+        kbContext = relevant.map(c => `[${chunkLabel(c)}]\n${c.content}`).join('\n---\n');
+      }
     } catch {}
   }
 
@@ -313,9 +372,37 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     } catch {}
   }
 
-  // Rebuild recordingMeta segment counts if poor-listening flags were inserted
-  // (callResult?.segments may have extra segments vs original callSegments).
-  // We use the original counts since poorListening flags don't change call timing.
+  // Build per-call recordings with poor-listening flags applied proportionally.
+  // We re-split the flagged merged segments back into per-call buckets using original counts.
+  const flaggedMerged: CallSegment[] = callResult?.segments ?? callSegments;
+  let segCursor = 0;
+  const callRecordingsOut = perCallRecordings.map((rec, idx) => {
+    const originalCount = rec.segments.length;
+    // Count how many segments (including inserted poor_listening flags) belong to this recording.
+    // Flags are inserted immediately after their parent speech segment, so advance until we've
+    // consumed `originalCount` non-poor_listening segments.
+    let consumed = 0;
+    let end = segCursor;
+    while (end < flaggedMerged.length && consumed < originalCount) {
+      if (flaggedMerged[end].type !== 'poor_listening') consumed++;
+      end++;
+    }
+    // Also consume any trailing poor_listening flags
+    while (end < flaggedMerged.length && flaggedMerged[end].type === 'poor_listening') end++;
+    const segs = flaggedMerged.slice(segCursor, end);
+    segCursor = end;
+    return {
+      id: rec.id,
+      label: perCallRecordings.length > 1 ? `Call ${idx + 1}` : 'Call',
+      calledAt: rec.calledAt,
+      durationSeconds: rec.durationSeconds,
+      recordingUrl: rec.recordingUrl,
+      segments: segs,
+      interruptionCount: rec.interruptionCount,
+      deadAirCount: rec.deadAirCount,
+    };
+  });
+
   const mergedTimeline = buildMergedTimeline(
     callResult?.segments ?? callSegments,
     chatMessages,
@@ -338,11 +425,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     chatScores:         chatResult?.scores ?? {},
     chatReasoning:      chatResult?.reasoning ?? {},
     chatSummary:        chatResult?.summary ?? '',
+    chatKbCitation:     chatResult?.kbCitation ?? null,
     callIqs:            callResult?.iqs ?? null,
     callScores:         callResult?.scores ?? {},
     callReasoning:      callResult?.reasoning ?? {},
     callSummary:        callResult?.summary ?? '',
-    callSegments:       callResult?.segments ?? callSegments,
+    callKbCitation:     callResult?.kbCitation ?? null,
+    callSegments:       flaggedMerged,
+    callRecordings:     callRecordingsOut,
     poorListeningCount: (callResult?.poorListeningSegments ?? []).length,
     mergedTimeline,
     scoringMs,

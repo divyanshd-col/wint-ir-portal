@@ -47,15 +47,22 @@ function buildParams(page: number, f: LogFilters): URLSearchParams {
   if (f.chatId)       p.set('chatId', f.chatId);
   // Skip date range when searching by chat ID — find the chat regardless of period
   if (!f.chatId) {
+    // Use local date components to avoid UTC midnight shift for IST users
+    const localDate = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
     if (f.dateRange === 'today') {
-      const d = new Date().toISOString().slice(0, 10);
+      const d = localDate(new Date());
       p.set('dateFrom', d); p.set('dateTo', d);
     } else if (f.dateRange === 'yesterday') {
-      const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const d = localDate(new Date(Date.now() - 86400000));
       p.set('dateFrom', d); p.set('dateTo', d);
     } else if (f.dateRange === '1w') {
-      p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
-      p.set('dateTo', new Date().toISOString().slice(0, 10));
+      p.set('dateFrom', localDate(new Date(Date.now() - 6 * 86400000)));
+      p.set('dateTo', localDate(new Date()));
     } else if (f.dateRange === 'custom') {
       if (f.dateFrom) p.set('dateFrom', f.dateFrom);
       if (f.dateTo)   p.set('dateTo', f.dateTo);
@@ -79,12 +86,14 @@ interface AgentStat {
   csatBad?: number;
 }
 
+type QualityTab = 'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test' | 'unified';
 interface QualityClientProps {
   userRole?: string;
   userEmail?: string;
   selfAgentName?: string;
   initialAgent?: string;
-  initialTab?: 'log';
+  initialTab?: QualityTab;
+  initialSection?: 'pending' | 'reviewed';
 }
 interface ParsedRow {
   chatId: string; agent: string; date: string; csat: string; transcript: string; tags?: string; contactPhone?: string;
@@ -1004,6 +1013,7 @@ interface IQSFlagComment {
 }
 interface PendingReviewItem {
   chatId: string; agentName: string; iqs: number; scoredAt: string; date: string;
+  disposition?: string; subDisposition?: string;
   flag?: IQSFlagData | null;
   qaStatus?: { reviewedBy: string; reviewedAt: string; reviewNote: string } | null;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
@@ -1011,10 +1021,50 @@ interface PendingReviewItem {
   reasoning?: Record<string, string>;
 }
 
-function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail?: string }) {
+const PENDING_DEFAULT_FILTERS: LogFilters = {
+  agent: '', minScore: 0, maxScore: 100,
+  disposition: '', subDisposition: '', csat: '', type: '',
+  dateRange: '1w', dateFrom: '', dateTo: '',
+  chatId: '',
+};
+
+function buildPendingParams(f: LogFilters): URLSearchParams {
+  const p = new URLSearchParams();
+  if (f.minScore > 0)    p.set('minScore', String(f.minScore));
+  if (f.maxScore < 100)  p.set('maxScore', String(f.maxScore));
+  if (f.disposition)     p.set('tag', f.disposition);
+  if (f.subDisposition)  p.set('subTag', f.subDisposition);
+  if (f.dateRange === 'today') {
+    const d = new Date().toISOString().slice(0, 10);
+    p.set('dateFrom', d); p.set('dateTo', d);
+  } else if (f.dateRange === 'yesterday') {
+    const d = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+    p.set('dateFrom', d); p.set('dateTo', d);
+  } else if (f.dateRange === '1w') {
+    p.set('dateFrom', new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10));
+    p.set('dateTo', new Date().toISOString().slice(0, 10));
+  } else if (f.dateRange === 'custom') {
+    if (f.dateFrom) p.set('dateFrom', f.dateFrom);
+    if (f.dateTo)   p.set('dateTo', f.dateTo);
+  }
+  return p;
+}
+
+function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: string; userEmail?: string; initialSection?: 'pending' | 'reviewed' }) {
   const [filter, setFilter] = useState<'all' | 'challenged' | 'uncertain'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
-  const [section, setSection] = useState<'pending' | 'reviewed'>('pending');
+  const [section, setSection] = useState<'pending' | 'reviewed'>(initialSection || 'pending');
+
+  const switchSection = (s: 'pending' | 'reviewed') => {
+    setSection(s);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', 'pending');
+      if (s === 'reviewed') url.searchParams.set('section', 'reviewed');
+      else url.searchParams.delete('section');
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
   const [items, setItems] = useState<PendingReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -1027,16 +1077,40 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   const [reviewing, setReviewing] = useState<Record<string, boolean>>({});
   const [transcripts, setTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
   const [transcriptLoading, setTranscriptLoading] = useState<Record<string, boolean>>({});
+  // Inline edit state — keyed by chatId
+  const [inlineEdit, setInlineEdit] = useState<Record<string, { scores: Record<string, string>; reasoning: Record<string, string>; note: string }>>({});
+  const [overrideSaving, setOverrideSaving] = useState<Record<string, boolean>>({});
+  const [overrideSaved, setOverrideSaved]   = useState<Record<string, boolean>>({});
+  // Prior chat history
+  const [histories, setHistories]           = useState<Record<string, any[] | null>>({});
+  const [historyLoading, setHistoryLoading] = useState<Record<string, boolean>>({});
+  const [showHistory, setShowHistory]       = useState<Record<string, boolean>>({});
+  const [priorTranscripts, setPriorTranscripts] = useState<Record<string, { timedMessages?: any[]; rawTranscript?: string } | null>>({});
+  const [priorTranscriptLoading, setPriorTranscriptLoading] = useState<Record<string, boolean>>({});
+  const [expandedPriorChat, setExpandedPriorChat] = useState<Record<string, string | null>>({});
 
-  useEffect(() => {
+  // Filter state
+  const [pendingFilters, setPendingFilters] = useState<LogFilters>(PENDING_DEFAULT_FILTERS);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
+  const [dispositionSubMap, setDispositionSubMap] = useState<Record<string, string[]>>({});
+
+  const fetchPending = useCallback(async (filters: LogFilters) => {
     setLoading(true);
     setLoadError('');
-    fetch('/api/quality/pending-review')
-      .then(r => r.json())
-      .then(d => setItems(d.items || []))
-      .catch(() => setLoadError('Failed to load pending chats'))
-      .finally(() => setLoading(false));
+    try {
+      const params = buildPendingParams(filters);
+      const d = await fetch(`/api/quality/pending-review?${params}`).then(r => r.json());
+      setItems(d.items || []);
+      setAvailableDispositions(d.availableDispositions || []);
+      setDispositionSubMap(d.dispositionSubMap || {});
+    } catch {
+      setLoadError('Failed to load pending chats');
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => { fetchPending(PENDING_DEFAULT_FILTERS); }, [fetchPending]);
 
   const loadThread = async (flagId: string) => {
     if (threads[flagId] !== undefined) return;
@@ -1060,11 +1134,75 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
     setTranscriptLoading(t => ({ ...t, [chatId]: false }));
   };
 
+  const loadHistory = async (chatId: string) => {
+    if (histories[chatId] !== undefined) return;
+    setHistoryLoading(h => ({ ...h, [chatId]: true }));
+    try {
+      const d = await fetch(`/api/quality/history?chatId=${encodeURIComponent(chatId)}`).then(r => r.json());
+      setHistories(h => ({ ...h, [chatId]: d.history || [] }));
+    } catch { setHistories(h => ({ ...h, [chatId]: [] })); }
+    setHistoryLoading(h => ({ ...h, [chatId]: false }));
+  };
+
+  const loadPriorTranscript = async (priorChatId: string) => {
+    if (priorTranscripts[priorChatId] !== undefined) return;
+    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: true }));
+    try {
+      const d = await fetch(`/api/quality/transcript?chatId=${encodeURIComponent(priorChatId)}`).then(r => r.json());
+      setPriorTranscripts(t => ({ ...t, [priorChatId]: d.found ? { timedMessages: d.timedMessages, rawTranscript: d.rawTranscript } : {} }));
+    } catch { setPriorTranscripts(t => ({ ...t, [priorChatId]: {} })); }
+    setPriorTranscriptLoading(t => ({ ...t, [priorChatId]: false }));
+  };
+
+  const togglePriorChat = (parentChatId: string, priorChatId: string) => {
+    setExpandedPriorChat(s => {
+      const next = s[parentChatId] === priorChatId ? null : priorChatId;
+      if (next) loadPriorTranscript(next);
+      return { ...s, [parentChatId]: next };
+    });
+  };
+
+  const saveOverride = async (item: PendingReviewItem) => {
+    const edit = inlineEdit[item.chatId];
+    if (!edit) return;
+    setOverrideSaving(s => ({ ...s, [item.chatId]: true }));
+    try {
+      const res = await fetch('/api/quality/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chatId: item.chatId, scores: edit.scores, reasoning: edit.reasoning, note: edit.note }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+      const newIqs = data.entry?.iqs;
+      setItems(prev => prev.map(i =>
+        i.chatId === item.chatId
+          ? { ...i, scores: edit.scores, reasoning: edit.reasoning, ...(newIqs !== undefined ? { iqs: newIqs } : {}) }
+          : i
+      ));
+      // Reinitialise inlineEdit with the saved values (note cleared) so the open card
+      // keeps showing reasoning/scores and re-expansion also shows fresh saved data
+      setInlineEdit(s => ({ ...s, [item.chatId]: { scores: edit.scores, reasoning: edit.reasoning, note: '' } }));
+      setOverrideSaved(s => ({ ...s, [item.chatId]: true }));
+      setTimeout(() => setOverrideSaved(s => ({ ...s, [item.chatId]: false })), 3000);
+    } catch (e: any) { alert(e?.message || 'Failed to save override'); }
+    setOverrideSaving(s => ({ ...s, [item.chatId]: false }));
+  };
+
   const expand = (chatId: string, flagId?: string) => {
     if (expandedId === chatId) { setExpandedId(null); return; }
     setExpandedId(chatId);
     loadTranscript(chatId);
+    loadHistory(chatId);
     if (flagId) loadThread(flagId);
+    // Initialise inline edit from current item scores (only once per chatId)
+    const it = items.find(i => i.chatId === chatId);
+    if (it) {
+      setInlineEdit(s => s[chatId] ? s : {
+        ...s,
+        [chatId]: { scores: { ...(it.scores || {}) }, reasoning: { ...(it.reasoning || {}) }, note: '' },
+      });
+    }
   };
 
   const sendReply = async (flagId: string) => {
@@ -1085,19 +1223,24 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   };
 
   const markReviewed = async (chatId: string) => {
+    // For quality/admin the note is stored in inlineEdit; for TL it's in reviewNotes
+    const canEdit = userRole === 'quality' || userRole === 'admin';
+    const note = canEdit ? (inlineEdit[chatId]?.note || '') : (reviewNotes[chatId] || '');
     setReviewing(r => ({ ...r, [chatId]: true }));
     try {
-      await fetch('/api/quality/pending-review', {
+      const res = await fetch('/api/quality/pending-review', {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, reviewNote: reviewNotes[chatId] || '' }),
+        body: JSON.stringify({ chatId, reviewNote: note }),
       });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
       const now = new Date().toISOString();
       setItems(prev => prev.map(item =>
         item.chatId === chatId
-          ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: reviewNotes[chatId] || '' } }
+          ? { ...item, qaStatus: { reviewedBy: userEmail || '', reviewedAt: now, reviewNote: note } }
           : item
       ));
-    } catch {}
+      switchSection('reviewed');
+    } catch (e: any) { alert(e?.message || 'Failed to mark reviewed'); }
     setReviewing(r => ({ ...r, [chatId]: false }));
   };
 
@@ -1132,6 +1275,12 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 
     const failedParams = PARAM_ORDER.filter(p => item.scores?.[p] === 'No');
     const borderColor  = hasFlag ? 'border-blue-200' : hasUncertain && !isReviewed ? 'border-amber-200' : isReviewed ? 'border-gray-100' : 'border-orange-200';
+    const canEdit      = userRole === 'quality' || userRole === 'admin';
+    const edit         = inlineEdit[item.chatId];
+
+    const prevChatKeywords = /previous (chat|conversation|text|ticket)|last (chat|conversation|time we (spoke|talked|spoke))|earlier (chat|ticket|conversation)|as (discussed|mentioned) (before|earlier|last time|previously)|as per (our last|previous)|continuing from (before|last|previous)|referring to (my|our|the) (earlier|previous|last)/i;
+    const txText = txData?.timedMessages?.map((m: any) => m.content || '').join(' ') || txData?.rawTranscript || '';
+    const hasPrevChatRef = txText ? prevChatKeywords.test(txText) : false;
 
     return (
       <div key={item.chatId} className={`bg-white rounded-2xl border shadow-sm overflow-hidden transition ${borderColor}`}>
@@ -1152,7 +1301,7 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
               {item.date || item.scoredAt?.slice(0, 10)}
-              {isReviewed && item.qaStatus?.reviewedAt && ` · Reviewed ${new Date(item.qaStatus.reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
+              {isReviewed && item.qaStatus?.reviewedAt && ` · Reviewed by ${(item.qaStatus.reviewedBy || '').split('@')[0] || 'QA'} · ${new Date(item.qaStatus.reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}`}
             </p>
           </div>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
@@ -1161,7 +1310,14 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
 
         {/* Expanded: details + transcript side-by-side */}
         {isExpanded && (
-          <div className="border-t border-gray-100 flex divide-x divide-gray-100" style={{ maxHeight: 560, minHeight: 220 }}>
+          <div className="border-t border-gray-100 flex flex-col">
+          {hasPrevChatRef && (
+            <div className="flex items-start gap-2 bg-amber-50 border-b border-amber-200 px-4 py-2.5">
+              <svg className="shrink-0 mt-0.5 text-amber-500" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7.5a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/></svg>
+              <p className="text-xs text-amber-800 flex-1"><span className="font-semibold">Previous conversation referenced</span> — this transcript refers to a prior chat. Scores may not reflect the full context. Review carefully and override if needed.</p>
+            </div>
+          )}
+          <div className="flex divide-x divide-gray-100" style={{ maxHeight: 560, minHeight: 220 }}>
             {/* Left panel: scores + actions */}
             <div className="w-[42%] shrink-0 overflow-y-auto flex flex-col">
               {/* IQS parameter breakdown */}
@@ -1169,29 +1325,47 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
                 <div className="p-4 space-y-1">
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Parameter Scores</p>
                   {PARAM_ORDER.map(p => {
-                    const val = item.scores![p] as string | undefined;
-                    const reason = item.reasoning?.[p];
+                    const val    = canEdit ? (edit?.scores[p] ?? item.scores?.[p]) : (item.scores?.[p] as string | undefined);
                     const isFail = val === 'No';
                     const isUnc  = !!(item.uncertainParameters?.some(u => u.parameter === p));
                     return (
                       <div key={p} className={`rounded-xl px-3 py-2 ${isFail ? 'bg-red-50 border border-red-100' : isUnc ? 'bg-amber-50 border border-amber-100' : 'bg-gray-50'}`}>
                         <div className="flex items-center gap-2">
-                          <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
-                            val === 'Yes' ? 'bg-emerald-100 text-emerald-700'
-                            : val === 'No' ? 'bg-red-100 text-red-700'
-                            : isUnc ? 'bg-amber-100 text-amber-700'
-                            : 'bg-gray-200 text-gray-500'
-                          }`}>{isUnc && val === 'NA' ? '?' : (val || 'NA')}</span>
+                          {canEdit ? (
+                            <div className="flex gap-1 shrink-0">
+                              {(['Yes', 'No', 'NA'] as const).map(v => (
+                                <button key={v}
+                                  onClick={() => setInlineEdit(s => { const cur = s[item.chatId] ?? { scores: { ...(item.scores || {}) }, reasoning: { ...(item.reasoning || {}) }, note: '' }; return { ...s, [item.chatId]: { ...cur, scores: { ...cur.scores, [p]: v } } }; })}
+                                  className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${
+                                    val === v
+                                      ? v === 'Yes' ? 'bg-emerald-500 text-white' : v === 'No' ? 'bg-red-500 text-white' : 'bg-gray-400 text-white'
+                                      : 'bg-white border border-gray-200 text-gray-400 hover:border-gray-400'
+                                  }`}>{v}</button>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+                              val === 'Yes' ? 'bg-emerald-100 text-emerald-700'
+                              : val === 'No' ? 'bg-red-100 text-red-700'
+                              : isUnc ? 'bg-amber-100 text-amber-700'
+                              : 'bg-gray-200 text-gray-500'
+                            }`}>{isUnc && val === 'NA' ? '?' : (val || 'NA')}</span>
+                          )}
                           <span className="text-xs font-medium text-gray-700 flex-1 leading-tight">{PARAM_NAMES[p]}</span>
                           <span className="text-[10px] text-gray-400 shrink-0">{Math.round(WEIGHTS[p] * 100)}%</span>
                         </div>
-                        {isFail && reason && (
-                          <p className="text-[11px] text-red-700/80 mt-1.5 ml-7 leading-relaxed">{reason}</p>
-                        )}
-                        {isUnc && (
-                          <p className="text-[11px] text-amber-700/80 mt-1.5 ml-7 leading-relaxed">
-                            {item.uncertainParameters!.find(u => u.parameter === p)?.question}
-                          </p>
+                        {canEdit ? (
+                          <textarea
+                            value={edit?.reasoning[p] || ''}
+                            onChange={e => setInlineEdit(s => { const cur = s[item.chatId] ?? { scores: { ...(item.scores || {}) }, reasoning: { ...(item.reasoning || {}) }, note: '' }; return { ...s, [item.chatId]: { ...cur, reasoning: { ...cur.reasoning, [p]: e.target.value } } }; })}
+                            placeholder="Reasoning…" rows={2}
+                            className="mt-1.5 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-400/30 resize-none bg-white"
+                          />
+                        ) : (
+                          <>
+                            {isFail && item.reasoning?.[p] && <p className="text-[11px] text-red-700/80 mt-1.5 ml-7 leading-relaxed">{item.reasoning[p]}</p>}
+                            {isUnc && <p className="text-[11px] text-amber-700/80 mt-1.5 ml-7 leading-relaxed">{item.uncertainParameters!.find(u => u.parameter === p)?.question}</p>}
+                          </>
                         )}
                       </div>
                     );
@@ -1247,46 +1421,135 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
               )}
 
               {/* Review action — sticky at bottom */}
-              <div className="mt-auto border-t border-gray-100 p-4">
-                {canReview && !isReviewed ? (
-                  <>
-                    <input type="text" value={reviewNotes[item.chatId] || ''} onChange={e => setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
-                      placeholder="Review note (optional)…" className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 mb-2" />
+              <div className="mt-auto border-t border-gray-100 p-4 space-y-2">
+                {canReview && (
+                  <input
+                    type="text"
+                    value={canEdit ? (inlineEdit[item.chatId]?.note || '') : (reviewNotes[item.chatId] || '')}
+                    onChange={e => canEdit
+                      ? setInlineEdit(s => { const cur = s[item.chatId] ?? { scores: { ...(item.scores || {}) }, reasoning: { ...(item.reasoning || {}) }, note: '' }; return { ...s, [item.chatId]: { ...cur, note: e.target.value } }; })
+                      : setReviewNotes(r => ({ ...r, [item.chatId]: e.target.value }))}
+                    placeholder="Review note (optional)…"
+                    className="w-full text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30"
+                  />
+                )}
+                <div className="flex gap-2">
+                  {canReview && !isReviewed && (
                     <button onClick={() => markReviewed(item.chatId)} disabled={reviewing[item.chatId]}
-                      className="w-full px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
+                      className="flex-1 px-3 py-2 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 disabled:opacity-40 transition">
                       {reviewing[item.chatId] ? '…' : 'Mark Reviewed'}
                     </button>
-                  </>
-                ) : isReviewed ? (
-                  <div className="text-center">
-                    <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-full">
-                      ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
-                    </span>
-                    {item.qaStatus?.reviewNote && <p className="text-xs text-gray-500 mt-2">{item.qaStatus.reviewNote}</p>}
-                  </div>
-                ) : null}
+                  )}
+                  {canEdit && (
+                    <button onClick={() => saveOverride(item)} disabled={overrideSaving[item.chatId]}
+                      className="flex-1 px-3 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+                      {overrideSaving[item.chatId] ? 'Saving…' : overrideSaved[item.chatId] ? 'Saved ✓' : 'Save Override'}
+                    </button>
+                  )}
+                </div>
+                {isReviewed && (
+                  <p className="text-[10px] text-center text-emerald-600 font-semibold">
+                    ✓ Reviewed by {(item.qaStatus?.reviewedBy || '').split('@')[0]}
+                    {item.qaStatus?.reviewNote && ` · ${item.qaStatus.reviewNote}`}
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* Right: transcript */}
-            <div className="flex-1 overflow-y-auto p-4">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Transcript</p>
-              {transcriptLoading[item.chatId] && (
-                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
-                  Loading…
+            {/* Right: prior chats + transcript */}
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
+
+              {/* Prior chats — inline expandable above current transcript */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Customer's Prior Chats</p>
+                  {(histories[item.chatId]?.length ?? 0) > 0 && (
+                    <button onClick={() => setShowHistory(s => ({ ...s, [item.chatId]: !s[item.chatId] }))}
+                      className="text-[10px] font-semibold text-emerald-600 hover:underline flex items-center gap-1">
+                      {showHistory[item.chatId] ? 'Hide' : `Show (${histories[item.chatId]!.length})`}
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                        className={`transition-transform ${showHistory[item.chatId] ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+                    </button>
+                  )}
+                  {historyLoading[item.chatId] && (
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin text-gray-400"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                  )}
                 </div>
-              )}
-              {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
-                <TranscriptBubbles messages={txData.timedMessages} />
-              )}
-              {txData && txData.rawTranscript && !txData.timedMessages?.length && (
-                <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
-              )}
-              {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
-                <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
-              )}
+                {showHistory[item.chatId] && (
+                  <div className="space-y-1">
+                    {(histories[item.chatId] || []).length === 0 && (
+                      <p className="text-xs text-gray-400 text-center py-2">No prior chats found.</p>
+                    )}
+                    {(histories[item.chatId] || []).map((h: any) => {
+                      const isPriorExpanded = expandedPriorChat[item.chatId] === h.chatId;
+                      const ptx = priorTranscripts[h.chatId];
+                      return (
+                        <div key={h.chatId} className="rounded-xl border border-gray-100 overflow-hidden">
+                          <button
+                            onClick={() => togglePriorChat(item.chatId, h.chatId)}
+                            className={`w-full flex items-center gap-3 px-3 py-2 text-left transition-colors ${isPriorExpanded ? 'bg-gray-50' : 'hover:bg-gray-50'}`}>
+                            <IQSRing iqs={h.iqs} size={28} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-semibold text-gray-700">{h.chatId}</span>
+                                <span className="text-[10px] text-gray-500">{h.agentName}</span>
+                                {h.disposition && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{h.disposition}</span>}
+                              </div>
+                              <p className="text-[10px] text-gray-400 mt-0.5">{h.date}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {h.csat === '5' && <span className="text-[10px] bg-emerald-50 text-emerald-600 font-bold px-1.5 py-0.5 rounded-full">Good</span>}
+                              {h.csat === '3' && <span className="text-[10px] bg-yellow-50 text-yellow-600 font-bold px-1.5 py-0.5 rounded-full">CBB</span>}
+                              {h.csat === '1' && <span className="text-[10px] bg-red-50 text-red-600 font-bold px-1.5 py-0.5 rounded-full">Bad</span>}
+                              <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                                className={`text-gray-400 transition-transform ${isPriorExpanded ? 'rotate-180' : ''}`}><path d="M2 4l4 4 4-4"/></svg>
+                            </div>
+                          </button>
+                          {isPriorExpanded && (
+                            <div className="border-t border-gray-100 bg-gray-50/60 px-3 py-3 max-h-80 overflow-y-auto">
+                              {priorTranscriptLoading[h.chatId] && (
+                                <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-4">
+                                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                                  Loading transcript…
+                                </div>
+                              )}
+                              {ptx?.timedMessages && ptx.timedMessages.length > 0 && <TranscriptBubbles messages={ptx.timedMessages} />}
+                              {ptx?.rawTranscript && !ptx.timedMessages?.length && (
+                                <pre className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed font-sans">{ptx.rawTranscript}</pre>
+                              )}
+                              {ptx && !ptx.timedMessages?.length && !ptx.rawTranscript && !priorTranscriptLoading[h.chatId] && (
+                                <p className="text-xs text-gray-400 text-center py-3">No transcript saved for this chat.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Current transcript */}
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Transcript</p>
+                {transcriptLoading[item.chatId] && (
+                  <div className="flex items-center gap-2 text-gray-400 text-xs justify-center py-8">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
+                    Loading…
+                  </div>
+                )}
+                {txData && txData.timedMessages && txData.timedMessages.length > 0 && (
+                  <TranscriptBubbles messages={txData.timedMessages} />
+                )}
+                {txData && txData.rawTranscript && !txData.timedMessages?.length && (
+                  <pre className="text-[11px] text-gray-600 bg-gray-50 rounded-xl px-3 py-2 whitespace-pre-wrap leading-relaxed font-sans">{txData.rawTranscript}</pre>
+                )}
+                {txData && !txData.timedMessages?.length && !txData.rawTranscript && !transcriptLoading[item.chatId] && (
+                  <p className="text-xs text-gray-400 text-center py-6">No transcript saved for this chat.</p>
+                )}
+              </div>
             </div>
+          </div>
           </div>
         )}
       </div>
@@ -1294,6 +1557,18 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
   };
 
   const displayItems = section === 'pending' ? pendingItems : reviewedItems;
+
+  const activeFilterCount = [
+    pendingFilters.dateRange !== '1w',
+    pendingFilters.minScore > 0,
+    pendingFilters.maxScore < 100,
+    !!pendingFilters.disposition,
+    !!pendingFilters.subDisposition,
+  ].filter(Boolean).length;
+
+  const subDispositionOptions = pendingFilters.disposition
+    ? (dispositionSubMap[pendingFilters.disposition] || [])
+    : Object.values(dispositionSubMap).flat().filter((v, i, a) => a.indexOf(v) === i).sort();
 
   return (
     <div className="space-y-5 max-w-4xl mx-auto">
@@ -1322,12 +1597,12 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
         </div>
         {/* Pending / Reviewed section */}
         <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
-          <button onClick={() => setSection('pending')}
+          <button onClick={() => switchSection('pending')}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition ${section === 'pending' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             Pending
             {pendingItems.length > 0 && <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{pendingItems.length}</span>}
           </button>
-          <button onClick={() => setSection('reviewed')}
+          <button onClick={() => switchSection('reviewed')}
             className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold transition ${section === 'reviewed' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             Reviewed
             {reviewedItems.length > 0 && <span className="bg-gray-200 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none">{reviewedItems.length}</span>}
@@ -1337,7 +1612,112 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
         <input type="text" value={chatIdSearch} onChange={e => setChatIdSearch(e.target.value)}
           placeholder="Filter by Chat ID…"
           className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 w-40 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+        {/* Filter toggle */}
+        <button
+          onClick={() => setShowFilterPanel(v => !v)}
+          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl font-semibold border transition ${
+            showFilterPanel ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:border-gray-400'
+          }`}>
+          Filters
+          {activeFilterCount > 0 && (
+            <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold ${showFilterPanel ? 'bg-white text-emerald-700' : 'bg-emerald-600 text-white'}`}>
+              {activeFilterCount}
+            </span>
+          )}
+        </button>
       </div>
+
+      {/* Filter panel */}
+      {showFilterPanel && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+          {/* Row 1: Date Range */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Date Range</p>
+            <div className="flex flex-wrap items-center gap-2">
+              {(['today', 'yesterday', '1w'] as const).map(r => (
+                <button key={r}
+                  onClick={() => setPendingFilters(f => ({ ...f, dateRange: r, dateFrom: '', dateTo: '' }))}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                    pendingFilters.dateRange === r ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  }`}>
+                  {r === 'today' ? 'Today' : r === 'yesterday' ? 'Yesterday' : '1 Week'}
+                </button>
+              ))}
+              <button
+                onClick={() => setPendingFilters(f => ({ ...f, dateRange: 'custom' }))}
+                className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition ${
+                  pendingFilters.dateRange === 'custom' ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}>
+                Custom
+              </button>
+              {pendingFilters.dateRange === 'custom' && (
+                <div className="flex items-center gap-2 ml-1">
+                  <input type="date" value={pendingFilters.dateFrom}
+                    onChange={e => setPendingFilters(f => ({ ...f, dateFrom: e.target.value }))}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                  <span className="text-gray-400 text-xs">→</span>
+                  <input type="date" value={pendingFilters.dateTo}
+                    onChange={e => setPendingFilters(f => ({ ...f, dateTo: e.target.value }))}
+                    className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: IQS Range */}
+          <div>
+            <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">IQS Range</p>
+            <div className="flex items-center gap-2">
+              <input type="number" min={0} max={100} value={pendingFilters.minScore}
+                onChange={e => setPendingFilters(f => ({ ...f, minScore: parseInt(e.target.value) || 0 }))}
+                className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+              <span className="text-gray-400 text-xs">–</span>
+              <input type="number" min={0} max={100} value={pendingFilters.maxScore}
+                onChange={e => setPendingFilters(f => ({ ...f, maxScore: parseInt(e.target.value) || 100 }))}
+                className="w-14 text-xs border border-gray-200 rounded-xl px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-500/30" />
+            </div>
+          </div>
+
+          {/* Row 3: Disposition + Sub-Disposition */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
+              <select value={pendingFilters.disposition}
+                onChange={e => setPendingFilters(f => ({ ...f, disposition: e.target.value, subDisposition: '' }))}
+                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
+                <option value="">All</option>
+                {availableDispositions.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Sub-Disposition</p>
+              <select value={pendingFilters.subDisposition}
+                onChange={e => setPendingFilters(f => ({ ...f, subDisposition: e.target.value }))}
+                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
+                <option value="">All</option>
+                {subDispositionOptions.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Action row */}
+          <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
+            <button onClick={() => { fetchPending(pendingFilters); setShowFilterPanel(false); }} disabled={loading}
+              className="px-5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-40 transition">
+              {loading ? 'Loading…' : 'Apply Filters'}
+            </button>
+            <button
+              onClick={() => {
+                setPendingFilters(PENDING_DEFAULT_FILTERS);
+                fetchPending(PENDING_DEFAULT_FILTERS);
+                setShowFilterPanel(false);
+              }}
+              className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700 font-medium transition">
+              Reset all
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Items */}
       {displayItems.length === 0 ? (
@@ -1349,12 +1729,13 @@ function PendingChatsTab({ userRole, userEmail }: { userRole?: string; userEmail
       ) : (
         <div className="space-y-3">{displayItems.map(renderItem)}</div>
       )}
+
     </div>
   );
 }
 
-export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab }: QualityClientProps = {}) {
-  const [tab, setTab] = useState<'performance' | 'log' | 'upload' | 'reports' | 'pending' | 'calls' | 'call-test' | 'unified'>(initialTab || 'performance');
+export default function QualityClient({ userRole, userEmail, selfAgentName: selfAgentNameProp, initialAgent, initialTab, initialSection }: QualityClientProps = {}) {
+  const [tab, setTab] = useState<QualityTab>(initialTab || 'performance');
   const [challengeCount, setChallengeCount] = useState(0);
 
   // Fresh agentName from config (overrides stale JWT value)
@@ -1646,8 +2027,14 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     setLogsLoading(false);
   }, []);
 
-  const switchTab = (t: typeof tab) => {
+  const switchTab = (t: QualityTab) => {
     setTab(t);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', t);
+      url.searchParams.delete('section');
+      window.history.replaceState({}, '', url.toString());
+    }
     if (t === 'log' && !logsLoaded) loadScores(0, appliedFilters);
   };
 
@@ -1789,7 +2176,19 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         throw new Error(errData?.error || `Server error ${res.status}`);
       }
       const data = await res.json();
-      const updated: IQSScoreEntry = data.entry || { ...editEntry, ...editForm, updatedAt: new Date().toISOString(), updatedBy: userEmail };
+      const updated: IQSScoreEntry = {
+        ...editEntry,
+        agentName:      editForm.agentName,
+        csat:           editForm.csat,
+        disposition:    editForm.disposition,
+        subDisposition: editForm.subDisposition,
+        scores:         editForm.scores as Record<string, ParamScore>,
+        reasoning:      editForm.reasoning,
+        iqs:            data.entry?.iqs ?? editEntry.iqs,
+        updatedBy:      userEmail,
+        updatedAt:      new Date().toISOString(),
+        ...(editForm.note ? { reviewNote: editForm.note } : {}),
+      };
       setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
       setDetailEntry(prev => prev?.id === editEntry.id ? updated : prev);
       setEditSaved(true);
@@ -2148,18 +2547,18 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               collapsed={!sidebarExpanded} onClick={() => switchTab('upload')} />
           )}
           <NavItem icon={icons.reports} label="Reports" active={tab === 'reports'}
-            collapsed={!sidebarExpanded} onClick={() => setTab('reports')} />
+            collapsed={!sidebarExpanded} onClick={() => switchTab('reports')} />
           <NavItem icon={icons.challenges} label="Chats Pending" active={tab === 'pending'}
-            collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => setTab('pending')} />
+            collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => switchTab('pending')} />
           <NavItem icon={icons.calls} label="Call Quality" active={tab === 'calls'}
-            collapsed={!sidebarExpanded} onClick={() => setTab('calls')} />
+            collapsed={!sidebarExpanded} onClick={() => switchTab('calls')} />
           {!selfAgentName && (
             <NavItem icon={icons.callTest} label="Call Test" active={tab === 'call-test'}
-              collapsed={!sidebarExpanded} onClick={() => setTab('call-test')} />
+              collapsed={!sidebarExpanded} onClick={() => switchTab('call-test')} />
           )}
           {!selfAgentName && (
             <NavItem icon={icons.unified} label="Unified Score" active={tab === 'unified'}
-              collapsed={!sidebarExpanded} onClick={() => setTab('unified')} />
+              collapsed={!sidebarExpanded} onClick={() => switchTab('unified')} />
           )}
         </nav>
 
@@ -2341,7 +2740,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                 <div className="flex flex-col items-center justify-center h-48 text-center">
                   <p className="text-gray-400 text-sm">No scored chats yet.</p>
                   <p className="text-xs text-gray-300 mt-1">Upload transcripts in the Upload & Score tab.</p>
-                  <button onClick={() => setTab('upload')}
+                  <button onClick={() => switchTab('upload')}
                     className="mt-4 text-xs px-4 py-2 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition">
                     Go to Upload →
                   </button>
@@ -3374,7 +3773,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
           {/* ── CHATS PENDING TAB ── */}
           {tab === 'pending' && (
-            <PendingChatsTab userRole={userRole} userEmail={userEmail} />
+            <PendingChatsTab userRole={userRole} userEmail={userEmail} initialSection={initialSection} />
           )}
 
           {/* ── CALL QUALITY TAB ── */}
@@ -3394,7 +3793,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── UNIFIED SCORE TAB ── */}
           {tab === 'unified' && (
             <div className="overflow-y-auto flex-1">
-              <UnifiedScoringClient />
+              <UnifiedScoringClient userRole={userRole} />
             </div>
           )}
 

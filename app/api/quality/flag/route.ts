@@ -85,12 +85,10 @@ export async function GET(req: NextRequest) {
   const role = (session.user as any)?.role;
   const email = (session.user as any)?.email || '';
 
-  // Agents only see their own flags
   if (role === 'agent') {
     return NextResponse.json({ flags: flags.filter(f => f.agentEmail === email) });
   }
 
-  // Quality role: filter to agents assigned to them in the CX DB
   if (role === 'quality') {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
@@ -105,7 +103,7 @@ export async function GET(req: NextRequest) {
       const myAgents = new Set(rows.map((r: any) => (r.name || '').toLowerCase()));
       return NextResponse.json({ flags: flags.filter(f => myAgents.has((f.agentName || '').toLowerCase())) });
     } catch {
-      // CX DB unavailable — fall through to return all
+      // CX DB unavailable
     }
   }
 

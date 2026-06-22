@@ -49,7 +49,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Forbidden — admin only' }, { status: 403 });
   }
 
-  let body: { call_id?: string } = {};
+  let body: { call_id?: string; force?: boolean } = {};
   try { body = await req.json(); } catch {}
 
   const callId = body.call_id?.trim();
@@ -57,7 +57,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'call_id is required' }, { status: 400 });
   }
 
-  // Fetch the call row — only process if transcript is null
+  const force = body.force === true;
+
+  // Fetch the call row — only process if transcript is null (or force=true)
   const rows = await query<{
     id: string;
     contact_id: number | null;
@@ -77,11 +79,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const call = rows[0];
 
-  if (call.transcript !== null) {
+  if (call.transcript !== null && !force) {
     return NextResponse.json({
       ok: true,
       skipped: true,
-      reason: 'transcript already exists — use backfill-call-dispositions to re-classify',
+      reason: 'transcript already exists — pass force:true to re-transcribe, or use backfill-call-dispositions to re-classify only',
     });
   }
 

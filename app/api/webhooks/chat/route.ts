@@ -100,6 +100,7 @@ export function transcriptFromJsonb(messages: any[]): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
   for (const m of messages) {
+    if (m.sender_name === 'Robylon AI' && m.sender_type === 'agent') continue;
     const role = m.sender_type === 'customer' ? 'Customer'
                : m.sender_type === 'bot'      ? 'Bot'
                : 'Agent';
@@ -254,13 +255,14 @@ export async function scoreLinkedCallsForChat(
 async function linkAndScoreCallsForChat(
   chatId: string,
   contactId: number,
+  startedAt: string,
   closedAt: string,
   chatTranscriptText: string,
   disposition: string,
   subDisposition: string,
   config: any,
 ): Promise<void> {
-  const unlinked = await getUnlinkedCallsForContact(contactId, closedAt);
+  const unlinked = await getUnlinkedCallsForContact(contactId, startedAt, closedAt);
   if (!unlinked.length) return;
 
   await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
@@ -441,13 +443,16 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
 
   const rawMessages: any[] = transcriptObj.messages;
   const convStarted = transcriptObj.conversation_started || body.created_at || '';
-  const convEnded   = body.created_at || '';
+  const convEnded   = transcriptObj.conversation_ended || body.data?.closed_at || body.data?.ended_at || body.created_at || new Date().toISOString();
   const chatId      = String(body.chat_id || transcriptObj.chat_id || `wh_${Date.now()}`);
   const year        = convStarted ? new Date(convStarted).getUTCFullYear() : new Date().getUTCFullYear();
   const agentName   = extractAgentName(rawMessages);
 
-  // Extract mobile/phone number
+  // Extract mobile/phone number — check all known Robylon field locations
   const mobileNumber: string | undefined =
+    body.data?.requester_info?.phone_number ||
+    body.requester_info?.phone_number       ||
+    transcriptObj?.requester_info?.phone_number ||
     body.data?.user_phone      || body.data?.customer_phone ||
     body.data?.phone_number    || body.data?.mobile         ||
     body.user_phone            || body.customer_phone       ||
@@ -541,6 +546,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     const callLinkPromise = linkAndScoreCallsForChat(
       chatId,
       contactId,
+      convStarted,
       convEnded,
       transcriptText,
       disposition,

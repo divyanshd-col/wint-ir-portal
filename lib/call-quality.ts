@@ -164,14 +164,17 @@ SPEAKER IDENTIFICATION
 ══════════════════════════════════════════
 There are exactly two speakers: IR EXECUTIVE and INVESTOR.
 
-IR EXECUTIVE: Says their own name + "Wint Wealth" in their introduction. Explains products and resolves queries.
-INVESTOR: Often speaks first — answers with "Hello?", "Haan?", or silence. Asks questions, raises problems.
+IR EXECUTIVE: The Wint Wealth employee on the call. Introduces themselves by name AND says "Wint Wealth" (e.g. "This is Priya calling from Wint Wealth"). Professional tone. Explains products and answers queries.
+INVESTOR: The customer. May speak first OR second. May ask "Hello, is this Wint Wealth?" — this is still the INVESTOR asking a question, NOT the IR introducing themselves.
 
-DECISION PROCEDURE:
-1. Listen to the whole call first.
-2. Whoever says their name + "Wint Wealth" = IR EXECUTIVE for the entire call.
-3. The other voice = INVESTOR for the entire call.
-4. A short "Hello?" or "Haan?" with no introduction at the start = INVESTOR.
+DECISION PROCEDURE (follow in order):
+1. Listen to the ENTIRE call before labelling any speaker.
+2. Use VOICE CHARACTERISTICS as the PRIMARY identifier: distinguish the two voices by pitch, gender, accent, and speaking style. The same voice must get the same label throughout.
+3. The speaker who says their OWN NAME + "Wint Wealth" in a self-introduction = IR EXECUTIVE (e.g. "This is Rahul from Wint Wealth calling"). Assign that voice as IR EXECUTIVE for the whole call.
+4. The other voice = INVESTOR for the entire call.
+5. CRITICAL EDGE CASE: If the INVESTOR speaks first and says "Hello, is this Wint Wealth?" or similar — that is the INVESTOR asking, not the IR introducing. Do NOT label this voice IR EXECUTIVE.
+6. Do NOT rely on who speaks first. Either speaker may initiate. Use the self-introduction ("I am [Name] from Wint Wealth") as the definitive marker.
+7. Once you have identified both voices, apply the correct label to EVERY segment — never mix labels for the same voice.
 
 Pay close attention to names — IR executives introduce themselves by name (e.g. "This is Priya from Wint Wealth").
 Transcribe that name EXACTLY as heard. Similarly transcribe bond names, fund names, and product names exactly as spoken.
@@ -243,19 +246,20 @@ Example: IR says "Sorry sir, I could not hear you, could you please repeat?" the
 OUTPUT FORMAT
 ══════════════════════════════════════════
 Return ONLY a valid JSON object. No markdown, no code fences.
-Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false}
+Speech segments use: {"type":"speech","speaker":"[NAME]","text":"[ENGLISH TEXT]","translated":false,"ts":"M:SS"}
+  where "ts" is the timestamp when this line begins in the audio, in M:SS format (e.g. "0:00", "1:32", "12:05").
 Interruption flags use: {"type":"interruption","interrupted_speaker":"[NAME]","interrupted_by":"[NAME]","words_spoken":[N]}
 Dead air flags use: {"type":"dead_air","duration":"~[N] seconds","resumed_by":"[NAME]"}
 Active listening flags use: {"type":"active_listening","phrase":"[exact phrase in English]"}
 
 Example output (mixed Telugu + English call):
 {"language":"Telugu + English","segments":[
-  {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false},
+  {"type":"speech","speaker":"INVESTOR","text":"Hello?","translated":false,"ts":"0:00"},
   {"type":"dead_air","duration":"~2 seconds","resumed_by":"IR EXECUTIVE"},
-  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false},
-  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true},
+  {"type":"speech","speaker":"IR EXECUTIVE","text":"Hello, good morning! This is Priya calling from Wint Wealth.","translated":false,"ts":"0:03"},
+  {"type":"speech","speaker":"INVESTOR","text":"Yes sir, please go ahead.","translated":true,"ts":"0:08"},
   {"type":"interruption","interrupted_speaker":"IR EXECUTIVE","interrupted_by":"INVESTOR","words_spoken":5},
-  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true}
+  {"type":"speech","speaker":"INVESTOR","text":"When will that bond mature?","translated":true,"ts":"1:45"}
 ]}`;
 
 // ── Energy / Tone scoring prompt (audio-based, Pass 1b) ───────────────────────
@@ -279,113 +283,137 @@ export const CALL_DISPOSITION_PROMPT = `You are analyzing a Wint Wealth IR call 
 Return ONLY this JSON:
 {"call_disposition":"brief topic e.g. Payout Query, TDS Form Issue, Bond Maturity, Portfolio Question","call_sub_disposition":"more specific e.g. Delay in payout credit, Unable to submit Form 121"}`;
 
-// ── Call disposition classification prompt (constrained to official 14-category list) ─
+// ── Call disposition classification prompt (synced with Robylon taxonomy) ─────
 export const CALL_DISPOSITION_CLASSIFY_PROMPT = `You are classifying a Wint Wealth IR call transcript into an official disposition and sub-disposition.
 
 You MUST choose EXACTLY one disposition and one sub-disposition from the lists below. Do not invent new values.
 If the call touches multiple topics, pick the one that consumed the most conversation time.
-If nothing fits, use disposition "OTHERS" and the closest sub-disposition.
+If nothing fits, use disposition "Others" and the closest sub-disposition.
 
 ## OFFICIAL DISPOSITION LIST
 
-LIQUIDITY
+Liquidity
   - Liquidity General Enquiry
   - Liquidity Process
   - Liquidity Status Update
   - Liquidity Charges
   - Liquidity DDPI Status
-  - Liquidity cancellation
+  - Liquidity Cancellation
   - Liquidity Funds Not Received
-  - Interest payout after selling a bond
+  - Interest Payout After Selling a Bond
 
 SGB
   - SGB Enquiry
   - SGBs Not Visible in Portfolio
 
-REFERRAL PROGRAM
+Referral Program
   - Refer & Earn Not Activated
-  - Referral reward calculation
-  - Referred User Not Showing (referral mapping)
+  - Referral Reward Calculation
+  - Referred User Not Showing
 
-TAXATION
-  - Tax deduction
+Taxation
+  - Tax Deduction
   - Taxation Statement/Reports
   - Taxation TDS Certificate
-  - Taxation 15G/H
   - Taxation Capital Gain/Loss
+  - Form 121
+  - Form 121 Status & Confirmation
+  - Form 121 bugs
+  - Form 121 Not Available
 
-BOND PURCHASE
+Bond Purchase
   - Bond Purchase Cancellation
   - Bond Purchase Order Status
-  - Bond Purchase issue
+  - Bond Purchase Issue
   - Bond Purchase Process
-  - Net Banking unavailable
+  - Net Banking Unavailable
 
 FD
   - FD Withdrawal
-  - FD Order status
-  - FD Nominee details
-  - FD Order pending
+  - FD Order Status
+  - FD Nominee Details
+  - FD Order Pending
   - FD KYC
   - FD Bugs
-  - FD not visible in the portfolio
-  - FD interest
+  - FD Not Visible in Portfolio
+  - FD Interest
 
 Interest Repayment
-  - Interest Repayment Issue
-  - Asset YTM/Coupon
-  - Interest Repayment When/Where
   - Interest Repayment Breakup
+  - Interest Repayment When/Where
+  - Asset YTM/Coupon
+  - Interest / Principal Not Credited
 
-ASSET
+Asset
+  - Asset General Enquiry
   - Asset Risk
   - Asset Specific Requirement
   - Asset Covenant Breach
   - Asset Limit
   - Asset NRI
 
-FLEXI-TENURE BOND
-  - flexi general enquiry
-  - flexi sell process
-  - flexi interest
-  - flexi tenure change
+Flexi-Tenure Bond
+  - Flexi General Enquiry
+  - Flexi Sell Process
+  - Flexi Interest
+  - Flexi Tenure Change
 
 SIP
-  - SIP general enquiry
-  - SIP modification
-  - SIP cancellation
+  - SIP General Enquiry
+  - SIP Modification
+  - SIP Cancellation
   - SIP Instalment Skip
 
-WINT WISDOM
-  - General Enquiry
-  - Bugs
+Wint Wisdom
+  - Wint Wisdom General Enquiry
+  - Wint Wisdom Bugs
   - Portfolio and Risk
   - Tax and Optimisation
 
-DIVERISIFICATION METER
+Diversification Meter
   - Diversification Meter General
 
-OTHERS
-  - Unsubscribe Whatsapp
-  - Advisory
-  - Partnership
-  - Request for RM
-  - OTP not received
-  - PT Refund Pending
-  - Bond Name Change
-
-SEBI KYC
-  - SEBI KYC HUF
-  - SEBI KYC Demat Query
-  - SEBI KYC General Enquiry
-  - SEBI KYC Delete Account
-  - SEBI KYC NSDL SPEEDE
-  - SEBI KYC Documents
-  - Profile Change
-  - SEBI KYC Details Change
-  - Selfie Capture
+KYC
+  - Bank Account linking issues
+  - Aadhar / PAN Queries
+  - KYC Status
+  - ACF Link Generation
   - Nominee
-  - ACF link generation
+  - Selfie Capture
+  - SEBI KYC Details Change
+  - Profile Change
+  - SEBI KYC Documents
+  - SEBI KYC NSDL SPEEDE
+  - SEBI KYC Delete Account
+  - KYC Process and Steps
+  - SEBI KYC Demat Query
+  - SEBI KYC HUF
+
+Dashboard and Profile Query
+  - Login & OTP Issue
+  - App and Dashboard Bugs
+  - Dashboard - General Query
+  - Dashboard - Portfolio values
+  - Dashboard and App Navigation
+
+Wint Ivory
+  - Wint Ivory Required
+  - Wint Ivory General Query
+
+Family Account
+  - Family Account General Query
+
+Junk Chats
+  - No query asked
+
+Others
+  - Bond Name Change
+  - PT Refund Pending
+  - OTP Not Received
+  - Request for RM
+  - Partnership
+  - Advisory
+  - Unsubscribe Whatsapp
 
 ## OUTPUT
 Return ONLY this JSON — no other text:
@@ -422,11 +450,34 @@ export const CALL_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Call Quality eval
 The IR EXECUTIVE is the Wint Wealth agent. The INVESTOR is the customer.
 Speech segments are numbered [1], [2], [3]... for reference.
 
+## READ THE COMPLETE TRANSCRIPT FIRST — NON-NEGOTIABLE
+Before scoring ANY parameter, read the COMPLETE call transcript from segment [1] to the last segment. Do not begin scoring until every segment has been read. Scoring a parameter without reading the full call is invalid and will produce wrong results. Details that determine scores often appear late in the call — a closing, a correction, a follow-up question. Missing any segment = incorrect scores.
+
 ## SCORING PHILOSOPHY
 - Catch DEFINITIVE failures, not minor imperfections. When in doubt, score Yes.
 - NA counts as Yes (pass) in the final IQS calculation.
 - Never penalise for something the transcript does not clearly show.
 - You receive the CALL TRANSCRIPT (primary — score this) and optionally a WHATSAPP CHAT TRANSCRIPT (context only).
+- **Date awareness**: Today's date is provided in CALL METADATA. Any date on or before today is a PAST event that has already occurred. Do NOT treat a past date as a missed future commitment when scoring Expectation. Only fail Expectation for missing or vague timelines on genuinely unresolved future issues — never for referencing dates that have already passed.
+
+---
+
+## PARAMETER ISOLATION — CRITICAL
+Each parameter is fully independent. Its reasoning must stay within its own criteria only.
+
+RULES:
+1. The reasoning for parameter X must ONLY discuss the criteria defined for parameter X — nothing else.
+2. NEVER mention another parameter's name inside a reasoning field.
+3. NEVER evaluate CallOpening, CallClosing, Grammar, Fillers, ActiveListening, etc. inside the TechnicalLegal reasoning — each has its own separate scoring field.
+4. If you find yourself writing about one parameter while filling in another parameter's reasoning, stop and remove it.
+
+EXAMPLES OF WHAT NOT TO DO:
+- TechnicalLegal reasoning: "The call closing was appropriate and the agent signed off well..." → WRONG. Call Closing belongs in CallClosing.reasoning only.
+- CallOpening reasoning: "The agent's grammar was poor throughout..." → WRONG. Grammar belongs in Grammar.reasoning only.
+- Expectation reasoning: "All investor questions were also addressed clearly..." → WRONG. That belongs in AllQuestions.reasoning.
+- ActiveListening reasoning: "The IR gave incorrect product information about the bond..." → WRONG. Factual errors belong in TechnicalLegal.reasoning only.
+
+Score each parameter as if you are filling in a completely separate evaluation form with no visibility into the others.
 
 ---
 
@@ -442,9 +493,11 @@ Speech segments are numbered [1], [2], [3]... for reference.
 - No: Abrupt hang-up with no closing greeting, or call was cut off.
 - NA: Call was disconnected before closing was possible.
 
-### 3. Technically / Legally Correct (15%) — key: TechnicalLegal
+### 3. Technically / Legally Correct (15%) — key: TechnicalLegal ⚠️ HIGHEST PRIORITY PARAMETER
+Technical and legal correctness is the utmost crucial point for IQS evaluation. There must not be even a hint of incorrect information in any customer conversation. Every factual claim the IR makes about products, rates, timelines, or regulations must be verifiably accurate — no exceptions.
 - Yes: All product information stated by the IR EXECUTIVE matches the WINT KNOWLEDGE BASE REFERENCE below — bond name, yield, tenure, payout, taxation, lock-in, redemption, penalty terms, registered entity names. In your reasoning, name the specific KB document and section that confirms each fact.
 - No: A statement contradicts the KB, or the KB has no relevant entry to verify a significant product claim the IR made. State exactly what was claimed and what the KB says (or that it is absent from the KB).
+  Also No — SEBI / Regulatory violation (automatic fail, no KB needed): IR gave a personalised investment recommendation (e.g. "You should invest in this bond", "I suggest putting your money here"), implied guaranteed returns, or provided investment advisory services that would constitute unregistered advisory activity under SEBI regulations.
 - NA: No substantive product information was exchanged on this call.
 
 ### 4. All Questions Addressed (10%) — key: AllQuestions
@@ -469,6 +522,7 @@ Speech segments are numbered [1], [2], [3]... for reference.
 ### 7. Vocabulary / Sentence Structure / Grammar / Pronunciations (10%) — key: Grammar
 - Yes: IR interacts with correct sentence structure, grammar, and clear pronunciation. Professional vocabulary.
 - No: Repeated grammatical errors, broken sentences, or mispronunciations that caused confusion.
+- Each speaker turn in the transcript is a separate spoken utterance — evaluate grammar per utterance, not across the full call as one continuous block. A pause or new turn does not mean a sentence is incomplete.
 - NA: Very rare. Minor slips acceptable.
 
 ### 8. Fillers, Fumbling & Stammering. Clarity of Speech. Avoid Dead Air (10%) — key: Fillers
@@ -522,7 +576,7 @@ Respond with EXACTLY this JSON — no other text:
   "reasoning": {
     "CallOpening":     "brief reason",
     "CallClosing":     "brief reason",
-    "TechnicalLegal":  "brief reason",
+    "TechnicalLegal":  "brief reason — cite the KB document and section used",
     "AllQuestions":    "brief reason",
     "Expectation":     "brief reason",
     "Process":         "brief reason",
@@ -532,6 +586,7 @@ Respond with EXACTLY this JSON — no other text:
     "ActiveListening": "brief reason",
     "Simplifying":     "brief reason"
   },
+  "kbCitation": "Document Name > Section Heading (null if KB was not relevant)",
   "poor_listening_segments": [
     {"segment_index": 7, "phrase": "Could you please repeat that?"}
   ],
@@ -539,7 +594,7 @@ Respond with EXACTLY this JSON — no other text:
   "summary": "1-2 sentence overall assessment"
 }
 \`\`\`
-CRITICAL: Output ONLY the JSON.`;
+CRITICAL: Output ONLY the JSON. For kbCitation, use the exact document name and section heading from the KB context provided (e.g. "Wint Fixed Deposits > Lock-in Period"). Set to null if no KB lookup was needed.`;
 
 // ── Build call scoring prompt ─────────────────────────────────────────────────
 export function buildCallScoringPrompt(
@@ -552,10 +607,12 @@ export function buildCallScoringPrompt(
   chatDisposition = '',
   kbContext = '',
 ): string {
+  const today = new Date().toISOString().split('T')[0];
   return `Score the following Wint Wealth IR call.
 
 ## CALL METADATA
 - Call ID: ${callId}
+- Today's date (scoring date): ${today}
 - Interruptions detected: ${interruptionCount}
 - Dead air instances: ${deadAirCount}
 - Call disposition (extracted from call): ${callDisposition || 'Unknown'}
@@ -576,13 +633,29 @@ Score all 11 parameters. Output ONLY the JSON.`;
 }
 
 // ── Deterministic speaker-label correction ────────────────────────────────────
-// The LLM sometimes swaps IR EXECUTIVE and INVESTOR. We detect this by checking
-// whether any INVESTOR segment contains "Wint" (only the IR says "Wint Wealth").
-// If detected, swap every IR EXECUTIVE ↔ INVESTOR label in the entire array.
+// Detects swapped IR EXECUTIVE / INVESTOR labels via two heuristics:
+// 1. INVESTOR segment says "Wint [Wealth]" in a self-introduction context
+//    — only the IR introduces themselves as calling from Wint.
+// 2. IR EXECUTIVE segment phrases "is this Wint Wealth?" or "are you from Wint"
+//    — investor phrasing, not an IR self-introduction.
 function fixSpeakerLabels(segments: CallSegment[]): CallSegment[] {
-  const labelsReversed = segments.some(
-    s => s.type === 'speech' && s.speaker === 'INVESTOR' && /wint/i.test(s.text || ''),
+  const speechSegs = segments.filter(s => s.type === 'speech');
+
+  // Heuristic 1: INVESTOR says "from Wint" / introduces as Wint Wealth employee
+  const investorClaimsWint = speechSegs.some(
+    s => s.speaker === 'INVESTOR' &&
+         /\bwint\b/i.test(s.text || '') &&
+         // Confirm it looks like a self-introduction, not a question about Wint
+         !/is\s+this\s+wint|are\s+you\s+(from\s+)?wint|this\s+is\s+wint\?/i.test(s.text || ''),
   );
+
+  // Heuristic 2: IR EXECUTIVE asks "is this Wint Wealth?" — investor question pattern
+  const irAsksIfWint = speechSegs.some(
+    s => s.speaker === 'IR EXECUTIVE' &&
+         /is\s+this\s+(wint|wint\s+wealth)|are\s+you\s+(from\s+)?wint/i.test(s.text || ''),
+  );
+
+  const labelsReversed = investorClaimsWint || irAsksIfWint;
   if (!labelsReversed) return segments;
 
   console.warn('[fixSpeakerLabels] Detected reversed labels — swapping IR EXECUTIVE ↔ INVESTOR');
@@ -695,13 +768,17 @@ export function parseCallScoringResponse(raw: string): {
   poorListeningSegments: PoorListeningSegment[];
   iqs: number;
   summary: string;
+  kbCitation: string | null;
 } {
   const data = robustJsonParse(raw);
   const scores: Record<string, CallParamScore> = data?.scores || {};
   const reasoning: Record<string, string> = data?.reasoning || {};
   const poorListeningSegments: PoorListeningSegment[] = data?.poor_listening_segments || [];
   const iqs = calculateCallIQS(scores);
-  return { scores, reasoning, poorListeningSegments, iqs, summary: data?.summary || '' };
+  const kbCitation = typeof data?.kbCitation === 'string' && data.kbCitation.toLowerCase() !== 'null'
+    ? data.kbCitation
+    : null;
+  return { scores, reasoning, poorListeningSegments, iqs, summary: data?.summary || '', kbCitation };
 }
 
 // ── Robust JSON parser (5-step fallback) ──────────────────────────────────────

@@ -101,6 +101,20 @@ export async function storeAcquireScoringLock(chatId: string): Promise<boolean> 
   }
 }
 
+/** Release a scoring lock manually — used by admin batch scoring so that
+ *  a lock held from a previous failed attempt doesn't block the next batch. */
+export async function storeDeleteScoringLock(chatId: string): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/del/wint_scoring_lock:${chatId}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
+    });
+  } catch {
+    // Non-critical — if DEL fails the lock will simply expire after 30 min
+  }
+}
+
 // --- Webhook event_id deduplication ---
 // Prevents the same Robylon webhook event from being processed twice
 // (Robylon retries on timeout — both can arrive before scoring completes).
@@ -398,6 +412,47 @@ export async function storeAppendFlagComment(comment: IQSFlagComment): Promise<v
 export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment[]> {
   const raw = await kv_lrange(flagThreadKey(flagId), 0, -1);
   return raw.map(r => { try { return JSON.parse(r) as IQSFlagComment; } catch { return null; } }).filter(Boolean) as IQSFlagComment[];
+}
+
+// --- IQS Audit Trail ---
+
+const IQS_AUDIT_KEY = 'wint_iqs_audit';
+
+export interface IQSAuditEntry {
+  id: string;
+  action:
+    | 'bot_scored'
+    | 'dispute_raised'
+    | 'ir_dispute_raised'
+    | 'tl_dispute_raised'
+    | 'review_submitted'
+    | 'score_overridden'
+    | 'dispute_resolved'
+    | 'tl_forwarded_dispute'
+    | 'tl_resolved_cat2'
+    | 'tl_override'
+    | 'tl_submit';
+  chatId: string;
+  actorEmail: string;
+  actorRole: string;
+  ts: string;
+  meta?: Record<string, any>;
+}
+
+export async function storeAppendAuditEntry(entry: IQSAuditEntry): Promise<void> {
+  if (!ready()) return;
+  try {
+    await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify([['LPUSH', IQS_AUDIT_KEY, JSON.stringify(entry)], ['LTRIM', IQS_AUDIT_KEY, '0', '1999']]),
+    });
+  } catch (e: any) { log.warn('store', 'kv audit error', { err: e?.message ?? String(e) }); }
+}
+
+export async function storeGetAuditEntries(limit = 200): Promise<IQSAuditEntry[]> {
+  const raw = await kv_lrange(IQS_AUDIT_KEY, 0, limit - 1);
+  return raw.map(r => { try { return JSON.parse(r) as IQSAuditEntry; } catch { return null; } }).filter(Boolean) as IQSAuditEntry[];
 }
 
 // --- Pending Score State (accumulates TICKET_CLOSED + CLASSIFICATION + CSAT before scoring) ---

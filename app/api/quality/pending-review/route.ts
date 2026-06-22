@@ -24,7 +24,7 @@ function qualityAccess(role: string | undefined) {
   return !!role && ['admin', 'quality', 'tl'].includes(role);
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -47,14 +47,65 @@ export async function GET(_req: NextRequest) {
     scopedAgentNames = await getAgentNamesByQA(selfAgentName);
   }
 
-  const dbOpts: Parameters<typeof getAllScoredConversations>[1] = { iqsMax: 79, includeUncertain: true };
-  if (scopedAgentNames !== null) dbOpts.agentNames = scopedAgentNames;
+  // Parse filter params
+  const url = new URL(req.url);
+  const dateFrom     = url.searchParams.get('dateFrom') || '';
+  const dateTo       = url.searchParams.get('dateTo') || '';
+  const tag          = url.searchParams.get('tag') || '';
+  const subTag       = url.searchParams.get('subTag') || '';
+  const minScoreRaw  = parseInt(url.searchParams.get('minScore') ?? '', 10);
+  const maxScoreRaw  = parseInt(url.searchParams.get('maxScore') ?? '', 10);
+  const minScore     = isNaN(minScoreRaw) ? 0  : Math.max(0,   Math.min(100, minScoreRaw));
+  const maxScore     = isNaN(maxScoreRaw) ? 79 : Math.max(0,   Math.min(100, maxScoreRaw));
+  // Clamp so an inverted range doesn't silently return zero results
+  const effectiveMin = Math.min(minScore, maxScore);
+  const effectiveMax = Math.max(minScore, maxScore);
 
-  let rows: any[] = [];
+  // Base opts shared by all queries
+  const baseOpts: Parameters<typeof getAllScoredConversations>[1] = { iqsMax: 79, includeUncertain: true };
+  if (scopedAgentNames !== null) baseOpts.agentNames = scopedAgentNames;
+
+  // Fetch unfiltered set to build dropdown options
+  let allRows: any[] = [];
   try {
-    rows = await getAllScoredConversations(0, dbOpts);
+    allRows = await getAllScoredConversations(0, baseOpts);
   } catch (e: any) {
     return NextResponse.json({ error: 'Database error', detail: e?.message }, { status: 500 });
+  }
+
+  // Build available filter options from full unfiltered set
+  const availableDispositions = [...new Set(allRows.map((r: any) => r.disposition).filter(Boolean))].sort() as string[];
+  const dispositionSubMap: Record<string, string[]> = {};
+  for (const r of allRows) {
+    if (!r.disposition) continue;
+    if (!dispositionSubMap[r.disposition]) dispositionSubMap[r.disposition] = [];
+    if (r.subDisposition && !dispositionSubMap[r.disposition].includes(r.subDisposition)) {
+      dispositionSubMap[r.disposition].push(r.subDisposition);
+    }
+  }
+  for (const k of Object.keys(dispositionSubMap)) dispositionSubMap[k].sort();
+  const availableSubDispositions = [...new Set(allRows.map((r: any) => r.subDisposition).filter(Boolean))].sort() as string[];
+
+  // Apply filters to get final set
+  const filteredOpts: Parameters<typeof getAllScoredConversations>[1] = {
+    ...baseOpts,
+    iqsMin: effectiveMin > 0 ? effectiveMin : undefined,
+    iqsMax: effectiveMax < 100 ? effectiveMax : 79,
+    ...(dateFrom && { dateFrom }),
+    ...(dateTo && { dateTo }),
+    ...(tag && { disposition: tag }),
+    ...(subTag && { subDisposition: subTag }),
+  };
+
+  let rows: any[] = [];
+  if (dateFrom || dateTo || tag || subTag || effectiveMin > 0 || effectiveMax < 79) {
+    try {
+      rows = await getAllScoredConversations(0, filteredOpts);
+    } catch (e: any) {
+      return NextResponse.json({ error: 'Database error', detail: e?.message }, { status: 500 });
+    }
+  } else {
+    rows = allRows;
   }
 
   // Build flag map: chatId → pending flag
@@ -85,7 +136,6 @@ export async function GET(_req: NextRequest) {
       reasoning[k] = val?.reasoning || '';
     }
 
-    // Build qaStatus from DB columns (reviewedBy/reviewedAt come from iqs_scores)
     const qaStatus = row.reviewedBy
       ? { reviewedBy: row.reviewedBy, reviewedAt: row.reviewedAt, reviewNote: row.reviewNote || '' }
       : null;
@@ -97,6 +147,8 @@ export async function GET(_req: NextRequest) {
       scoredAt: row.scoredAt,
       date: row.date ? String(row.date).slice(0, 10) : '',
       mobileNumber: row.mobileNumber || '',
+      disposition: row.disposition || '',
+      subDisposition: row.subDisposition || '',
       flag: flagsByChat[String(row.chatId)] || null,
       qaStatus,
       scores,
@@ -106,7 +158,7 @@ export async function GET(_req: NextRequest) {
   });
 
   const uncertainCount = items.filter(i => !!(i as any).uncertainParameters && !(i as any).qaStatus).length;
-  return NextResponse.json({ items, uncertainCount });
+  return NextResponse.json({ items, uncertainCount, availableDispositions, availableSubDispositions, dispositionSubMap });
 }
 
 export async function PATCH(req: NextRequest) {

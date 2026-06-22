@@ -226,6 +226,7 @@ export async function isScored(chatId: string): Promise<boolean> {
 export interface IQSParameterResult {
   score: boolean | null;  // true=Yes, false=No, null=NA
   reasoning: string;
+  kbCitation?: string;
 }
 
 export async function insertIQSScore(data: {
@@ -260,7 +261,7 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMax?: number; includeUncertain?: boolean } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMin?: number; iqsMax?: number; includeUncertain?: boolean; disposition?: string; subDisposition?: string } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
@@ -273,6 +274,10 @@ export async function getAllScoredConversations(
   if (opts.dateTo) {
     params.push(opts.dateTo);
     conditions.push(`c.closed_at::date <= $${params.length}`);
+  }
+  if (opts.iqsMin !== undefined && opts.iqsMin > 0) {
+    params.push(opts.iqsMin);
+    conditions.push(`s.iqs_score >= $${params.length}`);
   }
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
@@ -294,48 +299,84 @@ export async function getAllScoredConversations(
     // Scoped role with no assigned agents — return nothing
     conditions.push(`1=0`);
   }
+  if (opts.disposition) {
+    params.push(opts.disposition);
+    conditions.push(`(c.tags->>'disposition') = $${params.length}`);
+  }
+  if (opts.subDisposition) {
+    params.push(opts.subDisposition);
+    conditions.push(`(c.tags->>'sub_disposition') = $${params.length}`);
+  }
 
   const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
   const limitSql = limit > 0 ? `LIMIT ${limit}` : '';
 
   return query(`
     SELECT
-      c.id                  AS "chatId",
+      c.id                        AS "chatId",
       COALESCE(c.closed_at, c.started_at)::date AS "date",
-      c.conversation_type   AS "conversationType",
-      c.frt_seconds         AS "frt",
-      c.bot_to_team_seconds AS "botToTeamSecs",
-      c.resolution_seconds  AS "resolutionTime",
+      c.conversation_type         AS "conversationType",
+      c.frt_seconds               AS "frt",
+      c.bot_to_team_seconds       AS "botToTeamSecs",
+      c.resolution_seconds        AS "resolutionTime",
       c.csat_score,
       c.csat_label,
       c.tags,
-      a.name                AS "agentName",
-      s.iqs_score           AS "iqs",
+      c.tags->>'disposition'      AS "disposition",
+      c.tags->>'sub_disposition'  AS "subDisposition",
+      a.name                      AS "agentName",
+      s.iqs_score                 AS "iqs",
       s.parameters,
-      s.model_version       AS "modelVersion",
-      s.scored_at           AS "scoredAt"
+      s.model_version             AS "modelVersion",
+      s.scored_at                 AS "scoredAt",
+      s.reviewed_by               AS "reviewedBy",
+      s.reviewed_at               AS "reviewedAt",
+      s.review_note               AS "reviewNote"
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     ${where}
-    ORDER BY s.scored_at DESC
+    ORDER BY c.closed_at DESC NULLS LAST, s.scored_at DESC
     ${limitSql}
   `, params);
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */
-export async function getUnscoredConversations(minHoursOld = 12): Promise<ConversationRow[]> {
+export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fromDate?: string): Promise<ConversationRow[]> {
+  const params: any[] = [minHoursOld, limit];
+  const fromClause = fromDate ? `AND c.closed_at >= $3::timestamptz` : '';
+  if (fromDate) params.push(fromDate);
+
   return query<ConversationRow>(`
     SELECT c.*
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
     WHERE s.chat_id IS NULL
       AND c.transcript IS NOT NULL
+      AND jsonb_typeof(c.transcript) = 'array'
+      AND jsonb_array_length(c.transcript) > 0
       AND c.tags IS NOT NULL
+      AND (c.tags->>'disposition') IS NOT NULL
+      AND (c.tags->>'disposition') != ''
       AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
+      ${fromClause}
     ORDER BY c.closed_at ASC
-    LIMIT 50
-  `, [minHoursOld]);
+    LIMIT $2
+  `, params);
+}
+
+/**
+ * Insert a sentinel iqs_scores row for chats that can never be scored (e.g.
+ * call-interaction chats, chats with no readable transcript). This prevents
+ * getUnscoredConversations from picking them up on every subsequent batch.
+ * iqs_score is left NULL — callers that aggregate scores already handle NULLs.
+ */
+export async function markChatUnscoreable(chatId: string, reason: string): Promise<void> {
+  await query(`
+    INSERT INTO iqs_scores (chat_id, model_version, scored_at)
+    VALUES ($1, $2, NOW())
+    ON CONFLICT (chat_id) DO NOTHING
+  `, [chatId, `skipped:${reason.slice(0, 80)}`]);
 }
 
 export async function countUnscoredConversations(minHoursOld = 0): Promise<number> {
@@ -507,19 +548,39 @@ export async function getCallRecordingsByContactWindow(
 }
 
 /** Find call recordings for a contact that have not yet been linked to a chat.
- *  Since one phone = one active chat at a time, all unlinked calls with
- *  called_at <= closedAt belong to this chat. */
+ *  Lower bound (startedAt - 15 min) prevents orphaned calls from older conversations
+ *  being incorrectly linked to a newer chat when a backlog of NULL chat_ids exists. */
 export async function getUnlinkedCallsForContact(
   contactId: number,
+  startedAt: string,
   closedAt: string,
 ): Promise<CallRecordingRow[]> {
   return query<CallRecordingRow>(`
     SELECT * FROM call_recordings
     WHERE contact_id = $1
       AND chat_id IS NULL
-      AND called_at <= $2::timestamptz
+      AND called_at >= $2::timestamptz - INTERVAL '15 minutes'
+      AND called_at <= $3::timestamptz
     ORDER BY called_at ASC
-  `, [contactId, closedAt]);
+  `, [contactId, startedAt, closedAt]);
+}
+
+/** Find the closed conversation that a call belongs to, for self-linking after late transcription.
+ *  Matches a conversation whose window (started_at - 15 min → closed_at) contains the call. */
+export async function findClosedConversationForCall(
+  contactId: number,
+  calledAt: string,
+): Promise<{ id: string } | null> {
+  const rows = await query<{ id: string }>(`
+    SELECT id FROM conversations
+    WHERE contact_id = $1
+      AND started_at - INTERVAL '15 minutes' <= $2::timestamptz
+      AND closed_at >= $2::timestamptz
+      AND closed_at IS NOT NULL
+    ORDER BY started_at DESC
+    LIMIT 1
+  `, [contactId, calledAt]);
+  return rows[0] ?? null;
 }
 
 /** Backfill chat_id and advance status to 'linked' on a call recording. */

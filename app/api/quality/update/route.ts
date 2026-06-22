@@ -94,16 +94,15 @@ export async function PATCH(req: NextRequest) {
       if (rowExists) {
         await query(
           `UPDATE iqs_scores
-           SET parameters = $1, iqs_score = $2,
-               reviewed_by = $4, reviewed_at = NOW(), review_note = $5
-           WHERE chat_id = $3`,
-          [JSON.stringify(params), newIqs, chatId, updatedBy, note || null]
+           SET parameters = $1, iqs_score = $2, review_note = $3
+           WHERE chat_id = $4`,
+          [JSON.stringify(params), newIqs, note || null, chatId]
         );
       } else {
         await query(
-          `INSERT INTO iqs_scores (chat_id, parameters, iqs_score, scored_at, reviewed_by, reviewed_at, review_note)
-           VALUES ($1, $2, $3, NOW(), $4, NOW(), $5)`,
-          [chatId, JSON.stringify(params), newIqs, updatedBy, note || null]
+          `INSERT INTO iqs_scores (chat_id, parameters, iqs_score, scored_at, review_note)
+           VALUES ($1, $2, $3, NOW(), $4)`,
+          [chatId, JSON.stringify(params), newIqs, note || null]
         );
       }
       console.log(`[quality/update] Saved override for ${chatId}: iqs=${newIqs}, by=${updatedBy}`);

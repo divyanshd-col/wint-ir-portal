@@ -83,11 +83,11 @@ function fmtDuration(secs: number | null | undefined): string {
 }
 
 function IqsPill({ val }: { val: number | null | undefined }) {
-  if (val == null) return <span className="text-stone-400 text-xs">—</span>;
+  if (val == null) return <span className="text-gray-400 text-xs">—</span>;
   const color =
     val >= 85 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
     val >= 70 ? 'bg-orange-50 text-orange-600 border border-orange-200' :
-                'bg-stone-50 text-stone-500 border border-stone-200';
+                'bg-gray-50 text-gray-500 border border-gray-100';
   return (
     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>
       {val.toFixed(1)}%
@@ -96,11 +96,11 @@ function IqsPill({ val }: { val: number | null | undefined }) {
 }
 
 function CsatBadge({ val }: { val: number | null | undefined }) {
-  if (val == null) return <span className="text-stone-400 text-xs">—</span>;
+  if (val == null) return <span className="text-gray-400 text-xs">—</span>;
   const color =
     val >= 90 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
     val >= 75 ? 'bg-orange-50 text-orange-600 border border-orange-200' :
-                'bg-stone-50 text-stone-500 border border-stone-200';
+                'bg-gray-50 text-gray-500 border border-gray-100';
   return (
     <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold tabular-nums ${color}`}>
       {val.toFixed(1)}%
@@ -109,8 +109,8 @@ function CsatBadge({ val }: { val: number | null | undefined }) {
 }
 
 function ResolutionCell({ secs }: { secs: number | null | undefined }) {
-  if (secs == null) return <span className="text-stone-400 text-xs">—</span>;
-  return <span className="text-xs tabular-nums text-stone-600">{fmtDuration(secs)}</span>;
+  if (secs == null) return <span className="text-gray-400 text-xs">—</span>;
+  return <span className="text-xs tabular-nums text-gray-600">{fmtDuration(secs)}</span>;
 }
 
 // ── Agent Drawer ──────────────────────────────────────────────────────────────
@@ -128,12 +128,12 @@ function AgentDrawer({ agent, onClose }: { agent: AgentData | null; onClose: () 
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="fixed inset-0 bg-black/20" onClick={onClose} />
       <div className="relative bg-white w-full max-w-sm h-full flex flex-col shadow-2xl" style={{ zIndex: 51 }}>
-        <div className="px-5 py-4 border-b border-stone-200 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-stone-800">{agent.name}</h3>
-            <p className="text-xs text-stone-500 mt-0.5">Agent performance overview</p>
+            <h3 className="text-sm font-bold text-gray-900">{agent.name}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">Agent performance overview</p>
           </div>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-xl leading-none">×</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
@@ -146,25 +146,25 @@ function AgentDrawer({ agent, onClose }: { agent: AgentData | null; onClose: () 
                 color: agent.avg_iqs == null ? '' : agent.avg_iqs >= 85 ? 'text-emerald-700' : agent.avg_iqs >= 70 ? 'text-amber-700' : 'text-red-700' },
               { label: 'Avg FRT', value: fmtDuration(agent.avg_frt), plain: true },
               { label: 'Resolution', value: fmtDuration(agent.avg_resolution),
-                color: agent.avg_resolution == null ? '' : agent.avg_resolution > 36000 ? 'text-red-600' : agent.avg_resolution > 18000 ? 'text-amber-600' : 'text-stone-700' },
+                color: agent.avg_resolution == null ? '' : agent.avg_resolution > 36000 ? 'text-red-600' : agent.avg_resolution > 18000 ? 'text-amber-600' : 'text-gray-700' },
               { label: 'Handoff', value: fmtDuration(agent.avg_handoff), plain: true },
             ].map(m => (
-              <div key={m.label} className="bg-stone-50 rounded-xl p-3 border border-stone-100">
-                <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wider mb-1">{m.label}</p>
-                <p className={`text-lg font-bold tabular-nums ${m.color || 'text-stone-800'}`}>{m.value}</p>
+              <div key={m.label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">{m.label}</p>
+                <p className={`text-lg font-bold tabular-nums ${m.color || 'text-gray-900'}`}>{m.value}</p>
               </div>
             ))}
           </div>
 
           {agent.counterpart && (
-            <div className="bg-stone-50 rounded-xl p-3 border border-stone-100 text-xs text-stone-600">
-              <span className="font-semibold text-stone-400 uppercase tracking-wider text-[10px]">Counterpart</span>
-              <p className="mt-0.5 font-medium text-stone-700">{agent.counterpart}</p>
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100 text-xs text-gray-600">
+              <span className="font-semibold text-gray-400 uppercase tracking-wider text-[10px]">Counterpart</span>
+              <p className="mt-0.5 font-medium text-gray-700">{agent.counterpart}</p>
             </div>
           )}
         </div>
 
-        <div className="px-5 py-4 border-t border-stone-200 space-y-2">
+        <div className="px-5 py-4 border-t border-gray-100 space-y-2">
           <Link
             href={qualityUrl}
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-xl transition"
@@ -174,7 +174,7 @@ function AgentDrawer({ agent, onClose }: { agent: AgentData | null; onClose: () 
               <path d="M3 7h8M7 3l4 4-4 4" />
             </svg>
           </Link>
-          <button onClick={onClose} className="w-full py-2 text-stone-500 text-sm hover:text-stone-700 transition">
+          <button onClick={onClose} className="w-full py-2 text-gray-500 text-sm hover:text-gray-700 transition">
             Close
           </button>
         </div>
@@ -205,25 +205,25 @@ function CsatStrip({ good, cbb, bad, total }: { good: number; cbb: number; bad: 
       <div className="flex rounded-full overflow-hidden h-2.5 gap-px mb-3">
         <div className="bg-emerald-400 transition-all" style={{ width: `${goodPct}%` }} />
         <div className="bg-orange-300 transition-all"  style={{ width: `${cbbPct}%`  }} />
-        <div className="bg-stone-300 transition-all"   style={{ width: `${badPct}%`  }} />
+        <div className="bg-gray-200 transition-all"   style={{ width: `${badPct}%`  }} />
       </div>
       <div className="flex items-center gap-4 text-xs">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
-          <span className="text-stone-600 font-medium">Good</span>
-          <span className="text-stone-500">{good} · {goodPct}%</span>
+          <span className="text-gray-600 font-medium">Good</span>
+          <span className="text-gray-500">{good} · {goodPct}%</span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-orange-300 shrink-0" />
-          <span className="text-stone-600 font-medium">CBB</span>
-          <span className="text-stone-500">{cbb} · {cbbPct}%</span>
+          <span className="text-gray-600 font-medium">CBB</span>
+          <span className="text-gray-500">{cbb} · {cbbPct}%</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-stone-300 shrink-0" />
-          <span className="text-stone-600 font-medium">Bad</span>
-          <span className="text-stone-500">{bad} · {badPct}%</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-gray-200 shrink-0" />
+          <span className="text-gray-600 font-medium">Bad</span>
+          <span className="text-gray-500">{bad} · {badPct}%</span>
         </span>
-        <span className="ml-auto text-stone-400">{total} rated</span>
+        <span className="ml-auto text-gray-400">{total} rated</span>
       </div>
     </div>
   );
@@ -232,7 +232,7 @@ function CsatStrip({ good, cbb, bad, total }: { good: number; cbb: number; bad: 
 // ── IQS Health bar ────────────────────────────────────────────────────────────
 function IqsHealth({ excellent, warn, risk }: { excellent: number; warn: number; risk: number }) {
   const total = excellent + warn + risk;
-  if (total === 0) return <p className="text-xs text-stone-400">No IQS data</p>;
+  if (total === 0) return <p className="text-xs text-gray-400">No IQS data</p>;
   const excPct  = Math.round((excellent / total) * 100);
   const warnPct = Math.round((warn      / total) * 100);
   const riskPct = Math.round((risk      / total) * 100);
@@ -241,23 +241,23 @@ function IqsHealth({ excellent, warn, risk }: { excellent: number; warn: number;
       <div className="flex rounded-full overflow-hidden h-2.5 gap-px mb-3">
         <div className="bg-emerald-400 transition-all" style={{ width: `${excPct}%` }} />
         <div className="bg-orange-300 transition-all"  style={{ width: `${warnPct}%` }} />
-        <div className="bg-stone-300 transition-all"   style={{ width: `${riskPct}%` }} />
+        <div className="bg-gray-200 transition-all"   style={{ width: `${riskPct}%` }} />
       </div>
       <div className="flex items-center gap-4 text-xs">
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
-          <span className="text-stone-600 font-medium">≥85</span>
-          <span className="text-stone-500">{excellent} chats</span>
+          <span className="text-gray-600 font-medium">≥85</span>
+          <span className="text-gray-500">{excellent} chats</span>
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-orange-300 shrink-0" />
-          <span className="text-stone-600 font-medium">70–84</span>
-          <span className="text-stone-500">{warn} chats</span>
+          <span className="text-gray-600 font-medium">70–84</span>
+          <span className="text-gray-500">{warn} chats</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-stone-300 shrink-0" />
-          <span className="text-stone-600 font-medium">&lt;70</span>
-          <span className="text-stone-500">{risk} chats</span>
+          <span className="w-2.5 h-2.5 rounded-full bg-gray-200 shrink-0" />
+          <span className="text-gray-600 font-medium">&lt;70</span>
+          <span className="text-gray-500">{risk} chats</span>
         </span>
       </div>
     </div>
@@ -275,30 +275,30 @@ function ChannelCard({
 }) {
   const pct = totalVolume > 0 ? Math.round((volume / totalVolume) * 100) : 0;
   return (
-    <div className="bg-white border border-stone-200 rounded-xl p-4 flex-1">
+    <div className="bg-white border border-gray-100 rounded-xl p-4 flex-1">
       <div className="flex items-center gap-2 mb-3">
-        <span className="text-stone-400">{icon}</span>
-        <span className="text-sm font-semibold text-stone-700">{label}</span>
-        <span className="ml-auto text-xs text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full">{pct}% of total</span>
+        <span className="text-gray-400">{icon}</span>
+        <span className="text-sm font-semibold text-gray-700">{label}</span>
+        <span className="ml-auto text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">{pct}% of total</span>
       </div>
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Volume</p>
-          <p className="text-xl font-bold text-stone-800 tabular-nums">{volume.toLocaleString()}</p>
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Volume</p>
+          <p className="text-xl font-bold text-gray-900 tabular-nums">{volume.toLocaleString()}</p>
         </div>
         <div>
-          <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">CSAT %</p>
-          <p className={`text-xl font-bold tabular-nums ${csat == null ? 'text-stone-400' : csat >= 90 ? 'text-emerald-600' : csat >= 75 ? 'text-orange-500' : 'text-stone-500'}`}>
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">CSAT %</p>
+          <p className={`text-xl font-bold tabular-nums ${csat == null ? 'text-gray-400' : csat >= 90 ? 'text-emerald-600' : csat >= 75 ? 'text-orange-500' : 'text-gray-500'}`}>
             {csat != null ? `${csat}%` : '—'}
           </p>
         </div>
         <div>
-          <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Avg FRT</p>
-          <p className="text-sm font-semibold text-stone-700 tabular-nums">{fmtDuration(frt)}</p>
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Avg FRT</p>
+          <p className="text-sm font-semibold text-gray-700 tabular-nums">{fmtDuration(frt)}</p>
         </div>
         <div>
-          <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Avg Resolution</p>
-          <p className={`text-sm font-semibold tabular-nums ${resolution == null ? 'text-stone-400' : 'text-stone-700'}`}>
+          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Avg Resolution</p>
+          <p className={`text-sm font-semibold tabular-nums ${resolution == null ? 'text-gray-400' : 'text-gray-700'}`}>
             {fmtDuration(resolution)}
           </p>
         </div>
@@ -317,12 +317,12 @@ function KpiCard({ label, value, sub, onClick, active }: {
       onClick={onClick}
       className={`bg-white border rounded-xl p-4 transition ${
         onClick ? 'cursor-pointer hover:border-emerald-300 hover:shadow-sm' : ''
-      } ${active ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-stone-200'}`}
+      } ${active ? 'border-emerald-400 ring-1 ring-emerald-200' : 'border-gray-100'}`}
     >
-      <p className="text-[11px] text-stone-500 uppercase tracking-wider font-semibold mb-1">{label}</p>
-      <p className="text-2xl font-bold text-stone-800 tabular-nums">{value}</p>
-      {sub && <p className="text-xs text-stone-400 mt-1">{sub}</p>}
-      {onClick && <p className="text-[10px] text-stone-300 mt-1.5">Click to expand</p>}
+      <p className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold mb-1">{label}</p>
+      <p className="text-2xl font-bold text-gray-900 tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
+      {onClick && <p className="text-[10px] text-gray-200 mt-1.5">Click to expand</p>}
     </div>
   );
 }
@@ -343,42 +343,42 @@ function TeamsView() {
 
   if (loading) return (
     <div className="space-y-3 p-4">
-      {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-stone-100 rounded-xl animate-pulse" />)}
+      {[...Array(3)].map((_, i) => <div key={i} className="h-24 bg-gray-100 rounded-xl animate-pulse" />)}
     </div>
   );
 
   return (
     <div className="p-4 space-y-4">
       {teams.map(team => (
-        <div key={team.team_id} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-stone-100">
+        <div key={team.team_id} className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
             <div className="flex items-center gap-3">
-              <span className="text-stone-800 font-semibold">{team.team_name}</span>
-              <span className="text-xs text-stone-400 bg-stone-100 px-2 py-0.5 rounded-full capitalize">{team.team_type}</span>
+              <span className="text-gray-900 font-semibold">{team.team_name}</span>
+              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full capitalize">{team.team_type}</span>
             </div>
-            <div className="flex items-center gap-4 text-xs text-stone-500">
-              {team.tl_name && <span>TL: <span className="text-stone-600">{team.tl_name}</span></span>}
+            <div className="flex items-center gap-4 text-xs text-gray-500">
+              {team.tl_name && <span>TL: <span className="text-gray-600">{team.tl_name}</span></span>}
               <span>{team.agents.length} agent{team.agents.length !== 1 ? 's' : ''}</span>
             </div>
           </div>
           {team.agents.length === 0 ? (
-            <p className="px-5 py-4 text-stone-400 text-sm italic">No agents assigned to this team.</p>
+            <p className="px-5 py-4 text-gray-400 text-sm italic">No agents assigned to this team.</p>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-stone-100">
-                  <th className="px-5 py-2 text-left text-xs text-stone-400 font-medium uppercase tracking-wider">Agent</th>
-                  <th className="px-5 py-2 text-left text-xs text-stone-400 font-medium uppercase tracking-wider">QA</th>
-                  <th className="px-5 py-2 text-left text-xs text-stone-400 font-medium uppercase tracking-wider">Status</th>
+                <tr className="border-b border-gray-100">
+                  <th className="px-5 py-2 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">Agent</th>
+                  <th className="px-5 py-2 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">QA</th>
+                  <th className="px-5 py-2 text-left text-xs text-gray-400 font-medium uppercase tracking-wider">Status</th>
                 </tr>
               </thead>
               <tbody>
                 {team.agents.map(a => (
-                  <tr key={a.agent_id} className="border-b border-stone-50 last:border-0 hover:bg-stone-50/50 transition">
-                    <td className="px-5 py-2.5 text-stone-700">{a.agent_name}</td>
-                    <td className="px-5 py-2.5 text-stone-500">{a.qa_name || <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium">QA lead vacant</span>}</td>
+                  <tr key={a.agent_id} className="border-b border-gray-50 last:border-0 hover:bg-gray-50/50 transition">
+                    <td className="px-5 py-2.5 text-gray-700">{a.agent_name}</td>
+                    <td className="px-5 py-2.5 text-gray-500">{a.qa_name || <span className="text-xs px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 font-medium">QA lead vacant</span>}</td>
                     <td className="px-5 py-2.5">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${a.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-stone-100 text-stone-500'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${a.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
                         {a.status}
                       </span>
                     </td>
@@ -398,9 +398,9 @@ function TeamsView() {
           <table className="w-full text-sm">
             <tbody>
               {unassigned.map(a => (
-                <tr key={a.agent_id} className="border-b border-stone-50 last:border-0">
-                  <td className="px-5 py-2.5 text-stone-500">{a.agent_name}</td>
-                  <td className="px-5 py-2.5 text-stone-400">{a.qa_name || '—'}</td>
+                <tr key={a.agent_id} className="border-b border-gray-50 last:border-0">
+                  <td className="px-5 py-2.5 text-gray-500">{a.agent_name}</td>
+                  <td className="px-5 py-2.5 text-gray-400">{a.qa_name || '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -492,9 +492,9 @@ export default function AdminDashboard() {
     : null;
 
   const skeletonCards = [...Array(5)].map((_, i) => (
-    <div key={i} className="bg-white border border-stone-200 rounded-xl p-4 animate-pulse">
-      <div className="h-3 bg-stone-100 rounded w-2/3 mb-3" />
-      <div className="h-7 bg-stone-100 rounded w-1/2" />
+    <div key={i} className="bg-white border border-gray-100 rounded-xl p-4 animate-pulse">
+      <div className="h-3 bg-gray-100 rounded w-2/3 mb-3" />
+      <div className="h-7 bg-gray-100 rounded w-1/2" />
     </div>
   ));
 
@@ -505,13 +505,13 @@ export default function AdminDashboard() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold text-stone-800">CX Performance</h1>
-          <div className="flex bg-stone-100 rounded-lg p-0.5 gap-0.5">
+          <h1 className="text-xl font-semibold text-gray-900">CX Performance</h1>
+          <div className="flex bg-gray-100 rounded-lg p-0.5 gap-0.5">
             {(['metrics', 'teams'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setMainTab(t)}
-                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition ${mainTab === t ? 'bg-emerald-600 text-white shadow-sm' : 'text-stone-500 hover:text-stone-700'}`}
+                className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition ${mainTab === t ? 'bg-emerald-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
               >
                 {t === 'metrics' ? 'Metrics' : 'Teams'}
               </button>
@@ -527,7 +527,7 @@ export default function AdminDashboard() {
                   key={p.id}
                   onClick={() => setPreset(p.id)}
                   className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                    preset === p.id ? 'bg-emerald-600 text-white' : 'bg-stone-100 text-stone-500 hover:text-stone-700'
+                    preset === p.id ? 'bg-emerald-600 text-white' : 'bg-gray-100 text-gray-500 hover:text-gray-700'
                   }`}
                 >
                   {p.label}
@@ -537,10 +537,10 @@ export default function AdminDashboard() {
             {preset === 'custom' && (
               <div className="flex items-center gap-2">
                 <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                  className="bg-stone-100 border border-stone-200 rounded-lg px-2 py-1 text-xs text-stone-600 focus:outline-none focus:border-stone-300" />
-                <span className="text-stone-400 text-xs">to</span>
+                  className="bg-gray-100 border border-gray-100 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:border-gray-200" />
+                <span className="text-gray-400 text-xs">to</span>
                 <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-                  className="bg-stone-100 border border-stone-200 rounded-lg px-2 py-1 text-xs text-stone-600 focus:outline-none focus:border-stone-300" />
+                  className="bg-gray-100 border border-gray-100 rounded-lg px-2 py-1 text-xs text-gray-600 focus:outline-none focus:border-gray-200" />
               </div>
             )}
           </div>
@@ -553,10 +553,10 @@ export default function AdminDashboard() {
 
       {/* ── Teams view ── */}
       {mainTab === 'teams' && (
-        <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-stone-200">
-            <h2 className="text-stone-800 font-medium">Team Structure</h2>
-            <p className="text-stone-400 text-xs mt-0.5">Teams, TLs, assigned agents and QA reviewers</p>
+        <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100">
+            <h2 className="text-gray-900 font-medium">Team Structure</h2>
+            <p className="text-gray-400 text-xs mt-0.5">Teams, TLs, assigned agents and QA reviewers</p>
           </div>
           <TeamsView />
         </div>
@@ -593,19 +593,19 @@ export default function AdminDashboard() {
             <div className="bg-white border border-emerald-200 rounded-xl p-5 -mt-2">
               {activeCard === 'csat' && (
                 <>
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">CSAT Sentiment Breakdown</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">CSAT Sentiment Breakdown</p>
                   <CsatStrip good={overview.csat_good} cbb={overview.csat_cbb ?? 0} bad={overview.csat_bad} total={overview.with_csat} />
                 </>
               )}
               {activeCard === 'iqs' && (
                 <>
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">IQS Score Distribution</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">IQS Score Distribution</p>
                   <IqsHealth excellent={overview.iqs_excellent} warn={overview.iqs_warn} risk={overview.iqs_risk} />
                 </>
               )}
               {activeCard === 'volume' && (
                 <>
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">Volume by Channel</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Volume by Channel</p>
                   <div className="flex items-center gap-6 text-sm">
                     {[
                       { label: 'Bot', val: overview.bot_volume },
@@ -613,9 +613,9 @@ export default function AdminDashboard() {
                       { label: 'Hybrid', val: overview.hybrid_volume },
                     ].filter(c => c.val > 0).map(c => (
                       <div key={c.label}>
-                        <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">{c.label}</p>
-                        <p className="text-xl font-bold text-stone-700 tabular-nums">{c.val.toLocaleString()}</p>
-                        <p className="text-[10px] text-stone-400">{Math.round((c.val / overview.volume) * 100)}% of total</p>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">{c.label}</p>
+                        <p className="text-xl font-bold text-gray-700 tabular-nums">{c.val.toLocaleString()}</p>
+                        <p className="text-[10px] text-gray-400">{Math.round((c.val / overview.volume) * 100)}% of total</p>
                       </div>
                     ))}
                   </div>
@@ -623,35 +623,35 @@ export default function AdminDashboard() {
               )}
               {activeCard === 'frt' && (
                 <>
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">FRT Detail</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">FRT Detail</p>
                   <div className="flex items-center gap-8 text-sm">
                     <div>
-                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">SLA Met (≤3 min)</p>
-                      <p className="text-xl font-bold text-stone-700 tabular-nums">{overview.frt_sla_met}</p>
-                      <p className="text-[10px] text-stone-400">{frtSlaPct != null ? `${frtSlaPct}% of ${overview.with_frt} chats` : '—'}</p>
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">SLA Met (≤3 min)</p>
+                      <p className="text-xl font-bold text-gray-700 tabular-nums">{overview.frt_sla_met}</p>
+                      <p className="text-[10px] text-gray-400">{frtSlaPct != null ? `${frtSlaPct}% of ${overview.with_frt} chats` : '—'}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Bot Avg FRT</p>
-                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.bot_avg_frt)}</p>
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Bot Avg FRT</p>
+                      <p className="text-xl font-bold text-gray-700 tabular-nums">{fmtDuration(overview.bot_avg_frt)}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Agent Avg FRT</p>
-                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.agent_avg_frt)}</p>
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Agent Avg FRT</p>
+                      <p className="text-xl font-bold text-gray-700 tabular-nums">{fmtDuration(overview.agent_avg_frt)}</p>
                     </div>
                   </div>
                 </>
               )}
               {activeCard === 'resolution' && (
                 <>
-                  <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-4">Resolution by Channel</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Resolution by Channel</p>
                   <div className="flex items-center gap-8 text-sm">
                     <div>
-                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Bot Avg</p>
-                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.bot_avg_resolution)}</p>
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Bot Avg</p>
+                      <p className="text-xl font-bold text-gray-700 tabular-nums">{fmtDuration(overview.bot_avg_resolution)}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-stone-400 font-semibold uppercase tracking-wider mb-0.5">Agent Avg</p>
-                      <p className="text-xl font-bold text-stone-700 tabular-nums">{fmtDuration(overview.agent_avg_resolution)}</p>
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-0.5">Agent Avg</p>
+                      <p className="text-xl font-bold text-gray-700 tabular-nums">{fmtDuration(overview.agent_avg_resolution)}</p>
                     </div>
                   </div>
                 </>
@@ -662,7 +662,7 @@ export default function AdminDashboard() {
           {/* Bot vs Agent comparison */}
           {!loadingOverview && overview && (overview.bot_volume > 0 || overview.agent_volume > 0) && (
             <div>
-              <p className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3">Channel Breakdown</p>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Channel Breakdown</p>
               <div className="flex gap-3 flex-wrap">
                 {overview.bot_volume > 0 && (
                   <ChannelCard
@@ -690,47 +690,47 @@ export default function AdminDashboard() {
           )}
 
           {/* Breakdown table */}
-          <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-            <div className="flex items-center justify-between border-b border-stone-200">
+          <div className="bg-white border border-gray-100 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-gray-100">
               <div className="flex">
                 {(['tl', 'qa'] as const).map(t => (
                   <button
                     key={t}
                     onClick={() => setViewTab(t)}
-                    className={`px-5 py-3 text-sm font-medium transition ${viewTab === t ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-stone-400 hover:text-stone-600'}`}
+                    className={`px-5 py-3 text-sm font-medium transition ${viewTab === t ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-400 hover:text-gray-600'}`}
                   >
                     {t === 'tl' ? 'By Team Lead' : 'By QA Reviewer'}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-stone-400 px-4">Click a row to expand agents · click an agent to inspect</p>
+              <p className="text-xs text-gray-400 px-4">Click a row to expand agents · click an agent to inspect</p>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-stone-100 bg-stone-50/50">
-                    <th className="px-4 py-3 text-left text-stone-400 font-semibold text-xs uppercase tracking-wider w-8"></th>
-                    <th className="px-4 py-3 text-left text-stone-400 font-semibold text-xs uppercase tracking-wider">Name</th>
-                    <th className="px-4 py-3 text-left text-stone-400 font-semibold text-xs uppercase tracking-wider">Agents</th>
-                    <th className="px-4 py-3 text-left text-stone-400 font-semibold text-xs uppercase tracking-wider">Volume</th>
-                    <th className="px-4 py-3 text-left text-stone-400 font-semibold text-xs uppercase tracking-wider">CSAT %</th>
-                    <th className="px-4 py-3 text-left text-stone-400 font-semibold text-xs uppercase tracking-wider">IQS %</th>
-                    <th className="px-4 py-3 text-left text-stone-400 font-semibold text-xs uppercase tracking-wider">Avg Resolution</th>
+                  <tr className="border-b border-gray-100 bg-gray-50/50">
+                    <th className="px-4 py-3 text-left text-gray-400 font-semibold text-xs uppercase tracking-wider w-8"></th>
+                    <th className="px-4 py-3 text-left text-gray-400 font-semibold text-xs uppercase tracking-wider">Name</th>
+                    <th className="px-4 py-3 text-left text-gray-400 font-semibold text-xs uppercase tracking-wider">Agents</th>
+                    <th className="px-4 py-3 text-left text-gray-400 font-semibold text-xs uppercase tracking-wider">Volume</th>
+                    <th className="px-4 py-3 text-left text-gray-400 font-semibold text-xs uppercase tracking-wider">CSAT %</th>
+                    <th className="px-4 py-3 text-left text-gray-400 font-semibold text-xs uppercase tracking-wider">IQS %</th>
+                    <th className="px-4 py-3 text-left text-gray-400 font-semibold text-xs uppercase tracking-wider">Avg Resolution</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loadingGroups ? (
                     [...Array(4)].map((_, i) => (
-                      <tr key={i} className="border-b border-stone-100">
+                      <tr key={i} className="border-b border-gray-100">
                         <td colSpan={7} className="px-4 py-3">
-                          <div className="h-4 bg-stone-100 rounded animate-pulse w-3/4" />
+                          <div className="h-4 bg-gray-100 rounded animate-pulse w-3/4" />
                         </td>
                       </tr>
                     ))
                   ) : groups.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-10 text-center text-stone-400">No data for selected range</td>
+                      <td colSpan={7} className="px-4 py-10 text-center text-gray-400">No data for selected range</td>
                     </tr>
                   ) : (
                     groups.map(group => {
@@ -740,14 +740,14 @@ export default function AdminDashboard() {
                         <Fragment key={group.entity_name}>
                           <tr
                             onClick={() => toggleRow(group.entity_name)}
-                            className="border-b border-stone-100 hover:bg-stone-50 transition cursor-pointer"
+                            className="border-b border-gray-100 hover:bg-gray-50 transition cursor-pointer"
                           >
-                            <td className="px-4 py-3 text-stone-400 text-xs">
+                            <td className="px-4 py-3 text-gray-400 text-xs">
                               <span className={`transition-transform inline-block ${expanded ? 'rotate-90' : ''}`}>▶</span>
                             </td>
-                            <td className="px-4 py-3 text-stone-700 font-semibold">{group.entity_name}</td>
-                            <td className="px-4 py-3 text-stone-400 tabular-nums">{group.agent_count}</td>
-                            <td className="px-4 py-3 text-stone-600 font-medium tabular-nums">{group.volume}</td>
+                            <td className="px-4 py-3 text-gray-700 font-semibold">{group.entity_name}</td>
+                            <td className="px-4 py-3 text-gray-400 tabular-nums">{group.agent_count}</td>
+                            <td className="px-4 py-3 text-gray-600 font-medium tabular-nums">{group.volume}</td>
                             <td className="px-4 py-3"><CsatBadge val={group.csat_pct} /></td>
                             <td className="px-4 py-3"><IqsPill val={group.avg_iqs} /></td>
                             <td className="px-4 py-3"><ResolutionCell secs={group.avg_resolution} /></td>
@@ -757,18 +757,18 @@ export default function AdminDashboard() {
                             <tr
                               key={`${group.entity_name}-${agent.agent_id}`}
                               onClick={() => setSelectedAgent(agent)}
-                              className="border-b border-stone-50 bg-stone-50/40 hover:bg-emerald-50/40 cursor-pointer transition group"
+                              className="border-b border-gray-50 bg-gray-50/40 hover:bg-emerald-50/40 cursor-pointer transition group"
                             >
                               <td className="px-4 py-2.5"></td>
-                              <td className="px-4 py-2.5 pl-8 text-stone-700 text-xs">
+                              <td className="px-4 py-2.5 pl-8 text-gray-700 text-xs">
                                 <div className="flex items-center gap-2">
                                   <span className="font-semibold">{agent.name}</span>
                                   <span className="text-[10px] text-emerald-600 opacity-0 group-hover:opacity-100 transition font-medium">Inspect →</span>
                                 </div>
-                                <span className="text-stone-400 text-[10px]">{counterpartLabel}: {agent.counterpart}</span>
+                                <span className="text-gray-400 text-[10px]">{counterpartLabel}: {agent.counterpart}</span>
                               </td>
-                              <td className="px-4 py-2.5 text-stone-400 text-xs">—</td>
-                              <td className="px-4 py-2.5 text-stone-600 text-xs font-medium tabular-nums">{agent.volume}</td>
+                              <td className="px-4 py-2.5 text-gray-400 text-xs">—</td>
+                              <td className="px-4 py-2.5 text-gray-600 text-xs font-medium tabular-nums">{agent.volume}</td>
                               <td className="px-4 py-2.5"><CsatBadge val={agent.csat_pct} /></td>
                               <td className="px-4 py-2.5"><IqsPill val={agent.avg_iqs} /></td>
                               <td className="px-4 py-2.5"><ResolutionCell secs={agent.avg_resolution} /></td>

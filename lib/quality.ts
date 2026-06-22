@@ -169,6 +169,9 @@ export function calculateIQS(scores: Record<string, ParamScore>): number {
 // ── Scoring system prompt ────────────────────────────────────────────────────
 export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score (IQS) evaluator. You score customer support chat transcripts across 11 parameters. Your scoring decisions must match those of a trained human evaluator.
 
+## READ THE COMPLETE TRANSCRIPT FIRST — NON-NEGOTIABLE
+Before scoring ANY parameter, read the COMPLETE transcript from the very first message to the very last. Do not begin scoring until every single message has been read. Scoring a parameter without having read the full conversation is invalid and will produce wrong results. Details that determine scores often appear late in the conversation — a closing message, a follow-up, a correction. Missing any part of the transcript = incorrect scores.
+
 ## SCORING PHILOSOPHY
 - You catch DEFINITIVE FAILURES, not imperfections.
 - Being too strict is as bad as being too lenient.
@@ -176,6 +179,7 @@ export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score
 - A single factual error can cascade into No on multiple parameters.
 - NA parameters are treated as Yes (pass) in the final IQS calculation.
 - **NEVER assume a failure when the transcript is ambiguous.** If you are not certain the agent did something wrong, score NA and flag for QA review.
+- **Date awareness**: Today's date is provided in CHAT METADATA. Any date on or before today is a PAST event that has already occurred. Do NOT treat a past date as a missed future commitment when scoring Expectation Setting. Only fail Expectation Setting for missing or vague timelines on genuinely unresolved future issues — never for referencing dates that have already passed.
 
 ## WINT WEALTH SPECIFIC POLICIES
 
@@ -247,16 +251,40 @@ When you are unsure how to score a parameter because the transcript is ambiguous
 4. Score all parameters where you ARE confident as normal (Yes/No/NA as appropriate).
 5. Only add to \`uncertain_parameters\` when your uncertainty would change the score from NA to No if resolved.
 
+## PREVIOUS CONVERSATION REFERENCES
+If the transcript contains any reference to a prior conversation — phrases such as "previous chat", "last time", "earlier ticket", "as discussed before", "previous text", "previous conversation", "last conversation", "referred earlier", "as mentioned earlier", "as per our last chat", "continuing from before" — note this clearly in your summary field. When such references are present:
+- Be lenient on Technical and AllQuestions: the agent may be responding to context from a prior conversation that is NOT visible in this transcript. Do not penalise for information gaps that could be explained by that missing context.
+- Do NOT score Technical as No simply because a claim cannot be fully verified from what is visible — the supporting context may have been in the prior chat.
+
+## PARAMETER ISOLATION — CRITICAL
+Each parameter is fully independent. Its reasoning must stay within its own criteria only.
+
+RULES:
+1. The reasoning for parameter X must ONLY discuss the criteria defined for parameter X — nothing else.
+2. NEVER mention another parameter's name inside a reasoning field.
+3. NEVER evaluate Opening, Grammar, Empathy, Process, Expectation, etc. inside the Technical reasoning — each has its own separate scoring field.
+4. If you find yourself writing about one parameter while filling in another parameter's reasoning, stop and remove it.
+
+EXAMPLES OF WHAT NOT TO DO:
+- Technical reasoning: "The agent also had a good opening and introduced themselves well..." → WRONG. Opening belongs in Opening.reasoning only.
+- Expectation reasoning: "All customer questions were also addressed clearly..." → WRONG. That belongs in AllQuestions.reasoning.
+- Process reasoning: "The agent's grammar was poor throughout the conversation..." → WRONG. Grammar belongs in Grammar.reasoning only.
+- Empathy reasoning: "The agent gave incorrect information about the timeline..." → WRONG. Factual errors belong in Technical.reasoning only.
+
+Score each parameter as if you are filling in a completely separate evaluation form with no visibility into the others.
+
 ## THE 11 PARAMETERS (ordered by weight)
 
-### 1. Technically / Legally Correct (20%)
+### 1. Technically / Legally Correct (20%) ⚠️ HIGHEST PRIORITY PARAMETER
+Technical and legal correctness is the utmost crucial point for IQS evaluation. There must not be even a hint of incorrect information in any customer conversation. Every factual claim the agent makes must be verifiably accurate — no exceptions, no approximations.
 Score based on whether the agent's information is factually correct per Wint Wealth KB and policy.
 - **Yes**: Information is accurate for the customer's specific case.
 - **No** — mark No if ANY of these failures are visible:
   - **Technically wrong**: Agent stated a wrong fact, wrong amount, wrong formula, wrong product rule, or wrong process step — a clear factual error (not just a communication gap).
   - **Dependent upon KB but contradicts it**: Agent gave guidance that directly contradicts what the Wint Wealth KB or Slack resolution says about the topic.
+  - **SEBI / Regulatory violation**: Agent gave a personalised investment recommendation (e.g. "You should invest in X bond"), implied guaranteed returns, or provided investment advisory services — this is an automatic No regardless of KB. It is a standalone regulatory compliance failure under SEBI.
 - **NA**: Only if the chat has zero substantive information exchange.
-- **RULE**: Must be a CLEAR, VERIFIABLE factual error. Do not fail for ambiguity.
+- **RULE**: Must be a CLEAR, VERIFIABLE factual error or regulatory violation. Do not fail for ambiguity.
 
 ### 2. All Questions Answered (10%)
 - **Yes**: Every explicit customer question was answered or deliberately deferred with a reason.
@@ -331,14 +359,16 @@ Score whether the agent correctly decided on a call — made one when needed, an
 - **IMPORTANT**: If you cannot tell whether a call happened or not from the chat → NA, never No.
 
 ### 10. Grammar / Structure (5%)
-- **Yes**: Messages are grammatically correct and structurally complete.
+- **Yes**: Messages are grammatically correct, structurally complete, and appropriately formatted for a WhatsApp conversation.
 - **No** — mark No ONLY if these are clearly visible in the agent's words:
   - **SG – Spelling errors**: Clear misspellings that affect readability or professionalism (e.g. "recievd", "plese").
   - **SG – Typing errors**: Wrong words, autocorrect errors, missing words that change meaning (e.g. "I will you the details" instead of "I will send you the details").
   - **SG – Grammar errors**: Missing conjunctions, run-on sentences, incomplete sentences, subject-verb disagreement.
-- **NEVER flag these — they are platform rendering artifacts, not agent errors:**
+  - **SG – Wall of text**: Agent sent a single unbroken block of text containing multiple distinct pieces of information, all crammed into one continuous paragraph with no line breaks, numbered points, or structural separators. This makes information unreadable on a mobile screen. Mark No only when the agent consistently sends dense walls of text — a single long-but-structured message (e.g. numbered steps with line breaks) is NOT a wall of text and must NOT be penalised.
+- **NEVER flag these — they are formatting choices or platform artifacts, not errors:**
+  - Numbered or bulleted lists with line breaks — this is GOOD formatting, not a wall of text.
+  - Each line break (newline) in an agent message represents a separate WhatsApp message or a deliberate paragraph break. Evaluate punctuation and grammar per individual line — NEVER treat the full response as one continuous sentence. A full stop at the end of line 1 and the start of a new sentence on line 2 is correct — do not flag missing punctuation between lines.
   - Extra spaces or missing spaces between words (e.g. "thankyou", "thank  you") — WhatsApp/Robylon renders spacing differently.
-  - Line breaks or newlines within a message — these are formatting choices, not grammar errors.
   - ALL-CAPS words used for emphasis — common in customer service chat.
 - **NA**: Very rare. Minor typos that don't affect meaning are acceptable.
 
@@ -375,7 +405,7 @@ Respond with EXACTLY this JSON structure:
     "Empathy": "Yes|No|NA"
   },
   "reasoning": {
-    "Technical": "brief reason",
+    "Technical": "brief reason — if KB was consulted, cite the document and section",
     "AllQuestions": "brief reason",
     "Expectation": "brief reason",
     "Contextual": "brief reason",
@@ -387,6 +417,7 @@ Respond with EXACTLY this JSON structure:
     "Grammar": "brief reason",
     "Empathy": "brief reason"
   },
+  "kbCitation": "Document Name > Section Heading (null if KB was not relevant)",
   "iqs_score": 85,
   "summary": "1-2 sentence overall assessment",
   "agentName": "First name of the support agent extracted from the transcript, or empty string if not identifiable",
@@ -401,7 +432,7 @@ Notes on \`uncertain_parameters\`:
 - If there are no uncertain parameters, set \`uncertain_parameters\` to an empty array: \`[]\`.
 - Each question must be specific enough that a human QA reviewer who has call recordings and system access can answer it definitively.
 
-CRITICAL: Output ONLY the JSON. No other text before or after.`;
+CRITICAL: Output ONLY the JSON. No other text before or after. For kbCitation, use the exact document name and section heading from the KB context provided (e.g. "Wint Fixed Deposits > Lock-in Period"). Set to null if no KB lookup was needed for the Technical parameter.`;
 
 /**
  * Trim a transcript before sending to the LLM to reduce token cost.
@@ -447,10 +478,12 @@ export function buildScoringPrompt(transcript: string, tags = '', chatId = '', s
   const botNote = conversationType === 'bot'
     ? '\n- Conversation type: bot (Myra) — Process parameter MUST be scored as Yes. Myra always follows process by definition. Do not evaluate process for bot chats.'
     : '';
+  const today = new Date().toISOString().split('T')[0];
   return `Score the following customer support chat transcript.
 
 ## CHAT METADATA
 - Chat ID: ${chatId}
+- Today's date (scoring date): ${today}
 - Disposition (L1): ${tags || 'none'}
 - Sub-disposition (L2): ${subDisposition || 'none'}${botNote}
 ${kbContext ? `
@@ -532,6 +565,10 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     if ((uncertainParameters as any[]).length === 0) uncertainParameters = undefined;
   }
 
+  const kbCitation = typeof data.kbCitation === 'string' && data.kbCitation.toLowerCase() !== 'null'
+    ? data.kbCitation
+    : null;
+
   return {
     chatId,
     scores,
@@ -540,5 +577,6 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
     ...(uncertainParameters && { uncertainParameters }),
+    ...(kbCitation && { kbCitation }),
   };
 }
