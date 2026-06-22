@@ -200,19 +200,21 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
           );
         })()}
 
-        {/* Date range */}
+        {/* Quality parameter fail filter */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button style={customFrom ? chipActive : chip} onClick={() => { setShowPicker(v => !v); setOpenDrop(null); }}>
-            {customFrom && customTo
-              ? `${fmtDateShort(customFrom)} – ${fmtDateShort(customTo)}`
-              : 'Date range'}
-            <span style={{ fontSize: 9 }}>▾</span>
+          <button style={paramFail ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'param' ? null : 'param')}>
+            {paramFail ? (PARAM_NAMES[paramFail] ?? paramFail) : 'Quality parameter'} <span style={{ fontSize: 9 }}>▾</span>
           </button>
-          {showPicker && (
-            <DateRangePicker
-              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowPicker(false); }}
-              onCancel={() => setShowPicker(false)}
-            />
+          {openDrop === 'param' && (
+            <div style={dropdown} onClick={e => e.stopPropagation()}>
+              <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setParamFail(''); setOpenDrop(null); }}>All</div>
+              {PARAM_ORDER.map(key => (
+                <div key={key} style={{ ...dropItem, fontWeight: paramFail === key ? 600 : 400 }}
+                  onClick={() => { setParamFail(key); setOpenDrop(null); }}>
+                  {PARAM_NAMES[key]}
+                </div>
+              ))}
+            </div>
           )}
         </div>
 
@@ -258,21 +260,19 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
           )}
         </div>
 
-        {/* Quality parameter fail filter */}
+        {/* Date range */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button style={paramFail ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'param' ? null : 'param')}>
-            {paramFail ? (PARAM_NAMES[paramFail] ?? paramFail) : 'Quality parameter'} <span style={{ fontSize: 9 }}>▾</span>
+          <button style={customFrom ? chipActive : chip} onClick={() => { setShowPicker(v => !v); setOpenDrop(null); }}>
+            {customFrom && customTo
+              ? `${fmtDateShort(customFrom)} – ${fmtDateShort(customTo)}`
+              : 'Date range'}
+            <span style={{ fontSize: 9 }}>▾</span>
           </button>
-          {openDrop === 'param' && (
-            <div style={dropdown} onClick={e => e.stopPropagation()}>
-              <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setParamFail(''); setOpenDrop(null); }}>All</div>
-              {PARAM_ORDER.map(key => (
-                <div key={key} style={{ ...dropItem, fontWeight: paramFail === key ? 600 : 400 }}
-                  onClick={() => { setParamFail(key); setOpenDrop(null); }}>
-                  {PARAM_NAMES[key]}
-                </div>
-              ))}
-            </div>
+          {showPicker && (
+            <DateRangePicker
+              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowPicker(false); }}
+              onCancel={() => setShowPicker(false)}
+            />
           )}
         </div>
 
