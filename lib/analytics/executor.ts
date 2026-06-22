@@ -34,9 +34,17 @@ async function cacheSet(key: string, value: string): Promise<void> {
   } catch {}
 }
 
+// DML keywords that must never appear in an analytics query, even inside a CTE.
+const DML_PATTERN = /\b(INSERT|UPDATE|DELETE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|COPY|CALL|EXECUTE)\b/i;
+
 function isReadQuery(sql: string): boolean {
   const t = sql.trim().toUpperCase();
-  return t.startsWith('SELECT') || t.startsWith('WITH');
+  if (!t.startsWith('SELECT') && !t.startsWith('WITH')) return false;
+  // Reject any SQL that contains DML keywords (covers "WITH … DELETE … RETURNING" bypass).
+  if (DML_PATTERN.test(sql)) return false;
+  // Reject multi-statement injection (semicolon followed by non-whitespace).
+  if (/;\s*\S/.test(sql)) return false;
+  return true;
 }
 
 function queryCacheKey(sql: string): string {

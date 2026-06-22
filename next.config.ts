@@ -18,8 +18,8 @@ const securityHeaders = [
     key: 'Content-Security-Policy',
     value: [
       "default-src 'self'",
-      // Next.js needs inline scripts for hydration; nonces would be ideal but require middleware
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      // Next.js requires unsafe-inline for hydration chunks; unsafe-eval is not needed in production
+      "script-src 'self' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
       // Allow images from self and data URIs (used by SVGs, chart libs)
       "img-src 'self' data: blob:",

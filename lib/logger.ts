@@ -18,7 +18,8 @@ export async function logChatMessage(username: string, query: string, model: str
     ...(category ? { category } : {}),
     ...(queryType ? { queryType } : {}),
   };
-  console.log('[IR_LOG]', JSON.stringify(entry));
+  // Log metadata only — never the raw query text which may contain customer PII.
+  console.log('[IR_LOG]', JSON.stringify({ timestamp: entry.timestamp, username: entry.username, model: entry.model, category: entry.category, queryType: entry.queryType, queryLen: entry.query?.length ?? 0 }));
   // KV (Vercel) + file (local) in parallel
   await Promise.allSettled([
     storeAppendLog(entry),
