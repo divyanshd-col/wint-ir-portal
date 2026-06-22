@@ -161,11 +161,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const baseWhere = reviewedMode
     ? `c.tags->>'disposition' = ANY($1)
-       AND i.reviewed_by IS NOT NULL
-       AND i.call_iqs_score IS NULL`
+       AND i.reviewed_by IS NOT NULL`
     : `c.tags->>'disposition' = ANY($1)
        AND i.reviewed_by IS NULL
-       AND i.call_iqs_score IS NULL
        AND i.iqs_score < 85
        AND EXISTS (
          SELECT 1 FROM jsonb_each(i.parameters) AS p(k,v)
