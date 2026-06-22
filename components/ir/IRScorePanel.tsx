@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, CAT1_PARAMS } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
+
+const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
 interface ChallengedParam {
   param: string;
@@ -10,7 +13,7 @@ interface ChallengedParam {
 }
 
 interface TranscriptMsg {
-  role: 'user' | 'assistant' | 'bot';
+  role: 'user' | 'assistant' | 'bot' | 'system';
   content: string;
   timestamp?: string;
 }
@@ -27,61 +30,19 @@ interface IRScorePanelProps {
   reviewedBy?: string;
   colSpan: number;
   flagId?: string;
+  flagStatus?: string;
   onClose: () => void;
   onDisputeRaised?: () => void;
 }
 
-// Static styles
-const S: Record<string, CSSProperties> = {
-  row: { background: '#FAFAFB', borderBottom: '1px solid #E4E4E7' },
-  inner: { display: 'flex', gap: 0, minHeight: 420 },
-  leftPanel: { width: 340, flexShrink: 0, padding: 24, borderRight: '1px solid #E4E4E7', background: '#fff', overflowY: 'auto', maxHeight: 560 },
-  rightPanel: { flex: 1, display: 'flex', flexDirection: 'column', background: '#FAFAFB', overflowY: 'auto', maxHeight: 560 },
-  scoreRing: { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 },
-  ringWrap: { position: 'relative', width: 60, height: 60 },
-  ringScore: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#111' },
-  divider: { borderTop: '1px solid #E4E4E7', margin: '14px 0' },
-  paramRow: { marginBottom: 10 },
-  paramLabel: { fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 4 },
-  paramReasoning: { fontSize: 11, color: '#6B7280', marginTop: 2, lineHeight: 1.4 },
-  paramBtns: { display: 'flex', gap: 4 },
-  disputeTag: { display: 'inline-block', fontSize: 10, fontWeight: 600, background: '#FEF3C7', color: '#92400E', borderRadius: 4, padding: '1px 6px', marginLeft: 6 },
-  noteBox: { fontSize: 11, color: '#6B7280', marginTop: 3, fontStyle: 'italic' },
-  actionArea: { padding: '14px 18px', borderBottom: '1px solid #E4E4E7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff' },
-  closeBtn: { fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', cursor: 'pointer', color: '#374151', fontWeight: 500 },
-  disputeBtn: { fontSize: 11, padding: '5px 14px', borderRadius: 6, border: '1px solid #2D2D31', background: '#2D2D31', color: '#fff', cursor: 'pointer', fontWeight: 500 },
-  transcriptWrap: { flex: 1, padding: '14px 18px', overflowY: 'auto' },
-  bubbleTime: { fontSize: 10, color: '#9CA3AF', marginBottom: 2 },
-  noteTextarea: { width: '100%', marginTop: 4, padding: '6px 8px', fontSize: 11, border: '1px solid #D1D5DB', borderRadius: 4, resize: 'vertical', minHeight: 52, color: '#111', background: '#FAFAFB', outline: 'none' },
-  cancelBtn: { fontSize: 12, padding: '6px 14px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', color: '#374151', cursor: 'pointer', fontWeight: 400 },
-};
-
-// Dynamic style functions
-function btnStyle(active: boolean, color: string): CSSProperties {
-  return { fontSize: 11, fontWeight: 500, padding: '2px 8px', borderRadius: 4, border: `1px solid ${active ? color : '#D1D5DB'}`, background: active ? color : '#fff', color: active ? '#fff' : '#9CA3AF', cursor: 'default' };
-}
-function outcomeTagStyle(accepted: boolean): CSSProperties {
-  return { display: 'inline-block', fontSize: 10, fontWeight: 600, borderRadius: 4, padding: '1px 6px', marginLeft: 6, background: accepted ? '#D1FAE5' : '#FEE2E2', color: accepted ? '#065F46' : '#991B1B' };
-}
-function statusBadgeStyle(color: string, bg: string): CSSProperties {
-  return { fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 20, background: bg, color, display: 'inline-block' };
-}
-function bubbleStyle(isAgent: boolean): CSSProperties {
-  return { maxWidth: '80%', padding: '8px 12px', borderRadius: isAgent ? '12px 12px 4px 12px' : '12px 12px 12px 4px', background: isAgent ? '#2D2D31' : '#fff', color: isAgent ? '#fff' : '#111', fontSize: 13, lineHeight: 1.5, marginBottom: 8, alignSelf: isAgent ? 'flex-end' : 'flex-start', border: isAgent ? 'none' : '1px solid #E4E4E7', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' };
-}
-function submitBtnStyle(enabled: boolean): CSSProperties {
-  return { fontSize: 12, padding: '6px 16px', borderRadius: 6, border: 'none', background: enabled ? '#2D2D31' : '#D1D5DB', color: enabled ? '#fff' : '#9CA3AF', cursor: enabled ? 'pointer' : 'not-allowed', fontWeight: 500 };
-}
-
-// Map DB snake_case → frontend PascalCase
 const DB_KEY_TO_PASCAL: Record<string, string> = {
   technical: 'Technical', all_questions: 'AllQuestions', expectation: 'Expectation',
   contextual: 'Contextual', follow_up: 'FollowUp', sentences: 'Sentences',
   process: 'Process', opening: 'Opening', call: 'Call', grammar: 'Grammar', empathy: 'Empathy',
 };
 
-function normalizeParams(raw: Record<string, any> | null): Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }> {
-  if (!raw) return {};
+function normalizeParams(raw: Record<string, any> | null) {
+  if (!raw) return {} as Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }>;
   const out: Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }> = {};
   for (const [k, v] of Object.entries(raw)) {
     if (k.startsWith('__')) continue;
@@ -94,72 +55,78 @@ function normalizeParams(raw: Record<string, any> | null): Record<string, { scor
   return out;
 }
 
-function IQSRing({ score }: { score: number | null }) {
+function ScoreRing({ score }: { score: number | null }) {
   const val = score ?? 0;
-  const r = 24;
-  const circ = 2 * Math.PI * r;
-  const fill = (val / 100) * circ;
-  const color = val >= 85 ? '#16A34A' : val >= 75 ? '#CA8A04' : val >= 60 ? '#EA580C' : '#DC2626';
+  const r = 27;
+  const circ = 2 * Math.PI * r; // ≈ 169.6
+  const offset = circ - (val / 100) * circ;
   return (
-    <div style={S.ringWrap}>
-      <svg width="60" height="60" viewBox="0 0 60 60">
-        <circle cx="30" cy="30" r={r} fill="none" stroke="#E4E4E7" strokeWidth="5" />
-        <circle cx="30" cy="30" r={r} fill="none" stroke={color} strokeWidth="5"
-          strokeDasharray={`${fill} ${circ}`} strokeDashoffset={circ / 4} strokeLinecap="round" />
-      </svg>
-      <div style={S.ringScore}>{score !== null ? `${val}` : '—'}</div>
-    </div>
+    <svg width={64} height={64}>
+      <circle cx={32} cy={32} r={r} stroke="#E4E4E7" strokeWidth={5} fill="none" />
+      <circle
+        cx={32} cy={32} r={r} stroke="#2D2D31" strokeWidth={5} fill="none"
+        strokeLinecap="round"
+        strokeDasharray={circ}
+        strokeDashoffset={offset}
+        transform="rotate(-90 32 32)"
+      />
+      <text x={32} y={33} textAnchor="middle" dominantBaseline="central" fontSize={18} fontWeight={700} fill="#111111" fontFamily={SANS}>
+        {score !== null ? val : '—'}
+      </text>
+    </svg>
   );
 }
 
 export default function IRScorePanel({
   chatId, agentName, iqsScore, closedAt, parameters, mode,
-  challengedParams = [], reviewNote, reviewedBy, colSpan,
-  onClose, onDisputeRaised,
+  challengedParams = [], reviewNote, colSpan,
+  onClose, onDisputeRaised, flagStatus,
 }: IRScorePanelProps) {
-  const [transcriptMsgs, setTranscriptMsgs] = useState<TranscriptMsg[]>([]);
-  const [transcriptLoading, setTranscriptLoading] = useState(true);
+  const params = normalizeParams(parameters);
+  const failCount = Object.values(params).filter(p => p.score === 'No').length;
+
+  const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
+  const [txLoading, setTxLoading] = useState(true);
   const [disputing, setDisputing] = useState(false);
-  const [pickedParams, setPickedParams] = useState<Set<string>>(new Set());
-  const [paramNotes, setParamNotes] = useState<Record<string, string>>({});
+  const [picks, setPicks] = useState<Set<string>>(new Set());
+  const [sharedNote, setSharedNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [disputeDone, setDisputeDone] = useState(false);
   const [error, setError] = useState('');
-
-  const params = normalizeParams(parameters);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    setTranscriptLoading(true);
+    setTxLoading(true);
     fetch(`/api/quality/transcript?chatId=${encodeURIComponent(chatId)}`)
       .then(r => r.json())
       .then(d => {
         const msgs: TranscriptMsg[] = Array.isArray(d.messages) ? d.messages : Array.isArray(d.transcript) ? d.transcript : [];
-        setTranscriptMsgs(msgs);
+        setTranscript(msgs);
       })
       .catch(() => {})
-      .finally(() => setTranscriptLoading(false));
+      .finally(() => setTxLoading(false));
   }, [chatId]);
 
-  const toggleParam = useCallback((param: string) => {
-    setPickedParams(prev => {
+  const togglePick = useCallback((param: string) => {
+    setPicks(prev => {
       const next = new Set(prev);
       if (next.has(param)) next.delete(param); else next.add(param);
       return next;
     });
   }, []);
 
-  const canSubmit = pickedParams.size > 0 && [...pickedParams].every(p => (paramNotes[p] || '').trim().length > 0);
+  const canSubmit = picks.size > 0 && sharedNote.trim().length > 0;
 
   const submitDispute = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || submitting) return;
     setSubmitting(true);
     setError('');
     try {
-      const challenged = [...pickedParams].map(p => ({ param: p, note: (paramNotes[p] || '').trim() }));
+      const challenged = [...picks].map(p => ({ param: p, note: sharedNote.trim() }));
       const res = await fetch('/api/quality/flag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, challengedParams: challenged, agentNote: challenged.map(c => `${c.param}: ${c.note}`).join('; '), raisedByRole: 'ir' }),
+        body: JSON.stringify({ chatId, challengedParams: challenged, agentNote: sharedNote.trim(), raisedByRole: 'ir' }),
       });
       if (!res.ok) throw new Error('Failed to submit dispute');
       setDisputeDone(true);
@@ -172,133 +139,303 @@ export default function IRScorePanel({
     }
   };
 
+  const cancelDisputing = () => { setDisputing(false); setPicks(new Set()); setSharedNote(''); };
+
   const date = closedAt ? new Date(closedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const isRejected = reviewNote?.toLowerCase().includes('reject');
 
+  const pendingStatusLabel = flagStatus === 'ir_pending_tl' ? 'Raised' : 'Under Review';
+  const reviewedOutcome = isRejected ? 'Rejected' : 'Accepted';
+
   return (
-    <tr style={S.row}>
-      <td colSpan={colSpan} style={{ padding: 0 }}>
-        <div style={S.inner}>
-          {/* Left panel */}
-          <div style={S.leftPanel}>
-            <div style={S.scoreRing}>
-              <IQSRing score={iqsScore} />
-              <div>
-                {agentName && <div style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>{agentName}</div>}
-                <div style={{ fontSize: 11, color: '#6B7280', fontFamily: 'monospace' }}>{chatId.slice(0, 16)}…</div>
-                <div style={{ fontSize: 11, color: '#6B7280' }}>{date}</div>
+    <tr style={{ background: '#FAFAFB' }}>
+      <td colSpan={colSpan} style={{ padding: '0 16px 16px' }}>
+        <div style={{
+          display: 'flex', height: 520,
+          border: '1px solid #E4E4E7', borderRadius: 8,
+          background: '#FFFFFF', overflow: 'hidden',
+        }}>
+          {/* ── Left panel ── */}
+          <div style={{
+            width: 400, flexShrink: 0, borderRight: '1px solid #E4E4E7',
+            display: 'flex', flexDirection: 'column',
+          }}>
+            {/* Header */}
+            <div style={{ padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <ScoreRing score={iqsScore} />
+                <div>
+                  <div style={{ fontSize: 16, fontWeight: 600, color: '#111111' }}>{agentName || '—'}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <span style={{
+                      height: 20, padding: '0 8px', border: '1px solid #E4E4E7',
+                      borderRadius: 999, fontSize: 12, color: '#6B6B6B',
+                      display: 'inline-flex', alignItems: 'center',
+                    }}>
+                      {failCount} fail{failCount !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: 6 }}>
+                    <span style={{ fontFamily: MONO }}>{chatId?.slice(0, 14)}</span>
+                    {' · '}{date}
+                  </div>
+                </div>
               </div>
             </div>
-            <div style={S.divider} />
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#9CA3AF', letterSpacing: '0.5px', marginBottom: 10, textTransform: 'uppercase' }}>Parameters</div>
 
-            {PARAM_ORDER.map(param => {
-              const entry = params[param];
-              const score = entry?.score || 'NA';
-              const reasoning = entry?.reasoning || '';
-              const dispChallenge = challengedParams.find(c => c.param === param);
-              const isPicked = pickedParams.has(param);
-              const isClickable = disputing;
-              const rowStyle: CSSProperties = {
-                ...S.paramRow,
-                ...(isClickable ? { cursor: 'pointer', padding: '6px 8px', borderRadius: 6, background: isPicked ? '#EFF6FF' : 'transparent', border: isPicked ? '1px solid #BFDBFE' : '1px solid transparent' } : {}),
-              };
-              return (
-                <div key={param} style={rowStyle} onClick={isClickable ? () => toggleParam(param) : undefined}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <span style={S.paramLabel}>{PARAM_NAMES[param] || param}</span>
-                    {!CAT1_PARAMS.has(param) && <span style={{ fontSize: 9, background: '#F3F4F6', color: '#6B7280', borderRadius: 3, padding: '0 4px', fontWeight: 600 }}>TL</span>}
-                    {dispChallenge && <span style={S.disputeTag}>Disputed</span>}
-                    {mode === 'reviewed' && dispChallenge && (
-                      <span style={outcomeTagStyle(!isRejected)}>{isRejected ? 'Rejected' : 'Accepted'}</span>
+            {/* Section label */}
+            <div style={{
+              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+              color: '#A1A1AA', padding: '16px 16px 4px', flexShrink: 0,
+            }}>
+              Parameter Scores
+            </div>
+
+            {/* Params */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {PARAM_ORDER.map((param, idx) => {
+                const entry = params[param];
+                const score = entry?.score || 'NA';
+                const reasoning = entry?.reasoning || '';
+                const dispChallenge = challengedParams.find(c => c.param === param);
+                const isPicked = picks.has(param);
+                const weight = WEIGHTS?.[param] != null ? `${Math.round((WEIGHTS[param] ?? 0) * 100)}%` : '';
+                const isLast = idx === PARAM_ORDER.length - 1;
+
+                const rowStyle: CSSProperties = {
+                  padding: '14px 16px',
+                  borderBottom: isLast ? 'none' : '1px solid #F0F0F2',
+                  cursor: disputing ? 'pointer' : 'default',
+                  background: isPicked ? '#FAFAFB' : 'transparent',
+                  boxShadow: isPicked ? 'inset 3px 0 0 #2D2D31' : 'none',
+                  transition: 'background 0.1s',
+                };
+
+                return (
+                  <div
+                    key={param}
+                    style={rowStyle}
+                    onClick={disputing ? () => togglePick(param) : undefined}
+                    onMouseEnter={disputing ? e => { if (!isPicked) (e.currentTarget as HTMLElement).style.background = '#F4F4F5'; } : undefined}
+                    onMouseLeave={disputing ? e => { (e.currentTarget as HTMLElement).style.background = isPicked ? '#FAFAFB' : 'transparent'; } : undefined}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: '#111111', flex: '0 1 auto' }}>
+                        {PARAM_NAMES[param] || param}
+                      </span>
+                      {dispChallenge && (mode === 'pending' || mode === 'reviewed') && (
+                        <span style={{
+                          height: 18, padding: '0 7px', borderRadius: 999,
+                          background: '#2D2D31', color: '#fff',
+                          fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                          display: 'inline-flex', alignItems: 'center',
+                        }}>
+                          Disputed
+                        </span>
+                      )}
+                      {isPicked && mode === 'evaluated' && (
+                        <span style={{
+                          height: 18, padding: '0 7px', borderRadius: 999,
+                          background: '#2D2D31', color: '#fff',
+                          fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+                          display: 'inline-flex', alignItems: 'center',
+                        }}>
+                          Disputing
+                        </span>
+                      )}
+                      {weight && (
+                        <span style={{ fontSize: 11, color: '#A1A1AA', fontFamily: MONO, marginLeft: 'auto', flexShrink: 0 }}>
+                          {weight}
+                        </span>
+                      )}
+                      <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
+                        {(['Yes', 'No', 'NA'] as const).map(opt => {
+                          const selected = score === opt;
+                          return (
+                            <button
+                              key={opt}
+                              disabled
+                              style={{
+                                height: 28, padding: '0 9px', borderRadius: 8,
+                                border: `1px solid ${selected ? '#E4E4E7' : '#E4E4E7'}`,
+                                background: selected ? '#E4E4E7' : '#FFFFFF',
+                                color: selected ? '#6B6B6B' : '#C7C7CC',
+                                fontSize: 12, fontFamily: SANS, cursor: 'default',
+                              }}
+                            >
+                              {opt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    {reasoning && (
+                      <div style={{ marginTop: 10, fontSize: 12, color: '#6B6B6B', lineHeight: 1.5 }}>
+                        {reasoning}
+                      </div>
+                    )}
+                    {dispChallenge && (mode === 'pending' || mode === 'reviewed') && (
+                      <div style={{
+                        marginTop: 10, fontSize: 12, color: '#6B6B6B',
+                        background: '#FFFFFF', border: '1px solid #E4E4E7',
+                        borderRadius: 6, padding: '8px 10px',
+                        display: 'flex', flexDirection: 'column', gap: 4,
+                      }}>
+                        Your note: {dispChallenge.note}
+                      </div>
                     )}
                   </div>
-                  <div style={S.paramBtns}>
-                    <button style={btnStyle(score === 'Yes', '#16A34A')} disabled>Yes</button>
-                    <button style={btnStyle(score === 'No', '#DC2626')} disabled>No</button>
-                    <button style={btnStyle(score === 'NA', '#6B7280')} disabled>N/A</button>
-                  </div>
-                  {reasoning && <div style={S.paramReasoning}>{reasoning}</div>}
-                  {dispChallenge && <div style={S.noteBox}>Your note: {dispChallenge.note}</div>}
-                  {isClickable && isPicked && (
-                    <textarea
-                      style={S.noteTextarea}
-                      placeholder="Explain why you're disputing this parameter (required)"
-                      value={paramNotes[param] || ''}
-                      onChange={e => { e.stopPropagation(); setParamNotes(prev => ({ ...prev, [param]: e.target.value })); }}
-                      onClick={e => e.stopPropagation()}
-                    />
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
-          {/* Right panel */}
-          <div style={S.rightPanel}>
-            <div style={S.actionArea}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                {mode === 'evaluated' && !disputeDone && !disputing && (
-                  <button style={S.disputeBtn} onClick={() => setDisputing(true)}>Raise Dispute</button>
-                )}
-                {mode === 'evaluated' && disputing && (
-                  <>
-                    <button style={submitBtnStyle(canSubmit)} onClick={submitDispute} disabled={!canSubmit || submitting}>
-                      {submitting ? 'Submitting…' : 'Submit Dispute'}
-                    </button>
-                    <button style={S.cancelBtn} onClick={() => { setDisputing(false); setPickedParams(new Set()); setParamNotes({}); }}>Cancel</button>
-                  </>
-                )}
-                {mode === 'evaluated' && disputeDone && (
-                  <span style={statusBadgeStyle('#065F46', '#D1FAE5')}>Dispute raised</span>
-                )}
-                {mode === 'pending' && (
-                  <span style={statusBadgeStyle('#92400E', '#FEF3C7')}>Under Review</span>
-                )}
-                {mode === 'reviewed' && (
-                  <span style={statusBadgeStyle(isRejected ? '#991B1B' : '#065F46', isRejected ? '#FEE2E2' : '#D1FAE5')}>
-                    {isRejected ? 'Dispute Rejected' : 'Dispute Accepted'}
-                  </span>
-                )}
-                {error && <span style={{ fontSize: 11, color: '#DC2626' }}>{error}</span>}
-              </div>
-              <button style={S.closeBtn} onClick={onClose}>Close ✕</button>
+          {/* ── Right panel ── */}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Header */}
+            <div style={{
+              padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0,
+              display: 'flex', alignItems: 'center', gap: 8,
+            }}>
+              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
+                {transcript.length > 0 ? `${transcript.length} messages` : txLoading ? 'Loading…' : 'No transcript'}
+              </span>
+              <div style={{ flex: 1 }} />
+
+              {/* Dispute actions */}
+              {mode === 'evaluated' && !disputeDone && !disputing && (
+                <button
+                  style={{
+                    height: 32, padding: '0 16px', borderRadius: 8,
+                    background: '#FFFFFF', border: '1px solid #E4E4E7',
+                    fontSize: 13, fontWeight: 500, color: '#111111', cursor: 'pointer', fontFamily: SANS,
+                  }}
+                  onClick={() => setDisputing(true)}
+                >
+                  Raise Dispute
+                </button>
+              )}
+              {mode === 'evaluated' && disputing && (
+                <>
+                  <button
+                    style={{
+                      height: 32, padding: '0 16px', borderRadius: 8,
+                      background: '#FFFFFF', border: '1px solid #E4E4E7',
+                      fontSize: 13, fontWeight: 500, color: '#111111', cursor: 'pointer', fontFamily: SANS,
+                    }}
+                    onClick={cancelDisputing}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    style={{
+                      height: 32, padding: '0 16px', borderRadius: 8,
+                      background: '#111111', border: '1px solid #111111',
+                      fontSize: 13, fontWeight: 500, color: '#fff',
+                      cursor: canSubmit ? 'pointer' : 'default', fontFamily: SANS,
+                      opacity: canSubmit ? 1 : 0.4,
+                    }}
+                    onClick={submitDispute}
+                    disabled={!canSubmit || submitting}
+                  >
+                    {submitting ? 'Submitting…' : 'Submit Dispute'}
+                  </button>
+                </>
+              )}
+              {mode === 'evaluated' && disputeDone && (
+                <span style={{ fontSize: 13, color: '#A1A1AA' }}>Dispute raised</span>
+              )}
+              {mode === 'pending' && (
+                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{pendingStatusLabel}</span>
+              )}
+              {mode === 'reviewed' && (
+                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{reviewedOutcome}</span>
+              )}
+
+              {error && <span style={{ fontSize: 12, color: '#DC2626' }}>{error}</span>}
+
+              {/* Close */}
+              <button
+                style={{
+                  width: 28, height: 28, border: '1px solid #E4E4E7', borderRadius: 8,
+                  background: '#FFFFFF', color: '#6B6B6B', cursor: 'pointer',
+                  fontSize: 16, lineHeight: 1,
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: SANS,
+                }}
+                onClick={onClose}
+              >
+                ×
+              </button>
             </div>
 
-            {mode === 'pending' && (
-              <div style={{ padding: '10px 18px', background: '#FFFBEB', borderBottom: '1px solid #FDE68A', fontSize: 12, color: '#92400E' }}>
-                This dispute is under TL review. You cannot edit it.
-              </div>
-            )}
-            {mode === 'reviewed' && reviewNote && (
-              <div style={{ padding: '10px 18px', background: '#F0FDF4', borderBottom: '1px solid #BBF7D0', fontSize: 12, color: '#065F46' }}>
-                <strong>Review note:</strong> {reviewNote}
-                {reviewedBy && <span style={{ color: '#6B7280', marginLeft: 8 }}>— {reviewedBy}</span>}
-              </div>
-            )}
-            {disputing && (
-              <div style={{ padding: '10px 18px', background: '#EFF6FF', borderBottom: '1px solid #BFDBFE', fontSize: 12, color: '#1D4ED8' }}>
-                Click parameters on the left to select them for dispute. Add a note for each.
+            {/* Dispute compose area */}
+            {mode === 'evaluated' && disputing && (
+              <div style={{
+                flexShrink: 0, padding: '14px 16px',
+                borderBottom: '1px solid #E4E4E7', background: '#FAFAFB',
+              }}>
+                <div style={{ fontSize: 13, color: '#6B6B6B', marginBottom: 8 }}>Reason for dispute</div>
+                <textarea
+                  ref={textareaRef}
+                  style={{
+                    width: '100%', height: 80, border: '1px solid #E4E4E7', borderRadius: 8,
+                    padding: '8px 10px', fontFamily: SANS, fontSize: 13, lineHeight: 1.5,
+                    color: '#111111', resize: 'none', outline: 'none', background: '#FFFFFF',
+                    boxSizing: 'border-box',
+                  }}
+                  placeholder="Describe what you think is incorrect and why (required)"
+                  value={sharedNote}
+                  onChange={e => setSharedNote(e.target.value)}
+                  onFocus={e => { e.target.style.borderColor = '#111111'; }}
+                  onBlur={e => { e.target.style.borderColor = '#E4E4E7'; }}
+                />
               </div>
             )}
 
-            <div style={S.transcriptWrap}>
-              {transcriptLoading ? (
-                <div style={{ color: '#9CA3AF', fontSize: 13, textAlign: 'center', marginTop: 40 }}>Loading transcript…</div>
-              ) : transcriptMsgs.length === 0 ? (
-                <div style={{ color: '#9CA3AF', fontSize: 13, textAlign: 'center', marginTop: 40 }}>No transcript available</div>
+            {/* Transcript */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', background: '#FFFFFF' }}>
+              {txLoading ? (
+                <div style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, marginTop: 40 }}>Loading transcript…</div>
+              ) : transcript.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, marginTop: 40 }}>No transcript available</div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {transcriptMsgs.map((msg, i) => {
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                  {transcript.map((msg, i) => {
                     const isAgent = msg.role === 'assistant' || msg.role === 'bot';
+                    const isUser = msg.role === 'user';
+                    const isSystem = msg.role === 'system';
+
+                    if (isSystem) {
+                      return (
+                        <div key={i} style={{ marginTop: i === 0 ? 0 : 8 }}>
+                          <div style={{
+                            background: '#FAFAFB', border: '1px solid #F0F0F2', borderRadius: 8,
+                            fontSize: 12, fontStyle: 'italic', color: '#6B6B6B',
+                            textAlign: 'center', padding: '8px 14px', lineHeight: 1.5,
+                          }}>
+                            {msg.content}
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
-                      <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: isAgent ? 'flex-end' : 'flex-start' }}>
-                        {msg.timestamp && (
-                          <div style={{ ...S.bubbleTime, alignSelf: isAgent ? 'flex-end' : 'flex-start' }}>
-                            {new Date(msg.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      <div key={i} style={{ marginTop: i === 0 ? 0 : 8, display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-start' : 'flex-end' }}>
+                        {!isUser && (
+                          <div style={{ fontSize: 11, color: '#A1A1AA', marginBottom: 4 }}>
+                            {isAgent ? 'Agent' : 'Bot'}
                           </div>
                         )}
-                        <div style={bubbleStyle(isAgent)}>{msg.content}</div>
+                        <div style={{
+                          background: isUser ? '#FFFFFF' : isAgent ? '#2D2D31' : '#F4F4F5',
+                          color: isUser ? '#111111' : isAgent ? '#fff' : '#111111',
+                          border: isUser ? '1px solid #E4E4E7' : 'none',
+                          padding: '10px 14px', borderRadius: 8,
+                          fontSize: 13, lineHeight: 1.5, maxWidth: '76%',
+                        }}>
+                          {msg.content}
+                        </div>
                       </div>
                     );
                   })}

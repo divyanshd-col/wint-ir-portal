@@ -1,40 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import type { IQSScoreEntry } from '@/lib/quality';
+import { PARAM_NAMES } from '@/lib/quality';
 import IRScorePanel from './IRScorePanel';
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
-const css: Record<string, CSSProperties> = {
-  page: { padding: '28px 32px', maxWidth: 1100 },
-  heading: { fontSize: 20, fontWeight: 700, color: '#111', marginBottom: 4 },
-  subheading: { fontSize: 13, color: '#6B7280', marginBottom: 24 },
-  section: { marginBottom: 40 },
-  sectionTitle: { fontSize: 16, fontWeight: 600, color: '#111', marginBottom: 14 },
-  card: { background: '#fff', border: '1px solid #E4E4E7', borderRadius: 10, overflow: 'hidden' },
-  filterBar: { padding: '14px 18px', borderBottom: '1px solid #E4E4E7', display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', background: '#FAFAFB' },
-  select: { fontSize: 12, padding: '6px 10px', border: '1px solid #D1D5DB', borderRadius: 6, background: '#fff', color: '#111', cursor: 'pointer', outline: 'none' },
-  dateInput: { fontSize: 12, padding: '5px 10px', border: '1px solid #D1D5DB', borderRadius: 6, background: '#fff', color: '#111', outline: 'none' },
-  applyBtn: { fontSize: 12, padding: '6px 14px', borderRadius: 6, border: 'none', background: '#2D2D31', color: '#fff', cursor: 'pointer', fontWeight: 500 },
-  resetBtn: { fontSize: 12, padding: '6px 14px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', color: '#374151', cursor: 'pointer' },
-  count: { fontSize: 12, color: '#6B7280', marginLeft: 'auto' },
-  table: { width: '100%', borderCollapse: 'collapse' },
-  th: { fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 16px', textAlign: 'left', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' },
-  td: { fontSize: 13, color: '#111', padding: '11px 16px', borderBottom: '1px solid #F3F4F6', verticalAlign: 'middle' },
-  viewBtn: { fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid #D1D5DB', background: '#fff', cursor: 'pointer', color: '#374151', fontWeight: 500 },
-  cancelBtn: { fontSize: 11, padding: '5px 12px', borderRadius: 6, border: '1px solid #DC2626', background: '#fff', cursor: 'pointer', color: '#DC2626', fontWeight: 500, marginRight: 6 },
-  tabRow: { display: 'flex', gap: 0, borderBottom: '1px solid #E4E4E7', background: '#FAFAFB', padding: '0 18px' },
-  emptyRow: { textAlign: 'center', color: '#9CA3AF', fontSize: 13, padding: '32px 0' },
-};
-
-function tabStyle(active: boolean): CSSProperties {
-  return { fontSize: 13, fontWeight: active ? 600 : 400, color: active ? '#111' : '#6B7280', padding: '10px 16px', cursor: 'pointer', borderBottom: active ? '2px solid #111' : '2px solid transparent', marginBottom: -1, background: 'none', border: 'none', outline: 'none' };
-}
-function badgeStyle(color: string, bg: string): CSSProperties {
-  return { fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12, background: bg, color };
-}
+const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,22 +32,235 @@ interface Props {
   agentName: string;
 }
 
-// ─── IQS badge ───────────────────────────────────────────────────────────────
+// ─── Chip button ─────────────────────────────────────────────────────────────
 
-function IQSBadge({ score }: { score: number | null | undefined }) {
-  if (score == null) return <span style={{ color: '#9CA3AF' }}>—</span>;
-  const color = score >= 85 ? '#16A34A' : score >= 75 ? '#CA8A04' : score >= 60 ? '#EA580C' : '#DC2626';
-  return <span style={{ fontWeight: 600, color }}>{score}</span>;
+function Chip({
+  label, value, active, disabled, onClick,
+}: { label: string; value?: string; active?: boolean; disabled?: boolean; onClick?: React.MouseEventHandler<HTMLButtonElement> }) {
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      style={{
+        height: 32, padding: '0 10px',
+        border: `1px solid ${active ? '#2D2D31' : '#E4E4E7'}`,
+        borderRadius: 8,
+        background: active ? '#F4F4F5' : '#FFFFFF',
+        color: disabled ? '#C7C7CC' : '#111111',
+        fontSize: 13, fontFamily: SANS,
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        cursor: disabled ? 'default' : 'pointer',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {value || label}
+      <span style={{ color: '#A1A1AA', fontSize: 9 }}>▾</span>
+    </button>
+  );
 }
 
+// ─── Dropdown ─────────────────────────────────────────────────────────────────
+
+interface DropdownProps {
+  anchorRect: DOMRect | null;
+  onClose: () => void;
+  children: React.ReactNode;
+}
+
+function Dropdown({ anchorRect, onClose, children }: DropdownProps) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  if (!anchorRect) return null;
+  return (
+    <div
+      ref={ref}
+      style={{
+        position: 'fixed',
+        top: anchorRect.bottom + 4,
+        left: anchorRect.left,
+        zIndex: 2000,
+        minWidth: 184,
+        maxHeight: 300,
+        overflowY: 'auto',
+        background: '#FFFFFF',
+        border: '1px solid #E4E4E7',
+        borderRadius: 10,
+        boxShadow: '0 10px 28px rgba(17,17,17,0.12)',
+        padding: 4,
+        fontFamily: SANS,
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function MenuItem({
+  label, selected, muted, onSelect,
+}: { label: string; selected?: boolean; muted?: boolean; onSelect: () => void }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        height: 34, padding: '0 10px', borderRadius: 6,
+        fontSize: 13, color: muted ? '#A1A1AA' : '#111111',
+        cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        background: hovered ? '#F4F4F5' : 'transparent',
+      }}
+    >
+      {label}
+      {selected && <span style={{ fontSize: 12, color: '#111111' }}>✓</span>}
+    </div>
+  );
+}
+
+// ─── Calendar popup ───────────────────────────────────────────────────────────
+
+function CalendarPopup({
+  anchorRect, dateFrom, dateTo, onSetFrom, onSetTo, onClear, onClose,
+}: {
+  anchorRect: DOMRect | null;
+  dateFrom: string; dateTo: string;
+  onSetFrom: (d: string) => void; onSetTo: (d: string) => void;
+  onClear: () => void; onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth());
+  const [year, setYear] = useState(now.getFullYear());
+  const [picking, setPicking] = useState<'from' | 'to'>('from');
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  if (!anchorRect) return null;
+
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: (number | null)[] = [...Array(firstDay).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)];
+
+  const toIso = (d: number) => `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+  const selectDay = (d: number) => {
+    const iso = toIso(d);
+    if (picking === 'from') { onSetFrom(iso); setPicking('to'); }
+    else { onSetTo(iso); onClose(); }
+  };
+
+  const rangeLabel = dateFrom || dateTo
+    ? `${dateFrom || '—'} → ${dateTo || '—'}`
+    : 'Select start date';
+
+  return (
+    <div ref={ref} style={{
+      position: 'fixed',
+      top: anchorRect.bottom + 4,
+      left: anchorRect.left,
+      zIndex: 2000, width: 256,
+      background: '#FFFFFF', border: '1px solid #E4E4E7',
+      borderRadius: 10, boxShadow: '0 10px 28px rgba(17,17,17,0.12)',
+      padding: 12, fontFamily: SANS,
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <button
+          onClick={() => { if (month === 0) { setMonth(11); setYear(y => y - 1); } else setMonth(m => m - 1); }}
+          style={{ width: 26, height: 26, border: '1px solid #E4E4E7', borderRadius: 6, background: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}
+        >‹</button>
+        <span style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>{MONTHS[month]} {year}</span>
+        <button
+          onClick={() => { if (month === 11) { setMonth(0); setYear(y => y + 1); } else setMonth(m => m + 1); }}
+          style={{ width: 26, height: 26, border: '1px solid #E4E4E7', borderRadius: 6, background: '#FFFFFF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}
+        >›</button>
+      </div>
+      {/* Day headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(d => (
+          <div key={d} style={{ height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#A1A1AA' }}>{d}</div>
+        ))}
+      </div>
+      {/* Day cells */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+        {cells.map((d, i) => {
+          if (!d) return <div key={i} />;
+          const iso = toIso(d);
+          const isFrom = iso === dateFrom;
+          const isTo = iso === dateTo;
+          const selected = isFrom || isTo;
+          return (
+            <div
+              key={i}
+              onClick={() => selectDay(d)}
+              style={{
+                height: 30, borderRadius: 6, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 12, fontFamily: MONO,
+                background: selected ? '#2D2D31' : 'transparent',
+                color: selected ? '#fff' : '#111111',
+              }}
+            >
+              {d}
+            </div>
+          );
+        })}
+      </div>
+      {/* Footer */}
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontSize: 11, color: '#A1A1AA' }}>{rangeLabel}</span>
+        <button
+          onClick={() => { onClear(); onClose(); }}
+          style={{ background: 'none', border: 0, fontSize: 12, color: '#A1A1AA', cursor: 'pointer', fontFamily: SANS }}
+        >
+          Clear
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Table styles ─────────────────────────────────────────────────────────────
+
+const TH_BASE: CSSProperties = {
+  height: 40, background: '#FAFAFB', borderBottom: '1px solid #E4E4E7',
+  fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em',
+  color: '#6B6B6B', fontWeight: 500, padding: '0 16px', textAlign: 'left',
+  whiteSpace: 'nowrap',
+};
+const TD_BASE: CSSProperties = {
+  height: 52, padding: '0 16px', fontSize: 14, color: '#111111', verticalAlign: 'middle',
+};
+
 // ─── Section A: Evaluated Chats ───────────────────────────────────────────────
+
+const PARAM_LIST = Object.entries(PARAM_NAMES).map(([key, label]) => ({ key, label }));
+
+const CSAT_OPTS = [
+  { value: '5', label: 'Good (5)' },
+  { value: '3', label: 'CBB (3)' },
+  { value: '1', label: 'Bad (1)' },
+];
 
 function EvaluatedSection({ agentName }: { agentName: string }) {
   const [entries, setEntries] = useState<IQSScoreEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [total, setTotal] = useState(0);
 
-  // Filter state
   const [disposition, setDisposition] = useState('');
   const [subDisposition, setSubDisposition] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -82,16 +268,24 @@ function EvaluatedSection({ agentName }: { agentName: string }) {
   const [csat, setCsat] = useState('');
   const [qualityParam, setQualityParam] = useState('');
 
-  // Available filter options (from API)
   const [dispositions, setDispositions] = useState<string[]>([]);
-  const [subDispositions, setSubDispositions] = useState<string[]>([]);
   const [dispositionSubMap, setDispositionSubMap] = useState<Record<string, string[]>>({});
 
-  // Applied filters
-  const [applied, setApplied] = useState({ disposition: '', subDisposition: '', dateFrom: '', dateTo: '', csat: '', qualityParam: '' });
+  const [applied, setApplied] = useState({
+    disposition: '', subDisposition: '', dateFrom: '', dateTo: '', csat: '', qualityParam: '',
+  });
 
-  // Expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Open dropdown tracking
+  const [openMenu, setOpenMenu] = useState<'disposition' | 'subdisposition' | 'csat' | 'param' | 'calendar' | null>(null);
+  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null);
+
+  const openDropdown = (name: typeof openMenu, e: React.MouseEvent<HTMLButtonElement>) => {
+    if (openMenu === name) { setOpenMenu(null); return; }
+    setMenuAnchor(e.currentTarget.getBoundingClientRect());
+    setOpenMenu(name);
+  };
 
   const fetchData = useCallback(async (filters: typeof applied) => {
     setLoading(true);
@@ -105,18 +299,12 @@ function EvaluatedSection({ agentName }: { agentName: string }) {
       const res = await fetch(`/api/quality/scores?${p}`);
       const data = await res.json();
       const rows: IQSScoreEntry[] = Array.isArray(data.entries) ? data.entries : [];
-
-      // Client-side filter by failed quality parameter
       const filtered = filters.qualityParam
         ? rows.filter(e => e.scores?.[filters.qualityParam] === 'No')
         : rows;
-
       setEntries(filtered);
-      setTotal(data.total ?? filtered.length);
-
       if (data.availableDispositions) setDispositions(data.availableDispositions);
       if (data.dispositionSubMap) setDispositionSubMap(data.dispositionSubMap);
-      if (data.availableSubDispositions) setSubDispositions(data.availableSubDispositions);
     } catch {
       setEntries([]);
     } finally {
@@ -126,9 +314,13 @@ function EvaluatedSection({ agentName }: { agentName: string }) {
 
   useEffect(() => { fetchData(applied); }, [fetchData, applied]);
 
+  const hasFilters = !!(applied.disposition || applied.subDisposition || applied.dateFrom || applied.dateTo || applied.csat || applied.qualityParam);
+  const hasPending = !!(disposition !== applied.disposition || subDisposition !== applied.subDisposition || dateFrom !== applied.dateFrom || dateTo !== applied.dateTo || csat !== applied.csat || qualityParam !== applied.qualityParam);
+
   const handleApply = () => {
     setApplied({ disposition, subDisposition, dateFrom, dateTo, csat, qualityParam });
     setExpandedId(null);
+    setOpenMenu(null);
   };
 
   const handleReset = () => {
@@ -137,96 +329,181 @@ function EvaluatedSection({ agentName }: { agentName: string }) {
     setExpandedId(null);
   };
 
-  const subDispsForPicked = disposition && dispositionSubMap[disposition] ? dispositionSubMap[disposition] : subDispositions;
-
-  const PARAM_NAMES_FLAT = [
-    { key: 'Technical', label: 'Technically / Legally Correct' },
-    { key: 'AllQuestions', label: 'All Questions Answered' },
-    { key: 'Expectation', label: 'Expectation Setting' },
-    { key: 'Contextual', label: 'Contextual & Personal' },
-    { key: 'FollowUp', label: 'Follow-up & Closing' },
-    { key: 'Sentences', label: 'Sentences / Tone' },
-    { key: 'Process', label: 'Process-wise' },
-    { key: 'Opening', label: 'First Response & Opening' },
-    { key: 'Call', label: 'Call (when required)' },
-    { key: 'Grammar', label: 'Grammar / Structure' },
-    { key: 'Empathy', label: 'Empathy' },
-  ];
+  const subDispsForPicked = disposition && dispositionSubMap[disposition] ? dispositionSubMap[disposition] : [];
+  const dateLabel = dateFrom || dateTo ? `${dateFrom || '—'} — ${dateTo || '—'}` : 'Date Range';
+  const csatLabel = csat ? (CSAT_OPTS.find(o => o.value === csat)?.label ?? 'CSAT') : 'CSAT';
+  const paramLabel = qualityParam ? (PARAM_NAMES[qualityParam] ?? 'Parameter') : 'Quality Param';
 
   return (
-    <div style={css.section}>
-      <div style={css.sectionTitle}>My Evaluated Chats</div>
-      <div style={css.card}>
+    <div style={{ marginBottom: 40 }}>
+      <div style={{
+        background: '#FFFFFF', border: '1px solid #E4E4E7', borderRadius: 8, overflow: 'hidden',
+      }}>
         {/* Filter bar */}
-        <div style={css.filterBar}>
-          <select style={css.select} value={disposition} onChange={e => { setDisposition(e.target.value); setSubDisposition(''); }}>
-            <option value="">All Dispositions</option>
-            {dispositions.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <select style={css.select} value={subDisposition} onChange={e => setSubDisposition(e.target.value)} disabled={!subDispsForPicked.length}>
-            <option value="">All Sub-dispositions</option>
-            {subDispsForPicked.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-          <input type="date" style={css.dateInput} value={dateFrom} onChange={e => setDateFrom(e.target.value)} placeholder="From" />
-          <input type="date" style={css.dateInput} value={dateTo} onChange={e => setDateTo(e.target.value)} placeholder="To" />
-          <select style={css.select} value={csat} onChange={e => setCsat(e.target.value)}>
-            <option value="">All CSAT</option>
-            <option value="5">Good (5)</option>
-            <option value="3">CBB (3)</option>
-            <option value="1">Bad (1)</option>
-          </select>
-          <select style={css.select} value={qualityParam} onChange={e => setQualityParam(e.target.value)}>
-            <option value="">All Parameters</option>
-            {PARAM_NAMES_FLAT.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
-          </select>
-          <button style={css.applyBtn} onClick={handleApply}>Apply</button>
-          <button style={css.resetBtn} onClick={handleReset}>Reset</button>
-          <span style={css.count}>Showing {entries.length} chats</span>
+        <div style={{
+          minHeight: 56, background: '#FFFFFF', borderBottom: '1px solid #E4E4E7',
+          display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '11px 16px',
+        }}>
+          {/* Disposition */}
+          <Chip
+            label="Disposition"
+            value={disposition || undefined}
+            active={!!disposition}
+            onClick={e => openDropdown('disposition', e)}
+          />
+          {openMenu === 'disposition' && (
+            <Dropdown anchorRect={menuAnchor} onClose={() => setOpenMenu(null)}>
+              <MenuItem label="All dispositions" muted selected={!disposition} onSelect={() => { setDisposition(''); setSubDisposition(''); setOpenMenu(null); }} />
+              {dispositions.map(d => (
+                <MenuItem key={d} label={d} selected={disposition === d} onSelect={() => { setDisposition(d); setSubDisposition(''); setOpenMenu(null); }} />
+              ))}
+            </Dropdown>
+          )}
+
+          {/* Subdisposition */}
+          <Chip
+            label="Subdisposition"
+            value={subDisposition || undefined}
+            active={!!subDisposition}
+            disabled={!disposition}
+            onClick={e => openDropdown('subdisposition', e)}
+          />
+          {openMenu === 'subdisposition' && disposition && (
+            <Dropdown anchorRect={menuAnchor} onClose={() => setOpenMenu(null)}>
+              <MenuItem label="All subdispositions" muted selected={!subDisposition} onSelect={() => { setSubDisposition(''); setOpenMenu(null); }} />
+              {subDispsForPicked.map(d => (
+                <MenuItem key={d} label={d} selected={subDisposition === d} onSelect={() => { setSubDisposition(d); setOpenMenu(null); }} />
+              ))}
+            </Dropdown>
+          )}
+
+          {/* Date range */}
+          <button
+            onClick={e => openDropdown('calendar', e)}
+            style={{
+              height: 32, padding: '0 10px',
+              border: `1px solid ${dateFrom || dateTo ? '#2D2D31' : '#E4E4E7'}`,
+              borderRadius: 8, background: dateFrom || dateTo ? '#F4F4F5' : '#FFFFFF',
+              color: '#111111', fontSize: 13, fontFamily: SANS,
+              display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A1A1AA" strokeWidth="1.5">
+              <rect x="1" y="3" width="14" height="12" rx="1.5"/>
+              <path d="M5 1v4M11 1v4M1 7h14"/>
+            </svg>
+            {dateLabel}
+          </button>
+          {openMenu === 'calendar' && (
+            <CalendarPopup
+              anchorRect={menuAnchor}
+              dateFrom={dateFrom} dateTo={dateTo}
+              onSetFrom={setDateFrom} onSetTo={setDateTo}
+              onClear={() => { setDateFrom(''); setDateTo(''); }}
+              onClose={() => setOpenMenu(null)}
+            />
+          )}
+
+          {/* CSAT */}
+          <Chip
+            label="CSAT"
+            value={csat ? csatLabel : undefined}
+            active={!!csat}
+            onClick={e => openDropdown('csat', e)}
+          />
+          {openMenu === 'csat' && (
+            <Dropdown anchorRect={menuAnchor} onClose={() => setOpenMenu(null)}>
+              <MenuItem label="Any CSAT" muted selected={!csat} onSelect={() => { setCsat(''); setOpenMenu(null); }} />
+              {CSAT_OPTS.map(o => (
+                <MenuItem key={o.value} label={o.label} selected={csat === o.value} onSelect={() => { setCsat(o.value); setOpenMenu(null); }} />
+              ))}
+            </Dropdown>
+          )}
+
+          {/* Quality param */}
+          <Chip
+            label="Quality Param"
+            value={qualityParam ? paramLabel : undefined}
+            active={!!qualityParam}
+            onClick={e => openDropdown('param', e)}
+          />
+          {openMenu === 'param' && (
+            <Dropdown anchorRect={menuAnchor} onClose={() => setOpenMenu(null)}>
+              <MenuItem label="All parameters" muted selected={!qualityParam} onSelect={() => { setQualityParam(''); setOpenMenu(null); }} />
+              {PARAM_LIST.map(p => (
+                <MenuItem key={p.key} label={p.label} selected={qualityParam === p.key} onSelect={() => { setQualityParam(p.key); setOpenMenu(null); }} />
+              ))}
+            </Dropdown>
+          )}
+
+          {/* Right side */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 13, color: '#A1A1AA' }}>Showing {entries.length} chats</span>
+            <button
+              onClick={handleReset}
+              disabled={!hasFilters}
+              style={{
+                background: 'none', border: 0, fontSize: 13, color: '#6B6B6B',
+                cursor: hasFilters ? 'pointer' : 'default', fontFamily: SANS,
+                opacity: hasFilters ? 1 : 0.4,
+              }}
+            >
+              Reset
+            </button>
+            <button
+              onClick={handleApply}
+              disabled={!hasPending}
+              style={{
+                height: 36, padding: '0 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                background: '#111111', color: '#fff', border: '1px solid #111111',
+                cursor: hasPending ? 'pointer' : 'default', fontFamily: SANS,
+                opacity: hasPending ? 1 : 0.4,
+              }}
+            >
+              Apply
+            </button>
+          </div>
         </div>
 
         {/* Table */}
-        <table style={css.table}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={css.th}>Chat ID</th>
-              <th style={css.th}>IQS</th>
-              <th style={css.th}>Date</th>
-              <th style={css.th}>CSAT</th>
-              <th style={css.th}>Action</th>
+              <th style={TH_BASE}>Chat ID</th>
+              <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
+              <th style={TH_BASE}>Date</th>
+              <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={5} style={css.emptyRow}>Loading…</td></tr>
+              <tr><td colSpan={4} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '32px 0' }}>Loading…</td></tr>
             ) : entries.length === 0 ? (
-              <tr><td colSpan={5} style={css.emptyRow}>No evaluated chats found</td></tr>
-            ) : entries.map(e => {
+              <tr><td colSpan={4} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '32px 0' }}>No evaluated chats found</td></tr>
+            ) : entries.map((e, idx) => {
               const isOpen = expandedId === e.id;
+              const isLast = idx === entries.length - 1;
               return (
                 <>
-                  <tr key={e.id} style={{ background: isOpen ? '#F9FAFB' : '#fff' }}>
-                    <td style={css.td}><span style={{ fontSize: 12, fontFamily: 'monospace', color: '#374151' }}>{e.chatId?.slice(0, 16)}…</span></td>
-                    <td style={css.td}><IQSBadge score={e.iqs} /></td>
-                    <td style={css.td}>{e.date || '—'}</td>
-                    <td style={css.td}>{e.csat ? csatLabel(e.csat) : '—'}</td>
-                    <td style={css.td}>
-                      <button style={css.viewBtn} onClick={() => setExpandedId(isOpen ? null : e.id)}>
-                        {isOpen ? 'Close ▲' : 'View ▾'}
-                      </button>
-                    </td>
-                  </tr>
+                  <EvalRow
+                    key={e.id}
+                    entry={e}
+                    isOpen={isOpen}
+                    isLast={isLast && !isOpen}
+                    onToggle={() => setExpandedId(isOpen ? null : e.id)}
+                  />
                   {isOpen && (
                     <IRScorePanel
                       key={`panel-${e.id}`}
                       chatId={e.chatId}
                       agentName={e.agentName}
                       iqsScore={e.iqs}
-                      closedAt={e.date || e.scoredAt}
+                      closedAt={e.date || e.scoredAt || ''}
                       parameters={buildParams(e)}
                       mode="evaluated"
-                      colSpan={5}
+                      colSpan={4}
                       onClose={() => setExpandedId(null)}
-                      onDisputeRaised={() => { /* no-op, stay on page */ }}
+                      onDisputeRaised={() => {}}
                     />
                   )}
                 </>
@@ -239,20 +516,67 @@ function EvaluatedSection({ agentName }: { agentName: string }) {
   );
 }
 
-// ─── Section B: My Disputes ────────────────────────────────────────────────────
+function EvalRow({ entry: e, isOpen, isLast, onToggle }: {
+  entry: IQSScoreEntry; isOpen: boolean; isLast: boolean; onToggle: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <tr
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ background: isOpen ? '#FAFAFB' : hovered ? '#F4F4F5' : '#FFFFFF' }}
+    >
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontFamily: MONO, fontSize: 13, color: '#6B6B6B' }}>
+        {e.chatId?.slice(0, 16)}…
+      </td>
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right', fontFamily: MONO, fontSize: 13 }}>
+        {e.iqs != null ? e.iqs : '—'}
+      </td>
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+        {e.date || '—'}
+      </td>
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
+        <RowActionBtn open={isOpen} onClick={onToggle} />
+      </td>
+    </tr>
+  );
+}
+
+// ─── Row action button ────────────────────────────────────────────────────────
+
+function RowActionBtn({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        background: 'none', border: 0, fontSize: 13, color: '#111111', fontWeight: 500,
+        cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5, fontFamily: SANS,
+      }}
+    >
+      {open ? 'Close' : 'View'}
+      <span style={{
+        color: '#6B6B6B', fontSize: 11,
+        display: 'inline-block',
+        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+        transition: 'transform 0.15s',
+      }}>▾</span>
+    </button>
+  );
+}
+
+// ─── Section B: Disputes ──────────────────────────────────────────────────────
 
 function DisputesSection() {
   const [tab, setTab] = useState<'pending' | 'reviewed'>('pending');
   const [pending, setPending] = useState<DisputeRow[]>([]);
   const [reviewed, setReviewed] = useState<DisputeRow[]>([]);
-  const [loadingPending, setLoadingPending] = useState(true);
-  const [loadingReviewed, setLoadingReviewed] = useState(true);
+  const [loadingP, setLoadingP] = useState(true);
+  const [loadingR, setLoadingR] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<string | null>(null);
 
   const fetchDisputes = useCallback(async () => {
-    setLoadingPending(true);
-    setLoadingReviewed(true);
+    setLoadingP(true); setLoadingR(true);
     try {
       const [pRes, rRes] = await Promise.all([
         fetch('/api/ir/disputes?status=pending'),
@@ -262,11 +586,9 @@ function DisputesSection() {
       setPending(Array.isArray(pData.disputes) ? pData.disputes : []);
       setReviewed(Array.isArray(rData.disputes) ? rData.disputes : []);
     } catch {
-      setPending([]);
-      setReviewed([]);
+      setPending([]); setReviewed([]);
     } finally {
-      setLoadingPending(false);
-      setLoadingReviewed(false);
+      setLoadingP(false); setLoadingR(false);
     }
   }, []);
 
@@ -281,91 +603,75 @@ function DisputesSection() {
         body: JSON.stringify({ id: flagId, status: 'cancelled', action: 'cancel' }),
       });
       await fetchDisputes();
-    } catch {
     } finally {
       setCancelling(null);
     }
   };
 
   const rows = tab === 'pending' ? pending : reviewed;
-  const loading = tab === 'pending' ? loadingPending : loadingReviewed;
-
-  const pendingCols = 5;
-  const reviewedCols = 5;
-  const colSpan = tab === 'pending' ? pendingCols : reviewedCols;
+  const loading = tab === 'pending' ? loadingP : loadingR;
+  const colSpan = 5;
 
   return (
-    <div style={css.section}>
-      <div style={css.sectionTitle}>My Disputes</div>
-      <div style={css.card}>
-        <div style={css.tabRow}>
-          <button style={tabStyle(tab === 'pending')} onClick={() => { setTab('pending'); setExpandedId(null); }}>
-            Pending {pending.length > 0 && <span style={{ marginLeft: 4, fontSize: 11, background: '#FEF3C7', color: '#92400E', borderRadius: 10, padding: '1px 6px', fontWeight: 600 }}>{pending.length}</span>}
-          </button>
-          <button style={tabStyle(tab === 'reviewed')} onClick={() => { setTab('reviewed'); setExpandedId(null); }}>
-            Reviewed
-          </button>
+    <div>
+      <div style={{ fontSize: 20, fontWeight: 600, color: '#111111', margin: '0 0 16px' }}>My Disputes</div>
+      <div style={{ background: '#FFFFFF', border: '1px solid #E4E4E7', borderRadius: 8, overflow: 'hidden' }}>
+        {/* Tabs */}
+        <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid #E4E4E7' }}>
+          {(['pending', 'reviewed'] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setExpandedId(null); }}
+              style={{
+                height: 40, padding: '0 16px', background: 'transparent', border: 0,
+                fontSize: 13, color: tab === t ? '#111111' : '#A1A1AA',
+                fontWeight: tab === t ? 600 : 400,
+                cursor: 'pointer', fontFamily: SANS,
+                borderBottom: `2px solid ${tab === t ? '#111111' : 'transparent'}`,
+                marginBottom: -1,
+              }}
+            >
+              {t === 'pending' ? 'Pending' : 'Reviewed'}
+            </button>
+          ))}
         </div>
 
-        <table style={css.table}>
+        {/* Table */}
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              <th style={css.th}>Chat ID</th>
-              <th style={css.th}>IQS</th>
-              <th style={css.th}>Date Raised</th>
-              {tab === 'pending' && <th style={css.th}>Status</th>}
-              {tab === 'reviewed' && <th style={css.th}>Outcome</th>}
-              <th style={css.th}>Action</th>
+              <th style={TH_BASE}>Chat ID</th>
+              <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
+              <th style={TH_BASE}>Date</th>
+              <th style={TH_BASE}>{tab === 'pending' ? 'Status' : 'Outcome'}</th>
+              <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={colSpan} style={css.emptyRow}>Loading…</td></tr>
+              <tr><td colSpan={colSpan} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '32px 0' }}>Loading…</td></tr>
             ) : rows.length === 0 ? (
-              <tr><td colSpan={colSpan} style={css.emptyRow}>No {tab} disputes</td></tr>
-            ) : rows.map(row => {
+              <tr><td colSpan={colSpan} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '32px 0' }}>No {tab} disputes</td></tr>
+            ) : rows.map((row, idx) => {
               const isOpen = expandedId === row.flagId;
+              const isLast = idx === rows.length - 1;
+              const isRejected = row.reviewNote?.toLowerCase().includes('reject');
+              const statusText = tab === 'pending'
+                ? (row.status === 'ir_pending_tl' ? 'Raised' : 'Under Review')
+                : (isRejected ? 'Rejected' : 'Accepted');
               return (
                 <>
-                  <tr key={row.flagId} style={{ background: isOpen ? '#F9FAFB' : '#fff' }}>
-                    <td style={css.td}><span style={{ fontSize: 12, fontFamily: 'monospace', color: '#374151' }}>{row.chatId?.slice(0, 16)}…</span></td>
-                    <td style={css.td}><IQSBadge score={row.iqsScore} /></td>
-                    <td style={css.td}>{row.flaggedAt ? new Date(row.flaggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</td>
-                    {tab === 'pending' && (
-                      <td style={css.td}>
-                        <span style={badgeStyle(
-                          row.status === 'ir_pending_tl' ? '#92400E' : '#1D4ED8',
-                          row.status === 'ir_pending_tl' ? '#FEF3C7' : '#DBEAFE',
-                        )}>
-                          {row.status === 'ir_pending_tl' ? 'Raised' : 'Under Review'}
-                        </span>
-                      </td>
-                    )}
-                    {tab === 'reviewed' && (
-                      <td style={css.td}>
-                        <span style={badgeStyle(
-                          row.status === 'tl_resolved' ? '#065F46' : (row.reviewNote?.includes('reject') ? '#991B1B' : '#065F46'),
-                          row.status === 'tl_resolved' ? '#D1FAE5' : (row.reviewNote?.includes('reject') ? '#FEE2E2' : '#D1FAE5'),
-                        )}>
-                          {row.status === 'tl_resolved' ? 'TL Resolved' : (row.reviewNote?.includes('reject') ? 'Rejected' : 'Accepted')}
-                        </span>
-                      </td>
-                    )}
-                    <td style={css.td}>
-                      {tab === 'pending' && row.status === 'ir_pending_tl' && (
-                        <button
-                          style={css.cancelBtn}
-                          disabled={cancelling === row.flagId}
-                          onClick={() => cancelDispute(row.flagId)}
-                        >
-                          {cancelling === row.flagId ? 'Cancelling…' : 'Cancel Dispute'}
-                        </button>
-                      )}
-                      <button style={css.viewBtn} onClick={() => setExpandedId(isOpen ? null : row.flagId)}>
-                        {isOpen ? 'Close ▲' : 'View ▾'}
-                      </button>
-                    </td>
-                  </tr>
+                  <DisputeRowComp
+                    key={row.flagId}
+                    row={row}
+                    tab={tab}
+                    statusText={statusText}
+                    isOpen={isOpen}
+                    isLast={isLast && !isOpen}
+                    cancelling={cancelling}
+                    onCancel={() => cancelDispute(row.flagId)}
+                    onToggle={() => setExpandedId(isOpen ? null : row.flagId)}
+                  />
                   {isOpen && (
                     <IRScorePanel
                       key={`panel-${row.flagId}`}
@@ -377,8 +683,8 @@ function DisputesSection() {
                       mode={tab === 'pending' ? 'pending' : 'reviewed'}
                       challengedParams={row.challengedParams}
                       reviewNote={row.reviewNote}
-                      reviewedBy={row.reviewedBy}
                       flagId={row.flagId}
+                      flagStatus={row.status}
                       colSpan={colSpan}
                       onClose={() => setExpandedId(null)}
                     />
@@ -393,14 +699,53 @@ function DisputesSection() {
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function csatLabel(csat: string) {
-  if (csat === '5') return <span style={{ color: '#16A34A', fontWeight: 500 }}>Good</span>;
-  if (csat === '3') return <span style={{ color: '#CA8A04', fontWeight: 500 }}>CBB</span>;
-  if (csat === '1') return <span style={{ color: '#DC2626', fontWeight: 500 }}>Bad</span>;
-  return csat;
+function DisputeRowComp({ row, tab, statusText, isOpen, isLast, cancelling, onCancel, onToggle }: {
+  row: DisputeRow; tab: 'pending' | 'reviewed'; statusText: string;
+  isOpen: boolean; isLast: boolean; cancelling: string | null;
+  onCancel: () => void; onToggle: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const dateStr = row.flaggedAt ? new Date(row.flaggedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  return (
+    <tr
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ background: isOpen ? '#FAFAFB' : hovered ? '#F4F4F5' : '#FFFFFF' }}
+    >
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontFamily: MONO, fontSize: 13, color: '#6B6B6B' }}>
+        {row.chatId?.slice(0, 16)}…
+      </td>
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right', fontFamily: MONO, fontSize: 13 }}>
+        {row.iqsScore != null ? row.iqsScore : '—'}
+      </td>
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>{dateStr}</td>
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 13, color: '#6B6B6B' }}>
+        {statusText}
+      </td>
+      <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          {tab === 'pending' && row.status === 'ir_pending_tl' && (
+            <button
+              disabled={cancelling === row.flagId}
+              onClick={onCancel}
+              style={{
+                height: 28, padding: '0 12px', borderRadius: 8, fontSize: 12, fontWeight: 500,
+                background: '#FFFFFF', border: '1px solid #E4E4E7', color: '#111111',
+                cursor: cancelling === row.flagId ? 'default' : 'pointer', fontFamily: SANS,
+                opacity: cancelling === row.flagId ? 0.5 : 1,
+              }}
+            >
+              {cancelling === row.flagId ? 'Cancelling…' : 'Cancel Dispute'}
+            </button>
+          )}
+          <RowActionBtn open={isOpen} onClick={onToggle} />
+        </div>
+      </td>
+    </tr>
+  );
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildParams(e: IQSScoreEntry): Record<string, { score: boolean | null; reasoning: string }> {
   const out: Record<string, { score: boolean | null; reasoning: string }> = {};
@@ -410,14 +755,14 @@ function buildParams(e: IQSScoreEntry): Record<string, { score: boolean | null; 
   return out;
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main ─────────────────────────────────────────────────────────────────────
 
-export default function MyQualityChatsPage({ userEmail, agentName }: Props) {
+export default function MyQualityChatsPage({ agentName }: Props) {
   return (
-    <div style={css.page}>
-      <div style={css.heading}>My Quality Chats</div>
-      <div style={css.subheading}>Review your scored chats, raise disputes, and track dispute outcomes.</div>
-
+    <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS }}>
+      <div style={{ fontSize: 24, fontWeight: 600, color: '#111111', margin: '0 0 24px' }}>
+        My Quality Chats
+      </div>
       <EvaluatedSection agentName={agentName} />
       <DisputesSection />
     </div>
