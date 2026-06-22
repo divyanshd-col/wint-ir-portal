@@ -146,12 +146,17 @@ export async function GET(req: NextRequest) {
   let selfAgentName = '';
   let scopedAgentNames: string[] | null = null; // null = no scope restriction
 
+  let assignedDispositions: string[] | null = null;
+
   if (role === 'agent' || role === 'tl' || role === 'quality') {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
     const email = session.user?.email || '';
     const configUser = config.users.find(u => (u.email || u.username) === email);
     selfAgentName = configUser?.agentName || '';
+    if (role === 'quality' && configUser?.assignedDispositions?.length) {
+      assignedDispositions = configUser.assignedDispositions;
+    }
   }
 
   if (role === 'agent' && selfAgentName) {
@@ -168,13 +173,14 @@ export async function GET(req: NextRequest) {
     dateFrom?: string; dateTo?: string;
     agentName?: string; agentNames?: string[];
     minUserMessages?: number;
-    disposition?: string; subDisposition?: string;
+    disposition?: string; subDisposition?: string; dispositions?: string[];
     csat?: string; conversationType?: string;
   } = {};
   if (!chatIdSearch) {
     if (dateFrom) dbOpts.dateFrom = dateFrom;
     if (dateTo)   dbOpts.dateTo   = dateTo;
     if (tagFilter)     dbOpts.disposition     = tagFilter;
+    else if (assignedDispositions) dbOpts.dispositions = assignedDispositions; // soft default for QA
     if (subTagFilter)  dbOpts.subDisposition  = subTagFilter;
     if (csatFilter)    dbOpts.csat            = csatFilter;
     if (typeFilter)    dbOpts.conversationType = typeFilter;
@@ -358,6 +364,7 @@ export async function GET(req: NextRequest) {
     total: totalFiltered,
     totalStored,
     selfAgentName: selfAgentName || null,
+    ...(assignedDispositions && { assignedDispositions }),
     page,
     pageSize: PAGE_SIZE,
     hasMore,

@@ -138,6 +138,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<'agent' | 'tl' | 'quality' | 'admin'>('agent');
   const [newAgentName, setNewAgentName] = useState('');
+  const [newDispositions, setNewDispositions] = useState('');
   const [addingUser, setAddingUser] = useState(false);
   const [userError, setUserError] = useState('');
   const [editingAgentName, setEditingAgentName] = useState<Record<string, string>>({});
@@ -431,13 +432,21 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: newEmail.trim(), role: newRole, agentName: newAgentName.trim() || undefined }),
+        body: JSON.stringify({
+          email: newEmail.trim(),
+          role: newRole,
+          agentName: newAgentName.trim() || undefined,
+          assignedDispositions: newDispositions.trim()
+            ? newDispositions.split(',').map(d => d.trim()).filter(Boolean)
+            : [],
+        }),
       });
       const data = await res.json();
       if (!res.ok) { setUserError(data.error || 'Failed'); return; }
       await loadUsers();
       setNewEmail('');
       setNewAgentName('');
+      setNewDispositions('');
       setNewRole('agent');
       showToast('User added');
     } finally { setAddingUser(false); }
@@ -1178,6 +1187,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Name (optional)</label>
                 <input type="text" value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Display name for quality reports…"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Assigned Dispositions (QA only, comma-separated)</label>
+                <input type="text" value={newDispositions} onChange={e => setNewDispositions(e.target.value)} placeholder="e.g. TAXATION, SGB, LIQUIDITY"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
               </div>
               {userError && <p className="text-xs text-red-500">{userError}</p>}

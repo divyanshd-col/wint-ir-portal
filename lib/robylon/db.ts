@@ -261,7 +261,7 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 export async function getAllScoredConversations(
   limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMin?: number; iqsMax?: number; includeUncertain?: boolean; disposition?: string; subDisposition?: string } = {},
+  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMin?: number; iqsMax?: number; includeUncertain?: boolean; disposition?: string; subDisposition?: string; dispositions?: string[] } = {},
 ): Promise<any[]> {
   const conditions: string[] = [];
   const params: any[] = [];
@@ -302,6 +302,10 @@ export async function getAllScoredConversations(
   if (opts.disposition) {
     params.push(opts.disposition);
     conditions.push(`(c.tags->>'disposition') = $${params.length}`);
+  } else if (opts.dispositions && opts.dispositions.length > 0) {
+    // Multi-value default scope (e.g. QA's assigned dispositions)
+    params.push(opts.dispositions);
+    conditions.push(`(c.tags->>'disposition') = ANY($${params.length})`);
   }
   if (opts.subDisposition) {
     params.push(opts.subDisposition);

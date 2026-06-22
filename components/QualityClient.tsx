@@ -1030,6 +1030,7 @@ const PENDING_DEFAULT_FILTERS: LogFilters = {
 
 function buildPendingParams(f: LogFilters): URLSearchParams {
   const p = new URLSearchParams();
+  if (f.agent)           p.set('agent', f.agent);
   if (f.minScore > 0)    p.set('minScore', String(f.minScore));
   if (f.maxScore < 100)  p.set('maxScore', String(f.maxScore));
   if (f.disposition)     p.set('tag', f.disposition);
@@ -1093,7 +1094,9 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
   const [pendingFilters, setPendingFilters] = useState<LogFilters>(PENDING_DEFAULT_FILTERS);
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
+  const [availableAgents, setAvailableAgents] = useState<string[]>([]);
   const [dispositionSubMap, setDispositionSubMap] = useState<Record<string, string[]>>({});
+  const [assignedDispositions, setAssignedDispositions] = useState<string[] | null>(null);
 
   const fetchPending = useCallback(async (filters: LogFilters) => {
     setLoading(true);
@@ -1103,7 +1106,9 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
       const d = await fetch(`/api/quality/pending-review?${params}`).then(r => r.json());
       setItems(d.items || []);
       setAvailableDispositions(d.availableDispositions || []);
+      setAvailableAgents(d.availableAgents || []);
       setDispositionSubMap(d.dispositionSubMap || {});
+      if (d.assignedDispositions) setAssignedDispositions(d.assignedDispositions);
     } catch {
       setLoadError('Failed to load pending chats');
     }
@@ -1678,7 +1683,25 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
             </div>
           </div>
 
-          {/* Row 3: Disposition + Sub-Disposition */}
+          {/* Row 3: Agent */}
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent</p>
+              <select value={pendingFilters.agent}
+                onChange={e => setPendingFilters(f => ({ ...f, agent: e.target.value }))}
+                className="text-xs border border-gray-200 rounded-xl px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 min-w-[180px]">
+                <option value="">All agents</option>
+                {availableAgents.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Row 4: Disposition + Sub-Disposition */}
+          {assignedDispositions && (
+            <p className="text-[11px] text-emerald-700 font-medium">
+              Default view: {assignedDispositions.join(', ')} — select a different disposition below to override
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-4">
             <div>
               <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Disposition</p>
