@@ -26,6 +26,7 @@ export async function GET() {
     llmProvider: config.llmProvider || 'gemini',
     geminiModel: config.geminiModel || 'gemini-2.5-flash',
     knowledgeBaseUrls: config.knowledgeBaseUrls,
+    knowledgeBaseDocNames: config.knowledgeBaseDocNames || {},
     systemPrompt: config.systemPrompt || '',
     conversationHistoryEnabled: config.conversationHistoryEnabled ?? false,
     slackUserToken: config.slackUserToken ? '••••••••' : '',

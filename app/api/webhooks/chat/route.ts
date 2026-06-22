@@ -193,7 +193,14 @@ export async function scoreLinkedCallsForChat(
     if (searchQuery) {
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
-      if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
+      if (relevant.length) {
+        const docNames = config.knowledgeBaseDocNames || {};
+        kbContext = relevant.map(c => {
+          const driveId = c.fileName.trim();
+          const label = docNames[driveId] || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
+          return `[${label}]\n${c.content}`;
+        }).join('\n---\n');
+      }
     }
   } catch {}
 
@@ -345,9 +352,12 @@ export async function executeScoring(
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
       if (relevant.length) {
-        kbContext = relevant
-          .map(c => `[${c.fileName}]\n${c.content}`)
-          .join('\n---\n');
+        const docNames = config.knowledgeBaseDocNames || {};
+        kbContext = relevant.map(c => {
+          const driveId = c.fileName.trim();
+          const label = docNames[driveId] || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
+          return `[${label}]\n${c.content}`;
+        }).join('\n---\n');
         console.log(`[webhook] KB context: ${relevant.length} chunks for query "${searchQuery}"`);
       }
     }

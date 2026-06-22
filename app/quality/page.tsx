@@ -5,7 +5,7 @@ import { readConfig } from '@/lib/config';
 import AgentAnalyticsDashboard from '@/components/quality/AgentAnalyticsDashboard';
 import QAAnalyticsDashboard from '@/components/quality/QAAnalyticsDashboard';
 
-export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string; section?: string; period?: string } }) {
+export default async function QualityPage({ searchParams }: { searchParams?: { agent?: string; tab?: string; section?: string; period?: string; chatId?: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 

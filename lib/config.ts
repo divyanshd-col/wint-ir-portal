@@ -38,6 +38,8 @@ export interface PortalConfig {
   analyticsSynthesizerPrompt?: string;
   // ── QA disposition mapping ───────────────────────────────────────────────
   qaDispositionMap?: QADispositionEntry[];
+  // ── KB document display names (Drive ID → human-readable name) ──────────────
+  knowledgeBaseDocNames?: Record<string, string>;
 }
 
 export interface QADispositionEntry {
