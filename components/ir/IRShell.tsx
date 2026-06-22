@@ -9,61 +9,122 @@ interface IRShellProps {
   children: React.ReactNode;
 }
 
+const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
+
 export default function IRShell({ role, name, children }: IRShellProps) {
   const pathname = usePathname();
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#F7F7F8', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
-      {/* Left sidebar */}
-      <aside style={{ width: 200, background: '#111', display: 'flex', flexDirection: 'column', flexShrink: 0, position: 'sticky', top: 0, height: '100vh' }}>
-        <div style={{ padding: '20px 16px 12px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-          <span style={{ color: '#fff', fontWeight: 700, fontSize: 15, letterSpacing: '-0.3px' }}>Wint Portal</span>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#F7F7F8', fontFamily: SANS }}>
+      {/* Topnav */}
+      <header style={{
+        height: 64, background: '#FFFFFF', borderBottom: '1px solid #E4E4E7',
+        padding: '0 24px', display: 'flex', alignItems: 'center', gap: 16,
+        position: 'sticky', top: 0, zIndex: 30, flexShrink: 0,
+      }}>
+        {/* Wordmark */}
+        <div style={{
+          border: '1px dashed #E4E4E7', borderRadius: 6, padding: '4px 10px',
+          fontSize: 11, color: '#A1A1AA', textTransform: 'uppercase', letterSpacing: '0.08em',
+        }}>
+          Wint Portal
         </div>
 
-        <nav style={{ flex: 1, padding: '12px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <SideLink href="/quality" label="My Analytics" active={pathname === '/quality'} icon={
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="1" y="9" width="3" height="6" rx="0.5"/><rect x="6" y="5" width="3" height="10" rx="0.5"/><rect x="11" y="1" width="3" height="14" rx="0.5"/>
-            </svg>
-          } />
-          <SideLink href="/agent/quality-chats" label="My Quality Chats" active={pathname === '/agent/quality-chats'} icon={
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
-            </svg>
-          } />
-        </nav>
+        {/* Role pill */}
+        <div style={{
+          height: 28, padding: '0 12px', borderRadius: 999,
+          background: '#F4F4F5', border: '1px solid #E4E4E7',
+          fontSize: 12, color: '#111111', fontWeight: 500,
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2D2D31', flexShrink: 0 }} />
+          {role.charAt(0).toUpperCase() + role.slice(1)}
+        </div>
 
-        <div style={{ padding: '12px 16px', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2D2D31', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 600 }}>
-              {name.charAt(0).toUpperCase()}
-            </div>
-            <div>
-              <div style={{ color: '#fff', fontSize: 12, fontWeight: 500, lineHeight: 1.2 }}>{name}</div>
-              <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{role}</div>
-            </div>
+        <div style={{ flex: 1 }} />
+
+        {/* User info */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'default' }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: '50%', background: '#E4E4E7',
+            fontSize: 12, fontWeight: 600, color: '#6B6B6B',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            {name.charAt(0).toUpperCase()}
           </div>
+          <span style={{ fontSize: 13, color: '#111111' }}>{name}</span>
+          <span style={{ fontSize: 10, color: '#A1A1AA' }}>▾</span>
         </div>
-      </aside>
+      </header>
 
-      {/* Main content */}
-      <main style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
-        {children}
-      </main>
+      {/* Body */}
+      <div style={{ display: 'flex', flex: 1 }}>
+        {/* Sidebar */}
+        <aside style={{
+          width: 220, flexShrink: 0, background: '#FFFFFF',
+          borderRight: '1px solid #E4E4E7', padding: '16px 0',
+          minHeight: 'calc(100vh - 64px)',
+        }}>
+          <div style={{
+            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+            color: '#A1A1AA', padding: '12px 16px 6px',
+          }}>
+            My Quality
+          </div>
+
+          <SideLink
+            href="/quality"
+            label="My Analytics"
+            active={pathname === '/quality'}
+            icon={
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="9" width="3" height="6" rx="0.5"/>
+                <rect x="6" y="5" width="3" height="10" rx="0.5"/>
+                <rect x="11" y="1" width="3" height="14" rx="0.5"/>
+              </svg>
+            }
+          />
+          <SideLink
+            href="/agent/quality-chats"
+            label="My Quality Chats"
+            active={pathname === '/agent/quality-chats'}
+            icon={
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M2 2h12v10H9l-3 3V12H2z"/>
+              </svg>
+            }
+          />
+        </aside>
+
+        {/* Main */}
+        <main style={{ flex: 1, overflow: 'auto' }}>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
 
 function SideLink({ href, label, active, icon }: { href: string; label: string; active: boolean; icon: React.ReactNode }) {
   return (
-    <Link href={href} style={{
-      display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6,
-      color: active ? '#fff' : 'rgba(255,255,255,0.5)',
-      background: active ? 'rgba(255,255,255,0.1)' : 'transparent',
-      textDecoration: 'none', fontSize: 13, fontWeight: active ? 500 : 400,
-      transition: 'background 0.15s, color 0.15s',
-    }}>
-      {icon}
+    <Link
+      href={href}
+      style={{
+        height: 44, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10,
+        fontSize: 14, color: '#111111', cursor: 'pointer',
+        borderLeft: active ? '3px solid #111111' : '3px solid transparent',
+        background: active ? '#F4F4F5' : 'transparent',
+        fontWeight: active ? 500 : 400,
+        textDecoration: 'none',
+        transition: 'background 0.1s',
+      }}
+    >
+      <span style={{
+        width: 16, height: 16, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: active ? '#111111' : '#A1A1AA',
+      }}>
+        {icon}
+      </span>
       {label}
     </Link>
   );
