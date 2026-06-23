@@ -50,6 +50,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   const { searchParams } = new URL(req.url);
+  log.info(ROUTE, 'params', { raw: req.url.split('?')[1] ?? '' });
 
   // Resolve dispositions for this QA
   const config = await readConfig();
@@ -170,6 +171,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
          WHERE k = ANY(ARRAY['technical','all_questions','expectation','process','follow_up','opening','call'])
            AND (v->>'score')::boolean = false
        )`;
+
+  log.info(ROUTE, 'query-plan', {
+    role, email,
+    reviewedMode,
+    effectiveDispositions,
+    extraWhere,
+    sqlParams: JSON.stringify(sqlParams),
+  });
 
   const t0 = Date.now();
 

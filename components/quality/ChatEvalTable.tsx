@@ -91,9 +91,15 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
       if (customFrom)    params.set('from', customFrom);
       if (customTo)      params.set('to',   customTo);
 
-      const res = await fetch(`/api/cx/qa/chats-to-review?${params}`);
-      if (!res.ok) return;
+      const url = `/api/cx/qa/chats-to-review?${params}`;
+      console.log('[ChatEvalTable] fetch', url);
+      const res = await fetch(url);
+      if (!res.ok) {
+        console.error('[ChatEvalTable] fetch failed', res.status, await res.text());
+        return;
+      }
       const data = await res.json();
+      console.log('[ChatEvalTable] result', { total: data.total, chatsLen: data.chats?.length });
       setChats(data.chats ?? []);
       setTotal(data.total ?? 0);
       setPage(pg);
