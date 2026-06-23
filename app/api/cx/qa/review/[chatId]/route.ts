@@ -116,7 +116,7 @@ export async function PATCH(
     } else if (action === 'submit') {
       await query(
         `UPDATE iqs_scores
-         SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2
+         SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = 'reviewed'
          WHERE chat_id = $3`,
         [email, note ?? null, chatId]
       );
@@ -165,7 +165,8 @@ export async function PATCH(
         await query(
           `UPDATE iqs_scores
            SET parameters = $1, iqs_score = $2,
-               reviewed_by = $3, reviewed_at = NOW(), review_note = $4
+               reviewed_by = $3, reviewed_at = NOW(), review_note = $4,
+               status = 'reviewed'
            WHERE chat_id = $5`,
           [JSON.stringify(merged), newIqs, email, note ?? null, chatId]
         );
@@ -176,7 +177,7 @@ export async function PATCH(
         // resolve without parameter changes — just mark reviewed
         await query(
           `UPDATE iqs_scores
-           SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2
+           SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = 'reviewed'
            WHERE chat_id = $3`,
           [email, note ?? null, chatId]
         );

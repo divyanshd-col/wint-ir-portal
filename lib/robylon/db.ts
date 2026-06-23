@@ -241,8 +241,8 @@ export async function insertIQSScore(data: {
     stored.__uncertain = data.uncertainParameters;
   }
   await query(`
-    INSERT INTO iqs_scores (chat_id, iqs_score, parameters, model_version, scored_at)
-    VALUES ($1, $2, $3, $4, NOW())
+    INSERT INTO iqs_scores (chat_id, iqs_score, parameters, model_version, scored_at, status)
+    VALUES ($1, $2, $3, $4, NOW(), 'pending')
     ON CONFLICT (chat_id) DO UPDATE SET
       iqs_score     = EXCLUDED.iqs_score,
       parameters    = EXCLUDED.parameters,
@@ -377,8 +377,8 @@ export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fro
  */
 export async function markChatUnscoreable(chatId: string, reason: string): Promise<void> {
   await query(`
-    INSERT INTO iqs_scores (chat_id, model_version, scored_at)
-    VALUES ($1, $2, NOW())
+    INSERT INTO iqs_scores (chat_id, model_version, scored_at, status)
+    VALUES ($1, $2, NOW(), 'skipped')
     ON CONFLICT (chat_id) DO NOTHING
   `, [chatId, `skipped:${reason.slice(0, 80)}`]);
 }
@@ -479,8 +479,8 @@ export async function updateCallIQSScore(data: {
   callModelVersion: string;
 }): Promise<void> {
   await query(`
-    INSERT INTO iqs_scores (chat_id, call_iqs_score, call_parameters, call_model_version, call_scored_at)
-    VALUES ($4, $1, $2, $3, NOW())
+    INSERT INTO iqs_scores (chat_id, call_iqs_score, call_parameters, call_model_version, call_scored_at, status)
+    VALUES ($4, $1, $2, $3, NOW(), 'skipped')
     ON CONFLICT (chat_id) DO UPDATE SET
       call_iqs_score     = EXCLUDED.call_iqs_score,
       call_parameters    = EXCLUDED.call_parameters,
