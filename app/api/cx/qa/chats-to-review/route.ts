@@ -163,6 +163,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filters.paramFail = paramFail;
   }
 
+  // Agent filter: bot_only | all | human_only (default: human_only)
+  const agentFilter = searchParams.get('agent_filter') || 'human_only';
+  if (agentFilter === 'human_only') {
+    extraWhere += ` AND (a.name IS NULL OR a.name != 'Robylon AI') AND (c.agent_id IS NULL OR c.agent_id NOT IN (15, 447, 784))`;
+    filters.agentFilter = 'human_only';
+  } else if (agentFilter === 'bot_only') {
+    extraWhere += ` AND (a.name = 'Robylon AI' OR c.agent_id IN (15, 447, 784))`;
+    filters.agentFilter = 'bot_only';
+  } else {
+    filters.agentFilter = 'all';
+  }
+
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
@@ -184,11 +196,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const t0 = Date.now();
 
-  // Count query
+  // Count query (needs LEFT JOIN agents to support include_robylon filter on agent name)
   const countRows = await query<{ total: string }>(
     `SELECT COUNT(*) AS total
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
+     LEFT JOIN agents a ON a.id = c.agent_id
      WHERE ${baseWhere}${extraWhere}`,
     sqlParams
   );

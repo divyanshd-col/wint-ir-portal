@@ -8,6 +8,7 @@ import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 interface Props {
   dispositions:   string[];
   onCountChange?: (count: number) => void;
+  agentFilter?:   'bot_only' | 'all' | 'human_only';
 }
 
 // ── Chip / filter styles ──────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
 type SortCol = 'chatId' | 'agentName' | 'iqsScore';
 type SortDir = 'asc' | 'desc';
 
-export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
+export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortCol, setSortCol] = useState<SortCol>('iqsScore');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -100,6 +101,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
     try {
       const params = new URLSearchParams({ page: String(pg), limit: String(ps) });
       if (chatIdSearch)  params.set('chat_id',            chatIdSearch);
+      params.set('agent_filter', agentFilter);
       dispFilter.forEach(d => params.append('disposition_filter', d));
       subDispFilter.forEach(s => params.append('sub_disposition', s));
       if (iqsMin)        params.set('iqs_min',            iqsMin);
@@ -126,7 +128,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [chatIdSearch, dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, customFrom, customTo, onCountChange, pageSize]);
+  }, [chatIdSearch, dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, customFrom, customTo, onCountChange, pageSize, agentFilter]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 

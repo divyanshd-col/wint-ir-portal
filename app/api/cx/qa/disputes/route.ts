@@ -29,6 +29,9 @@ export interface DisputeRow {
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
+  const { searchParams } = new URL(req.url);
+  const agentFilter = searchParams.get('agent_filter') || 'human_only';
+
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role  = (session.user as any).role as string;
@@ -76,6 +79,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const chatIds = [...new Set(pendingFlags.map(f => f.chatId))];
   const dbRows = await query<{
     chat_id: string;
+    agent_id: number | null;
     agent_name: string | null;
     closed_at: string;
     disposition: string;
@@ -85,7 +89,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     csat_score: string | null;
     mobile_number: string | null;
   }>(
-    `SELECT c.id AS chat_id, a.name AS agent_name,
+    `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name,
             c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
@@ -122,6 +126,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     // Scope-check: only disputes in QA's dispositions
     if (!dispositions.includes(db.disposition)) continue;
+
+    // Robylon AI / Bot check
+    const isBot = flag.agentName === 'Robylon AI' || db.agent_name === 'Robylon AI' || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)));
+    if (agentFilter === 'human_only' && isBot) {
+      continue;
+    }
+    if (agentFilter === 'bot_only' && !isBot) {
+      continue;
+    }
 
     let params = db.parameters ?? {};
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
