@@ -36,6 +36,7 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
   const [newComment,  setNewComment]  = useState('');
   const [posting,     setPosting]     = useState(false);
   const [raiserFilter, setRaiserFilter] = useState<'all' | 'tl_endorsed' | 'TL' | 'IR'>('all');
+  const [chatIdSearch, setChatIdSearch] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -101,9 +102,14 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
     }
   }
 
-  const visibleDisputes = raiserFilter === 'all' ? disputes
+  let visibleDisputes = raiserFilter === 'all' ? disputes
     : raiserFilter === 'tl_endorsed' ? disputes.filter(d => d.tlForwarded)
     : disputes.filter(d => d.raisedBy === raiserFilter);
+
+  if (chatIdSearch) {
+    const term = chatIdSearch.toLowerCase().trim();
+    visibleDisputes = visibleDisputes.filter(d => d.chatId.toLowerCase().startsWith(term));
+  }
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -131,13 +137,36 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)' }}>
-        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>Raised by</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)', flexWrap: 'wrap' }}>
+        <input
+          placeholder="Search by Chat ID…"
+          value={chatIdSearch}
+          onChange={e => setChatIdSearch(e.target.value)}
+          style={{
+            height: 32, padding: '0 10px', border: `1px solid ${chatIdSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
+            background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
+            outline: 'none', width: 140
+          }}
+        />
+        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginLeft: 8 }}>Raised by</span>
         {(['all', 'tl_endorsed', 'TL', 'IR'] as const).map(v => (
           <button key={v} style={raiserFilter === v ? chipActive : chip} onClick={() => setRaiserFilter(v)}>
             {v === 'all' ? 'All' : v === 'tl_endorsed' ? 'TL Endorsed ★' : v}
           </button>
         ))}
+
+        {(chatIdSearch || raiserFilter !== 'all') && (
+          <button
+            onClick={() => { setChatIdSearch(''); setRaiserFilter('all'); }}
+            style={{
+              height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
+              background: 'var(--qa-card)', color: 'var(--qa-text-2)', fontSize: 12, fontFamily: 'inherit',
+              cursor: 'pointer', outline: 'none'
+            }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
