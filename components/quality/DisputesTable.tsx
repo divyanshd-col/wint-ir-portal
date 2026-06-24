@@ -107,7 +107,7 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
 
   if (chatIdSearch) {
     const term = chatIdSearch.toLowerCase().trim();
-    visibleDisputes = visibleDisputes.filter(d => d.chatId.toLowerCase().includes(term));
+    visibleDisputes = visibleDisputes.filter(d => d.chatId.toLowerCase().startsWith(term));
   }
 
   const th: React.CSSProperties = {

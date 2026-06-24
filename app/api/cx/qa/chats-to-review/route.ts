@@ -93,8 +93,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const chatId = searchParams.get('chat_id');
   if (chatId) {
-    extraWhere += ` AND c.id = $${paramIdx++}`;
-    sqlParams.push(chatId.trim());
+    extraWhere += ` AND c.id LIKE $${paramIdx++}`;
+    sqlParams.push(`${chatId.trim()}%`);
     filters.chatId = chatId.trim();
   }
 
