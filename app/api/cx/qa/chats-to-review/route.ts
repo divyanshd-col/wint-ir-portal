@@ -91,6 +91,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const filters: Record<string, unknown> = {};
 
+  const chatId = searchParams.get('chat_id');
+  if (chatId) {
+    extraWhere += ` AND c.id LIKE $${paramIdx++}`;
+    sqlParams.push(`${chatId.trim()}%`);
+    filters.chatId = chatId.trim();
+  }
+
   const subDispos = searchParams.getAll('sub_disposition');
   if (subDispos.length) {
     extraWhere += ` AND c.tags->>'sub_disposition' = ANY($${paramIdx++})`;
