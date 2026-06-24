@@ -1,4 +1,5 @@
 'use client';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -58,48 +59,37 @@ function initials(name: string) {
 
 export default function QualityShell({ role, email, name, children }: Props) {
   const pathname = usePathname();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <div className="quality-shell-container" />;
+  }
 
   return (
-    <div
-      suppressHydrationWarning
-      style={{ background: 'var(--qa-bg)', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', fontSize: 14, color: 'var(--qa-text)' }}
-    >
+    <div className="quality-shell-container">
 
       {/* ── Top Nav ─────────────────────────────────────────────────── */}
-      <header style={{
-        position: 'sticky', top: 0, zIndex: 30,
-        height: 64, background: 'var(--qa-card)', borderBottom: '1px solid var(--qa-border)',
-        display: 'flex', alignItems: 'center', padding: '0 24px', gap: 16,
-      }}>
+      <header className="quality-shell-header">
         {/* Wordmark */}
-        <div style={{
-          width: 120, height: 28, border: '1px dashed var(--qa-border)', borderRadius: 4,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 11, color: 'var(--qa-text-3)', letterSpacing: '0.08em', textTransform: 'uppercase',
-        }}>
+        <div className="quality-shell-wordmark">
           Wint Wealth
         </div>
 
         {/* Role pill */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
-          <span style={{
-            height: 28, padding: '0 12px', borderRadius: 999,
-            background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontSize: 12, fontWeight: 500,
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--qa-text)' }} />
+        <div className="quality-shell-role-container">
+          <span className="quality-shell-role-pill">
+            <span className="quality-shell-role-pill-dot" />
             {ROLE_LABELS[role] ?? role}
           </span>
         </div>
 
         {/* User */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <span style={{
-            width: 32, height: 32, borderRadius: '50%', background: 'var(--qa-fill-med)',
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 12, fontWeight: 600, color: 'var(--qa-text-2)',
-          }}>
+        <div className="quality-shell-user">
+          <span className="quality-shell-user-avatar">
             {initials(name)}
           </span>
           <span>{name}</span>
@@ -107,17 +97,10 @@ export default function QualityShell({ role, email, name, children }: Props) {
         </div>
       </header>
 
-      <div style={{ display: 'flex' }}>
+      <div className="quality-shell-body">
         {/* ── Sidebar ───────────────────────────────────────────────── */}
-        <aside style={{
-          width: 220, flexShrink: 0, background: 'var(--qa-card)',
-          borderRight: '1px solid var(--qa-border)',
-          padding: '16px 0', minHeight: 'calc(100vh - 64px)',
-        }}>
-          <div style={{
-            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
-            color: 'var(--qa-text-3)', padding: '12px 16px 6px',
-          }}>
+        <aside className="quality-shell-sidebar">
+          <div className="quality-shell-sidebar-title">
             {ROLE_LABELS[role] ?? role}
           </div>
 
@@ -125,14 +108,12 @@ export default function QualityShell({ role, email, name, children }: Props) {
             const Icon = NAV_ICONS[item.href] ?? BarChartIcon;
             const active = pathname === item.href;
             return (
-              <Link key={item.href} href={item.href} style={{
-                height: 44, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 10,
-                fontSize: 14, color: 'var(--qa-text)', textDecoration: 'none', position: 'relative',
-                borderLeft: active ? '3px solid var(--qa-text)' : '3px solid transparent',
-                background: active ? 'var(--qa-gray-100)' : 'transparent',
-                fontWeight: active ? 500 : 400,
-              }}>
-                <span style={{ color: active ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
+              >
+                <span>
                   <Icon />
                 </span>
                 {item.label}
@@ -142,7 +123,7 @@ export default function QualityShell({ role, email, name, children }: Props) {
         </aside>
 
         {/* ── Main content ──────────────────────────────────────────── */}
-        <main style={{ flex: 1, padding: '32px 48px', minWidth: 0, maxWidth: 1400 }}>
+        <main className="quality-shell-main">
           {children}
         </main>
       </div>
