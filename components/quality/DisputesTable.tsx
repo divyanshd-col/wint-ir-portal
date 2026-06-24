@@ -6,6 +6,7 @@ import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 interface Props {
   dispositions: string[];
   onCountChange?: (count: number) => void;
+  agentFilter?: 'bot_only' | 'all' | 'human_only';
 }
 
 interface FlagComment {
@@ -25,7 +26,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ dispositions: _dispositions, onCountChange }: Props) {
+export default function DisputesTable({ dispositions: _dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/cx/qa/disputes');
+        const res = await fetch(`/api/cx/qa/disputes?agent_filter=${agentFilter}`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
@@ -52,7 +53,7 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [agentFilter, onCountChange]);
 
   function toggleExpand(chatId: string) {
     setExpandedId(prev => prev === chatId ? null : chatId);

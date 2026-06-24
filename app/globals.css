@@ -81,3 +81,144 @@ body {
   color: var(--foreground);
   font-family: var(--font-inter), Inter, system-ui, -apple-system, sans-serif;
 }
+
+/* ── QualityShell Layout Classes ── */
+.quality-shell-container {
+  background: var(--qa-bg);
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  font-size: 14px;
+  color: var(--qa-text);
+}
+
+.quality-shell-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 64px;
+  background: var(--qa-card);
+  border-bottom: 1px solid var(--qa-border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+}
+
+.quality-shell-wordmark {
+  width: 120px;
+  height: 28px;
+  border: 1px dashed var(--qa-border);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: var(--qa-text-3);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.quality-shell-role-container {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.quality-shell-role-pill {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--qa-fill-light);
+  border: 1px solid var(--qa-border);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.quality-shell-role-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--qa-text);
+}
+
+.quality-shell-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.quality-shell-user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--qa-fill-med);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--qa-text-2);
+}
+
+.quality-shell-body {
+  display: flex;
+}
+
+.quality-shell-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  background: var(--qa-card);
+  border-right: 1px solid var(--qa-border);
+  padding: 16px 0;
+  min-height: calc(100vh - 64px);
+}
+
+.quality-shell-sidebar-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--qa-text-3);
+  padding: 12px 16px 6px;
+}
+
+.quality-shell-sidebar-link {
+  height: 44px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--qa-text);
+  text-decoration: none;
+  position: relative;
+  border-left: 3px solid transparent;
+  background: transparent;
+  font-weight: 400;
+}
+
+.quality-shell-sidebar-link.active {
+  border-left: 3px solid var(--qa-text);
+  background: var(--qa-gray-100);
+  font-weight: 500;
+}
+
+.quality-shell-sidebar-link span {
+  color: var(--qa-text-3);
+  display: inline-flex;
+  align-items: center;
+}
+
+.quality-shell-sidebar-link.active span {
+  color: var(--qa-text);
+}
+
+.quality-shell-main {
+  flex: 1;
+  padding: 32px 48px;
+  min-width: 0;
+  max-width: 1400px;
+}
