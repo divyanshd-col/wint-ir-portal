@@ -6,6 +6,7 @@ import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 
 interface Props {
   dispositions: string[];
+  agentFilter?: 'bot_only' | 'all' | 'human_only';
 }
 
 function fmtDate(iso: string) {
@@ -15,7 +16,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export default function ReviewedChatsTable({ dispositions }: Props) {
+export default function ReviewedChatsTable({ dispositions, agentFilter = 'human_only' }: Props) {
   const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
   const [total,         setTotal]         = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
@@ -35,6 +36,7 @@ export default function ReviewedChatsTable({ dispositions }: Props) {
     setLoading(true);
     try {
       const params = new URLSearchParams({ reviewed: 'true', page: String(pg), limit: String(pageSize) });
+      params.set('agent_filter', agentFilter);
       if (chatIdSearch) params.set('chat_id', chatIdSearch);
       if (customFrom)   params.set('from', customFrom);
       if (customTo)     params.set('to',   customTo);
@@ -54,7 +56,7 @@ export default function ReviewedChatsTable({ dispositions }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [chatIdSearch, agentSearch, customFrom, customTo, pageSize]);
+  }, [chatIdSearch, agentSearch, customFrom, customTo, pageSize, agentFilter]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
