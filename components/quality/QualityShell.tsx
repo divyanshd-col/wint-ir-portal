@@ -60,7 +60,10 @@ export default function QualityShell({ role, email, name, children }: Props) {
   const pathname = usePathname();
 
   return (
-    <div style={{ background: 'var(--qa-bg)', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', fontSize: 14, color: 'var(--qa-text)' }}>
+    <div
+      suppressHydrationWarning
+      style={{ background: 'var(--qa-bg)', minHeight: '100vh', fontFamily: '-apple-system, BlinkMacSystemFont, "Inter", sans-serif', fontSize: 14, color: 'var(--qa-text)' }}
+    >
 
       {/* ── Top Nav ─────────────────────────────────────────────────── */}
       <header style={{
