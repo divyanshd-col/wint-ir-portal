@@ -68,6 +68,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
   }
 
   // ── Filter state ──────────────────────────────────────────────────────────
+  const [chatIdSearch,  setChatIdSearch]  = useState('');
   const [dispFilter,    setDispFilter]    = useState<string[]>([]);
   const [subDispFilter, setSubDispFilter] = useState<string[]>([]);
   const [iqsMin,        setIqsMin]        = useState('');
@@ -98,6 +99,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(pg), limit: String(ps) });
+      if (chatIdSearch)  params.set('chat_id',            chatIdSearch);
       dispFilter.forEach(d => params.append('disposition_filter', d));
       subDispFilter.forEach(s => params.append('sub_disposition', s));
       if (iqsMin)        params.set('iqs_min',            iqsMin);
@@ -124,7 +126,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, customFrom, customTo, onCountChange, pageSize]);
+  }, [chatIdSearch, dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, customFrom, customTo, onCountChange, pageSize]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -180,7 +182,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
     return <span>{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const hasFilters = !!(dispFilter.length || subDispFilter.length || iqsMin || iqsMax || csatFilter.length || paramFail || customFrom);
+  const hasFilters = !!(chatIdSearch || dispFilter.length || subDispFilter.length || iqsMin || iqsMax || csatFilter.length || paramFail || customFrom);
 
 
   return (
@@ -192,6 +194,18 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 16px',
         borderRadius: '8px 8px 0 0',
       }}>
+
+        {/* Search by Chat ID */}
+        <input
+          placeholder="Search by Chat ID…"
+          value={chatIdSearch}
+          onChange={e => setChatIdSearch(e.target.value)}
+          style={{
+            height: 32, padding: '0 10px', border: `1px solid ${chatIdSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
+            background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
+            outline: 'none', width: 140
+          }}
+        />
 
         {/* Disposition filter — multi-select */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
@@ -321,7 +335,7 @@ export default function ChatEvalTable({ dispositions, onCountChange }: Props) {
 
         {hasFilters && (
           <button style={{ ...chip, color: 'var(--qa-text-3)' }} onClick={() => {
-            setDispFilter([]); setSubDispFilter([]); setIqsMin(''); setIqsMax('');
+            setChatIdSearch(''); setDispFilter([]); setSubDispFilter([]); setIqsMin(''); setIqsMax('');
             setCsatFilter([]); setParamFail(''); setCustomFrom(''); setCustomTo('');
           }}>
             Clear filters
