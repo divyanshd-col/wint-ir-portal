@@ -156,12 +156,17 @@ export function analyzeConversationTiming(
 
 // ── IQS calculation ──────────────────────────────────────────────────────────
 // Normalizes by sum of applicable weights so old DB rows with Tags still score correctly.
+// 'NA' parameters are excluded from both numerator (total) and denominator (possible).
 export function calculateIQS(scores: Record<string, ParamScore>): number {
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(WEIGHTS)) {
-    possible += weight;
     const score = scores[param] ?? 'Yes';
-    if (score === 'Yes' || score === 'NA') total += weight;
+    if (score !== 'NA') {
+      possible += weight;
+      if (score === 'Yes') {
+        total += weight;
+      }
+    }
   }
   return possible > 0 ? Math.round((total / possible) * 100) : 100;
 }
