@@ -107,6 +107,35 @@ interface HistoryEntry {
   subDisposition: string;
 }
 
+function renderContentWithLinks(text: string, isOutgoing?: boolean) {
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
+  const parts = text.split(urlRegex);
+  if (parts.length === 1) return text;
+
+  const linkClass = isOutgoing
+    ? "underline text-white font-medium hover:opacity-90 break-all"
+    : "underline text-blue-600 font-medium hover:text-blue-800 break-all";
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: isOutgoing ? '#fff' : 'var(--qa-text-link, #2563eb)', textDecoration: 'underline' }}
+          className={linkClass}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function EvalPanel({
@@ -887,7 +916,7 @@ export default function EvalPanel({
                           : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
                           : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),
                       }}>
-                        {msg.content}
+                        {renderContentWithLinks(msg.content, type === 'agent')}
                       </div>
                     </div>
                   );
