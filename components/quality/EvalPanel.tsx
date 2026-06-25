@@ -788,7 +788,22 @@ export default function EvalPanel({
                       {history.map((h, i) => (
                         <tr key={i} style={{ borderTop: '1px solid var(--qa-border-sub)' }}>
                           <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>{h.date}</td>
-                          <td style={{ padding: '6px 12px', color: 'var(--qa-text)' }}>{h.agentName}</td>
+                          <td style={{ padding: '6px 12px', color: 'var(--qa-text)' }}>
+                            {h.chatId && /^\d+$/.test(h.chatId.trim()) ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${h.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: 'var(--qa-text)', textDecoration: 'none', fontWeight: 500 }}
+                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                              >
+                                {h.agentName}
+                              </a>
+                            ) : (
+                              h.agentName
+                            )}
+                          </td>
                           <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.disposition}</td>
                           <td style={{ padding: '6px 12px' }}>
                             {h.iqs != null ? (
