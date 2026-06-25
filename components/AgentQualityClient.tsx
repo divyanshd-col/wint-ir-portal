@@ -73,6 +73,34 @@ function ParamBadge({ val }: { val: string | undefined }) {
 const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
 const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
 
+function renderContentWithLinks(text: string, isOutgoing?: boolean) {
+  if (!text) return '';
+  const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
+  const parts = text.split(urlRegex);
+  if (parts.length === 1) return text;
+
+  const linkClass = isOutgoing
+    ? "underline text-white font-medium hover:opacity-90 break-all"
+    : "underline text-blue-600 font-medium hover:text-blue-800 break-all";
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={linkClass}
+        >
+          Link
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; content: string; timestamp?: string }> }) {
   return (
     <div className="space-y-2 py-1">
@@ -90,7 +118,7 @@ function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; con
             </div>
             <div className="max-w-[78%]">
               <p className="text-[9px] font-semibold text-gray-400 mb-0.5">{m.sender}{time && ` · ${time}`}</p>
-              <div className="bg-gray-100 text-gray-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-xs leading-relaxed">{m.content}</div>
+              <div className="bg-gray-100 text-gray-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-xs leading-relaxed font-sans">{renderContentWithLinks(m.content, false)}</div>
             </div>
           </div>
         );
@@ -98,7 +126,7 @@ function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; con
           <div key={i} className="flex justify-end gap-2">
             <div className="max-w-[78%]">
               <p className="text-[9px] font-semibold text-violet-400 text-right mb-0.5 pr-1">{m.sender}{time && ` · ${time}`}</p>
-              <div className="bg-violet-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed">{m.content}</div>
+              <div className="bg-violet-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed font-sans">{renderContentWithLinks(m.content, true)}</div>
             </div>
           </div>
         );
@@ -106,7 +134,7 @@ function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; con
           <div key={i} className="flex justify-end gap-2">
             <div className="max-w-[78%]">
               <p className="text-[9px] font-semibold text-emerald-600 text-right mb-0.5 pr-1">{m.sender}{time && ` · ${time}`}</p>
-              <div className="bg-emerald-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed">{m.content}</div>
+              <div className="bg-emerald-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed font-sans">{renderContentWithLinks(m.content, true)}</div>
             </div>
           </div>
         );
@@ -383,7 +411,7 @@ function ScoreDetailModal({ entry, flagged, onClose }: { entry: IQSScoreEntry; f
                   ) : transcript?.rawTranscript ? (
                     <>
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Raw Transcript</p>
-                      <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{transcript.rawTranscript}</pre>
+                      <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{renderContentWithLinks(transcript.rawTranscript, false)}</pre>
                     </>
                   ) : (
                     <div className="text-center py-12">
