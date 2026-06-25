@@ -282,10 +282,10 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
           )}
         </div>
 
-        {/* Status filter (All / Fresh / Re-Opened) */}
+        {/* Status filter (All / Pending / Re-Opened) */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button style={statusFilter ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'status' ? null : 'status')}>
-            {statusFilter === 'reopened' ? 'Re-Opened' : statusFilter === 'pending' ? 'Fresh' : 'Status'} <span style={{ fontSize: 9 }}>▾</span>
+            {statusFilter === 'reopened' ? 'Re-Opened' : statusFilter === 'pending' ? 'Pending' : 'Status'} <span style={{ fontSize: 9 }}>▾</span>
           </button>
           {openDrop === 'status' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
@@ -295,7 +295,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
               </div>
               <div style={{ ...dropItem, fontWeight: statusFilter === 'pending' ? 600 : 400 }}
                 onClick={() => { setStatusFilter('pending'); setOpenDrop(null); }}>
-                Fresh
+                Pending
               </div>
               <div style={{ ...dropItem, fontWeight: statusFilter === 'reopened' ? 600 : 400 }}
                 onClick={() => { setStatusFilter('reopened'); setOpenDrop(null); }}>
@@ -530,7 +530,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                           background: '#e0f2fe',
                           color: '#0369a1',
                         }}>
-                          Fresh
+                          Pending
                         </span>
                       )}
                     </td>
