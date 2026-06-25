@@ -420,7 +420,7 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
           rel="noopener noreferrer"
           className={linkClass}
         >
-          {part}
+          Link
         </a>
       );
     }
