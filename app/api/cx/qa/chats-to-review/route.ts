@@ -37,6 +37,7 @@ export interface ChatToReviewRow {
   reviewedBy?:   string | null;
   reviewedAt?:   string | null;
   reviewNote?:   string | null;
+  status?:       string;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -163,6 +164,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filters.paramFail = paramFail;
   }
 
+  // Status filter (e.g. 'reopened')
+  const statusParam = searchParams.get('status');
+  if (statusParam) {
+    extraWhere += ` AND i.status = $${paramIdx++}`;
+    sqlParams.push(statusParam);
+    filters.status = statusParam;
+  }
+
   // Agent filter: bot_only | all | human_only (default: human_only)
   const agentFilter = searchParams.get('agent_filter') || 'human_only';
   if (agentFilter === 'human_only') {
@@ -183,7 +192,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     ? `c.tags->>'disposition' = ANY($1)
        AND i.status = 'reviewed'`
     : `c.tags->>'disposition' = ANY($1)
-       AND i.status = 'pending'
+       AND i.status IN ('pending', 'reopened')
        AND i.iqs_score IS NOT NULL`;
 
   log.info(ROUTE, 'query-plan', {
@@ -222,6 +231,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     reviewed_by: string | null;
     reviewed_at: string | null;
     review_note: string | null;
+    status: string;
   }>(
     `SELECT c.id AS chat_id, a.name AS agent_name,
             i.iqs_score, c.closed_at,
@@ -229,13 +239,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             c.tags->>'sub_disposition' AS sub_disposition,
             c.csat_score, i.parameters,
             ct.phone AS mobile_number,
-            i.reviewed_by, i.reviewed_at, i.review_note
+            i.reviewed_by, i.reviewed_at, i.review_note, i.status
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}
-     ORDER BY ${reviewedMode ? 'i.reviewed_at DESC' : 'i.iqs_score ASC, c.closed_at DESC'}
+     ORDER BY ${reviewedMode ? 'i.reviewed_at DESC' : 'i.scored_at DESC'}
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
     sqlParams
   );
@@ -279,6 +289,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       reviewedBy:     r.reviewed_by ?? null,
       reviewedAt:     r.reviewed_at ?? null,
       reviewNote:     r.review_note ?? null,
+      status:         r.status,
     };
   });
 

@@ -24,6 +24,7 @@ export default function ReviewedChatsTable({ dispositions, agentFilter = 'human_
   const [pageSize]                        = useState(50);
   const [loading,       setLoading]       = useState(true);
   const [expandedId,    setExpandedId]    = useState<string | null>(null);
+  const [reopeningId,   setReopeningId]   = useState<string | null>(null);
 
   // Filters
   const [chatIdSearch, setChatIdSearch] = useState('');
@@ -216,22 +217,59 @@ export default function ReviewedChatsTable({ dispositions, agentFilter = 'human_
                       {chat.reviewedAt ? fmtDate(chat.reviewedAt) : '—'}
                     </td>
                     <td style={tdAct}>
-                      <button
-                        onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
-                        style={{
-                          background: 'none', border: 0, padding: 0,
-                          fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                          color: 'var(--qa-text)', cursor: 'pointer',
-                          display: 'inline-flex', alignItems: 'center', gap: 5,
-                        }}
-                      >
-                        View{' '}
-                        <span style={{
-                          fontSize: 11, color: 'var(--qa-text-2)',
-                          transform: expandedId === chat.chatId ? 'rotate(180deg)' : 'none',
-                          transition: 'transform 0.15s', display: 'inline-block',
-                        }}>▾</span>
-                      </button>
+                      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <button
+                          onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
+                          style={{
+                            background: 'none', border: 0, padding: 0,
+                            fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                            color: 'var(--qa-text)', cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                          }}
+                        >
+                          View{' '}
+                          <span style={{
+                            fontSize: 11, color: 'var(--qa-text-2)',
+                            transform: expandedId === chat.chatId ? 'rotate(180deg)' : 'none',
+                            transition: 'transform 0.15s', display: 'inline-block',
+                          }}>▾</span>
+                        </button>
+                        <button
+                          disabled={reopeningId === chat.chatId}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!window.confirm(`Are you sure you want to reopen chat ${chat.chatId} for review?`)) return;
+                            setReopeningId(chat.chatId);
+                            try {
+                              const res = await fetch(`/api/cx/qa/review/${chat.chatId}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'reopen' }),
+                              });
+                              if (!res.ok) {
+                                alert(`Failed to reopen chat: ${await res.text()}`);
+                                return;
+                              }
+                              // Remove from list
+                              setChats(prev => prev.filter(c => c.chatId !== chat.chatId));
+                              setTotal(prev => Math.max(0, prev - 1));
+                              setFilteredCount(prev => Math.max(0, prev - 1));
+                            } catch (err: any) {
+                              alert(`Error: ${err.message}`);
+                            } finally {
+                              setReopeningId(null);
+                            }
+                          }}
+                          style={{
+                            background: 'none', border: 0, padding: 0,
+                            fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                            color: reopeningId === chat.chatId ? 'var(--qa-text-3, #a1a1aa)' : 'var(--qa-active-blue, #2563eb)',
+                            cursor: reopeningId === chat.chatId ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {reopeningId === chat.chatId ? 'Reopening...' : 'Reopen'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
 
