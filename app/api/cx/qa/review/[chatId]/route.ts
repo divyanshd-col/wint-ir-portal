@@ -41,7 +41,7 @@ export async function PATCH(
   const email = ((session.user as any).email || session.user?.name || 'unknown') as string;
 
   let body: {
-    action:       'submit' | 'override' | 'resolve' | 'tl-submit' | 'tl-override';
+    action:       'submit' | 'override' | 'resolve' | 'tl-submit' | 'tl-override' | 'reopen';
     parameters?:  Record<string, { score: boolean | null; reasoning: string }>;
     note?:        string;
     flagId?:      string;
@@ -54,7 +54,7 @@ export async function PATCH(
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 });
 
   // QA actions restricted to quality/admin; TL actions restricted to tl/admin
-  const qaOnlyAction = action === 'submit' || action === 'override' || action === 'resolve';
+  const qaOnlyAction = action === 'submit' || action === 'override' || action === 'resolve' || action === 'reopen';
   const tlOnlyAction = action === 'tl-submit' || action === 'tl-override';
   if (qaOnlyAction && !['quality', 'admin'].includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -196,6 +196,23 @@ export async function PATCH(
         log.info(ROUTE, 'flag resolved', { chatId, flagId, reviewer: email });
         await storeAppendAuditEntry({ id: randomUUID(), action: 'dispute_resolved', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { flagId, note: note ?? null } } as IQSAuditEntry);
       }
+    } else if (action === 'reopen') {
+      await query(
+        `UPDATE iqs_scores
+         SET status = 'reopened', reviewed_by = NULL, reviewed_at = NULL, review_note = NULL, scored_at = NOW()
+         WHERE chat_id = $1`,
+        [chatId]
+      );
+      log.info(ROUTE, 'reopen', { chatId, actor: email });
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: 'review_reopened',
+        chatId,
+        actorEmail: email,
+        actorRole: role,
+        ts: new Date().toISOString(),
+        meta: { note: note ?? null }
+      } as IQSAuditEntry);
     }
 
     return NextResponse.json({ ok: true });

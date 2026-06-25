@@ -1499,7 +1499,19 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
                             <IQSRing iqs={h.iqs} size={28} />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-xs font-semibold text-gray-700">{h.chatId}</span>
+                                {h.chatId && /^\d+$/.test(h.chatId.trim()) ? (
+                                  <a
+                                    href={`https://app.robylon.ai/unified-inbox/share/${h.chatId}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={e => e.stopPropagation()}
+                                    className="text-xs font-semibold text-emerald-600 hover:underline"
+                                  >
+                                    {h.chatId}
+                                  </a>
+                                ) : (
+                                  <span className="text-xs font-semibold text-gray-700">{h.chatId}</span>
+                                )}
                                 <span className="text-[10px] text-gray-500">{h.agentName}</span>
                                 {h.disposition && <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{h.disposition}</span>}
                               </div>

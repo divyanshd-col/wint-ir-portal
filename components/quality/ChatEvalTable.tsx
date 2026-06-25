@@ -13,7 +13,9 @@ interface Props {
 
 // ── Chip / filter styles ──────────────────────────────────────────────────────
 const chip: React.CSSProperties = {
-  height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
+  height: 32, padding: '0 10px',
+  borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--qa-border)',
+  borderRadius: 8,
   background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
   display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', whiteSpace: 'nowrap',
   position: 'relative',
@@ -56,8 +58,8 @@ type SortDir = 'asc' | 'desc';
 
 export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
   // ── Sort state ────────────────────────────────────────────────────────────
-  const [sortCol, setSortCol] = useState<SortCol>('iqsScore');
-  const [sortDir, setSortDir] = useState<SortDir>('asc');
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   function toggleSort(col: SortCol) {
     if (sortCol === col) {
@@ -76,6 +78,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
   const [iqsMax,        setIqsMax]        = useState('');
   const [csatFilter,    setCsatFilter]    = useState<number[]>([]);
   const [paramFail,     setParamFail]     = useState('');
+  const [statusFilter,  setStatusFilter]  = useState('');
   const [customFrom,    setCustomFrom]    = useState('');
   const [customTo,      setCustomTo]      = useState('');
   const [showPicker,    setShowPicker]    = useState(false);
@@ -107,6 +110,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
       if (iqsMin)        params.set('iqs_min',            iqsMin);
       if (iqsMax)        params.set('iqs_max',            iqsMax);
       if (paramFail)     params.set('param_fail',         paramFail);
+      if (statusFilter)  params.set('status',             statusFilter);
       csatFilter.forEach(v => params.append('csat', String(v)));
       if (customFrom)    params.set('from', customFrom);
       if (customTo)      params.set('to',   customTo);
@@ -128,7 +132,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     } finally {
       setLoading(false);
     }
-  }, [chatIdSearch, dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, customFrom, customTo, onCountChange, pageSize, agentFilter]);
+  }, [chatIdSearch, dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, statusFilter, customFrom, customTo, onCountChange, pageSize, agentFilter]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -153,6 +157,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
 
   // ── Sorted view of current page ──────────────────────────────────────────
   const sortedChats = [...chats].sort((a, b) => {
+    if (!sortCol) return 0;
     let cmp = 0;
     if (sortCol === 'chatId')    cmp = a.chatId.localeCompare(b.chatId);
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
@@ -184,7 +189,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     return <span>{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const hasFilters = !!(chatIdSearch || dispFilter.length || subDispFilter.length || iqsMin || iqsMax || csatFilter.length || paramFail || customFrom);
+  const hasFilters = !!(chatIdSearch || dispFilter.length || subDispFilter.length || iqsMin || iqsMax || csatFilter.length || paramFail || statusFilter || customFrom);
 
 
   return (
@@ -217,7 +222,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
           </button>
           {openDrop === 'disp' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
-              <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setDispFilter([]); setSubDispFilter([]); }}>
+              <div style={dropItem} onClick={() => { setDispFilter([]); setSubDispFilter([]); }}>
                 Clear
               </div>
               {dispositions.map(d => {
@@ -244,7 +249,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
               </button>
               {openDrop === 'sub' && (
                 <div style={dropdown} onClick={e => e.stopPropagation()}>
-                  <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setSubDispFilter([]); setOpenDrop(null); }}>Clear</div>
+                  <div style={dropItem} onClick={() => { setSubDispFilter([]); setOpenDrop(null); }}>Clear</div>
                   {allSubs.map(s => {
                     const checked = subDispFilter.includes(s);
                     return (
@@ -266,13 +271,36 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
           </button>
           {openDrop === 'param' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
-              <div style={{ ...dropItem, color: 'var(--qa-text-3)' }} onClick={() => { setParamFail(''); setOpenDrop(null); }}>All</div>
+              <div style={{ ...dropItem, fontWeight: paramFail === '' ? 600 : 400 }} onClick={() => { setParamFail(''); setOpenDrop(null); }}>All</div>
               {PARAM_ORDER.map(key => (
                 <div key={key} style={{ ...dropItem, fontWeight: paramFail === key ? 600 : 400 }}
                   onClick={() => { setParamFail(key); setOpenDrop(null); }}>
                   {PARAM_NAMES[key]}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Status filter (All / Pending / Re-Opened) */}
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button style={statusFilter ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'status' ? null : 'status')}>
+            {statusFilter === 'reopened' ? 'Re-Opened' : statusFilter === 'pending' ? 'Pending' : 'Status'} <span style={{ fontSize: 9 }}>▾</span>
+          </button>
+          {openDrop === 'status' && (
+            <div style={dropdown} onClick={e => e.stopPropagation()}>
+              <div style={{ ...dropItem, fontWeight: statusFilter === '' ? 600 : 400 }}
+                onClick={() => { setStatusFilter(''); setOpenDrop(null); }}>
+                All
+              </div>
+              <div style={{ ...dropItem, fontWeight: statusFilter === 'pending' ? 600 : 400 }}
+                onClick={() => { setStatusFilter('pending'); setOpenDrop(null); }}>
+                Pending
+              </div>
+              <div style={{ ...dropItem, fontWeight: statusFilter === 'reopened' ? 600 : 400 }}
+                onClick={() => { setStatusFilter('reopened'); setOpenDrop(null); }}>
+                Re-Opened
+              </div>
             </div>
           )}
         </div>
@@ -338,7 +366,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
         {hasFilters && (
           <button style={{ ...chip, color: 'var(--qa-text-3)' }} onClick={() => {
             setChatIdSearch(''); setDispFilter([]); setSubDispFilter([]); setIqsMin(''); setIqsMax('');
-            setCsatFilter([]); setParamFail(''); setCustomFrom(''); setCustomTo('');
+            setCsatFilter([]); setParamFail(''); setStatusFilter(''); setCustomFrom(''); setCustomTo('');
           }}>
             Clear filters
           </button>
@@ -387,9 +415,10 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
       <div style={{ overflowX: 'auto', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: 160 }} />
+            <col style={{ width: 120 }} />
             <col />
             <col style={{ width: 80 }} />
+            <col style={{ width: 100 }} />
             <col style={{ width: 100 }} />
           </colgroup>
           <thead>
@@ -409,6 +438,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                   <SortIcon col="iqsScore" /> IQS
                 </button>
               </th>
+              <th style={th}>Status</th>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
@@ -416,7 +446,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 4 }).map((_, j) => (
+                  {Array.from({ length: 5 }).map((_, j) => (
                     <td key={j} style={td}>
                       <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '50%' : '70%' }} />
                     </td>
@@ -425,7 +455,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
               ))
             ) : sortedChats.length === 0 ? (
               <tr>
-                <td colSpan={4} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+                <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                   No chats pending review
                 </td>
               </tr>
@@ -469,6 +499,41 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                         {chat.iqsScore}
                       </span>
                     </td>
+                    <td style={td}>
+                      {chat.status === 'reopened' ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          height: 18,
+                          padding: '0 5px',
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          background: '#f3e8ff',
+                          color: '#6b21a8',
+                        }}>
+                          Reopened
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          height: 18,
+                          padding: '0 5px',
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          background: '#e0f2fe',
+                          color: '#0369a1',
+                        }}>
+                          Pending
+                        </span>
+                      )}
+                    </td>
                     <td style={tdAct}>
                       <button
                         onClick={e => { e.stopPropagation(); toggleExpand(chat.chatId); }}
@@ -501,7 +566,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       mode="submit"
                       onDone={() => removeChat(chat.chatId)}
                       onClose={() => setExpandedId(null)}
-                      colSpan={4}
+                      colSpan={5}
                     />
                   )}
                 </React.Fragment>

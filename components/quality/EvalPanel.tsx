@@ -779,7 +779,7 @@ export default function EvalPanel({
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                     <thead>
                       <tr style={{ background: 'var(--qa-gray-50)' }}>
-                        {['Date', 'Agent', 'Disposition', 'IQS', 'CSAT'].map(h => (
+                        {['Date', 'Chat ID', 'Agent', 'Disposition', 'IQS', 'CSAT'].map(h => (
                           <th key={h} style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--qa-text-3)', fontWeight: 500, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
                         ))}
                       </tr>
@@ -788,6 +788,22 @@ export default function EvalPanel({
                       {history.map((h, i) => (
                         <tr key={i} style={{ borderTop: '1px solid var(--qa-border-sub)' }}>
                           <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>{h.date}</td>
+                          <td style={{ padding: '6px 12px', fontFamily: 'ui-monospace, monospace' }}>
+                            {h.chatId && /^\d+$/.test(h.chatId.trim()) ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${h.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: 'var(--qa-text-2)', textDecoration: 'none' }}
+                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                              >
+                                {h.chatId}
+                              </a>
+                            ) : (
+                              h.chatId
+                            )}
+                          </td>
                           <td style={{ padding: '6px 12px', color: 'var(--qa-text)' }}>{h.agentName}</td>
                           <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{h.disposition}</td>
                           <td style={{ padding: '6px 12px' }}>
