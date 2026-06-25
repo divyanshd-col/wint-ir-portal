@@ -189,7 +189,18 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     return <span>{sortDir === 'asc' ? '↑' : '↓'}</span>;
   }
 
-  const hasFilters = !!(chatIdSearch || dispFilter.length || subDispFilter.length || iqsMin || iqsMax || csatFilter.length || paramFail || statusFilter || customFrom);
+  const hasFilters = !!(
+    chatIdSearch ||
+    dispFilter.length ||
+    subDispFilter.length ||
+    iqsMin ||
+    iqsMax ||
+    csatFilter.length ||
+    paramFail ||
+    statusFilter ||
+    customFrom ||
+    customTo
+  );
 
 
   return (
@@ -363,14 +374,21 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
           )}
         </div>
 
-        {hasFilters && (
-          <button style={{ ...chip, color: 'var(--qa-text-3)' }} onClick={() => {
+        <button
+          disabled={!hasFilters}
+          style={{
+            ...chip,
+            color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
+            opacity: hasFilters ? 1 : 0.5,
+            cursor: hasFilters ? 'pointer' : 'not-allowed',
+          }}
+          onClick={() => {
             setChatIdSearch(''); setDispFilter([]); setSubDispFilter([]); setIqsMin(''); setIqsMax('');
             setCsatFilter([]); setParamFail(''); setStatusFilter(''); setCustomFrom(''); setCustomTo('');
-          }}>
-            Clear filters
-          </button>
-        )}
+          }}
+        >
+          Reset Filters
+        </button>
 
         <div style={{ flex: 1 }} />
 
