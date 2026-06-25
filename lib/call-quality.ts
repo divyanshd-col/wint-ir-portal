@@ -100,12 +100,17 @@ export interface CallIQSScoreEntry {
 
 // ── IQS calculation ───────────────────────────────────────────────────────────
 export function calculateCallIQS(scores: Record<string, CallParamScore>): number {
-  let total = 0;
+  let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(CALL_WEIGHTS)) {
     const score = scores[param] ?? 'NA';
-    if (score === 'Yes' || score === 'NA') total += weight;
+    if (score !== 'NA') {
+      possible += weight;
+      if (score === 'Yes') {
+        total += weight;
+      }
+    }
   }
-  return Math.round(total * 100);
+  return possible > 0 ? Math.round((total / possible) * 100) : 100;
 }
 
 // ── Build readable text from segments (for LLM scoring input) ─────────────────
