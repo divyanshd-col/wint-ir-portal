@@ -128,7 +128,7 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
           style={{ color: isOutgoing ? '#fff' : 'var(--qa-text-link, #2563eb)', textDecoration: 'underline' }}
           className={linkClass}
         >
-          {part}
+          Link
         </a>
       );
     }
