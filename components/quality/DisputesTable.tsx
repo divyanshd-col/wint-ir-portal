@@ -102,6 +102,8 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
     }
   }
 
+  const hasFilters = !!(chatIdSearch || raiserFilter !== 'all');
+
   let visibleDisputes = raiserFilter === 'all' ? disputes
     : raiserFilter === 'tl_endorsed' ? disputes.filter(d => d.tlForwarded)
     : disputes.filter(d => d.raisedBy === raiserFilter);
@@ -155,18 +157,18 @@ export default function DisputesTable({ dispositions: _dispositions, onCountChan
           </button>
         ))}
 
-        {(chatIdSearch || raiserFilter !== 'all') && (
-          <button
-            onClick={() => { setChatIdSearch(''); setRaiserFilter('all'); }}
-            style={{
-              height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
-              background: 'var(--qa-card)', color: 'var(--qa-text-2)', fontSize: 12, fontFamily: 'inherit',
-              cursor: 'pointer', outline: 'none'
-            }}
-          >
-            Clear
-          </button>
-        )}
+        <button
+          disabled={!hasFilters}
+          onClick={() => { setChatIdSearch(''); setRaiserFilter('all'); }}
+          style={{
+            ...chip,
+            color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
+            opacity: hasFilters ? 1 : 0.5,
+            cursor: hasFilters ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Reset Filters
+        </button>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
