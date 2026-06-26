@@ -79,6 +79,8 @@ export default function ReviewedChatsTable({ dispositions, agentFilter = 'human_
     outline: 'none',
   };
 
+  const hasFilters = !!(chatIdSearch || agentSearch || customFrom || customTo);
+
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
 
@@ -116,14 +118,18 @@ export default function ReviewedChatsTable({ dispositions, agentFilter = 'human_
             />
           )}
         </div>
-        {(chatIdSearch || agentSearch || customFrom) && (
-          <button
-            onClick={() => { setChatIdSearch(''); setAgentSearch(''); setCustomFrom(''); setCustomTo(''); setShowPicker(false); }}
-            style={{ ...inputStyle, cursor: 'pointer', color: 'var(--qa-text-2)' }}
-          >
-            Clear
-          </button>
-        )}
+        <button
+          disabled={!hasFilters}
+          onClick={() => { setChatIdSearch(''); setAgentSearch(''); setCustomFrom(''); setCustomTo(''); setShowPicker(false); }}
+          style={{
+            ...inputStyle,
+            color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
+            opacity: hasFilters ? 1 : 0.5,
+            cursor: hasFilters ? 'pointer' : 'not-allowed',
+          }}
+        >
+          Reset Filters
+        </button>
         <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--qa-text-3)' }}>
           {loading ? 'Loading…' : agentSearch ? `${filteredCount} of ${total} reviewed` : `${total} reviewed`}
         </span>

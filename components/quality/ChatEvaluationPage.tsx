@@ -116,28 +116,28 @@ export default function ChatEvaluationPage() {
       </div>
 
       {/* Tab content */}
-      {tab === 'pending' && (
+      <div style={{ display: tab === 'pending' ? 'block' : 'none' }}>
         <ChatEvalTable
           dispositions={loadingDisp ? [] : dispositions}
           onCountChange={setPendingCount}
           agentFilter={agentFilter}
         />
-      )}
+      </div>
 
-      {tab === 'disputes' && (
+      <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
         <DisputesTable
           dispositions={loadingDisp ? [] : dispositions}
           onCountChange={setDisputeCount}
           agentFilter={agentFilter}
         />
-      )}
+      </div>
 
-      {tab === 'reviewed' && (
+      <div style={{ display: tab === 'reviewed' ? 'block' : 'none' }}>
         <ReviewedChatsTable
           dispositions={loadingDisp ? [] : dispositions}
           agentFilter={agentFilter}
         />
-      )}
+      </div>
 
       <p style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic', marginTop: 16 }}>
         Data from live DB · scoped to your assigned dispositions
