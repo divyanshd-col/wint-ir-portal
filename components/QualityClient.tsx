@@ -435,7 +435,18 @@ function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; con
         const senderLc = (m.sender || '').toLowerCase().trim();
         const isCustomer = CUSTOMER_LABELS.has(senderLc);
         const isBot = BOT_NAMES.has(senderLc);
-        const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
+        const isActivity = senderLc === 'activity' || senderLc === 'system';
+        const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+
+        if (isActivity) {
+          return (
+            <div key={i} className="flex justify-center my-2">
+              <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-3 py-1 font-sans italic border border-gray-200">
+                {m.content}{timeStr && `  •  ${timeStr}`}
+              </span>
+            </div>
+          );
+        }
 
         // Customer messages → LEFT (incoming)
         if (isCustomer) {

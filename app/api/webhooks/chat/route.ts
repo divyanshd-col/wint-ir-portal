@@ -101,6 +101,7 @@ export function transcriptFromJsonb(messages: any[]): string {
   const lines: string[] = [];
   for (const m of messages) {
     if (m.sender_name === 'Robylon AI' && m.sender_type === 'agent') continue;
+    if (m.sender_type === 'activity') continue;
     const role = m.sender_type === 'customer' ? 'Customer'
                : m.sender_type === 'bot'      ? 'Bot'
                : 'Agent';
@@ -488,9 +489,17 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     const content = (m.content || m.text || '').trim();
     if (!content) continue;
     const low = content.toLowerCase();
-    if (low.includes('auto-assigned') || low.includes('assigned by') ||
-        low.includes('waiting to assign') || low.includes('please rate your experience') ||
-        m.buttons) continue;
+    if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
+      const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+      transcriptForStorage.push({
+        sender_type: 'activity',
+        sender_name: 'system',
+        content,
+        timestamp: isoTs,
+      });
+      continue;
+    }
+    if (low.includes('please rate your experience') || m.buttons) continue;
 
     const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
     const senderLow = sender.toLowerCase();
@@ -699,9 +708,16 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
       const content = (m.content || m.text || '').trim();
       if (!content) continue;
       const low = content.toLowerCase();
-      if (low.includes('auto-assigned') || low.includes('assigned by') ||
-          low.includes('waiting to assign') || low.includes('please rate your experience') ||
-          (m as any).buttons) continue;
+      if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
+        transcriptForStorage.push({
+          sender_type: 'activity',
+          sender_name: 'system',
+          content,
+          timestamp: m.timestamp,
+        });
+        continue;
+      }
+      if (low.includes('please rate your experience') || (m as any).buttons) continue;
       const senderLow = sender.toLowerCase();
       const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
                        : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
