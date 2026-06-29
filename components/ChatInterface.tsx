@@ -231,7 +231,7 @@ interface ChatInterfaceProps {
   initialConversation?: SavedConversation | null;
 }
 
-export default function ChatInterface({ username, historyEnabled = false, initialConversation }: ChatInterfaceProps) {
+export default function ChatInterface({ historyEnabled = false, initialConversation }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);

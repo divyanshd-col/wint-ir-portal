@@ -138,7 +138,11 @@ export async function getAllSessions(email: string): Promise<SessionWithMessages
   return withMessages;
 }
 
-// ── Legacy stubs (kept so old imports don't break) ────────────────────────────
-
-export async function appendHistory(_email: string, _entry: HistoryEntry): Promise<void> {}
-export async function getHistory(_email: string): Promise<HistoryEntry[]> { return []; }
+// ── Legacy stubs (kept for backwards compatibility) ──────────────────────────
+export async function appendHistory(email: string, entry: HistoryEntry): Promise<void> {
+  void email; void entry;
+}
+export async function getHistory(email: string): Promise<HistoryEntry[]> {
+  void email;
+  return [];
+}

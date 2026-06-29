@@ -16,7 +16,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export default function ReviewedChatsTable({ dispositions, agentFilter = 'human_only' }: Props) {
+export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props) {
   const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
   const [total,         setTotal]         = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);

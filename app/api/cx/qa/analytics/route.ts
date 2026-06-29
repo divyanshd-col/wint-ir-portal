@@ -217,8 +217,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const byDisposition = Array.from(dispoMap.entries()).map(([dispo, rows]) => {
     // Aggregate across all conv_types for this L1
     const totalCount  = rows.reduce((s, r) => s + parseInt(r.total), 0);
-    const csatRated   = rows.reduce((s, r) => s + parseInt(r.csat_rated), 0);
-    const csatGood    = rows.reduce((s, r) => s + parseInt(r.csat_good), 0);
     const botCount    = rows.filter(r => r.is_bot).reduce((s, r) => s + parseInt(r.total), 0);
     const botCsatRated = rows.filter(r => r.is_bot).reduce((s, r) => s + parseInt(r.csat_rated), 0);
     const botCsatGood  = rows.filter(r => r.is_bot).reduce((s, r) => s + parseInt(r.csat_good), 0);
@@ -252,8 +250,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     const children = Array.from(subMap.entries()).map(([sub, sRows]) => {
       const st  = sRows.reduce((s, r) => s + parseInt(r.total), 0);
-      const scr = sRows.reduce((s, r) => s + parseInt(r.csat_rated), 0);
-      const scg = sRows.reduce((s, r) => s + parseInt(r.csat_good), 0);
       const sbc = sRows.filter(r => r.is_bot);
       const sbr = sbc.reduce((s, r) => s + parseInt(r.csat_rated), 0);
       const sbg = sbc.reduce((s, r) => s + parseInt(r.csat_good), 0);

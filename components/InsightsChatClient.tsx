@@ -631,7 +631,6 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [showTimeDropdown, setShowTimeDropdown] = useState(false);
 
   const [dispTrees, setDispTrees] = useState<DispositionTree[]>([]);
-  const [agentOptions]            = useState<AgentOption[]>([]);
 
   const [exporting, setExporting] = useState(false);
 
@@ -723,7 +722,11 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
       setActiveId(next.id);
       activeIdRef.current = next.id;
     }
-    setAllMessages(prev => { const { [id]: _, ...rest } = prev; return rest; });
+    setAllMessages(prev => {
+      const rest = { ...prev };
+      delete rest[id];
+      return rest;
+    });
     // Delete server-side (fire and forget)
     fetch(`/api/analytics/sessions?id=${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
   }

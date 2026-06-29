@@ -29,10 +29,8 @@ import {
   segmentsToText,
 } from '@/lib/call-quality';
 import {
-  getCallRecording,
   getConversation,
   insertCallRecording,
-  updateCallRecordingMetrics,
   updateCallIQSScore,
   updateCallRecordingStatus,
   linkCallToChat,
