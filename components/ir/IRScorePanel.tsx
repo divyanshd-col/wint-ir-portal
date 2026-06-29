@@ -102,7 +102,7 @@ export default function IRScorePanel({
       .then(d => {
         const raw: any[] = d.timedMessages ?? d.messages ?? d.transcript ?? [];
         const msgs: TranscriptMsg[] = Array.isArray(raw) ? raw.map(m => ({
-          role: m.role ?? (m.sender === 'user' ? 'user' : m.sender === 'bot' ? 'bot' : 'assistant'),
+          role: m.role ?? (m.sender === 'user' ? 'user' : m.sender === 'bot' ? 'bot' : m.sender === 'activity' ? 'system' : 'assistant'),
           content: m.content ?? m.text ?? '',
           timestamp: m.timestamp,
         })) : [];
@@ -412,6 +412,9 @@ export default function IRScorePanel({
                     const isSystem = msg.role === 'system';
 
                     if (isSystem) {
+                      const systemTime = msg.timestamp
+                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        : '';
                       return (
                         <div key={i} style={{ marginTop: i === 0 ? 0 : 8 }}>
                           <div style={{
@@ -419,7 +422,7 @@ export default function IRScorePanel({
                             fontSize: 12, fontStyle: 'italic', color: '#6B6B6B',
                             textAlign: 'center', padding: '8px 14px', lineHeight: 1.5,
                           }}>
-                            {msg.content}
+                            {msg.content}{systemTime}
                           </div>
                         </div>
                       );

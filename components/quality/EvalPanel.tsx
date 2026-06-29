@@ -370,7 +370,7 @@ export default function EvalPanel({
   const USER_NAMES = new Set(['user', 'customer', 'visitor']);
   function senderType(s: string): 'user' | 'bot' | 'agent' | 'system' {
     const sl = s.toLowerCase();
-    if (sl === 'system') return 'system';
+    if (sl === 'system' || sl === 'activity') return 'system';
     if (USER_NAMES.has(sl))  return 'user';
     if (BOT_NAMES.has(sl))   return 'bot';
     return 'agent';
@@ -883,6 +883,9 @@ export default function EvalPanel({
                   const gap  = prev === null ? 0 : prev === type ? 8 : 16;
 
                   if (type === 'system') {
+                    const systemTime = msg.timestamp
+                      ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                      : '';
                     return (
                       <div key={idx} style={{ marginTop: gap + 'px', textAlign: 'center' }}>
                         <div style={{
@@ -891,7 +894,7 @@ export default function EvalPanel({
                           color: 'var(--qa-text-2)', padding: '8px 14px', display: 'inline-block',
                           maxWidth: '90%', lineHeight: 1.5,
                         }}>
-                          {msg.content}
+                          {msg.content}{systemTime}
                         </div>
                       </div>
                     );

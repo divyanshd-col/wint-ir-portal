@@ -30,11 +30,32 @@ function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: 
   return messages.map((m: any) => ({
     sender: m.sender_type === 'customer' ? 'user'
           : m.sender_type === 'bot'      ? 'bot'
+          : m.sender_type === 'activity' ? 'activity'
           : (m.sender_name || 'Agent'),
     content: normalizeContent(m.content || m.text || ''),
     senderName: m.sender_name || m.sender || '',
     timestamp: m.timestamp,
   })).filter(m => m.content && !isInternalAnnotation(m.senderName, m.content));
+}
+
+function parseRobyTimestamp(ts: string, year: number): string {
+  try {
+    const match = (ts || '').match(/^(\w+)\s+(\d+),\s+(\d+):(\d+)\s+(AM|PM)$/);
+    if (!match) return ts;
+    const [, mon, day, hr, min, ampm] = match;
+    let hour = parseInt(hr, 10);
+    if (ampm === 'PM' && hour !== 12) hour += 12;
+    if (ampm === 'AM' && hour === 12) hour = 0;
+    const months: Record<string, number> = {
+      Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5,
+      Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11,
+    };
+    const monthIdx = months[mon];
+    if (monthIdx === undefined) return ts;
+    const d = new Date(Date.UTC(year, monthIdx, parseInt(day, 10), hour, parseInt(min, 10)));
+    d.setMinutes(d.getMinutes() - 330); // IST → UTC
+    return d.toISOString();
+  } catch { return ts; }
 }
 
 export async function GET(req: NextRequest) {
@@ -57,8 +78,8 @@ export async function GET(req: NextRequest) {
     }
 
     // Fall back to DB: check transcript column, then raw_payload
-    const rows = await query<{ transcript: any; raw_payload: any }>(
-      `SELECT transcript, raw_payload FROM conversations WHERE id = $1`, [chatId]
+    const rows = await query<{ transcript: any; raw_payload: any; closed_at: any }>(
+      `SELECT transcript, raw_payload, closed_at FROM conversations WHERE id = $1`, [chatId]
     );
     if (!rows.length) return NextResponse.json({ ok: true, found: false });
 
@@ -75,19 +96,53 @@ export async function GET(req: NextRequest) {
       messages = rawTranscript.messages;
     }
 
-    // 2. raw_payload.data.transcript.messages (full webhook body stored at TICKET_CLOSED)
-    if (!messages.length && rows[0].raw_payload) {
+    // 2. Reconstruct from raw_payload if missing activity messages or empty transcript
+    const hasActivity = messages.some((m: any) => m.sender_type === 'activity');
+    if ((!messages.length || !hasActivity) && rows[0].raw_payload) {
       const payload = rows[0].raw_payload;
       const payloadMsgs = payload?.data?.transcript?.messages;
       if (Array.isArray(payloadMsgs) && payloadMsgs.length) {
-        messages = payloadMsgs.map((m: any) => ({
-          sender_type: m.sender === 'User' || m.sender === 'user' ? 'customer'
-                     : m.sender === 'Bot'  || m.sender === 'bot'  ? 'bot'
-                     : 'agent',
-          sender_name: m.sender,
-          content: m.content || m.text || '',
-          timestamp: m.timestamp,
-        })).filter((m: any) => m.content);
+        const closedAt = rows[0].closed_at;
+        const year = closedAt ? new Date(closedAt).getUTCFullYear() : new Date().getUTCFullYear();
+
+        const rawHasActivity = payloadMsgs.some((m: any) => {
+          const c = (m.content || m.text || '').toLowerCase();
+          return c.includes('auto-assigned') || c.includes('assigned by') || c.includes('waiting to assign');
+        });
+
+        if (rawHasActivity || !messages.length) {
+          messages = payloadMsgs.map((m: any) => {
+            const sender = (m.sender || '').trim();
+            const content = (m.content || m.text || '').trim();
+            if (!content) return null;
+            const low = content.toLowerCase();
+
+            if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
+              const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+              return {
+                sender_type: 'activity',
+                sender_name: 'system',
+                content,
+                timestamp: isoTs,
+              };
+            }
+
+            if (low.includes('please rate your experience') || m.buttons) return null;
+
+            const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+            const senderLow = sender.toLowerCase();
+            const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
+                             : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
+                             : 'agent';
+
+            return {
+              sender_type: senderType,
+              sender_name: sender,
+              content,
+              timestamp: isoTs,
+            };
+          }).filter(Boolean);
+        }
       }
     }
 
