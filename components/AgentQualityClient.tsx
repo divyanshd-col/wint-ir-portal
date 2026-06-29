@@ -108,9 +108,17 @@ function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; con
         const lc = (m.sender || '').toLowerCase().trim();
         const isCustomer = CUSTOMER_LABELS.has(lc);
         const isBot = BOT_NAMES.has(lc);
+        const isActivity = lc === 'activity' || lc === 'system';
         const time = m.timestamp
-          ? new Date(m.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+          ? new Date(m.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
           : '';
+        if (isActivity) return (
+          <div key={i} className="flex justify-center my-2">
+            <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-3 py-1 font-sans italic border border-gray-200">
+              {m.content}{time && `  •  ${time}`}
+            </span>
+          </div>
+        );
         if (isCustomer) return (
           <div key={i} className="flex gap-2">
             <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-1">
