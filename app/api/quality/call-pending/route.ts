@@ -9,7 +9,7 @@ function qualityAccess(session: any) {
 }
 
 // GET — list call-skipped chats, filtered to quality person's agents
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

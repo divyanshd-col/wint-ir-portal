@@ -178,7 +178,11 @@ export default function MemberAnalyticsDashboard() {
   const toggleCat = (disp: string) => {
     setExpandedCats(prev => {
       const next = new Set(prev);
-      next.has(disp) ? next.delete(disp) : next.add(disp);
+      if (next.has(disp)) {
+        next.delete(disp);
+      } else {
+        next.add(disp);
+      }
       return next;
     });
   };

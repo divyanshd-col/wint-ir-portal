@@ -120,7 +120,7 @@ export async function GET(request: Request) {
 }
 
 // Called manually by admins from the Analytics page
-export async function POST(request: Request) {
+export async function POST() {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

@@ -34,9 +34,6 @@ const dropItem: React.CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
 };
 
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
 function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }

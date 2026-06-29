@@ -57,7 +57,7 @@ function initials(name: string) {
   return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 }
 
-export default function QualityShell({ role, email, name, children }: Props) {
+export default function QualityShell({ role, name, children }: Props) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
 

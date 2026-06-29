@@ -26,7 +26,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ dispositions: _dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
+export default function DisputesTable({ onCountChange, agentFilter = 'human_only' }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);

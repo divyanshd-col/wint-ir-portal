@@ -28,8 +28,6 @@ import {
   segmentsToText,
 } from '@/lib/call-quality';
 import {
-  insertCallRecording,
-  updateCallRecordingMetrics,
   updateCallDisposition,
   type CallRecordingRow,
 } from '@/lib/robylon/db';
@@ -66,10 +64,10 @@ async function transcribeCall(
   call: CallRecordingRow,
   geminiKeys: string[],
 ): Promise<{ disposition: string; subDisposition: string; segments: number }> {
-  const { id: callId, recording_url: recordingUrl, contact_id, agent_id, called_at } = call;
+  const { id: callId, recording_url: recordingUrl } = call;
 
   if (!recordingUrl) throw new Error('No recording_url');
-
+  
   // Step 1: Fetch audio
   let audioBase64 = '';
   let mimeType = mimeFromUrl(recordingUrl);
@@ -78,6 +76,7 @@ async function transcribeCall(
   const ct = audioRes.headers.get('content-type');
   if (ct && ct.startsWith('audio/')) mimeType = ct.split(';')[0].trim();
   audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+
 
   // Step 2: Gemini audio transcription — 5 retries × 5-model chain via callGeminiForCall
   const raw = await callGeminiForCall(
@@ -188,7 +187,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 }
 
 // GET: preview how many calls today have null transcript
-export async function GET(req: NextRequest): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;

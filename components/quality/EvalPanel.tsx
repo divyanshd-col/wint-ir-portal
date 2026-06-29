@@ -139,9 +139,9 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function EvalPanel({
-  chatId, agentName, iqsScore, closedAt, disposition,
+  chatId, agentName, closedAt, disposition,
   parameters, mode, dispute, flagId,
-  mobileNumber, reviewedBy, reviewedAt, reviewNote,
+  mobileNumber, reviewedBy, reviewNote,
   onDone, onClose, colSpan,
 }: EvalPanelProps) {
 

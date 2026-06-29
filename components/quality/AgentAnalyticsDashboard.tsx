@@ -94,7 +94,7 @@ function SpinnerIcon() {
 
 interface Props { userEmail: string; selfAgentName?: string; }
 
-export default function AgentAnalyticsDashboard({ userEmail, selfAgentName }: Props) {
+export default function AgentAnalyticsDashboard({}: Props) {
   // ── Time range ──────────────────────────────────────────────────────────────
   const [period, setPeriod] = useState<'7' | '30' | 'custom'>('30');
   const [customFrom, setCustomFrom] = useState('');
@@ -154,7 +154,11 @@ export default function AgentAnalyticsDashboard({ userEmail, selfAgentName }: Pr
   function toggleCategory(key: string) {
     setOpenKeys(prev => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
       return next;
     });
   }
@@ -504,7 +508,7 @@ export default function AgentAnalyticsDashboard({ userEmail, selfAgentName }: Pr
                           <thead>
                             <tr>
                               <th style={S({ height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 2 })}>Parameter</th>
-                              {data.wowWeeks.map((w, i) => (
+                              {data.wowWeeks.map((w) => (
                                 <th key={w} style={S({ height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', fontWeight: 500, textAlign: 'right', padding: '0 16px', whiteSpace: 'nowrap', position: 'sticky', top: 0, zIndex: 2 })}>{w}</th>
                               ))}
                             </tr>

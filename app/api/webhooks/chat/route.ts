@@ -39,7 +39,6 @@ import {
   insertPoorListeningFlags,
   segmentsToText,
 } from '@/lib/call-quality';
-import type { CallParamScore, CallSegment } from '@/lib/call-quality';
 import {
   upsertAgent,
   upsertContact,

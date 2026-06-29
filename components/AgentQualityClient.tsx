@@ -162,7 +162,11 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
 
   const toggleParam = (p: string) => setSelectedParams(prev => {
     const next = new Set(prev);
-    next.has(p) ? next.delete(p) : next.add(p);
+    if (next.has(p)) {
+      next.delete(p);
+    } else {
+      next.add(p);
+    }
     return next;
   });
 
@@ -280,7 +284,6 @@ function ScoreDetailModal({ entry, flagged, onClose }: { entry: IQSScoreEntry; f
   }, [activeTab, entry.chatId, transcript]);
 
   const fails = PARAM_ORDER.filter(p => entry.scores[p] === 'No');
-  const t = iqsTheme(entry.iqs);
   const cs = csatLabel(entry.csat);
   const chatUrl = /^\d+$/.test(entry.chatId.trim())
     ? `https://app.robylon.ai/unified-inbox/share/${entry.chatId}` : null;
@@ -545,9 +548,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
   // Detail modal
   const [detailEntry, setDetailEntry] = useState<IQSScoreEntry | null>(null);
 
-  // Toast
-  const [toast, setToast] = useState<string | null>(null);
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
 
   // ── Fetch performance data ────────────────────────────────────────────────
   const loadPerf = useCallback(async (period: 'today'|'7d'|'30d'|'all') => {
@@ -657,10 +658,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
     .filter(p => myParamRates[p] != null && myParamRates[p]! < 100)
     .slice(0, 4), [paramsSorted]);
 
-  const gaps = useMemo(() => PARAM_ORDER
-    .filter(p => myParamRates[p] != null && top3Rates[p] != null && (top3Rates[p]! - myParamRates[p]!) >= 10)
-    .sort((a, b) => (top3Rates[b]! - myParamRates[b]!) - (top3Rates[a]! - myParamRates[a]!))
-    .slice(0, 3), [JSON.stringify(myParamRates), JSON.stringify(top3Rates)]);
+
 
   const dispositionStats = useMemo(() => {
     const map: Record<string, { count: number; iqsSum: number; csatGood: number; csatTotal: number }> = {};
@@ -719,11 +717,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
         />
       )}
 
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm font-medium px-5 py-3 rounded-2xl shadow-xl">
-          {toast}
-        </div>
-      )}
+
 
       {/* ── Left sidebar ── */}
       <aside className="w-64 shrink-0 bg-[#111827] flex flex-col h-full">
@@ -1262,7 +1256,6 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
                         <tr><td colSpan={9} className="text-center text-sm text-gray-400 py-14">No chats match these filters.</td></tr>
                       )}
                       {displayedEntries.map((e, i) => {
-                        const theme = iqsTheme(e.iqs);
                         const cs = csatLabel(e.csat);
                         const isFlagged = !!flags[e.chatId];
                         return (

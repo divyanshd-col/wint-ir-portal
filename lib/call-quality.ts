@@ -786,12 +786,7 @@ export function parseCallScoringResponse(raw: string): {
   return { scores, reasoning, poorListeningSegments, iqs, summary: data?.summary || '', kbCitation };
 }
 
-// ── Robust JSON parser (5-step fallback) ──────────────────────────────────────
-function normalizeTranscription(r: any): { language: string; segments: CallSegment[] } {
-  if (Array.isArray(r)) return { language: 'Unknown', segments: r };
-  if (r?.segments) return { language: r.language || 'Unknown', segments: r.segments };
-  return { language: r?.language || 'Unknown', segments: [] };
-}
+
 
 function robustJsonParse(raw: string): any {
   if (!raw?.trim()) return null;

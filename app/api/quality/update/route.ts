@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest) {
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
 
-  const { id, chatId, scores, reasoning, agentName, disposition, subDisposition, csat, summary, note } = body;
+  const { id, chatId, scores, reasoning, agentName, disposition, subDisposition, csat, note } = body;
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
   // Validate scores if provided

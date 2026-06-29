@@ -42,8 +42,6 @@ function formatWeekLabel(weekStart: string, inProgress: boolean): string {
   return inProgress ? `${label} (In progress)` : label;
 }
 
-const RANK_MEDALS: Record<number, string> = { 1: '#', 2: '#', 3: '#' };
-
 export default function AgentDashboard() {
   const currentWeek = getWeekStart();
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);

@@ -274,7 +274,7 @@ function cleanKbCitation(raw: string): string {
 
 type Stage = 'idle' | 'running' | 'done' | 'error';
 
-export default function UnifiedScoringClient({ userRole, initialChatId }: { userRole?: string; initialChatId?: string }) {
+export default function UnifiedScoringClient({ initialChatId }: { initialChatId?: string }) {
   const [chatId, setChatId]           = useState(initialChatId || '');
   const [stage, setStage]             = useState<Stage>('idle');
   const [step, setStep]               = useState(0);
@@ -337,15 +337,13 @@ export default function UnifiedScoringClient({ userRole, initialChatId }: { user
   if (stage === 'done' && result) {
     const chatIqs = result.chatIqs;
     const callIqs = result.callIqs;
-    const ct = iqsTheme(chatIqs);
-    const kt = iqsTheme(callIqs);
+
 
     const mergedItems = (result.mergedTimeline || []).filter((item: any) =>
       item.source === 'call' || item.source === 'call-boundary' || (item.data?.content || '').trim()
     );
 
     const chatMessages = mergedItems.filter((i: any) => i.source === 'chat');
-    const callSegs = result.callSegments || [];
 
     return (
       <div className="space-y-4">
