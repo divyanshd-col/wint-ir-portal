@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import Sidebar from './Sidebar';
 import ChatInterface from './ChatInterface';
 import type { SavedConversation } from '@/lib/types';

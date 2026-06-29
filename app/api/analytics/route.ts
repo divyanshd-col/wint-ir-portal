@@ -6,7 +6,7 @@ import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 import { storeGetIQSScores } from '@/lib/store';
-import { PARAM_NAMES, PARAM_ORDER, WEIGHTS, type IQSScoreEntry } from '@/lib/quality';
+import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry } from '@/lib/quality';
 
 interface LogEntry {
   timestamp: string;

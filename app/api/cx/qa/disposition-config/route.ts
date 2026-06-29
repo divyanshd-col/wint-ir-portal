@@ -8,7 +8,7 @@ import { log } from '@/lib/log';
 const ROUTE = 'cx/qa/disposition-config';
 
 // GET — returns the current QA's assigned dispositions (or all mappings for admin)
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role = (session.user as any).role;

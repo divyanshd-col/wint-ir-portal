@@ -42,12 +42,6 @@ function formatWeek(weekStart: string): string {
   return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
-const CustomDot = (props: any) => {
-  const { cx, cy, payload } = props;
-  if (!payload.in_progress) return null;
-  return <circle cx={cx} cy={cy} r={4} fill="#6366f1" stroke="#6366f1" strokeWidth={2} strokeDasharray="3 3" />;
-};
-
 export default function WoWChart({ data, metrics }: WoWChartProps) {
   const inProgressWeek = data.find(d => d.in_progress)?.week_start;
 

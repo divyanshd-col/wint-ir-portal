@@ -424,31 +424,6 @@ export function compare_two_windows(f: AnalyticsFilters, extras?: TemplateExtras
   const params: any[] = [];
   let i = 1;
 
-  function windowSql(win: { dateFrom: string; dateTo: string }, label: string): string {
-    const wClauses = [
-      `c.closed_at >= $${i++}::timestamptz`,
-      `c.closed_at < $${i++}::timestamptz`,
-      ...dimClauses.map(cl => {
-        // Remap $N placeholders — they're already at correct positions since params grows
-        return cl;
-      }),
-    ];
-    params.push(win.dateFrom + 'T00:00:00Z', win.dateTo + 'T23:59:59.999Z');
-    // Push shared dim params for this window
-    params.push(...sharedParams.slice(2));
-
-    const metricExpr = metric === 'avg_iqs'
-      ? `ROUND(AVG(s.iqs_score), 1)::float`
-      : `COUNT(*)::int`;
-    const iqsJoin = metric === 'avg_iqs'
-      ? `JOIN iqs_scores s ON s.chat_id = c.id`
-      : '';
-
-    return `SELECT '${label}' AS window_label, ${metricExpr} AS value, COUNT(*)::int AS count
-            FROM conversations c ${iqsJoin}
-            ${toWhere(wClauses)}`;
-  }
-
   // Rebuild with correct $N numbering
   function buildWindowSql(win: { dateFrom: string; dateTo: string }, label: string, baseIdx: number) {
     const localParams: any[] = [];

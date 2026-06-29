@@ -45,7 +45,6 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
       {/* Logo */}
       <div className="px-5 py-4 border-b border-white/10">
         <Link href="/chat">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
             <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
           </div>

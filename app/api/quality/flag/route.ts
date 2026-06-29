@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 }
 
 // GET — list flags (quality/admin/tl: all; agent: own only)
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 

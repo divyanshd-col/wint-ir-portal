@@ -218,7 +218,7 @@ function CorrectionCard({ correction, onAction }: { correction: CorrectionEntry;
   const [done, setDone] = useState(false);
   const [doneAction, setDoneAction] = useState('');
   const [error, setError] = useState('');
-  const [promptSuggestion, setPromptSuggestion] = useState(correction.promptSuggestion || '');
+  const promptSuggestion = correction.promptSuggestion || '';
 
   async function handleAction(action: 'approve' | 'reject') {
     setActing(true); setError('');

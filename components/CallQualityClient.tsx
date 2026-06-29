@@ -295,7 +295,7 @@ function buildParams(page: number, f: Filters): URLSearchParams {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function CallQualityClient({ userRole, selfAgentName, agentOnly }: Props) {
+export default function CallQualityClient({ agentOnly }: Props) {
   const [entries, setEntries] = useState<CallEntry[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(false);

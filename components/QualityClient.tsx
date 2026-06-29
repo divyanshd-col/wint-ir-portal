@@ -128,12 +128,7 @@ function fmtDuration(secs: number | undefined | null): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-// ── Conversation type badge ───────────────────────────────────────────────────
-function TypeBadge({ type }: { type?: string }) {
-  if (type === 'bot') return <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700">Bot</span>;
-  if (type === 'hybrid') return <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">Hybrid</span>;
-  return <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Agent</span>;
-}
+
 
 // ── Summary stats bar ─────────────────────────────────────────────────────────
 // Fix 5 — summary card click-to-filter
@@ -611,7 +606,6 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
       })
       .catch(() => setTranscriptError('Failed to load transcript'))
       .finally(() => setTranscriptLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.chatId]);
 
   return (
@@ -753,10 +747,9 @@ function ScoreDetail({ entry, onClose, onEdit, userRole }: { entry: IQSScoreEntr
 }
 
 // ── Agent Report Modal ────────────────────────────────────────────────────────
-function AgentReportModal({ stat, entries, paramFails, onClose, onFilterLog }: {
+function AgentReportModal({ stat, entries, onClose, onFilterLog }: {
   stat: AgentStat;
   entries: IQSScoreEntry[];
-  paramFails: Record<string, number>;
   onClose: () => void;
   onFilterLog: (f: { agent: string; minScore?: number; maxScore?: number }) => void;
 }) {
@@ -926,7 +919,7 @@ function AgentCard({
   onFilterLog?: (f: { agent: string; minScore?: number; maxScore?: number }) => void;
   onViewReport?: (stat: AgentStat) => void;
 }) {
-  const t = iqsTheme(stat.avgIqs);
+
   // normalise empty agentName → 'Unknown' so it matches stat.agent
   const agentEntries = entries.filter(e => (e.agentName || 'Unknown') === stat.agent);
 
@@ -1938,7 +1931,6 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
       setTranscripts(t => ({ ...t, [callId]: [] }));
     }
     setTranscriptLoading(t => ({ ...t, [callId]: false }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcripts, transcriptLoading]);
 
   const scoreCall = async (callId: string) => {
@@ -2438,7 +2430,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [logsLoaded, setLogsLoaded] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsError, setLogsError] = useState<string | null>(null);
-  const [logsDebug, setLogsDebug] = useState<Record<string, any> | null>(null);
+
   const [exporting, setExporting] = useState(false);
 
   // ── Filter state (pending = UI inputs; applied = what was last fetched) ────────
@@ -2489,7 +2481,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
 
   // Score Log / Reports custom date picker visibility
-  const [showLogPicker, setShowLogPicker] = useState(false);
   const [showReportPicker, setShowReportPicker] = useState(false);
 
   // Agent timing analytics pagination
@@ -2504,7 +2495,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     summary: string; scores: Record<string, string>; reasoning: Record<string, string>; note: string;
   } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
-  const [editSaved, setEditSaved] = useState(false);
+
 
   // Agent report modal
   const [agentReportStat, setAgentReportStat] = useState<AgentStat | null>(null);
@@ -2631,7 +2622,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setAvailableDispositions(data.availableDispositions || []);
       setAvailableSubDispositions(data.availableSubDispositions || []);
     } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Load scores (Score Log only — never updates Performance stats) ──────────
@@ -2759,7 +2749,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   }, [reportFilters]);
 
   // Download report CSV from export API using reportFilters (independent of Score Log)
-  const downloadReport = useCallback(async (_format: 'csv' | 'xlsx') => {
+  const downloadReport = useCallback(async () => {
     setExporting(true);
     try {
       const params = buildParams(0, reportFilters);
@@ -2811,7 +2801,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       reasoning: { ...entry.reasoning },
       note: '',
     });
-    setEditSaved(false);
+
   };
 
   const saveEdit = async () => {
@@ -2849,7 +2839,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       };
       setEntries(prev => prev.map(e => e.id === editEntry.id ? updated : e));
       setDetailEntry(prev => prev?.id === editEntry.id ? updated : prev);
-      setEditSaved(true);
+
       setToast('Override saved successfully');
       setTimeout(() => setToast(null), 3000);
       setEditEntry(null); setEditForm(null);
@@ -2967,7 +2957,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   const totalToScore = rowLimit > 0 ? Math.min(rowLimit, isWint ? parsedRows.length : rawRows.length) : (isWint ? parsedRows.length : rawRows.length);
   const avgIqs = batchResults.length ? Math.round(batchResults.reduce((s, e) => s + e.iqs, 0) / batchResults.length) : 0;
-  const maxParamFail = Math.max(...Object.values(paramFails), 1);
+
 
   const wintAgentPreview = useMemo(() => {
     if (!isWint || !parsedRows.length) return [];
@@ -3149,7 +3139,6 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
         <AgentReportModal
           stat={agentReportStat}
           entries={entries}
-          paramFails={paramFails}
           onClose={() => setAgentReportStat(null)}
           onFilterLog={({ agent, minScore, maxScore }) => {
             const f = { ...DEFAULT_FILTERS, agent, minScore: minScore ?? 0, maxScore: maxScore ?? 100 };
@@ -4392,7 +4381,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                 <p className="text-xs text-gray-500 mb-5">Exports all chats matching the filters above — no pagination limit.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <button
-                    onClick={() => downloadReport('csv')}
+                    onClick={() => downloadReport()}
                     disabled={exporting}
                     className="flex items-center gap-3 p-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-50 transition group">
                     <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shrink-0">
@@ -4407,7 +4396,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                   </button>
 
                   <button
-                    onClick={() => downloadReport('xlsx')}
+                    onClick={() => downloadReport()}
                     disabled={exporting}
                     className="flex items-center gap-3 p-4 rounded-2xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition group">
                     <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shrink-0">
@@ -4459,7 +4448,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           {/* ── UNIFIED SCORE TAB ── */}
           {tab === 'unified' && (
             <div className="overflow-y-auto flex-1">
-              <UnifiedScoringClient userRole={userRole} initialChatId={initialChatId} />
+              <UnifiedScoringClient initialChatId={initialChatId} />
             </div>
           )}
 

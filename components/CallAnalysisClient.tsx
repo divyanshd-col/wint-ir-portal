@@ -18,9 +18,6 @@ const SENTIMENT_COLOR: Record<string, string> = {
   negative: 'text-red-500',
 };
 
-const CONFIDENCE_COLOR = (v: number) =>
-  v >= 7 ? 'text-emerald-600' : v >= 4 ? 'text-amber-500' : 'text-red-500';
-
 function ScorePill({ label, value, invert = false }: { label: string; value: number | null; invert?: boolean }) {
   if (value === null) return <span className="text-gray-300 text-xs">—</span>;
   const color = invert
