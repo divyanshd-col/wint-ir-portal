@@ -36,28 +36,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'transcript is required' }, { status: 400 });
   }
 
-  // ── Call detection — skip scoring, flag to QA ────────────────────────────
-  if (hasCallInteraction(transcript, tags)) {
-    const reason = /\bcall\b/i.test(String(tags?.disposition || tags || ''))
-      ? `Disposition tagged as: ${tags?.disposition || tags}`
-      : 'Transcript contains a call interaction or callback request';
-    // Store for QA review — no Slack alert
-    storeAppendCallSkipped({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      chatId: chatId || '',
-      agentName: agentName || '',
-      reason,
-      skippedAt: new Date().toISOString(),
-      status: 'pending',
-    }).catch(() => {});
-    return NextResponse.json({
-      ok: true,
-      skipped: true,
-      reason: 'call_interaction',
-      message: 'Scoring skipped — call interaction detected. Added to QA review queue.',
-    });
-  }
-
   const config       = await readConfig();
   const provider     = config.llmProvider || 'gemini';
   const geminiKeys   = getIQSGeminiKeys(config);

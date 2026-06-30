@@ -62,6 +62,7 @@ import {
 import { storeHasProcessedEvent, storeMarkProcessedEvent, storeAcquireScoringLock, storeAppendAuditEntry } from '@/lib/store';
 import Anthropic from '@anthropic-ai/sdk';
 import type { ParamScore } from '@/lib/quality';
+import { query } from '@/lib/cx/db';
 
 // ── CSAT normalisation ────────────────────────────────────────────────────────
 function normaliseCsat(raw: string | undefined): { score: number; label: string } | null {
@@ -205,8 +206,64 @@ export async function scoreLinkedCallsForChat(
   } catch {}
 
   for (const call of calls) {
-    const segments = Array.isArray(call.transcript) ? call.transcript : [];
-    const callText  = segmentsToText(segments);
+    let segments = Array.isArray(call.transcript) ? call.transcript : [];
+    let callText  = segmentsToText(segments);
+
+    if (!callText && call.recording_url) {
+      console.log(`[webhook] Call ${call.id} transcript is empty/null. Attempting auto-transcription on the fly before scoring...`);
+      try {
+        const audioRes = await fetch(call.recording_url);
+        if (audioRes.ok) {
+          let mimeType = 'audio/wav';
+          const u = call.recording_url.toLowerCase().split('?')[0];
+          if (u.endsWith('.mp3'))  mimeType = 'audio/mpeg';
+          if (u.endsWith('.wav'))  mimeType = 'audio/wav';
+          if (u.endsWith('.m4a'))  mimeType = 'audio/mp4';
+          if (u.endsWith('.ogg'))  mimeType = 'audio/ogg';
+          if (u.endsWith('.flac')) mimeType = 'audio/flac';
+          
+          const contentType = audioRes.headers.get('content-type');
+          if (contentType) mimeType = contentType.split(';')[0].trim() || mimeType;
+          
+          const audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+          
+          const raw = await callGeminiForCall(
+            geminiKeys,
+            [{ parts: [
+              { inline_data: { mime_type: mimeType, data: audioBase64 } },
+              { text: CALL_TRANSCRIPTION_PROMPT },
+            ]}],
+            undefined,
+            270_000,
+          );
+          
+          const parsed = parseTranscriptionResponse(raw);
+          const intCount = parsed.segments.filter(s => s.type === 'interruption').length;
+          const daCount  = parsed.segments.filter(s => s.type === 'dead_air').length;
+          
+          await insertCallRecording({
+            id: call.id,
+            chatId: call.chat_id,
+            agentId: call.agent_id,
+            contactId: call.contact_id,
+            recordingUrl: call.recording_url,
+            durationSeconds: call.duration_seconds,
+            calledAt: call.called_at,
+            language: parsed.language,
+            transcript: parsed.segments,
+          });
+          await updateCallRecordingMetrics({ id: call.id, interruptionCount: intCount, deadAirCount: daCount, status: 'linked' });
+          
+          segments = parsed.segments;
+          callText = segmentsToText(segments);
+          call.interruption_count = intCount;
+          call.dead_air_count = daCount;
+        }
+      } catch (err: any) {
+        console.error(`[webhook] scoreLinkedCalls auto-transcription failed for call ${call.id}:`, err.message);
+      }
+    }
+
     if (!callText) {
       await updateCallRecordingStatus(call.id, 'scored');
       continue;
@@ -309,12 +366,6 @@ export async function executeScoring(
   let transcriptText = transcriptFromJsonb(transcriptMessages);
   if (!transcriptText) {
     console.warn(`[webhook] executeScoring: empty transcript for chat ${chatId}`);
-    return null;
-  }
-
-  // ── Call detection — skip scoring silently ───────────────────────────────
-  if (hasCallInteraction(transcriptText, conv.tags)) {
-    console.log(`[webhook] Skipping scoring for chat ${chatId} — call interaction detected`);
     return null;
   }
 
@@ -834,7 +885,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
     durationSeconds,
     calledAt,
     language: null,
-    transcript: [],
+    transcript: null,
   });
 
   // Keep the function alive after responding so Vercel doesn't kill the background work
@@ -921,6 +972,11 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       }
     } catch (err: any) {
       console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
+      try {
+        await query(`UPDATE call_recordings SET transcript = NULL, status = 'failed' WHERE id = $1`, [callId]);
+      } catch (dbErr: any) {
+        console.error(`[webhook] Failed to update failed call status for ${callId}:`, dbErr.message);
+      }
     }
   })());
 
