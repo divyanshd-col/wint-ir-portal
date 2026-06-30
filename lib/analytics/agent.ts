@@ -542,9 +542,6 @@ export async function runAnalyticsAgent(
   const synthExtra: any = {
     systemInstruction: { parts: [{ text: synthesizerPrompt }] },
   };
-  if (!plan.needs_transcripts) {
-    synthExtra.config = { thinkingConfig: { thinkingBudget: 0 } };
-  }
 
   let synthRaw: string;
   try {
@@ -698,9 +695,6 @@ export async function runSynthesizerPhase(
   const synthExtra: any = {
     systemInstruction: { parts: [{ text: synthesizerPrompt }] },
   };
-  if (!transcriptSummaries.length) {
-    synthExtra.config = { thinkingConfig: { thinkingBudget: 0 } };
-  }
 
   const raw = await geminiWithFallback(
     keys,

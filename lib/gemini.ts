@@ -25,7 +25,8 @@ function isRetryable(err: any): boolean {
   const msg = String(err?.message).toLowerCase();
   return err?.status === 429 || err?.status === 503
     || msg.includes('429') || msg.includes('503')
-    || msg.includes('quota') || msg.includes('unavailable') || msg.includes('high demand');
+    || msg.includes('quota') || msg.includes('unavailable') || msg.includes('high demand')
+    || msg.includes('text content blocks must be non-empty');
 }
 
 // Fallback chain: follow links until no next entry or a cycle is detected.
@@ -120,7 +121,6 @@ export async function callGeminiForCall(
       generationConfig: {
         temperature: 0,
         responseMimeType: 'application/json',
-        ...(!isPro ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
       },
     });
 

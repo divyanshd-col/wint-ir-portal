@@ -35,7 +35,6 @@ export async function miniSummarizeTranscripts(
       [{ role: 'user', parts: [{ text: formatted }] }],
       {
         systemInstruction: { parts: [{ text: PROMPT.replace('{INTENT}', intent) }] },
-        config: { thinkingConfig: { thinkingBudget: 0 } },
       },
       20_000,
     );
