@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
+import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -162,6 +163,7 @@ export default function EvalPanel({
 
   const [paramState, setParamState] = useState<Record<string, ParamState>>(initParams);
   const [transcript, setTranscript]  = useState<TMessage[] | null>(null);
+  const [callRecordings, setCallRecordings] = useState<any[]>([]);
   const [txLoading,  setTxLoading]   = useState(true);
   const [submitting, setSubmitting]  = useState(false);
   const [submitErr,  setSubmitErr]   = useState('');
@@ -231,9 +233,15 @@ export default function EvalPanel({
         const res = await fetch(`/api/quality/transcript?chatId=${encodeURIComponent(chatId)}`);
         if (!res.ok) throw new Error('Failed');
         const data = await res.json();
-        if (!cancelled) setTranscript(Array.isArray(data) ? data : (data.timedMessages ?? data.messages ?? []));
+        if (!cancelled) {
+          setTranscript(Array.isArray(data) ? data : (data.timedMessages ?? data.messages ?? []));
+          setCallRecordings(data.callRecordings || []);
+        }
       } catch {
-        if (!cancelled) setTranscript([]);
+        if (!cancelled) {
+          setTranscript([]);
+          setCallRecordings([]);
+        }
       } finally {
         if (!cancelled) setTxLoading(false);
       }
@@ -872,58 +880,109 @@ export default function EvalPanel({
                 <div style={{ color: 'var(--qa-text-3)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                   Loading transcript…
                 </div>
-              ) : !transcript?.length ? (
+              ) : (!transcript?.length && !callRecordings?.length) ? (
                 <div style={{ color: 'var(--qa-text-3)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                   No transcript available
                 </div>
               ) : (
-                transcript.map((msg, idx) => {
-                  const type = senderType(msg.sender_type ?? msg.sender);
-                  const prev = idx > 0 ? senderType(transcript[idx - 1].sender_type ?? transcript[idx - 1].sender) : null;
-                  const gap  = prev === null ? 0 : prev === type ? 8 : 16;
+                (() => {
+                  // Merge messages and calls chronologically
+                  const items = [
+                    ...(transcript || []).map(m => ({
+                      type: 'message' as const,
+                      timestamp: m.timestamp,
+                      time: m.timestamp ? new Date(m.timestamp).getTime() : 0,
+                      data: m,
+                    })),
+                    ...(callRecordings || []).map(c => ({
+                      type: 'call' as const,
+                      timestamp: c.calledAt,
+                      time: c.calledAt ? new Date(c.calledAt).getTime() : 0,
+                      data: c,
+                    })),
+                  ];
 
-                  if (type === 'system') {
-                    const systemTime = msg.timestamp
-                      ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-                      : '';
+                  // Sort by time ascending
+                  items.sort((a, b) => a.time - b.time);
+
+                  return items.map((item, idx) => {
+                    if (item.type === 'call') {
+                      const rec = item.data;
+                      return (
+                        <div key={`call-${rec.id}`} className="my-4 shrink-0 text-left" style={{ width: '100%' }}>
+                          <CallTranscriptCard
+                            rec={{
+                              id: rec.id,
+                              label: `Call #${rec.id} (${rec.language || 'English'})`,
+                              calledAt: rec.calledAt,
+                              durationSeconds: rec.durationSeconds,
+                              recordingUrl: rec.recordingUrl,
+                              segments: rec.segments || [],
+                              interruptionCount: rec.interruptionCount || 0,
+                              deadAirCount: rec.deadAirCount || 0,
+                            }}
+                            index={idx}
+                          />
+                        </div>
+                      );
+                    }
+
+                    const msg = item.data;
+                    const type = senderType(msg.sender_type ?? msg.sender);
+                    
+                    // Determine gap based on previous item
+                    let gap = 16;
+                    if (idx > 0) {
+                      const prevItem = items[idx - 1];
+                      if (prevItem.type === 'message') {
+                        const prevType = senderType(prevItem.data.sender_type ?? prevItem.data.sender);
+                        gap = prevType === type ? 8 : 16;
+                      }
+                    }
+
+                    if (type === 'system') {
+                      const systemTime = msg.timestamp
+                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        : '';
+                      return (
+                        <div key={idx} style={{ marginTop: gap + 'px', textAlign: 'center' }}>
+                          <div style={{
+                            background: 'var(--qa-gray-50)', border: '1px solid var(--qa-border-sub)',
+                            borderRadius: 8, fontSize: 12, fontStyle: 'italic',
+                            color: 'var(--qa-text-2)', padding: '8px 14px', display: 'inline-block',
+                            maxWidth: '90%', lineHeight: 1.5,
+                          }}>
+                            {msg.content}{systemTime}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    const isRight = type === 'agent' || type === 'bot';
+                    const label   = (msg.sender_name ?? msg.sender) + (msg.timestamp
+                      ? ' · ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                      : '');
                     return (
-                      <div key={idx} style={{ marginTop: gap + 'px', textAlign: 'center' }}>
+                      <div key={idx} style={{
+                        marginTop: gap + 'px',
+                        display: 'flex', flexDirection: 'column',
+                        maxWidth: '76%',
+                        alignSelf: isRight ? 'flex-end' : 'flex-start',
+                        alignItems: isRight ? 'flex-end' : 'flex-start',
+                      }}>
+                        <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginBottom: 4 }}>{label}</span>
                         <div style={{
-                          background: 'var(--qa-gray-50)', border: '1px solid var(--qa-border-sub)',
-                          borderRadius: 8, fontSize: 12, fontStyle: 'italic',
-                          color: 'var(--qa-text-2)', padding: '8px 14px', display: 'inline-block',
-                          maxWidth: '90%', lineHeight: 1.5,
+                          padding: '10px 14px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
+                          ...(type === 'agent' ? { background: 'var(--qa-gray-700)', color: '#fff' }
+                            : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
+                            : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),
                         }}>
-                          {msg.content}{systemTime}
+                          {renderContentWithLinks(msg.content, type === 'agent')}
                         </div>
                       </div>
                     );
-                  }
-
-                  const isRight = type === 'agent' || type === 'bot';
-                  const label   = (msg.sender_name ?? msg.sender) + (msg.timestamp
-                    ? ' · ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-                    : '');
-                  return (
-                    <div key={idx} style={{
-                      marginTop: gap + 'px',
-                      display: 'flex', flexDirection: 'column',
-                      maxWidth: '76%',
-                      alignSelf: isRight ? 'flex-end' : 'flex-start',
-                      alignItems: isRight ? 'flex-end' : 'flex-start',
-                    }}>
-                      <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginBottom: 4 }}>{label}</span>
-                      <div style={{
-                        padding: '10px 14px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
-                        ...(type === 'agent' ? { background: 'var(--qa-gray-700)', color: '#fff' }
-                          : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
-                          : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),
-                      }}>
-                        {renderContentWithLinks(msg.content, type === 'agent')}
-                      </div>
-                    </div>
-                  );
-                })
+                  });
+                })()
               )}
             </div>
           </div>

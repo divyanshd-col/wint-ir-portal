@@ -2,6 +2,17 @@
 
 import { useState } from 'react';
 
+function formatTs(ts?: string): string {
+  if (!ts) return '';
+  const parts = ts.split(':');
+  if (parts.length === 2) {
+    const mins = parts[0];
+    const secs = parts[1].padStart(2, '0');
+    return `${mins}:${secs}`;
+  }
+  return ts;
+}
+
 export interface CallTranscriptRec {
   id: string;
   label: string;
@@ -48,6 +59,16 @@ export function CallTranscriptCard({
 
       {open && (
         <div>
+          {rec.recordingUrl && (
+            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-100 flex flex-col gap-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Audio Recording</span>
+              <audio
+                src={rec.recordingUrl ? `/api/quality/audio-proxy?url=${encodeURIComponent(rec.recordingUrl)}` : undefined}
+                controls
+                className="w-full h-9 rounded-lg"
+              />
+            </div>
+          )}
           {/* Start marker */}
           <div className="flex items-center gap-3 px-4 py-2">
             <div className="flex-1 h-px bg-amber-200" />
@@ -57,62 +78,89 @@ export function CallTranscriptCard({
             <div className="flex-1 h-px bg-amber-200" />
           </div>
 
-          {/* Read-only transcript */}
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <tbody>
-                {rec.segments.map((seg: any, i: number) => {
-                  if (seg.type === 'interruption') return (
-                    <tr key={i}>
-                      <td colSpan={2} className="px-4 py-1.5">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-red-50 border border-red-100">
-                          <span className="text-red-500 text-xs">⚡</span>
-                          <span className="text-xs text-red-700"><strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` — ${seg.words_spoken} words` : ''}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                  if (seg.type === 'dead_air') return (
-                    <tr key={i}>
-                      <td colSpan={2} className="px-4 py-1.5">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-50 border border-slate-200">
-                          <span className="text-slate-400 text-xs">⏸</span>
-                          <span className="text-xs text-slate-500">Dead air{seg.duration ? ` — ${seg.duration}` : ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                  if (seg.type === 'poor_listening') return (
-                    <tr key={i}>
-                      <td colSpan={2} className="px-4 py-1.5">
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-orange-50 border border-orange-100">
-                          <span className="text-orange-500 text-xs">👂</span>
-                          <span className="text-xs text-orange-700">Poor listening{seg.phrase ? `: "${seg.phrase}"` : ''}</span>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                  const isIR = seg.speaker === 'IR EXECUTIVE';
-                  return (
-                    <tr key={i} className="border-b border-slate-50 align-top hover:bg-slate-50/50">
-                      <td className="px-4 py-2.5 w-36 shrink-0">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${isIR ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                          {isIR ? '🟡' : '🟢'} {seg.speaker}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-sm text-slate-700 leading-relaxed">
+          {/* Transcript Message Bubbles */}
+          <div className="px-5 py-4 space-y-4 max-h-[480px] overflow-y-auto bg-slate-50/30">
+            {rec.segments.map((seg: any, i: number) => {
+              if (seg.type === 'interruption') {
+                return (
+                  <div key={i} className="flex justify-center my-2">
+                    <span className="text-[11px] text-red-500 bg-red-50 border border-red-100 rounded-full px-3 py-1 font-sans italic text-center">
+                      ⚡ <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` — ${seg.words_spoken} words` : ''}
+                    </span>
+                  </div>
+                );
+              }
+
+              if (seg.type === 'dead_air') {
+                return (
+                  <div key={i} className="flex justify-center my-2">
+                    <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 font-sans italic text-center">
+                      ⏸ Dead air — {seg.duration || ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}
+                    </span>
+                  </div>
+                );
+              }
+
+              if (seg.type === 'poor_listening') {
+                return (
+                  <div key={i} className="flex justify-center my-2">
+                    <span className="text-[11px] text-orange-600 bg-orange-50 border border-orange-100 rounded-full px-3 py-1 font-sans italic text-center">
+                      👂 Poor listening{seg.phrase ? `: "${seg.phrase}"` : ''}
+                    </span>
+                  </div>
+                );
+              }
+
+              const isIR = seg.speaker === 'IR EXECUTIVE';
+              const timeOffset = formatTs(seg.ts);
+
+              if (!isIR) {
+                // Customer / Investor bubble -> LEFT
+                return (
+                  <div key={i} className="flex gap-2">
+                    <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center shrink-0 mt-1">
+                      <span className="text-[9px] font-bold text-slate-500">I</span>
+                    </div>
+                    <div className="max-w-[78%]">
+                      <p className="text-[9px] font-semibold text-slate-400 mb-0.5">
+                        Investor{timeOffset && ` · ${timeOffset}`}
+                      </p>
+                      <div className="bg-white border border-slate-150 text-slate-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed font-sans shadow-sm">
                         {seg.text}
-                        {seg.translated && <span className="ml-2 px-1 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-500">🌐 translated</span>}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        {seg.translated && (
+                          <span className="ml-2 inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-500 border border-blue-100">
+                            🌐 translated
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              // IR Executive bubble -> RIGHT
+              return (
+                <div key={i} className="flex justify-end gap-2">
+                  <div className="max-w-[78%]">
+                    <p className="text-[9px] font-semibold text-slate-500 text-right mb-0.5 pr-1">
+                      IR Executive{timeOffset && ` · ${timeOffset}`}
+                    </p>
+                    <div className="bg-[#2d3139] dark:bg-[var(--qa-gray-700)] text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-[12.5px] leading-relaxed font-sans shadow-sm">
+                      {seg.text}
+                      {seg.translated && (
+                        <span className="ml-2 inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-white/10 text-white/90 border border-white/10">
+                          🌐 translated
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* End marker */}
-          <div className="flex items-center gap-3 px-4 py-2">
+          <div className="flex items-center gap-3 px-4 py-2 border-t border-slate-100 bg-slate-50/50">
             <div className="flex-1 h-px bg-slate-200" />
             <span className="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-0.5 rounded-full whitespace-nowrap">
               📞 {rec.label} ended

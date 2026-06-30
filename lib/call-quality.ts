@@ -3,6 +3,8 @@
  * 10 parameters across 3 groups. Chat and call scored independently.
  */
 
+import { robustJsonParse } from './quality';
+
 // ── Parameter weights (must sum to 1.0) ──────────────────────────────────────
 
 export const CALL_WEIGHTS: Record<string, number> = {
@@ -784,32 +786,4 @@ export function parseCallScoringResponse(raw: string): {
     ? data.kbCitation
     : null;
   return { scores, reasoning, poorListeningSegments, iqs, summary: data?.summary || '', kbCitation };
-}
-
-
-
-function robustJsonParse(raw: string): any {
-  if (!raw?.trim()) return null;
-  let s = raw.trim();
-
-  // Step 1: strip markdown fences
-  const block = s.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (block) s = block[1].trim();
-
-  // Step 2: parse as-is
-  try { return JSON.parse(s); } catch {}
-
-  // Step 3: extract outermost { }
-  const oa = s.indexOf('{'), ob = s.lastIndexOf('}');
-  if (oa >= 0 && ob > oa) { try { return JSON.parse(s.slice(oa, ob + 1)); } catch {} }
-
-  // Step 4: extract outermost [ ]
-  const aa = s.indexOf('['), ab = s.lastIndexOf(']');
-  if (aa >= 0 && ab > aa) { try { return JSON.parse(s.slice(aa, ab + 1)); } catch {} }
-
-  // Step 5: fix trailing commas
-  if (oa >= 0 && ob > oa) { try { return JSON.parse(s.slice(oa, ob + 1).replace(/,\s*([}\]])/g, '$1')); } catch {} }
-  if (aa >= 0 && ab > aa) { try { return JSON.parse(s.slice(aa, ab + 1).replace(/,\s*([}\]])/g, '$1')); } catch {} }
-
-  throw new Error(`Cannot parse response: ${s.slice(0, 300)}`);
 }
