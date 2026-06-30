@@ -73,87 +73,121 @@ export async function GET(req: NextRequest) {
     // Check KV first
     const kvData = await storeGetTranscript(chatId);
     if (kvData?.timedMessages?.length || kvData?.rawTranscript) {
-      log.info(ROUTE, 'hit', { chatId, source: 'kv', messageCount: kvData.timedMessages?.length ?? 0, durationMs: Date.now() - t0 });
-      return NextResponse.json({ ok: true, found: true, ...kvData });
+      const callRows = await query<any>(
+        `SELECT id, recording_url, duration_seconds, called_at, language, transcript, status, interruption_count, dead_air_count
+         FROM call_recordings WHERE chat_id = $1 ORDER BY called_at ASC`,
+        [chatId]
+      );
+      const callRecordings = callRows.map(r => ({
+        id: r.id,
+        recordingUrl: r.recording_url,
+        durationSeconds: r.duration_seconds,
+        calledAt: r.called_at,
+        language: r.language,
+        segments: Array.isArray(r.transcript) ? r.transcript : [],
+        status: r.status,
+        interruptionCount: r.interruption_count || 0,
+        deadAirCount: r.dead_air_count || 0,
+      }));
+      log.info(ROUTE, 'hit', { chatId, source: 'kv', messageCount: kvData.timedMessages?.length ?? 0, callCount: callRecordings.length, durationMs: Date.now() - t0 });
+      return NextResponse.json({ ok: true, found: true, ...kvData, callRecordings });
     }
 
     // Fall back to DB: check transcript column, then raw_payload
     const rows = await query<{ transcript: any; raw_payload: any; closed_at: any }>(
       `SELECT transcript, raw_payload, closed_at FROM conversations WHERE id = $1`, [chatId]
     );
-    if (!rows.length) return NextResponse.json({ ok: true, found: false });
 
     let messages: any[] = [];
 
-    // 1. conversations.transcript (stored by webhook handler)
-    let rawTranscript = rows[0].transcript;
-    if (typeof rawTranscript === 'string') {
-      try { rawTranscript = JSON.parse(rawTranscript); } catch { rawTranscript = null; }
-    }
-    if (Array.isArray(rawTranscript) && rawTranscript.length) {
-      messages = rawTranscript;
-    } else if (rawTranscript && Array.isArray(rawTranscript.messages) && rawTranscript.messages.length) {
-      messages = rawTranscript.messages;
-    }
+    if (rows.length > 0) {
+      // 1. conversations.transcript (stored by webhook handler)
+      let rawTranscript = rows[0].transcript;
+      if (typeof rawTranscript === 'string') {
+        try { rawTranscript = JSON.parse(rawTranscript); } catch { rawTranscript = null; }
+      }
+      if (Array.isArray(rawTranscript) && rawTranscript.length) {
+        messages = rawTranscript;
+      } else if (rawTranscript && Array.isArray(rawTranscript.messages) && rawTranscript.messages.length) {
+        messages = rawTranscript.messages;
+      }
 
-    // 2. Reconstruct from raw_payload if missing activity messages or empty transcript
-    const hasActivity = messages.some((m: any) => m.sender_type === 'activity');
-    if ((!messages.length || !hasActivity) && rows[0].raw_payload) {
-      const payload = rows[0].raw_payload;
-      const payloadMsgs = payload?.data?.transcript?.messages;
-      if (Array.isArray(payloadMsgs) && payloadMsgs.length) {
-        const closedAt = rows[0].closed_at;
-        const year = closedAt ? new Date(closedAt).getUTCFullYear() : new Date().getUTCFullYear();
+      // 2. Reconstruct from raw_payload if missing activity messages or empty transcript
+      const hasActivity = messages.some((m: any) => m.sender_type === 'activity');
+      if ((!messages.length || !hasActivity) && rows[0].raw_payload) {
+        const payload = rows[0].raw_payload;
+        const payloadMsgs = payload?.data?.transcript?.messages;
+        if (Array.isArray(payloadMsgs) && payloadMsgs.length) {
+          const closedAt = rows[0].closed_at;
+          const year = closedAt ? new Date(closedAt).getUTCFullYear() : new Date().getUTCFullYear();
 
-        const rawHasActivity = payloadMsgs.some((m: any) => {
-          const c = (m.content || m.text || '').toLowerCase();
-          return c.includes('auto-assigned') || c.includes('assigned by') || c.includes('waiting to assign');
-        });
+          const rawHasActivity = payloadMsgs.some((m: any) => {
+            const c = (m.content || m.text || '').toLowerCase();
+            return c.includes('auto-assigned') || c.includes('assigned by') || c.includes('waiting to assign');
+          });
 
-        if (rawHasActivity || !messages.length) {
-          messages = payloadMsgs.map((m: any) => {
-            const sender = (m.sender || '').trim();
-            const content = (m.content || m.text || '').trim();
-            if (!content) return null;
-            const low = content.toLowerCase();
+          if (rawHasActivity || !messages.length) {
+            messages = payloadMsgs.map((m: any) => {
+              const sender = (m.sender || '').trim();
+              const content = (m.content || m.text || '').trim();
+              if (!content) return null;
+              const low = content.toLowerCase();
 
-            if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
+              if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                return {
+                  sender_type: 'activity',
+                  sender_name: 'system',
+                  content,
+                  timestamp: isoTs,
+                };
+              }
+
+              if (low.includes('please rate your experience') || m.buttons) return null;
+
               const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+              const senderLow = sender.toLowerCase();
+              const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
+                               : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
+                               : 'agent';
+
               return {
-                sender_type: 'activity',
-                sender_name: 'system',
+                sender_type: senderType,
+                sender_name: sender,
                 content,
                 timestamp: isoTs,
               };
-            }
-
-            if (low.includes('please rate your experience') || m.buttons) return null;
-
-            const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
-            const senderLow = sender.toLowerCase();
-            const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
-                             : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
-                             : 'agent';
-
-            return {
-              sender_type: senderType,
-              sender_name: sender,
-              content,
-              timestamp: isoTs,
-            };
-          }).filter(Boolean);
+            }).filter(Boolean);
+          }
         }
       }
     }
 
-    if (!messages.length) {
+    const callRows = await query<any>(
+      `SELECT id, recording_url, duration_seconds, called_at, language, transcript, status, interruption_count, dead_air_count
+       FROM call_recordings WHERE chat_id = $1 ORDER BY called_at ASC`,
+      [chatId]
+    );
+    const callRecordings = callRows.map(r => ({
+      id: r.id,
+      recordingUrl: r.recording_url,
+      durationSeconds: r.duration_seconds,
+      calledAt: r.called_at,
+      language: r.language,
+      segments: Array.isArray(r.transcript) ? r.transcript : [],
+      status: r.status,
+      interruptionCount: r.interruption_count || 0,
+      deadAirCount: r.dead_air_count || 0,
+    }));
+
+    if (!messages.length && !callRecordings.length) {
       log.warn(ROUTE, 'not found', { chatId, durationMs: Date.now() - t0 });
       return NextResponse.json({ ok: true, found: false });
     }
 
     const timedMessages = dbMessagesToTimedMessages(messages);
-    log.info(ROUTE, 'hit', { chatId, source: 'db', messageCount: timedMessages.length, durationMs: Date.now() - t0 });
-    return NextResponse.json({ ok: true, found: true, timedMessages });
+    log.info(ROUTE, 'hit', { chatId, source: 'db', messageCount: timedMessages.length, callCount: callRecordings.length, durationMs: Date.now() - t0 });
+    return NextResponse.json({ ok: true, found: true, timedMessages, callRecordings });
   } catch (err: any) {
     log.error(ROUTE, 'db error', { chatId, err: err?.message });
     return NextResponse.json({ error: 'DB error', detail: err?.message }, { status: 500 });

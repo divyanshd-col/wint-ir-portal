@@ -18,7 +18,7 @@ function CopyChip({ text, display }: { text: string; display?: string }) {
       {display || text}
       {copied
         ? <span style={{ color: 'var(--color-text-success)', fontSize: 10 }}>✓</span>
-        : <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}><rect x="5" y="5" width="8" height="8" rx="1"/><path d="M11 5V3H3v8h2"/></svg>
+        : <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.5 }}><rect x="5" y="5" width="8" height="8" rx="1" /><path d="M11 5V3H3v8h2" /></svg>
       }
     </span>
   );
@@ -90,7 +90,7 @@ function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
       const label = match[5] || match[7];
       parts.push(
         <a key={`${keyPrefix}-link-${match.index}`} href={href} target="_blank" rel="noopener noreferrer"
-           className="text-[#2d9e4f] underline underline-offset-2 hover:text-[#238a42] break-all">
+          className="text-[#2d9e4f] underline underline-offset-2 hover:text-[#238a42] break-all">
           {label}
         </a>
       );
@@ -428,7 +428,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                 prev.map(m => m.id === assistantId ? { ...m, sourceChunks: chunks } : m)
               );
             }
-          } catch {}
+          } catch { }
         }
         if (streamDone) break;
       }
@@ -449,7 +449,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(conversation),
-        }).catch(() => {});
+        }).catch(() => { });
       }
     } catch {
       setMessages(prev =>
@@ -481,12 +481,12 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
     // sees them in its history — prevents asking questions that are already answered
     const messagesForAnalyze = Object.keys(accumulated).length > 0
       ? [
-          ...queryMessages,
-          {
-            role: 'user' as const,
-            content: `[Already confirmed by agent:\n${Object.entries(accumulated).map(([k, v]) => `${k}: ${v}`).join('\n')}]`,
-          },
-        ]
+        ...queryMessages,
+        {
+          role: 'user' as const,
+          content: `[Already confirmed by agent:\n${Object.entries(accumulated).map(([k, v]) => `${k}: ${v}`).join('\n')}]`,
+        },
+      ]
       : queryMessages;
 
     try {
@@ -622,18 +622,18 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
           prev.map(m =>
             m.id === thinkingMsg.id
               ? {
-                  ...m,
-                  loading: false,
-                  form: {
-                    questions,
-                    stepTitle,
-                    reasoning: reasoning || '',
-                    answers: {},
-                    submitted: false,
-                    queryMessages: apiMessages,
-                    category,
-                  },
-                }
+                ...m,
+                loading: false,
+                form: {
+                  questions,
+                  stepTitle,
+                  reasoning: reasoning || '',
+                  answers: {},
+                  submitted: false,
+                  queryMessages: apiMessages,
+                  category,
+                },
+              }
               : m
           )
         );
@@ -687,474 +687,472 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
       {/* Messages area */}
       <div className="flex-1 overflow-y-auto py-5">
         <div className="max-w-4xl mx-auto px-6 space-y-4">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="mb-5 bg-white rounded-xl px-4 py-2.5 shadow-sm border border-gray-100 inline-block">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/wint-logo.png" alt="Wint Wealth" width={110} height={40} className="object-contain block" />
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <div className="mb-5 bg-white rounded-xl px-4 py-2.5 shadow-sm border border-gray-100 inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/wint-logo.png" alt="Wint Wealth" width={110} height={40} className="object-contain block" />
+              </div>
+              <h2 className="text-[19px] font-[650] text-[#0a0a0a] mb-1.5 tracking-[-0.01em]">IR Support Assistant</h2>
+              <p className="text-[13.5px] text-gray-400 max-w-xs mb-8 leading-relaxed">
+                Select a common issue below or describe the investor&apos;s problem.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
+                {SUGGESTED_QUESTIONS.map(q => (
+                  <button
+                    key={q}
+                    onClick={() => sendMessage(q)}
+                    className="text-left px-4 py-3 bg-white border border-gray-200/80 rounded-xl text-[13.5px] font-[500] text-[#374151] hover:border-[#2d9e4f]/50 hover:bg-[#2d9e4f]/5 hover:text-[#2d9e4f] transition-all shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
             </div>
-            <h2 className="text-[19px] font-[650] text-[#0a0a0a] mb-1.5 tracking-[-0.01em]">IR Support Assistant</h2>
-            <p className="text-[13.5px] text-gray-400 max-w-xs mb-8 leading-relaxed">
-              Select a common issue below or describe the investor&apos;s problem.
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
-              {SUGGESTED_QUESTIONS.map(q => (
-                <button
-                  key={q}
-                  onClick={() => sendMessage(q)}
-                  className="text-left px-4 py-3 bg-white border border-gray-200/80 rounded-xl text-[13.5px] font-[500] text-[#374151] hover:border-[#2d9e4f]/50 hover:bg-[#2d9e4f]/5 hover:text-[#2d9e4f] transition-all shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
-                >
-                  {q}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          messages.map((msg, index) => (
-            <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`w-full ${msg.role === 'user' ? 'max-w-lg ml-auto' : ''}`}>
+          ) : (
+            messages.map((msg, index) => (
+              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`w-full ${msg.role === 'user' ? 'max-w-lg ml-auto' : ''}`}>
 
-                {msg.role === 'assistant' && (index === 0 || messages[index - 1]?.role !== 'assistant') && (
-                  <div className="flex items-center gap-2 mb-2 ml-0.5">
-                    <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 bg-white border border-gray-200 shadow-sm flex items-center justify-center p-0.5">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/wint-logo.png" alt="Wint" className="object-contain w-full h-full" />
-                    </div>
-                    <span className="text-[11.5px] font-[600] text-gray-400 tracking-wide uppercase">Wint IR</span>
-                  </div>
-                )}
-
-                {/* User message */}
-                {msg.role === 'user' && (
-                  <div className="group flex items-end gap-2 justify-end">
-                    <button
-                      onClick={() => editMessage(msg, index)}
-                      disabled={loading}
-                      className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 disabled:hidden shrink-0 mb-1"
-                      title="Edit message"
-                    >
-                      <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
-                      </svg>
-                    </button>
-                    <div className="flex flex-col items-end gap-1.5 max-w-full">
-                      {msg.imagePreviewUrl && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={msg.imagePreviewUrl} alt="Attached screenshot" className="rounded-xl max-w-[220px] max-h-[160px] object-cover border border-white/20 shadow-sm" />
-                      )}
-                      {msg.content && (
-                        <div className="px-4 py-3 rounded-2xl rounded-tr-sm text-[14.5px] leading-[1.6] font-[450] bg-[#2d9e4f] text-white shadow-sm">
-                          {msg.content}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Assistant: loading / thinking */}
-                {msg.role === 'assistant' && msg.loading && (
-                  <div className="px-4 py-3.5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)] inline-flex">
-                    <div className="flex gap-1 items-center">
-                      <span className="w-1.5 h-1.5 bg-[#2d9e4f]/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1.5 h-1.5 bg-[#2d9e4f]/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-1.5 h-1.5 bg-[#2d9e4f]/80 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  </div>
-                )}
-
-                {/* Assistant: form step */}
-                {msg.role === 'assistant' && msg.form && !msg.loading && (
-                  <div className="bg-white border border-gray-200/80 rounded-2xl rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
-                    {msg.form.submitted ? (
-                      <div className="px-5 py-3.5 flex items-center gap-2.5">
-                        <span className="w-4 h-4 rounded-full bg-[#2d9e4f]/10 flex items-center justify-center shrink-0">
-                          <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="#2d9e4f" strokeWidth="2.5">
-                            <path d="M3 8l4 4 6-6"/>
-                          </svg>
-                        </span>
-                        <span className="text-[13px] text-gray-400">
-                          {msg.form.stepTitle ? `${msg.form.stepTitle} — submitted` : 'Step submitted'}
-                        </span>
+                  {msg.role === 'assistant' && (index === 0 || messages[index - 1]?.role !== 'assistant') && (
+                    <div className="flex items-center gap-2 mb-2 ml-0.5">
+                      <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 bg-white border border-gray-200 shadow-sm flex items-center justify-center p-0.5">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/wint-logo.png" alt="Wint" className="object-contain w-full h-full" />
                       </div>
-                    ) : (
-                      <>
-                        <div className="px-5 pt-4 pb-3 border-b border-gray-100">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-[3px] h-[14px] bg-[#2d9e4f] rounded-full shrink-0" />
-                            <p className="text-[11px] font-[700] text-[#2d9e4f] uppercase tracking-[0.1em]">
-                              {msg.form.stepTitle || 'Context Required'}
-                            </p>
-                          </div>
-                          {msg.form.reasoning && (
-                            <p className="text-[12.5px] text-gray-500 mt-1.5 pl-[17px] leading-relaxed italic">
-                              {msg.form.reasoning}
-                            </p>
-                          )}
-                          <p className="text-[12px] text-gray-400 mt-1.5 pl-[17px]">
-                            {msg.form.questions.every(q => q.options && q.options.length > 0)
-                              ? 'Select an answer for each field'
-                              : 'Select or type an answer for each field'}
-                          </p>
-                        </div>
-                        <div className="px-5 py-5 space-y-5">
-                          {msg.form.questions.map(q => {
-                            const isText = q.type === 'text' || !q.options || q.options.length === 0;
-                            return (
-                            <div key={q.id}>
-                              <label className="block text-[13.5px] font-[600] text-[#111827] mb-3">{q.label}</label>
-                              {isText ? (
-                                <input
-                                  type="text"
-                                  disabled={loading}
-                                  value={msg.form!.answers[q.id] || ''}
-                                  onChange={e => updateFormAnswer(msg.id, q.id, e.target.value)}
-                                  placeholder={q.placeholder || 'Type your answer…'}
-                                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
-                                />
-                              ) : (
-                                <div className="flex flex-wrap gap-2">
-                                  {(q.options ?? []).map(opt => {
-                                    const selected = msg.form!.answers[q.id] === opt;
-                                    return (
-                                      <button
-                                        key={opt}
-                                        type="button"
-                                        disabled={loading}
-                                        onClick={() => updateFormAnswer(msg.id, q.id, opt)}
-                                        className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${
-                                          selected
-                                            ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
-                                            : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
-                                        }`}
-                                      >
-                                        {opt}
-                                      </button>
-                                    );
-                                  })}
-                                  {/* Other: escape hatch when no option fits */}
-                                  {(() => {
-                                    const cur = msg.form!.answers[q.id] ?? '';
-                                    const isOtherMode = cur === '__other__' || (cur !== '' && !(q.options ?? []).includes(cur));
-                                    return (
-                                      <>
-                                        <button
-                                          type="button"
-                                          disabled={loading}
-                                          onClick={() => updateFormAnswer(msg.id, q.id, '__other__')}
-                                          className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${
-                                            isOtherMode
-                                              ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
-                                              : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
-                                          }`}
-                                        >
-                                          Other
-                                        </button>
-                                        {isOtherMode && (
-                                          <input
-                                            type="text"
-                                            autoFocus
-                                            disabled={loading}
-                                            value={cur === '__other__' ? '' : cur}
-                                            onChange={e => updateFormAnswer(msg.id, q.id, e.target.value || '__other__')}
-                                            placeholder="Describe the situation…"
-                                            className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
-                                          />
-                                        )}
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-                              )}
-                            </div>
-                            );
-                          })}
-                        </div>
-                        <div className="px-5 pb-5">
-                          {(() => {
-                            const unanswered = msg.form.questions.filter(q => {
-                              const ans = msg.form!.answers[q.id] ?? '';
-                              return !ans.trim() || ans === '__other__';
-                            }).length;
-                            return unanswered > 0 && !loading ? (
-                              <p className="text-center text-xs text-gray-400 py-1">
-                                {unanswered === msg.form.questions.length
-                                  ? 'Answer all questions to continue'
-                                  : `${unanswered} more question${unanswered > 1 ? 's' : ''} to answer`}
-                              </p>
-                            ) : (
-                              <button
-                                onClick={() => submitForm(msg.id)}
-                                disabled={loading}
-                                className="w-full bg-[#111827] hover:bg-[#1f2937] disabled:opacity-25 disabled:cursor-not-allowed text-white text-[13.5px] font-[600] py-2.5 rounded-xl transition-all"
-                              >
-                                {loading ? 'Processing…' : 'Continue'}
-                              </button>
-                            );
-                          })()}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )}
+                      <span className="text-[11.5px] font-[600] text-gray-400 tracking-wide uppercase">Wint IR</span>
+                    </div>
+                  )}
 
-                {/* Assistant: text answer */}
-                {msg.role === 'assistant' && !msg.loading && !msg.form && msg.content && (
-                  <>
-                    {/* Why This Happens — shown FIRST, before the answer */}
-                    {msg.education && (
-                      <div className="mb-3 bg-amber-50 border border-amber-200/70 rounded-xl overflow-hidden">
-                        {/* Fix 14 — why this happens persistence */}
-                        <button
-                          className="w-full px-4 py-2.5 flex items-center gap-2 text-left"
-                          onClick={() => toggleEducationPanel(msg.id)}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#92400e" strokeWidth="1.5" className="shrink-0">
-                            <circle cx="8" cy="8" r="6"/>
-                            <path d="M8 7v3M8 5.5v.5"/>
-                          </svg>
-                          <span className="flex-1 text-[11px] font-[700] text-amber-700 uppercase tracking-[0.09em]">Why This Happens</span>
-                          <svg
-                            width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#92400e" strokeWidth="1.5"
-                            className={`shrink-0 transition-transform ${collapsedPanels[`${msg.id}-education`] ? '-rotate-90' : ''}`}
-                          >
-                            <path d="M2 4l4 4 4-4"/>
-                          </svg>
-                        </button>
-                        {!collapsedPanels[`${msg.id}-education`] && (
-                          <div className="px-4 pb-3.5">
-                            <p className="text-[13.5px] leading-[1.7] text-amber-900">{msg.education}</p>
+                  {/* User message */}
+                  {msg.role === 'user' && (
+                    <div className="group flex items-end gap-2 justify-end">
+                      <button
+                        onClick={() => editMessage(msg, index)}
+                        disabled={loading}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-gray-600 disabled:hidden shrink-0 mb-1"
+                        title="Edit message"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <path d="M10 2l2 2-7 7H3v-2l7-7z" />
+                        </svg>
+                      </button>
+                      <div className="flex flex-col items-end gap-1.5 max-w-full">
+                        {msg.imagePreviewUrl && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={msg.imagePreviewUrl} alt="Attached screenshot" className="rounded-xl max-w-[220px] max-h-[160px] object-cover border border-white/20 shadow-sm" />
+                        )}
+                        {msg.content && (
+                          <div className="px-4 py-3 rounded-2xl rounded-tr-sm text-[14.5px] leading-[1.6] font-[450] bg-[#2d9e4f] text-white shadow-sm">
+                            {msg.content}
                           </div>
                         )}
                       </div>
-                    )}
+                    </div>
+                  )}
 
-                    {/* Fix 11 — Zone the response into 3 distinct sections */}
-                    {(() => {
-                      const isProcess = msg.queryType === 'process';
-                      const { zoneA, zoneBSteps, zoneC } = isProcess
-                        ? parseResponseZones(msg.content)
-                        : { zoneA: msg.content, zoneBSteps: [] as string[], zoneC: '' };
-                      const hasZones = isProcess && (zoneBSteps.length > 0 || zoneC !== '');
+                  {/* Assistant: loading / thinking */}
+                  {msg.role === 'assistant' && msg.loading && (
+                    <div className="px-4 py-3.5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)] inline-flex">
+                      <div className="flex gap-1 items-center">
+                        <span className="w-1.5 h-1.5 bg-[#2d9e4f]/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-1.5 h-1.5 bg-[#2d9e4f]/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-1.5 h-1.5 bg-[#2d9e4f]/80 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  )}
 
-                      // Helper: Frame a response section (Fix 15 — moved inside Zone A)
-                      const frameAResponseSection = isProcess && (
-                        msg.draft ? (
-                          <div className="mt-3 bg-blue-50 border border-blue-200/70 rounded-xl overflow-hidden">
-                            <div className="px-4 py-2.5 flex items-center gap-2">
-                              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#1d4ed8" strokeWidth="1.5" className="shrink-0">
-                                <rect x="1" y="4" width="14" height="10" rx="1"/>
-                                <path d="M1 7l7 4 7-4"/>
-                              </svg>
-                              <span className="flex-1 text-[11px] font-[700] text-blue-700 uppercase tracking-[0.09em]">Customer Message Draft</span>
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  onClick={() => {
-                                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, draft: undefined } : m));
-                                    setDraftExpanded(prev => ({ ...prev, [msg.id]: true }));
-                                  }}
-                                  className="text-blue-400 hover:text-blue-600 transition-colors text-[11px] font-medium mr-1"
-                                  title="Regenerate with different context"
-                                >
-                                  Redo
-                                </button>
-                                <button
-                                  onClick={() => setCollapsedPanels(prev => ({ ...prev, [`${msg.id}-draft`]: !prev[`${msg.id}-draft`] }))}
-                                  className="text-blue-400 hover:text-blue-600 transition-colors"
-                                  title="Toggle"
-                                >
-                                  <svg
-                                    width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
-                                    className={`shrink-0 transition-transform ${collapsedPanels[`${msg.id}-draft`] ? '-rotate-90' : ''}`}
-                                  >
-                                    <path d="M2 4l4 4 4-4"/>
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(editedDrafts[msg.id] ?? msg.draft!);
-                                    setCopiedDraft(prev => ({ ...prev, [msg.id]: true }));
-                                    setTimeout(() => setCopiedDraft(prev => ({ ...prev, [msg.id]: false })), 2000);
-                                  }}
-                                  className="text-blue-400 hover:text-blue-600 transition-colors"
-                                  title="Copy to clipboard"
-                                >
-                                  {copiedDraft[msg.id] ? (
-                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="M3 8l4 4 6-6"/>
-                                    </svg>
-                                  ) : (
-                                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                                      <rect x="5" y="5" width="8" height="8" rx="1"/>
-                                      <path d="M11 5V3H3v8h2"/>
-                                    </svg>
-                                  )}
-                                </button>
-                              </div>
-                            </div>
-                            {!collapsedPanels[`${msg.id}-draft`] && (
-                              <div className="px-4 pb-3.5">
-                                <textarea
-                                  value={editedDrafts[msg.id] ?? msg.draft ?? ''}
-                                  onChange={e => setEditedDrafts(prev => ({ ...prev, [msg.id]: e.target.value }))}
-                                  rows={Math.max(4, ((editedDrafts[msg.id] ?? msg.draft ?? '').match(/\n/g) || []).length + 2)}
-                                  className="w-full text-[13.5px] leading-[1.7] text-blue-900 whitespace-pre-wrap bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-blue-200 rounded-lg p-0"
-                                /></div>
-                            )}
-                          </div>
-                        ) : draftExpanded[msg.id] ? (
-                          /* Expanded: context input form */
-                          <div className="mt-2 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
-                            <div className="px-4 pt-3.5 pb-1 flex items-center gap-2 border-b border-gray-100">
-                              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0">
-                                <path d="M10 2l2 2-7 7H3v-2l7-7z"/>
-                              </svg>
-                              <span className="text-[11px] font-[700] text-gray-500 uppercase tracking-[0.09em]">Frame a response</span>
-                            </div>
-                            <div className="px-4 py-3.5 space-y-3">
-                              <div>
-                                <label className="block text-[12px] font-[600] text-gray-500 mb-1.5">
-                                  Add context <span className="text-gray-400 font-normal">(optional)</span>
-                                </label>
-                                <textarea
-                                  autoFocus
-                                  rows={2}
-                                  value={draftContext[msg.id] || ''}
-                                  onChange={e => setDraftContext(prev => ({ ...prev, [msg.id]: e.target.value }))}
-                                  placeholder="e.g. User already tried reinstalling the app · This is a premium investor · User is frustrated, second time reaching out…"
-                                  className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 focus:border-[#2d9e4f]/50 resize-none leading-relaxed transition"
-                                />
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  onClick={() => fetchDraft(msg.id, msg.content, msg.formAnswers, draftContext[msg.id])}
-                                  disabled={draftLoading[msg.id]}
-                                  className="flex items-center gap-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-[12.5px] font-[600] px-4 py-2 rounded-lg transition disabled:opacity-40"
-                                >
-                                  {draftLoading[msg.id] ? (
-                                    <>
-                                      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
-                                        <path d="M8 2a6 6 0 1 0 6 6"/>
-                                      </svg>
-                                      Drafting…
-                                    </>
-                                  ) : (
-                                    <>Generate draft →</>
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: false }))}
-                                  className="text-[12px] text-gray-400 hover:text-gray-600 px-2 py-2 transition"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          /* Fix 15 — Frame a response as primary CTA inside Zone A */
-                          <div className="flex justify-end mt-2">
-                            <button
-                              onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: true }))}
-                              disabled={draftLoading[msg.id]}
-                              className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 cursor-pointer"
-                              style={{ backgroundColor: 'var(--color-text-primary)', color: 'var(--color-background-primary)' }}
-                            >
-                              {draftLoading[msg.id] ? 'Drafting…' : 'Frame a response →'}
-                            </button>
-                          </div>
-                        )
-                      );
-
-                      if (hasZones) {
-                        return (
-                          <div className="flex flex-col gap-3 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-3">
-                            {/* Fix 11 — Zone A: Tell the user */}
-                            <div style={{ background: 'color-mix(in srgb, var(--color-background-info) 30%, transparent)', borderLeft: '3px solid var(--color-border-info)', borderRadius: 8 }} className="px-4 py-3">
-                              <p style={{ color: 'var(--color-text-info)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Tell the User</p>
-                              <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneA)}</div>
-                              {/* Fix 15 — Frame a response CTA inside Zone A */}
-                              {frameAResponseSection}
-                            </div>
-
-                            {/* Fix 11 — Zone B: Agent actions */}
-                            {zoneBSteps.length > 0 && (
-                              <div style={{ background: 'var(--color-background-secondary)', borderLeft: '3px solid var(--color-border-secondary)', borderRadius: 8 }} className="px-4 py-3">
-                                <p style={{ color: 'var(--color-text-secondary)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Agent Actions</p>
-                                {/* Fix 12 — step checkboxes */}
-                                {zoneBSteps.map((step, idx) => {
-                                  const isChecked = checkedSteps[msg.id]?.has(idx) ?? false;
-                                  return (
-                                    <div key={idx} className="flex items-start gap-2.5 py-1" style={{ opacity: isChecked ? 0.5 : 1 }}>
-                                      <button
-                                        onClick={() => toggleStep(msg.id, idx)}
-                                        className="mt-0.5 shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
-                                        style={{ borderColor: isChecked ? 'var(--color-border-success)' : 'var(--color-border-secondary)', background: isChecked ? 'var(--color-background-success)' : 'transparent' }}
-                                      >
-                                        {isChecked && <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="var(--color-text-success)" strokeWidth="2.5"><polyline points="1.5 6 4.5 9 10.5 3"/></svg>}
-                                      </button>
-                                      <span style={{ textDecoration: isChecked ? 'line-through' : 'none', color: 'var(--color-text-primary)' }} className="text-sm leading-relaxed">{step}</span>
-                                    </div>
-                                  );
-                                })}
-                                <button onClick={() => clearSteps(msg.id)} className="text-[11px] mt-2" style={{ color: 'var(--color-text-tertiary)' }}>Reset steps</button>
-                              </div>
-                            )}
-
-                            {/* Fix 11 — Zone C: Escalation */}
-                            {zoneC && (
-                              <div style={{ background: 'color-mix(in srgb, var(--color-background-warning) 30%, transparent)', borderLeft: '3px solid var(--color-border-warning)', borderRadius: 8 }} className="px-4 py-3">
-                                <p style={{ color: 'var(--color-text-warning)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Escalation — only if needed</p>
-                                <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneC)}</div>
-                              </div>
-                            )}
-                          </div>
-                        );
-                      }
-
-                      // No zones — original single-block render
-                      return (
+                  {/* Assistant: form step */}
+                  {msg.role === 'assistant' && msg.form && !msg.loading && (
+                    <div className="bg-white border border-gray-200/80 rounded-2xl rounded-tl-sm shadow-[0_1px_4px_rgba(0,0,0,0.05)] overflow-hidden">
+                      {msg.form.submitted ? (
+                        <div className="px-5 py-3.5 flex items-center gap-2.5">
+                          <span className="w-4 h-4 rounded-full bg-[#2d9e4f]/10 flex items-center justify-center shrink-0">
+                            <svg width="9" height="9" viewBox="0 0 16 16" fill="none" stroke="#2d9e4f" strokeWidth="2.5">
+                              <path d="M3 8l4 4 6-6" />
+                            </svg>
+                          </span>
+                          <span className="text-[13px] text-gray-400">
+                            {msg.form.stepTitle ? `${msg.form.stepTitle} — submitted` : 'Step submitted'}
+                          </span>
+                        </div>
+                      ) : (
                         <>
-                          <div className="px-6 py-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
-                            {renderContent(msg.content)}
+                          <div className="px-5 pt-4 pb-3 border-b border-gray-100">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-[3px] h-[14px] bg-[#2d9e4f] rounded-full shrink-0" />
+                              <p className="text-[11px] font-[700] text-[#2d9e4f] uppercase tracking-[0.1em]">
+                                {msg.form.stepTitle || 'Context Required'}
+                              </p>
+                            </div>
+                            {msg.form.reasoning && (
+                              <p className="text-[12.5px] text-gray-500 mt-1.5 pl-[17px] leading-relaxed italic">
+                                {msg.form.reasoning}
+                              </p>
+                            )}
+                            <p className="text-[12px] text-gray-400 mt-1.5 pl-[17px]">
+                              {msg.form.questions.every(q => q.options && q.options.length > 0)
+                                ? 'Select an answer for each field'
+                                : 'Select or type an answer for each field'}
+                            </p>
                           </div>
-                          {/* Frame a response for non-zoned process messages */}
-                          {isProcess && frameAResponseSection}
+                          <div className="px-5 py-5 space-y-5">
+                            {msg.form.questions.map(q => {
+                              const isText = q.type === 'text' || !q.options || q.options.length === 0;
+                              return (
+                                <div key={q.id}>
+                                  <label className="block text-[13.5px] font-[600] text-[#111827] mb-3">{q.label}</label>
+                                  {isText ? (
+                                    <input
+                                      type="text"
+                                      disabled={loading}
+                                      value={msg.form!.answers[q.id] || ''}
+                                      onChange={e => updateFormAnswer(msg.id, q.id, e.target.value)}
+                                      placeholder={q.placeholder || 'Type your answer…'}
+                                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
+                                    />
+                                  ) : (
+                                    <div className="flex flex-wrap gap-2">
+                                      {(q.options ?? []).map(opt => {
+                                        const selected = msg.form!.answers[q.id] === opt;
+                                        return (
+                                          <button
+                                            key={opt}
+                                            type="button"
+                                            disabled={loading}
+                                            onClick={() => updateFormAnswer(msg.id, q.id, opt)}
+                                            className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${selected
+                                              ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
+                                              : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
+                                              }`}
+                                          >
+                                            {opt}
+                                          </button>
+                                        );
+                                      })}
+                                      {/* Other: escape hatch when no option fits */}
+                                      {(() => {
+                                        const cur = msg.form!.answers[q.id] ?? '';
+                                        const isOtherMode = cur === '__other__' || (cur !== '' && !(q.options ?? []).includes(cur));
+                                        return (
+                                          <>
+                                            <button
+                                              type="button"
+                                              disabled={loading}
+                                              onClick={() => updateFormAnswer(msg.id, q.id, '__other__')}
+                                              className={`px-4 py-1.5 text-[13px] rounded-full border transition-all font-[500] disabled:opacity-50 ${isOtherMode
+                                                ? 'bg-[#2d9e4f] border-[#2d9e4f] text-white shadow-sm'
+                                                : 'bg-white border-gray-200 text-gray-600 hover:border-[#2d9e4f]/70 hover:text-[#2d9e4f] hover:bg-[#2d9e4f]/5'
+                                                }`}
+                                            >
+                                              Other
+                                            </button>
+                                            {isOtherMode && (
+                                              <input
+                                                type="text"
+                                                autoFocus
+                                                disabled={loading}
+                                                value={cur === '__other__' ? '' : cur}
+                                                onChange={e => updateFormAnswer(msg.id, q.id, e.target.value || '__other__')}
+                                                placeholder="Describe the situation…"
+                                                className="w-full mt-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-[13.5px] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 placeholder-gray-400 disabled:opacity-50 transition"
+                                              />
+                                            )}
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="px-5 pb-5">
+                            {(() => {
+                              const unanswered = msg.form.questions.filter(q => {
+                                const ans = msg.form!.answers[q.id] ?? '';
+                                return !ans.trim() || ans === '__other__';
+                              }).length;
+                              return unanswered > 0 && !loading ? (
+                                <p className="text-center text-xs text-gray-400 py-1">
+                                  {unanswered === msg.form.questions.length
+                                    ? 'Answer all questions to continue'
+                                    : `${unanswered} more question${unanswered > 1 ? 's' : ''} to answer`}
+                                </p>
+                              ) : (
+                                <button
+                                  onClick={() => submitForm(msg.id)}
+                                  disabled={loading}
+                                  className="w-full bg-[#111827] hover:bg-[#1f2937] disabled:opacity-25 disabled:cursor-not-allowed text-white text-[13.5px] font-[600] py-2.5 rounded-xl transition-all"
+                                >
+                                  {loading ? 'Processing…' : 'Continue'}
+                                </button>
+                              );
+                            })()}
+                          </div>
                         </>
-                      );
-                    })()}
+                      )}
+                    </div>
+                  )}
 
-                    {/* Flag & Correct button — available on all process answers */}
-                    {msg.queryType === 'process' && !msg.showCorrectionPanel && (
-                      <button
-                        onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, showCorrectionPanel: true } : m))}
-                        className="mt-3 flex items-center gap-2 text-[12px] text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-300 rounded-lg px-3 py-1.5 transition-colors bg-white"
-                      >
-                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
-                          <path d="M3 2v12M3 2l10 5-10 5"/>
-                        </svg>
-                        Flag & Correct
-                      </button>
-                    )}
+                  {/* Assistant: text answer */}
+                  {msg.role === 'assistant' && !msg.loading && !msg.form && msg.content && (
+                    <>
+                      {/* Why This Happens — shown FIRST, before the answer */}
+                      {msg.education && (
+                        <div className="mb-3 bg-amber-50 border border-amber-200/70 rounded-xl overflow-hidden">
+                          {/* Fix 14 — why this happens persistence */}
+                          <button
+                            className="w-full px-4 py-2.5 flex items-center gap-2 text-left"
+                            onClick={() => toggleEducationPanel(msg.id)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#92400e" strokeWidth="1.5" className="shrink-0">
+                              <circle cx="8" cy="8" r="6" />
+                              <path d="M8 7v3M8 5.5v.5" />
+                            </svg>
+                            <span className="flex-1 text-[11px] font-[700] text-amber-700 uppercase tracking-[0.09em]">Why This Happens</span>
+                            <svg
+                              width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#92400e" strokeWidth="1.5"
+                              className={`shrink-0 transition-transform ${collapsedPanels[`${msg.id}-education`] ? '-rotate-90' : ''}`}
+                            >
+                              <path d="M2 4l4 4 4-4" />
+                            </svg>
+                          </button>
+                          {!collapsedPanels[`${msg.id}-education`] && (
+                            <div className="px-4 pb-3.5">
+                              <p className="text-[13.5px] leading-[1.7] text-amber-900">{msg.education}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
-                    {/* Correction panel */}
-                    {msg.showCorrectionPanel && (
-                      <CorrectionPanel
-                        originalQuery={messages.find(m => m.role === 'user' && messages.indexOf(m) < messages.indexOf(msg))?.content || ''}
-                        originalAnswer={msg.content}
-                        sourceChunks={msg.sourceChunks || []}
-                        formAnswers={msg.formAnswers}
-                        category={msg.category}
-                        onClose={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, showCorrectionPanel: false } : m))}
-                      />
-                    )}
-                  </>
-                )}
+                      {/* Fix 11 — Zone the response into 3 distinct sections */}
+                      {(() => {
+                        const isProcess = msg.queryType === 'process';
+                        const { zoneA, zoneBSteps, zoneC } = isProcess
+                          ? parseResponseZones(msg.content)
+                          : { zoneA: msg.content, zoneBSteps: [] as string[], zoneC: '' };
+                        const hasZones = isProcess && (zoneBSteps.length > 0 || zoneC !== '');
 
+                        // Helper: Frame a response section (Fix 15 — moved inside Zone A)
+                        const frameAResponseSection = isProcess && (
+                          msg.draft ? (
+                            <div className="mt-3 bg-blue-50 border border-blue-200/70 rounded-xl overflow-hidden">
+                              <div className="px-4 py-2.5 flex items-center gap-2">
+                                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#1d4ed8" strokeWidth="1.5" className="shrink-0">
+                                  <rect x="1" y="4" width="14" height="10" rx="1" />
+                                  <path d="M1 7l7 4 7-4" />
+                                </svg>
+                                <span className="flex-1 text-[11px] font-[700] text-blue-700 uppercase tracking-[0.09em]">Customer Message Draft</span>
+                                <div className="flex items-center gap-1.5">
+                                  <button
+                                    onClick={() => {
+                                      setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, draft: undefined } : m));
+                                      setDraftExpanded(prev => ({ ...prev, [msg.id]: true }));
+                                    }}
+                                    className="text-blue-400 hover:text-blue-600 transition-colors text-[11px] font-medium mr-1"
+                                    title="Regenerate with different context"
+                                  >
+                                    Redo
+                                  </button>
+                                  <button
+                                    onClick={() => setCollapsedPanels(prev => ({ ...prev, [`${msg.id}-draft`]: !prev[`${msg.id}-draft`] }))}
+                                    className="text-blue-400 hover:text-blue-600 transition-colors"
+                                    title="Toggle"
+                                  >
+                                    <svg
+                                      width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5"
+                                      className={`shrink-0 transition-transform ${collapsedPanels[`${msg.id}-draft`] ? '-rotate-90' : ''}`}
+                                    >
+                                      <path d="M2 4l4 4 4-4" />
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(editedDrafts[msg.id] ?? msg.draft!);
+                                      setCopiedDraft(prev => ({ ...prev, [msg.id]: true }));
+                                      setTimeout(() => setCopiedDraft(prev => ({ ...prev, [msg.id]: false })), 2000);
+                                    }}
+                                    className="text-blue-400 hover:text-blue-600 transition-colors"
+                                    title="Copy to clipboard"
+                                  >
+                                    {copiedDraft[msg.id] ? (
+                                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M3 8l4 4 6-6" />
+                                      </svg>
+                                    ) : (
+                                      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                                        <rect x="5" y="5" width="8" height="8" rx="1" />
+                                        <path d="M11 5V3H3v8h2" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
+                              {!collapsedPanels[`${msg.id}-draft`] && (
+                                <div className="px-4 pb-3.5">
+                                  <textarea
+                                    value={editedDrafts[msg.id] ?? msg.draft ?? ''}
+                                    onChange={e => setEditedDrafts(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                                    rows={Math.max(4, ((editedDrafts[msg.id] ?? msg.draft ?? '').match(/\n/g) || []).length + 2)}
+                                    className="w-full text-[13.5px] leading-[1.7] text-blue-900 whitespace-pre-wrap bg-transparent resize-none focus:outline-none focus:ring-1 focus:ring-blue-200 rounded-lg p-0"
+                                  /></div>
+                              )}
+                            </div>
+                          ) : draftExpanded[msg.id] ? (
+                            /* Expanded: context input form */
+                            <div className="mt-2 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+                              <div className="px-4 pt-3.5 pb-1 flex items-center gap-2 border-b border-gray-100">
+                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-400 shrink-0">
+                                  <path d="M10 2l2 2-7 7H3v-2l7-7z" />
+                                </svg>
+                                <span className="text-[11px] font-[700] text-gray-500 uppercase tracking-[0.09em]">Frame a response</span>
+                              </div>
+                              <div className="px-4 py-3.5 space-y-3">
+                                <div>
+                                  <label className="block text-[12px] font-[600] text-gray-500 mb-1.5">
+                                    Add context <span className="text-gray-400 font-normal">(optional)</span>
+                                  </label>
+                                  <textarea
+                                    autoFocus
+                                    rows={2}
+                                    value={draftContext[msg.id] || ''}
+                                    onChange={e => setDraftContext(prev => ({ ...prev, [msg.id]: e.target.value }))}
+                                    placeholder="e.g. User already tried reinstalling the app · This is a premium investor · User is frustrated, second time reaching out…"
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[13px] text-[#111827] placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 focus:border-[#2d9e4f]/50 resize-none leading-relaxed transition"
+                                  />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => fetchDraft(msg.id, msg.content, msg.formAnswers, draftContext[msg.id])}
+                                    disabled={draftLoading[msg.id]}
+                                    className="flex items-center gap-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-[12.5px] font-[600] px-4 py-2 rounded-lg transition disabled:opacity-40"
+                                  >
+                                    {draftLoading[msg.id] ? (
+                                      <>
+                                        <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin">
+                                          <path d="M8 2a6 6 0 1 0 6 6" />
+                                        </svg>
+                                        Drafting…
+                                      </>
+                                    ) : (
+                                      <>Generate draft →</>
+                                    )}
+                                  </button>
+                                  <button
+                                    onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: false }))}
+                                    className="text-[12px] text-gray-400 hover:text-gray-600 px-2 py-2 transition"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            /* Fix 15 — Frame a response as primary CTA inside Zone A */
+                            <div className="flex justify-end mt-2">
+                              <button
+                                onClick={() => setDraftExpanded(prev => ({ ...prev, [msg.id]: true }))}
+                                disabled={draftLoading[msg.id]}
+                                className="rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50 cursor-pointer"
+                                style={{ backgroundColor: 'var(--color-text-primary)', color: 'var(--color-background-primary)' }}
+                              >
+                                {draftLoading[msg.id] ? 'Drafting…' : 'Frame a response →'}
+                              </button>
+                            </div>
+                          )
+                        );
+
+                        if (hasZones) {
+                          return (
+                            <div className="flex flex-col gap-3 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)] p-3">
+                              {/* Fix 11 — Zone A: Tell the user */}
+                              <div style={{ background: 'color-mix(in srgb, var(--color-background-info) 30%, transparent)', borderLeft: '3px solid var(--color-border-info)', borderRadius: 8 }} className="px-4 py-3">
+                                <p style={{ color: 'var(--color-text-info)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Tell the User</p>
+                                <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneA)}</div>
+                                {/* Fix 15 — Frame a response CTA inside Zone A */}
+                                {frameAResponseSection}
+                              </div>
+
+                              {/* Fix 11 — Zone B: Agent actions */}
+                              {zoneBSteps.length > 0 && (
+                                <div style={{ background: 'var(--color-background-secondary)', borderLeft: '3px solid var(--color-border-secondary)', borderRadius: 8 }} className="px-4 py-3">
+                                  <p style={{ color: 'var(--color-text-secondary)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Agent Actions</p>
+                                  {/* Fix 12 — step checkboxes */}
+                                  {zoneBSteps.map((step, idx) => {
+                                    const isChecked = checkedSteps[msg.id]?.has(idx) ?? false;
+                                    return (
+                                      <div key={idx} className="flex items-start gap-2.5 py-1" style={{ opacity: isChecked ? 0.5 : 1 }}>
+                                        <button
+                                          onClick={() => toggleStep(msg.id, idx)}
+                                          className="mt-0.5 shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
+                                          style={{ borderColor: isChecked ? 'var(--color-border-success)' : 'var(--color-border-secondary)', background: isChecked ? 'var(--color-background-success)' : 'transparent' }}
+                                        >
+                                          {isChecked && <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="var(--color-text-success)" strokeWidth="2.5"><polyline points="1.5 6 4.5 9 10.5 3" /></svg>}
+                                        </button>
+                                        <span style={{ textDecoration: isChecked ? 'line-through' : 'none', color: 'var(--color-text-primary)' }} className="text-sm leading-relaxed">{step}</span>
+                                      </div>
+                                    );
+                                  })}
+                                  <button onClick={() => clearSteps(msg.id)} className="text-[11px] mt-2" style={{ color: 'var(--color-text-tertiary)' }}>Reset steps</button>
+                                </div>
+                              )}
+
+                              {/* Fix 11 — Zone C: Escalation */}
+                              {zoneC && (
+                                <div style={{ background: 'color-mix(in srgb, var(--color-background-warning) 30%, transparent)', borderLeft: '3px solid var(--color-border-warning)', borderRadius: 8 }} className="px-4 py-3">
+                                  <p style={{ color: 'var(--color-text-warning)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Escalation — only if needed</p>
+                                  <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneC)}</div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // No zones — original single-block render
+                        return (
+                          <>
+                            <div className="px-6 py-5 rounded-2xl rounded-tl-sm bg-white border border-gray-200/80 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">
+                              {renderContent(msg.content)}
+                            </div>
+                            {/* Frame a response for non-zoned process messages */}
+                            {isProcess && frameAResponseSection}
+                          </>
+                        );
+                      })()}
+
+                      {/* Flag & Correct button — available on all process answers */}
+                      {msg.queryType === 'process' && !msg.showCorrectionPanel && (
+                        <button
+                          onClick={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, showCorrectionPanel: true } : m))}
+                          className="mt-3 flex items-center gap-2 text-[12px] text-gray-400 hover:text-red-500 border border-gray-200 hover:border-red-300 rounded-lg px-3 py-1.5 transition-colors bg-white"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="shrink-0">
+                            <path d="M3 2v12M3 2l10 5-10 5" />
+                          </svg>
+                          Flag & Correct
+                        </button>
+                      )}
+
+                      {/* Correction panel */}
+                      {msg.showCorrectionPanel && (
+                        <CorrectionPanel
+                          originalQuery={messages.find(m => m.role === 'user' && messages.indexOf(m) < messages.indexOf(msg))?.content || ''}
+                          originalAnswer={msg.content}
+                          sourceChunks={msg.sourceChunks || []}
+                          formAnswers={msg.formAnswers}
+                          category={msg.category}
+                          onClose={() => setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, showCorrectionPanel: false } : m))}
+                        />
+                      )}
+                    </>
+                  )}
+
+                </div>
               </div>
-            </div>
-          ))
-        )}
-        <div ref={bottomRef} />
+            ))
+          )}
+          <div ref={bottomRef} />
         </div>{/* end max-w-4xl centered column */}
       </div>
 
@@ -1172,7 +1170,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                 className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-500 text-white flex items-center justify-center hover:bg-gray-700 transition-colors"
               >
                 <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M1 1l6 6M7 1L1 7"/>
+                  <path d="M1 1l6 6M7 1L1 7" />
                 </svg>
               </button>
             </div>
@@ -1195,9 +1193,9 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
             className="shrink-0 p-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-400 hover:text-[#2d9e4f] hover:border-[#2d9e4f]/50 hover:bg-[#2d9e4f]/5 transition-all disabled:opacity-30"
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="1" y="3" width="14" height="10" rx="1.5"/>
-              <circle cx="5.5" cy="7" r="1.5"/>
-              <path d="M1 11l4-3.5 3 2.5 2.5-2 4.5 3.5"/>
+              <rect x="1" y="3" width="14" height="10" rx="1.5" />
+              <circle cx="5.5" cy="7" r="1.5" />
+              <path d="M1 11l4-3.5 3 2.5 2.5-2 4.5 3.5" />
             </svg>
           </button>
           <textarea
@@ -1220,7 +1218,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
             className="bg-[#2d9e4f] hover:bg-[#27883f] disabled:opacity-30 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl transition-all flex items-center gap-2 text-sm font-semibold shrink-0 shadow-sm"
           >
             <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z"/>
+              <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z" />
             </svg>
             Send
           </button>

@@ -506,7 +506,7 @@ Score this chat across all 12 parameters. Output ONLY the JSON.`;
 
 // ── Parse LLM response ───────────────────────────────────────────────────────
 /** Sanitize a JSON string: fix unescaped newlines/tabs/quotes inside string values. */
-function sanitizeJson(s: string): string {
+export function sanitizeJson(s: string): string {
   // Replace literal newlines/tabs inside JSON string values (between quotes) with escaped versions
   return s.replace(/("(?:[^"\\]|\\.)*")/g, (match) =>
     match
@@ -517,35 +517,45 @@ function sanitizeJson(s: string): string {
 }
 
 /** Try multiple strategies to parse LLM JSON response. */
-function robustJsonParse(raw: string): any {
-  let jsonStr = raw.trim();
+export function robustJsonParse(raw: string): any {
+  if (!raw?.trim()) return null;
+  let s = raw.trim();
 
   // 1. Extract from markdown code block if present
-  const block = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (block) jsonStr = block[1].trim();
-  else {
-    const start = jsonStr.indexOf('{');
-    const end = jsonStr.lastIndexOf('}');
-    if (start >= 0 && end > start) jsonStr = jsonStr.slice(start, end + 1);
-  }
+  const block = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (block) s = block[1].trim();
 
   // 2. Try direct parse
-  try { return JSON.parse(jsonStr); } catch {}
+  try { return JSON.parse(s); } catch {}
 
-  // 3. Sanitize unescaped control chars and retry
-  try { return JSON.parse(sanitizeJson(jsonStr)); } catch {}
+  // 3. Try to extract outermost object { }
+  const oa = s.indexOf('{'), ob = s.lastIndexOf('}');
+  if (oa >= 0 && ob > oa) {
+    const candidate = s.slice(oa, ob + 1);
+    try { return JSON.parse(candidate); } catch {}
+    try { return JSON.parse(sanitizeJson(candidate)); } catch {}
+    try { return JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1')); } catch {}
+  }
 
-  // 4. Last resort: extract scores block with regex so we at least get pass/fail
-  const scoresMatch = jsonStr.match(/"scores"\s*:\s*(\{[^}]+\})/);
+  // 4. Try to extract outermost array [ ]
+  const aa = s.indexOf('['), ab = s.lastIndexOf(']');
+  if (aa >= 0 && ab > aa) {
+    const candidate = s.slice(aa, ab + 1);
+    try { return JSON.parse(candidate); } catch {}
+    try { return JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1')); } catch {}
+  }
+
+  // 5. Last resort: extract scores block with regex so we at least get pass/fail
+  const scoresMatch = s.match(/"scores"\s*:\s*(\{[^}]+\})/);
   if (scoresMatch) {
     try {
       const scores = JSON.parse(scoresMatch[1]);
-      const summaryMatch = jsonStr.match(/"summary"\s*:\s*"([^"]+)"/);
+      const summaryMatch = s.match(/"summary"\s*:\s*"([^"]+)"/);
       return { scores, summary: summaryMatch?.[1] || '', reasoning: {}, agentName: '' };
     } catch {}
   }
 
-  throw new Error(`Cannot parse LLM scoring response: ${jsonStr.slice(0, 200)}`);
+  throw new Error(`Cannot parse response: ${s.slice(0, 300)}`);
 }
 
 export function parseScoringResponse(raw: string, chatId: string, conversationType?: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> & { extractedAgentName?: string } {
@@ -584,4 +594,22 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     ...(uncertainParameters && { uncertainParameters }),
     ...(kbCitation && { kbCitation }),
   };
+}
+
+// ── Shared UI Helpers ──────────────────────────────────────────────────────────
+
+export function fmtDuration(secs: number | undefined | null): string {
+  if (secs == null || secs < 0) return '—';
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  if (secs < 3600) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  const h = Math.floor(secs / 3600), rm = Math.floor((secs % 3600) / 60);
+  return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+}
+
+export function iqsTheme(iqs: number) {
+  if (iqs >= 90) return { text: '#15803d', bg: '#dcfce7', bar: '#22c55e', label: 'Excellent' };
+  if (iqs >= 80) return { text: '#b45309', bg: '#fef3c7', bar: '#f59e0b', label: 'Good' };
+  if (iqs >= 70) return { text: '#c2410c', bg: '#ffedd5', bar: '#f97316', label: 'Average' };
+  return { text: '#b91c1c', bg: '#fee2e2', bar: '#ef4444', label: 'At Risk' };
 }

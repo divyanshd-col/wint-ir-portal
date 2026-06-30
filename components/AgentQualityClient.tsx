@@ -2,27 +2,15 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, fmtDuration, iqsTheme } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
+import TranscriptBubbles, { renderContentWithLinks } from '@/components/quality/TranscriptBubbles';
+import { IQSRing, IQSPill } from '@/components/quality/IQSRing';
+import ParamBadge from '@/components/quality/ParamBadge';
+import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function fmtDuration(secs: number | undefined | null): string {
-  if (secs == null || secs < 0) return '—';
-  if (secs < 60) return `${secs}s`;
-  const m = Math.floor(secs / 60), s = secs % 60;
-  if (secs < 3600) return s > 0 ? `${m}m ${s}s` : `${m}m`;
-  const h = Math.floor(secs / 3600), rm = Math.floor((secs % 3600) / 60);
-  return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
-}
-
-function iqsTheme(iqs: number) {
-  if (iqs >= 90) return { text: '#15803d', bg: '#dcfce7', bar: '#22c55e', label: 'Excellent' };
-  if (iqs >= 80) return { text: '#92400e', bg: '#fef3c7', bar: '#f59e0b', label: 'Good' };
-  if (iqs >= 70) return { text: '#c2410c', bg: '#ffedd5', bar: '#f97316', label: 'Average' };
-  return { text: '#b91c1c', bg: '#fee2e2', bar: '#ef4444', label: 'Needs Work' };
-}
 
 function csatLabel(c?: string) {
   if (c === '5') return { label: 'Good',  cls: 'bg-emerald-50 text-emerald-700' };
@@ -37,119 +25,6 @@ function TypeBadge({ type }: { type?: string }) {
   return                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">Human</span>;
 }
 
-// ── IQS Ring ──────────────────────────────────────────────────────────────────
-function IQSRing({ iqs, size = 52 }: { iqs: number; size?: number }) {
-  const t = iqsTheme(iqs);
-  const r = (size - 6) / 2;
-  const circ = 2 * Math.PI * r;
-  const dash = (iqs / 100) * circ;
-  return (
-    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#f1f5f9" strokeWidth={5} />
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={t.bar} strokeWidth={5}
-          strokeDasharray={`${dash} ${circ}`} strokeLinecap="round" />
-      </svg>
-      <span className="absolute text-xs font-bold tabular-nums" style={{ color: t.text }}>{iqs}</span>
-    </div>
-  );
-}
-
-function IQSPill({ iqs }: { iqs: number }) {
-  const t = iqsTheme(iqs);
-  return (
-    <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold tabular-nums"
-      style={{ background: t.bg, color: t.text }}>{iqs}%</span>
-  );
-}
-
-function ParamBadge({ val }: { val: string | undefined }) {
-  if (val === 'Yes') return <span className="text-emerald-500 font-bold text-sm">✓</span>;
-  if (val === 'No')  return <span className="text-red-500 font-bold text-sm">✗</span>;
-  return <span className="text-gray-300 text-sm">—</span>;
-}
-
-// ── Transcript bubbles ────────────────────────────────────────────────────────
-const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
-const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
-
-function renderContentWithLinks(text: string, isOutgoing?: boolean) {
-  if (!text) return '';
-  const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
-  const parts = text.split(urlRegex);
-  if (parts.length === 1) return text;
-
-  const linkClass = isOutgoing
-    ? "underline text-white font-medium hover:opacity-90 break-all"
-    : "underline text-blue-600 font-medium hover:text-blue-800 break-all";
-
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={linkClass}
-        >
-          Link
-        </a>
-      );
-    }
-    return part;
-  });
-}
-
-function TranscriptBubbles({ messages }: { messages: Array<{ sender: string; content: string; timestamp?: string }> }) {
-  return (
-    <div className="space-y-2 py-1">
-      {messages.map((m, i) => {
-        const lc = (m.sender || '').toLowerCase().trim();
-        const isCustomer = CUSTOMER_LABELS.has(lc);
-        const isBot = BOT_NAMES.has(lc);
-        const isActivity = lc === 'activity' || lc === 'system';
-        const time = m.timestamp
-          ? new Date(m.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-          : '';
-        if (isActivity) return (
-          <div key={i} className="flex justify-center my-2">
-            <span className="text-[11px] text-gray-400 bg-gray-100 rounded-full px-3 py-1 font-sans italic border border-gray-200">
-              {m.content}{time && `  •  ${time}`}
-            </span>
-          </div>
-        );
-        if (isCustomer) return (
-          <div key={i} className="flex gap-2">
-            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center shrink-0 mt-1">
-              <span className="text-[9px] font-bold text-gray-500">U</span>
-            </div>
-            <div className="max-w-[78%]">
-              <p className="text-[9px] font-semibold text-gray-400 mb-0.5">{m.sender}{time && ` · ${time}`}</p>
-              <div className="bg-gray-100 text-gray-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-xs leading-relaxed font-sans">{renderContentWithLinks(m.content, false)}</div>
-            </div>
-          </div>
-        );
-        if (isBot) return (
-          <div key={i} className="flex justify-end gap-2">
-            <div className="max-w-[78%]">
-              <p className="text-[9px] font-semibold text-violet-400 text-right mb-0.5 pr-1">{m.sender}{time && ` · ${time}`}</p>
-              <div className="bg-violet-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed font-sans">{renderContentWithLinks(m.content, true)}</div>
-            </div>
-          </div>
-        );
-        return (
-          <div key={i} className="flex justify-end gap-2">
-            <div className="max-w-[78%]">
-              <p className="text-[9px] font-semibold text-emerald-600 text-right mb-0.5 pr-1">{m.sender}{time && ` · ${time}`}</p>
-              <div className="bg-emerald-500 text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-xs leading-relaxed font-sans">{renderContentWithLinks(m.content, true)}</div>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── Challenge modal ───────────────────────────────────────────────────────────
 function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onClose: () => void; onDone: () => void }) {
@@ -267,6 +142,7 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
 function ScoreDetailModal({ entry, flagged, onClose }: { entry: IQSScoreEntry; flagged: boolean; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<'scores' | 'transcript'>('scores');
   const [transcript, setTranscript] = useState<{ timedMessages?: any[]; rawTranscript?: string } | null>(null);
+  const [callRecordings, setCallRecordings] = useState<any[]>([]);
   const [txLoading, setTxLoading] = useState(false);
   const [txError, setTxError] = useState('');
   const [showChallenge, setShowChallenge] = useState(false);
@@ -278,7 +154,15 @@ function ScoreDetailModal({ entry, flagged, onClose }: { entry: IQSScoreEntry; f
     setTxLoading(true); setTxError('');
     fetch(`/api/quality/transcript?chatId=${encodeURIComponent(entry.chatId)}`)
       .then(r => r.json())
-      .then(d => { if (d.found) setTranscript({ timedMessages: d.timedMessages, rawTranscript: d.rawTranscript }); else setTranscript({}); })
+      .then(d => {
+        if (d.found) {
+          setTranscript({ timedMessages: d.timedMessages, rawTranscript: d.rawTranscript });
+          setCallRecordings(d.callRecordings || []);
+        } else {
+          setTranscript({});
+          setCallRecordings([]);
+        }
+      })
       .catch(() => setTxError('Failed to load transcript'))
       .finally(() => setTxLoading(false));
   }, [activeTab, entry.chatId, transcript]);
@@ -405,7 +289,7 @@ function ScoreDetailModal({ entry, flagged, onClose }: { entry: IQSScoreEntry; f
             )}
 
             {activeTab === 'transcript' && (
-              <div className="px-6 py-5">
+              <div className="px-6 py-5 space-y-6 overflow-y-auto max-h-[70vh]">
                 {txLoading && (
                   <div className="flex items-center justify-center py-12 text-gray-400 gap-2 text-sm">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" className="animate-spin"><path d="M8 2a6 6 0 1 0 6 6"/></svg>
@@ -413,22 +297,23 @@ function ScoreDetailModal({ entry, flagged, onClose }: { entry: IQSScoreEntry; f
                   </div>
                 )}
                 {txError && <p className="text-sm text-red-500 text-center py-8">{txError}</p>}
-                {!txLoading && !txError && transcript !== null && (
-                  transcript?.timedMessages && transcript.timedMessages.length > 0 ? (
-                    <>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-4">{transcript.timedMessages.length} messages</p>
-                      <TranscriptBubbles messages={transcript.timedMessages} />
-                    </>
-                  ) : transcript?.rawTranscript ? (
-                    <>
-                      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Raw Transcript</p>
-                      <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{renderContentWithLinks(transcript.rawTranscript, false)}</pre>
-                    </>
-                  ) : (
-                    <div className="text-center py-12">
-                      <p className="text-sm text-gray-400">No transcript saved for this chat.</p>
-                    </div>
-                  )
+                {!txLoading && !txError && (
+                  <>
+                    {transcript !== null && (
+                      (transcript.timedMessages && transcript.timedMessages.length > 0) || (callRecordings && callRecordings.length > 0) ? (
+                        <TranscriptBubbles messages={transcript.timedMessages || []} callRecordings={callRecordings} />
+                      ) : transcript.rawTranscript ? (
+                        <>
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Raw Transcript</p>
+                          <pre className="text-xs text-gray-600 bg-gray-50 rounded-xl px-4 py-3 whitespace-pre-wrap leading-relaxed font-sans">{renderContentWithLinks(transcript.rawTranscript, false)}</pre>
+                        </>
+                      ) : (
+                        <div className="text-center py-12">
+                          <p className="text-sm text-gray-400">No transcript saved for this chat.</p>
+                        </div>
+                      )
+                    )}
+                  </>
                 )}
               </div>
             )}
