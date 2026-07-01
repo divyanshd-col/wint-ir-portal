@@ -190,10 +190,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const baseWhere = reviewedMode
     ? `c.tags->>'disposition' = ANY($1)
-       AND i.status = 'reviewed'`
+       AND i.status = 'reviewed'
+       AND i.iqs_score <= 85`
     : `c.tags->>'disposition' = ANY($1)
        AND i.status IN ('pending', 'reopened')
-       AND i.iqs_score IS NOT NULL`;
+       AND i.iqs_score IS NOT NULL
+       AND i.iqs_score <= 85`;
 
   log.info(ROUTE, 'query-plan', {
     role, email,
