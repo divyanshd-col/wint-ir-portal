@@ -114,6 +114,20 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
         )}
         {isAdmin && (
           <NavLink
+            href="/tl/member-analytics"
+            label="Member Analytics"
+            icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="6" cy="5" r="2.5" />
+                <path d="M1 14c0-2.8 2.2-5 5-5" />
+                <circle cx="11.5" cy="9" r="2" />
+                <path d="M8.5 14c0-1.7 1.3-3 3-3s3 1.3 3 3" />
+              </svg>
+            }
+          />
+        )}
+        {isAdmin && (
+          <NavLink
             href="/settings"
             label="Settings"
             icon={
