@@ -15,6 +15,7 @@ const NAV_ALL = [
   { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', roles: ['admin', 'quality'] },
   { label: 'Call Evaluation',  href: '/quality/call-evaluation', roles: ['admin', 'quality'] },
   { label: 'Team Chats',       href: '/quality/tl-evaluation',  roles: ['admin', 'tl'] },
+  { label: 'Member Analytics', href: '/tl/member-analytics',    roles: ['admin'] },
 ];
 
 const BarChartIcon = () => (
@@ -38,12 +39,18 @@ const UsersIcon = () => (
     <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
   </svg>
 );
+const UserIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+  </svg>
+);
 
 const NAV_ICONS: Record<string, () => React.ReactElement> = {
   '/quality':                BarChartIcon,
   '/quality/chat-evaluation': ChatIcon,
   '/quality/call-evaluation': PhoneIcon,
   '/quality/tl-evaluation':   UsersIcon,
+  '/tl/member-analytics':     UserIcon,
 };
 
 const ROLE_LABELS: Record<string, string> = {
