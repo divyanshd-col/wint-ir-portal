@@ -37,7 +37,7 @@ function initials(name: string) {
   return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?';
 }
 
-export default function TLShell({ name, children }: Props) {
+export default function TLShell({ role, name, children }: Props) {
   const pathname = usePathname();
 
   return (
@@ -65,7 +65,7 @@ export default function TLShell({ name, children }: Props) {
             fontSize: 12, fontWeight: 500,
           }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--qa-text)' }} />
-            Team Lead
+            {role === 'admin' ? 'Admin' : 'Team Lead'}
           </span>
         </div>
 
@@ -93,7 +93,7 @@ export default function TLShell({ name, children }: Props) {
             fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
             color: 'var(--qa-text-3)', padding: '12px 16px 6px',
           }}>
-            Team Lead
+            {role === 'admin' ? 'Admin' : 'Team Lead'}
           </div>
 
           {NAV.map((item, i) => {
