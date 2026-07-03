@@ -376,8 +376,9 @@ export default function EvalPanel({
   // ── Transcript helpers ────────────────────────────────────────────────────
   const BOT_NAMES  = new Set(['bot', 'myra', 'wint bot', 'wintbot', 'robylon', 'robylon ai']);
   const USER_NAMES = new Set(['user', 'customer', 'visitor']);
-  function senderType(s: string): 'user' | 'bot' | 'agent' | 'system' {
-    const sl = s.toLowerCase();
+  function senderType(s: string): 'user' | 'bot' | 'agent' | 'system' | 'private_note' {
+    const sl = (s || '').toLowerCase();
+    if (sl === 'private note') return 'private_note';
     if (sl === 'system' || sl === 'activity') return 'system';
     if (USER_NAMES.has(sl))  return 'user';
     if (BOT_NAMES.has(sl))   return 'bot';
@@ -953,6 +954,36 @@ export default function EvalPanel({
                             maxWidth: '90%', lineHeight: 1.5,
                           }}>
                             {msg.content}{systemTime}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    if (type === 'private_note') {
+                      const noteTime = msg.timestamp
+                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        : '';
+                      return (
+                        <div key={idx} style={{
+                          marginTop: gap + 'px',
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          width: '100%',
+                          alignSelf: 'flex-end',
+                        }}>
+                          <div style={{
+                            background: '#fffbeb', border: '1px dashed #f59e0b',
+                            borderRadius: 8, fontSize: 12,
+                            color: '#78350f', padding: '10px 14px', display: 'inline-block',
+                            maxWidth: '76%', lineHeight: 1.5,
+                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                          }}>
+                            <div style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#b45309', marginBottom: 4 }}>
+                              Private Note (Robylon AI){noteTime}
+                            </div>
+                            <div style={{ fontStyle: 'italic' }}>
+                              {msg.content}
+                            </div>
                           </div>
                         </div>
                       );

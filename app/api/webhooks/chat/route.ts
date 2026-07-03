@@ -83,6 +83,16 @@ function messagesToTranscript(messages: RobyMessage[]): string {
     const sender  = m.sender || m.role || '';
     const content = (m.content || m.text || '').trim();
     if (!content) continue;
+
+    const isPrivateNote =
+      (sender === 'Robylon AI' || (m as any).sender_name === 'Robylon AI' || (m as any).agent_name === 'Robylon AI') &&
+      (m.role === 'agent' || m.role === 'Agent' || (m as any).sender_type === 'agent' || (m as any).sender_type === 'Agent' || (m as any).agent_type === 'agent' || (m as any).agent_type === 'Agent');
+
+    if (isPrivateNote) {
+      lines.push(`Private Note: ${content}`);
+      continue;
+    }
+
     const low = content.toLowerCase();
     if (low.includes('auto-assigned') || low.includes('assigned by') ||
         low.includes('waiting to assign') || low.includes('please rate your experience') ||
@@ -100,6 +110,17 @@ export function transcriptFromJsonb(messages: any[]): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
   for (const m of messages) {
+    const isPrivateNote =
+      m.is_private === true ||
+      ((m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI' || m.sender === 'Robylon AI') &&
+       (m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent' || m.role === 'agent' || m.role === 'Agent'));
+
+    if (isPrivateNote) {
+      const content = (m.content || '').trim();
+      if (content) lines.push(`Private Note: ${content}`);
+      continue;
+    }
+
     if (m.sender_name === 'Robylon AI' && m.sender_type === 'agent') continue;
     if (m.sender_type === 'activity') continue;
     const role = m.sender_type === 'customer' ? 'Customer'
@@ -534,6 +555,23 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     const sender  = (m.sender || m.role || '').trim();
     const content = (m.content || m.text || '').trim();
     if (!content) continue;
+
+    const isPrivateNote =
+      (sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
+      (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
+
+    if (isPrivateNote) {
+      const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+      transcriptForStorage.push({
+        sender_type: 'agent',
+        sender_name: 'Robylon AI',
+        content,
+        timestamp: isoTs,
+        is_private: true,
+      });
+      continue;
+    }
+
     const low = content.toLowerCase();
     if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
       const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
@@ -753,6 +791,22 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
       const sender  = m.sender || m.role || '';
       const content = (m.content || m.text || '').trim();
       if (!content) continue;
+
+      const isPrivateNote =
+        (sender === 'Robylon AI' || (m as any).sender_name === 'Robylon AI' || (m as any).agent_name === 'Robylon AI') &&
+        (m.role === 'agent' || m.role === 'Agent' || (m as any).sender_type === 'agent' || (m as any).sender_type === 'Agent' || (m as any).agent_type === 'agent' || (m as any).agent_type === 'Agent');
+
+      if (isPrivateNote) {
+        transcriptForStorage.push({
+          sender_type: 'agent',
+          sender_name: 'Robylon AI',
+          content,
+          timestamp: m.timestamp,
+          is_private: true,
+        });
+        continue;
+      }
+
       const low = content.toLowerCase();
       if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
         transcriptForStorage.push({

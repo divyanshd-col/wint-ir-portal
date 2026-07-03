@@ -92,7 +92,10 @@ const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
 
 function isCustomer(sender: string) { return CUSTOMER_LABELS.has(sender.toLowerCase()); }
 function isBot(sender: string) { return BOT_NAMES.has(sender.toLowerCase()); }
-function isHumanAgent(sender: string) { return !isCustomer(sender) && !isBot(sender); }
+function isHumanAgent(sender: string) {
+  const low = (sender || '').toLowerCase();
+  return !isCustomer(sender) && !isBot(sender) && low !== 'private note';
+}
 
 export interface TimedMessage {
   sender: string;
@@ -227,11 +230,11 @@ The KB mentions "Skip Instalment" as an option before cancellation, but this is 
 - If the customer never requested a call AND the agent calls without any business reason → this IS a process violation (score Process No and note it clearly).
 - When you cannot determine whether a call happened at all, score Call as NA and add to \`uncertain_parameters\`.
 
-### Internal Notes, Slack Links, and Internal References
-Transcripts sometimes contain internal Slack links, internal tool URLs, internal notes, or references to internal systems (e.g. Finder links, Slack thread URLs, internal escalation notes).
-- These are **internal agent notes** — they are NOT sent to the customer and are not part of the customer-facing response.
-- Do NOT penalize any parameter (Technical, Process, Sentences, Grammar, etc.) based on the presence of internal links or notes.
-- Evaluate the agent only on what they communicated to the customer, not on internal working notes visible in the transcript.
+### Internal Notes, Private Notes, Slack Links, and Internal References
+Transcripts sometimes contain internal Slack links, internal tool URLs, internal notes, private notes (indicated as "Private Note: [content]"), or references to internal systems.
+- These are **internal working notes** — they are NOT sent to the customer and are not part of the customer-facing response.
+- Do NOT judge, penalize, or evaluate the agent on any parameter based on the presence of these internal links, references, or private notes. Use private notes only for context.
+- Evaluate the agent only on what they communicated to the customer, not on internal working notes or private notes visible in the transcript.
 
 ### Screenshots and Media Shared in Chat
 When images are provided alongside the transcript, they are screenshots or other media shared by the customer or agent during the chat.

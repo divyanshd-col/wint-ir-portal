@@ -35,15 +35,27 @@ function isInternalAnnotation(senderName: string, content: string): boolean {
 }
 
 function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: string; timestamp?: string }[] {
-  return messages.map((m: any) => ({
-    sender: m.sender_type === 'customer' ? 'user'
-          : m.sender_type === 'bot'      ? 'bot'
-          : m.sender_type === 'activity' ? 'activity'
-          : (m.sender_name || 'Agent'),
-    content: normalizeContent(m.content || m.text || ''),
-    senderName: m.sender_name || m.sender || '',
-    timestamp: m.timestamp,
-  })).filter(m => m.content && !isInternalAnnotation(m.senderName, m.content));
+  return messages.map((m: any) => {
+    const isPrivateNote =
+      m.is_private === true ||
+      ((m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI' || m.sender === 'Robylon AI') &&
+       (m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent' || m.role === 'agent' || m.role === 'Agent'));
+
+    return {
+      sender: isPrivateNote ? 'Private Note'
+            : m.sender_type === 'customer' ? 'user'
+            : m.sender_type === 'bot'      ? 'bot'
+            : m.sender_type === 'activity' ? 'activity'
+            : (m.sender_name || 'Agent'),
+      content: normalizeContent(m.content || m.text || ''),
+      senderName: m.sender_name || m.sender || '',
+      timestamp: m.timestamp,
+    };
+  }).filter(m => {
+    if (!m.content) return false;
+    if (m.sender === 'Private Note') return true;
+    return !isInternalAnnotation(m.senderName, m.content);
+  });
 }
 
 function parseRobyTimestamp(ts: string, year: number): string {
@@ -153,6 +165,22 @@ export async function GET(req: NextRequest) {
               const sender = (m.sender || '').trim();
               const content = (m.content || m.text || '').trim();
               if (!content) return null;
+
+              const isPrivateNote =
+                (sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
+                (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
+
+              if (isPrivateNote) {
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                return {
+                  sender_type: 'agent',
+                  sender_name: 'Robylon AI',
+                  content,
+                  timestamp: isoTs,
+                  is_private: true,
+                };
+              }
+
               const low = content.toLowerCase();
               if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
                 const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
@@ -235,6 +263,22 @@ export async function GET(req: NextRequest) {
               const sender = (m.sender || '').trim();
               const content = (m.content || m.text || '').trim();
               if (!content) return null;
+
+              const isPrivateNote =
+                (sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
+                (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
+
+              if (isPrivateNote) {
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                return {
+                  sender_type: 'agent',
+                  sender_name: 'Robylon AI',
+                  content,
+                  timestamp: isoTs,
+                  is_private: true,
+                };
+              }
+
               const low = content.toLowerCase();
 
               if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
