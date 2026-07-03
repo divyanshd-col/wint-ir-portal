@@ -177,7 +177,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
             <th style={th}>Chat ID</th>
             <th style={th}>Agent</th>
             <th style={th}>Disputed By</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS (Chat)</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS (Call)</th>
+            <th style={th}>Call Transcript</th>
             <th style={th}>CSAT</th>
             <th style={{ ...th, textAlign: 'right' }}>Actions</th>
           </tr>
@@ -186,7 +188,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
           {loading ? (
             Array.from({ length: 3 }).map((_, i) => (
               <tr key={i}>
-                {Array.from({ length: 6 }).map((_, j) => (
+                {Array.from({ length: 8 }).map((_, j) => (
                   <td key={j} style={td}>
                     <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '30%' : '60%' }} />
                   </td>
@@ -195,7 +197,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
             ))
           ) : visibleDisputes.length === 0 ? (
             <tr>
-              <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+              <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                 {disputes.length === 0 ? 'No disputes pending' : 'No disputes match the filter'}
               </td>
             </tr>
@@ -248,11 +250,40 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
                       fontFamily: 'ui-monospace, monospace',
-                      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-                      border: '1px solid var(--qa-border)',
+                      background: d.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                      color:      d.iqsScore < 60 ? '#b91c1c' : '#713f12',
                     }}>
                       {d.iqsScore}
                     </span>
+                  </td>
+                  <td style={tdNum}>
+                    {d.callIqsScore !== null ? (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
+                        fontFamily: 'ui-monospace, monospace',
+                        background: d.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                        color:      d.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                      }}>
+                        {d.callIqsScore}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                    )}
+                  </td>
+                  <td style={td}>
+                    {d.callTranscriptStatus === 'transcribed' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
+                        <span style={{ fontSize: 11 }}>✓</span> Transcribed
+                      </span>
+                    ) : d.callTranscriptStatus === 'pending' ? (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#ca8a04', fontWeight: 500 }}>
+                        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
+                        Pending
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>No Call</span>
+                    )}
                   </td>
                   <td style={td}>
                     {d.csatScore == null ? (
@@ -307,7 +338,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 {/* Thread panel */}
                 {threadId === d.flagId && (
                   <tr>
-                    <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+                    <td colSpan={8} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
                       <div style={{ padding: '16px 20px' }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text-2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
                           Dispute Thread
@@ -398,7 +429,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     }}
                     onDone={() => removeDispute(d.chatId)}
                     onClose={() => setExpandedId(null)}
-                    colSpan={6}
+                    colSpan={8}
                   />
                 )}
               </React.Fragment>

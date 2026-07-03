@@ -4,6 +4,14 @@ import { authOptions } from '@/auth';
 import { storeGetTranscript } from '@/lib/store';
 import { query } from '@/lib/cx/db';
 import { log } from '@/lib/log';
+import { readConfig } from '@/lib/config';
+import {
+  getAllCallRecordingsByChatId,
+  getCallRecordingsByConversationContact,
+  getCallRecordingsByContactWindow,
+  linkCallToChat,
+} from '@/lib/robylon/db';
+import { scoreLinkedCallsForChat, transcriptFromJsonb } from '@/app/api/webhooks/chat/route';
 
 const ROUTE = 'quality/transcript';
 
@@ -70,6 +78,107 @@ export async function GET(req: NextRequest) {
   try {
     const t0 = Date.now();
 
+    // Fetch conversation row first to obtain contact details, dates and tags
+    const convRows = await query<any>(
+      `SELECT transcript, raw_payload, closed_at, tags, contact_id, started_at FROM conversations WHERE id = $1`,
+      [chatId]
+    );
+
+    if (convRows.length > 0) {
+      const chatConv = convRows[0];
+
+      // Perform 3-stage call recording lookup
+      const seenIds = new Set<string>();
+      const allRecs: any[] = [];
+      
+      function addRecs(rows: any[]) {
+        for (const r of rows) {
+          if (r?.id && !seenIds.has(String(r.id))) {
+            seenIds.add(String(r.id));
+            allRecs.push(r);
+          }
+        }
+      }
+
+      try { addRecs(await getAllCallRecordingsByChatId(chatId)); } catch {}
+      try { addRecs(await getCallRecordingsByConversationContact(chatId)); } catch {}
+      if (chatConv?.contact_id) {
+        const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+        const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
+        try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd)); } catch {}
+      }
+
+      let needsScoring = false;
+      for (const r of allRecs) {
+        let isTranscribed = false;
+        if (r.transcript) {
+          try {
+            const parsed = typeof r.transcript === 'string' ? JSON.parse(r.transcript) : r.transcript;
+            isTranscribed = Array.isArray(parsed) && parsed.length > 0;
+          } catch {}
+        }
+        if (r.chat_id !== chatId) {
+          await linkCallToChat(r.id, chatId);
+          if (!isTranscribed && r.recording_url) {
+            needsScoring = true;
+          }
+        } else {
+          if (!isTranscribed && r.recording_url) {
+            await query(`UPDATE call_recordings SET status = 'linked' WHERE id = $1`, [r.id]);
+            needsScoring = true;
+          }
+        }
+      }
+
+      if (needsScoring) {
+        let messages: any[] = [];
+        let rawTranscript = chatConv.transcript;
+        if (typeof rawTranscript === 'string') {
+          try { rawTranscript = JSON.parse(rawTranscript); } catch { rawTranscript = null; }
+        }
+        if (Array.isArray(rawTranscript) && rawTranscript.length) {
+          messages = rawTranscript;
+        } else if (rawTranscript && Array.isArray(rawTranscript.messages) && rawTranscript.messages.length) {
+          messages = rawTranscript.messages;
+        }
+
+        const hasActivity = messages.some((m: any) => m.sender_type === 'activity');
+        if ((!messages.length || !hasActivity) && chatConv.raw_payload) {
+          const payload = chatConv.raw_payload;
+          const payloadMsgs = payload?.data?.transcript?.messages;
+          if (Array.isArray(payloadMsgs) && payloadMsgs.length) {
+            const closedAt = chatConv.closed_at;
+            const year = closedAt ? new Date(closedAt).getUTCFullYear() : new Date().getUTCFullYear();
+            messages = payloadMsgs.map((m: any) => {
+              const sender = (m.sender || '').trim();
+              const content = (m.content || m.text || '').trim();
+              if (!content) return null;
+              const low = content.toLowerCase();
+              if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                return { sender_type: 'activity', sender_name: 'system', content, timestamp: isoTs };
+              }
+              if (low.includes('please rate your experience') || m.buttons) return null;
+              const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+              const senderLow = sender.toLowerCase();
+              const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
+                               : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
+                               : 'agent';
+              return { sender_type: senderType, sender_name: sender, content, timestamp: isoTs };
+            }).filter(Boolean);
+          }
+        }
+
+        const timedMessages = dbMessagesToTimedMessages(messages);
+        const chatTranscriptText = transcriptFromJsonb(timedMessages);
+        const tags = chatConv.tags || {};
+        const disposition = tags.disposition || '';
+        const subDisposition = tags.sub_disposition || '';
+        const config = await readConfig();
+        await scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config);
+      }
+    }
+
     // Check KV first
     const kvData = await storeGetTranscript(chatId);
     if (kvData?.timedMessages?.length || kvData?.rawTranscript) {
@@ -94,14 +203,9 @@ export async function GET(req: NextRequest) {
     }
 
     // Fall back to DB: check transcript column, then raw_payload
-    const rows = await query<{ transcript: any; raw_payload: any; closed_at: any }>(
-      `SELECT transcript, raw_payload, closed_at FROM conversations WHERE id = $1`, [chatId]
-    );
-
+    const rows = convRows;
     let messages: any[] = [];
-
     if (rows.length > 0) {
-      // 1. conversations.transcript (stored by webhook handler)
       let rawTranscript = rows[0].transcript;
       if (typeof rawTranscript === 'string') {
         try { rawTranscript = JSON.parse(rawTranscript); } catch { rawTranscript = null; }
