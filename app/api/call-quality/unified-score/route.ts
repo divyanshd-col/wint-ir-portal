@@ -17,9 +17,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
-import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { getConversation, getAllCallRecordingsByChatId, getCallRecordingsByConversationContact, getCallRecordingsByContactWindow } from '@/lib/robylon/db';
+import {
+  getConversation,
+  getAllCallRecordingsByChatId,
+  getCallRecordingsByConversationContact,
+  getCallRecordingsByContactWindow,
+  linkCallToChat,
+} from '@/lib/robylon/db';
+import { query } from '@/lib/cx/db';
+import { scoreLinkedCallsForChat } from '@/app/api/webhooks/chat/route';
 import {
   CALL_DISPOSITION_PROMPT,
   CALL_IQS_SYSTEM_PROMPT,
@@ -248,6 +256,50 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return new Date(a.called_at).getTime() - new Date(b.called_at).getTime();
     });
 
+    let needsScoring = false;
+    for (const r of allRecs) {
+      let isTranscribed = false;
+      if (r.transcript) {
+        try {
+          const parsed = typeof r.transcript === 'string' ? JSON.parse(r.transcript) : r.transcript;
+          isTranscribed = Array.isArray(parsed) && parsed.length > 0;
+        } catch {}
+      }
+      if (r.chat_id !== chatId) {
+        await linkCallToChat(r.id, chatId);
+        if (!isTranscribed && r.recording_url) {
+          needsScoring = true;
+        }
+      } else {
+        if (!isTranscribed && r.recording_url) {
+          await query(`UPDATE call_recordings SET status = 'linked' WHERE id = $1`, [r.id]);
+          needsScoring = true;
+        }
+      }
+    }
+
+    if (needsScoring) {
+      const tags = chatConv?.tags || {};
+      await scoreLinkedCallsForChat(chatId, chatTranscriptRaw, tags.disposition || '', tags.sub_disposition || '', config);
+      
+      // Re-fetch call recordings after they have been transcribed and scored
+      allRecs.length = 0;
+      seenIds.clear();
+      try { addRecs(await getAllCallRecordingsByChatId(chatId)); } catch {}
+      try { addRecs(await getCallRecordingsByConversationContact(chatId)); } catch {}
+      if (chatConv?.contact_id) {
+        const windowStart = chatConv.started_at ?? new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+        const windowEnd   = chatConv.closed_at  ?? new Date().toISOString();
+        try { addRecs(await getCallRecordingsByContactWindow(chatConv.contact_id, windowStart, windowEnd)); } catch {}
+      }
+      
+      allRecs.sort((a, b) => {
+        if (!a.called_at) return 1;
+        if (!b.called_at) return -1;
+        return new Date(a.called_at).getTime() - new Date(b.called_at).getTime();
+      });
+    }
+
     if (allRecs.length > 0) {
       const mergedSegs: CallSegment[] = [];
       for (const rec of allRecs) {
@@ -339,20 +391,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   ];
 
   if (hasCallRecording) {
+    const combinedTranscript = `--- WHATSAPP CHAT TRANSCRIPT ---\n${chatTranscriptRaw}\n\n--- TELEPHONE CALL TRANSCRIPT ---\n${callTranscriptText}`;
+    const combinedPrompt = buildScoringPrompt(
+      combinedTranscript,
+      chatDisposition,
+      chatId,
+      '',
+      kbContext,
+      '',
+      chatConv?.conversation_type || 'agent',
+    );
+    const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
     scoringTasks.push(
-      callGeminiForCall(
+      geminiGenerate(
         geminiKeys,
-        [{ role: 'user', parts: [{ text: CALL_IQS_SYSTEM_PROMPT + '\n\n' + buildCallScoringPrompt(
-          callTranscriptText,
-          chatTranscriptRaw,
-          chatId,
-          interruptionCount,
-          deadAirCount,
-          callDisposition,
-          chatDisposition,
-          kbContext,
-        )}] }],
-        undefined, 60_000,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + combinedPrompt }] }],
+        {},
+        60_000,
       ),
     );
   }
@@ -369,8 +425,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   let callResult: any = null;
   if (callScoringRaw && callScoringRaw.status === 'fulfilled') {
     try {
-      callResult = parseCallScoringResponse(callScoringRaw.value);
-      callResult.segments = insertPoorListeningFlags(callSegments, callResult.poorListeningSegments || []);
+      callResult = parseScoringResponse(callScoringRaw.value, chatId, chatConv?.conversation_type);
+      callResult.segments = callSegments;
     } catch {}
   }
 

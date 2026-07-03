@@ -50,7 +50,7 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
   return m;
 }
 
-type SortCol = 'chatId' | 'agentName' | 'iqsScore';
+type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'callIqsScore';
 type SortDir = 'asc' | 'desc';
 
 export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
@@ -159,6 +159,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     if (sortCol === 'chatId')    cmp = a.chatId.localeCompare(b.chatId);
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
     if (sortCol === 'iqsScore')  cmp = a.iqsScore - b.iqsScore;
+    if (sortCol === 'callIqsScore')  cmp = (a.callIqsScore ?? 0) - (b.callIqsScore ?? 0);
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
@@ -430,11 +431,13 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
       <div style={{ overflowX: 'auto', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: 120 }} />
+            <col style={{ width: 110 }} />
             <col />
-            <col style={{ width: 80 }} />
-            <col style={{ width: 100 }} />
-            <col style={{ width: 100 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 140 }} />
+            <col style={{ width: 95 }} />
+            <col style={{ width: 90 }} />
           </colgroup>
           <thead>
             <tr>
@@ -450,9 +453,15 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
               </th>
               <th style={{ ...th, textAlign: 'right' }}>
                 <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('iqsScore')}>
-                  <SortIcon col="iqsScore" /> IQS
+                  <SortIcon col="iqsScore" /> IQS (Chat)
                 </button>
               </th>
+              <th style={{ ...th, textAlign: 'right' }}>
+                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('callIqsScore')}>
+                  <SortIcon col="callIqsScore" /> IQS (Call)
+                </button>
+              </th>
+              <th style={th}>Call Transcript</th>
               <th style={th}>Status</th>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
@@ -461,7 +470,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 5 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <td key={j} style={td}>
                       <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '50%' : '70%' }} />
                     </td>
@@ -470,7 +479,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
               ))
             ) : sortedChats.length === 0 ? (
               <tr>
-                <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+                <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                   No chats pending review
                 </td>
               </tr>
@@ -513,6 +522,35 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       }}>
                         {chat.iqsScore}
                       </span>
+                    </td>
+                    <td style={tdNum}>
+                      {chat.callIqsScore !== null ? (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
+                          fontFamily: 'ui-monospace, monospace',
+                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#dcfce7',
+                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#15803d',
+                        }}>
+                          {chat.callIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
+                      )}
+                    </td>
+                    <td style={td}>
+                      {chat.callTranscriptStatus === 'transcribed' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
+                          <span style={{ fontSize: 10 }}>✓</span> Transcribed
+                        </span>
+                      ) : chat.callTranscriptStatus === 'pending' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#ca8a04', fontWeight: 500 }} title="Transcribing/scoring call automatically on-the-fly when Evaluated">
+                          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
+                          Pending
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>No Call</span>
+                      )}
                     </td>
                     <td style={td}>
                       {chat.status === 'reopened' ? (
@@ -581,7 +619,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       mode="submit"
                       onDone={() => removeChat(chat.chatId)}
                       onClose={() => setExpandedId(null)}
-                      colSpan={5}
+                      colSpan={7}
                     />
                   )}
                 </React.Fragment>

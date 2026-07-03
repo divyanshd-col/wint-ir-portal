@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
+import fs from 'fs';
+import path from 'path';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -48,6 +50,7 @@ Return ONLY valid JSON with no markdown fencing:
 {"draft":"<customer message text>"}`;
 
   try {
+    // 1. Generate the draft
     const raw = await geminiGenerate(
       geminiKeys,
       'gemini-2.5-flash',
@@ -58,7 +61,45 @@ Return ONLY valid JSON with no markdown fencing:
     const cleaned = raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const parsed = JSON.parse(cleaned);
     if (!parsed.draft) throw new Error('No draft in response');
-    return NextResponse.json({ draft: parsed.draft });
+
+    // 2. Load and run the Safety Guardrail
+    let guardrailTemplate = '';
+    const guardrailPath = path.join(process.cwd(), 'PROMPT_guardrail.txt');
+    try {
+      guardrailTemplate = fs.readFileSync(guardrailPath, 'utf-8');
+    } catch {
+      guardrailTemplate = `You are the strict safety guardrail for the Wint Wealth CX AI.
+RETURN FORMAT — ONLY JSON:
+{"isSafe": true|false, "reason": "Explanation if false", "fallbackMessage": "fallback"}
+- USER MESSAGE
+- PROPOSED AI RESPONSE`;
+    }
+
+    const guardrailPrompt = guardrailTemplate
+      .replace('- USER MESSAGE', `CONTEXT (Briefing & Verified Facts):\n${briefing}\n\nConfirmed Facts:\n${formAnswerLines}\n${agentContextLine}`)
+      .replace('- PROPOSED AI RESPONSE', `PROPOSED DRAFT RESPONSE:\n${parsed.draft}`);
+
+    const guardrailRaw = await geminiGenerate(
+      geminiKeys,
+      'gemini-2.5-flash',
+      [{ role: 'user', parts: [{ text: guardrailPrompt }] }],
+      { config: { responseMimeType: 'application/json' } },
+      10000
+    );
+
+    const cleanedGuardrail = guardrailRaw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const guardrailResult = JSON.parse(cleanedGuardrail);
+
+    if (guardrailResult.isSafe === false) {
+      console.warn(`[draft] Safety violation caught by guardrail: ${guardrailResult.reason}`);
+      return NextResponse.json({
+        draft: guardrailResult.fallbackMessage || 'I am unable to process this request. Let me connect you to a human agent.',
+        isSafe: false,
+        reason: guardrailResult.reason
+      });
+    }
+
+    return NextResponse.json({ draft: parsed.draft, isSafe: true });
   } catch (e) {
     console.error('[draft] Failed:', e);
     return NextResponse.json({ error: 'Failed to generate draft' }, { status: 500 });
