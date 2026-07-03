@@ -16,9 +16,9 @@ When asking a question (process, has questions):
 When all facts are known and scenario is resolved (process, no questions):
 {"queryType":"process","category":"repayment","questions":[],"stepTitle":"Resolution","reasoning":"","extractedFacts":{"holding_on_record_date":"Yes|No","contacted_on_repayment_date":"value","recent_bank_change":"Yes|No","change_before_or_after_record_date":"value","bank_ifsc_check":"value"}}
 
-[At runtime, inject:]
-- EXISTING CONFIRMED ANSWERS
-- LATEST MESSAGE
+[EXISTING CONFIRMED ANSWERS]
+[LATEST MESSAGE]
+
 
 SCHEMA & LOGIC TREE (Walk top-to-bottom. Return only the FIRST unanswered step):
 

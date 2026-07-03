@@ -394,11 +394,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const combinedTranscript = `--- WHATSAPP CHAT TRANSCRIPT ---\n${chatTranscriptRaw}\n\n--- TELEPHONE CALL TRANSCRIPT ---\n${callTranscriptText}`;
     const combinedPrompt = buildScoringPrompt(
       combinedTranscript,
-      chatDisposition,
+      chatDisposition.split(' > ')[0] || '',
       chatId,
       '',
       kbContext,
-      '',
+      chatDisposition.split(' > ')[1] || '',
       chatConv?.conversation_type || 'agent',
     );
     const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
