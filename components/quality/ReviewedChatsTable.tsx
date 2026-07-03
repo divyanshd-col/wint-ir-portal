@@ -206,8 +206,8 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#dcfce7',
-                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#15803d',
+                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
                         }}>
                           {chat.callIqsScore}
                         </span>

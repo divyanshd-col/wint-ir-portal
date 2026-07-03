@@ -250,8 +250,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                       minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
                       fontFamily: 'ui-monospace, monospace',
-                      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-                      border: '1px solid var(--qa-border)',
+                      background: d.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                      color:      d.iqsScore < 60 ? '#b91c1c' : '#713f12',
                     }}>
                       {d.iqsScore}
                     </span>
@@ -262,8 +262,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
                         fontFamily: 'ui-monospace, monospace',
-                        background: d.callIqsScore < 60 ? '#fee2e2' : '#dcfce7',
-                        color:      d.callIqsScore < 60 ? '#b91c1c' : '#15803d',
+                        background: d.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                        color:      d.callIqsScore < 60 ? '#b91c1c' : '#713f12',
                       }}>
                         {d.callIqsScore}
                       </span>
