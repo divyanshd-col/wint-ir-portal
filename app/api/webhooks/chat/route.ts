@@ -269,48 +269,44 @@ export async function scoreLinkedCallsForChat(
       continue;
     }
 
-    const scoringPrompt = buildCallScoringPrompt(
-      callText,
-      chatTranscriptText,
-      call.id,
-      call.interruption_count ?? 0,
-      call.dead_air_count ?? 0,
+    const combinedTranscript = `--- WHATSAPP CHAT TRANSCRIPT ---\n${chatTranscriptText}\n\n--- TELEPHONE CALL TRANSCRIPT ---\n${callText}`;
+    const scoringPrompt = buildScoringPrompt(
+      combinedTranscript,
+      disposition,
+      chatId,
       '',
-      `${disposition} ${subDisposition}`.trim(),
       kbContext,
+      subDisposition,
+      'agent',
     );
 
     try {
+      const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
       const raw = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',
-        [{ role: 'user', parts: [{ text: CALL_IQS_SYSTEM_PROMPT + '\n\n' + scoringPrompt }] }],
+        [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + scoringPrompt }] }],
         {},
         60_000,
       );
 
-      const { scores, reasoning, poorListeningSegments, iqs } = parseCallScoringResponse(raw);
-      const finalSegments = insertPoorListeningFlags(segments, poorListeningSegments);
-
+      const parsed = parseScoringResponse(raw, chatId, 'agent');
       const parameters: Record<string, IQSParameterResult> = {};
-      for (const [key, val] of Object.entries(scores)) {
-        parameters[key] = {
-          score: val === 'Yes' ? true : val === 'No' ? false : null,
-          reasoning: reasoning[key] || '',
-        };
+      for (const [key, val] of Object.entries(parsed.scores || {})) {
+        parameters[key] = toParamResult(val as ParamScore, (parsed.reasoning || {})[key] || '');
       }
 
-      // Persist updated transcript with poor_listening flags
+      // Persist transcript
       await insertCallRecording({
         id: call.id,
-        transcript: finalSegments,
+        transcript: segments,
       });
 
-      await updateCallIQSScore({ chatId, callIqsScore: iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
+      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
       await updateCallRecordingStatus(call.id, 'scored');
-      console.log(`[webhook] Scored call ${call.id} → IQS ${iqs} for chat ${chatId}`);
+      console.log(`[webhook] Scored combined chat+call for ${chatId} → IQS ${parsed.iqs}`);
     } catch (err: any) {
-      console.error(`[webhook] Call IQS scoring failed for call ${call.id}:`, err.message);
+      console.error(`[webhook] Combined IQS scoring failed for call ${call.id}:`, err.message);
     }
   }
 }

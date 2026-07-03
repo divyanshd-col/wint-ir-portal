@@ -26,6 +26,9 @@ export interface ChatToReviewRow {
   chatId:        string;
   agentName:     string;
   iqsScore:      number;
+  callIqsScore:  number | null;
+  callTranscriptStatus: 'no_call' | 'pending' | 'transcribed';
+  callTranscriptLabel: string;
   closedAt:      string;
   disposition:   string;
   subDisposition: string | null;
@@ -224,6 +227,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     chat_id: string;
     agent_name: string | null;
     iqs_score: string;
+    call_iqs_score: string | null;
     closed_at: string;
     disposition: string;
     sub_disposition: string | null;
@@ -234,14 +238,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     reviewed_at: string | null;
     review_note: string | null;
     status: string;
+    contact_id: number | null;
+    started_at: string | null;
   }>(
     `SELECT c.id AS chat_id, a.name AS agent_name,
-            i.iqs_score, c.closed_at,
+            i.iqs_score, i.call_iqs_score, c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
             c.csat_score, i.parameters,
             ct.phone AS mobile_number,
-            i.reviewed_by, i.reviewed_at, i.review_note, i.status
+            i.reviewed_by, i.reviewed_at, i.review_note, i.status,
+            c.contact_id, c.started_at
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -258,6 +265,63 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     durationMs: Date.now() - t0,
     ...filters,
   });
+
+  // Query call recordings for these chats to check transcript statuses
+  const chatIds = rows.map(r => r.chat_id);
+  const contactIds = rows.map(r => r.contact_id).filter(Boolean);
+  let callRecordings: any[] = [];
+  if (chatIds.length > 0) {
+    const sql = `
+      SELECT id, chat_id, contact_id, called_at, transcript, recording_url
+      FROM call_recordings
+      WHERE chat_id = ANY($1)
+         ${contactIds.length > 0 ? `OR contact_id = ANY($2)` : ''}
+    `;
+    const params = contactIds.length > 0 ? [chatIds, contactIds] : [chatIds];
+    try {
+      callRecordings = await query<any>(sql, params);
+    } catch (e) {
+      console.error('[chats-to-review] Failed to fetch call recordings for status check', e);
+    }
+  }
+
+  // 3-stage lookup mapper to check call transcript status
+  const getCallInfo = (chatId: string, contactId: number | null, startedAtStr: string | null, closedAtStr: string | null) => {
+    const matched = callRecordings.filter(rec => {
+      if (rec.chat_id === chatId) return true;
+      if (contactId && rec.contact_id === contactId) {
+        const calledAt = rec.called_at ? new Date(rec.called_at).getTime() : null;
+        if (calledAt) {
+          const startedAt = startedAtStr ? new Date(startedAtStr).getTime() : 0;
+          const closedAt = closedAtStr ? new Date(closedAtStr).getTime() : Date.now();
+          const oneHour = 60 * 60 * 1000;
+          return calledAt >= (startedAt - oneHour) && calledAt <= (closedAt + oneHour);
+        }
+      }
+      return false;
+    });
+
+    if (matched.length === 0) {
+      return { status: 'no_call' as const, label: 'No Call' };
+    }
+
+    const hasUntranscribed = matched.some(rec => {
+      let isTranscribed = false;
+      if (rec.transcript) {
+        try {
+          const parsed = typeof rec.transcript === 'string' ? JSON.parse(rec.transcript) : rec.transcript;
+          isTranscribed = Array.isArray(parsed) && parsed.length > 0;
+        } catch {}
+      }
+      return !isTranscribed && rec.recording_url;
+    });
+
+    if (hasUntranscribed) {
+      return { status: 'pending' as const, label: 'Pending Transcription' };
+    } else {
+      return { status: 'transcribed' as const, label: 'Transcribed' };
+    }
+  };
 
   // Invert PASCAL_TO_DB for converting DB keys back to PascalCase
   const DB_TO_PASCAL: Record<string, string> = Object.fromEntries(
@@ -277,10 +341,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
 
+    const callInfo = getCallInfo(r.chat_id, r.contact_id, r.started_at, r.closed_at);
+
     return {
       chatId:         r.chat_id,
       agentName:      r.agent_name ?? 'Unknown',
       iqsScore:       parseInt(r.iqs_score),
+      callIqsScore:   r.call_iqs_score ? parseInt(r.call_iqs_score) : null,
+      callTranscriptStatus: callInfo.status,
+      callTranscriptLabel: callInfo.label,
       closedAt:       r.closed_at,
       disposition:    r.disposition,
       subDisposition: r.sub_disposition,

@@ -4,6 +4,8 @@ import { authOptions } from '@/auth';
 import Anthropic from '@anthropic-ai/sdk';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
+import fs from 'fs';
+import path from 'path';
 
 interface AnalyzeRequest {
   messages: { role: string; content: string }[];
@@ -11,151 +13,9 @@ interface AnalyzeRequest {
   imageData?: { base64: string; mimeType: string };
 }
 
-export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const { messages, allAnswers, imageData }: AnalyzeRequest = await req.json();
-  const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
-  const query = latestUserMessage?.content || '';
-
-  const config = await readConfig();
-  const provider = config.llmProvider || 'gemini';
-  const geminiKeys = getOrderedGeminiKeys(config);
-
-  const conversationHistory = messages
-    .slice(0, -1)
-    .filter((m: any) => !m.content?.startsWith('[Already confirmed'))
-    .map((m: any) => `${m.role.toUpperCase()}: ${m.content}`)
-    .join('\n');
-
-  const existingAnswersJson = JSON.stringify(allAnswers || {}, null, 2);
-  const answeredIds = Object.keys(allAnswers || {});
-
-  const analyzePrompt = `You are the triage layer of a two-stage CX support system for Wint Wealth.
-
-Stage 1 (you): Determine what information the support agent still needs to look up in Finder, then ask for it one step at a time using the exact field schemas below.
-Stage 2 (answer generator): Once all needed facts are confirmed, generates the resolution using the KB.
-
-Your output feeds directly into Stage 2. The field IDs you generate MUST match the canonical IDs in the schemas below — Stage 2 reads them by exact name to identify the scenario and generate the correct answer. Never invent new field IDs.
-
-If a screenshot is attached, treat visible UI state (error messages, status labels, button states) as confirmed facts and extract them into your Known Set exactly as if the agent had stated them explicitly.
-
----
-
-RETURN FORMAT — return ONLY valid JSON, no markdown, no explanation:
-
-When asking a clarifying question (process, has questions):
-{"queryType":"process","category":"repayment"|"kyc"|"payment"|"sip"|"sell"|"referral"|"taxation"|"dashboard"|"fd"|"huf","questions":[{"id":"field_id","label":"Question label","options":["opt1","opt2"],"type":"select"|"text"}],"stepTitle":"Step N: Description","reasoning":"One sentence: what you understand so far and why you need this information","extractedFacts":{}}
-
-When all facts are known and scenario is resolved (process, no questions):
-{"queryType":"process","category":"repayment"|"kyc"|"payment"|"sip"|"sell"|"referral"|"taxation"|"dashboard"|"fd"|"huf","questions":[],"stepTitle":"Resolution","reasoning":"","extractedFacts":{"<canonical_field_id>":"<value>","<canonical_field_id>":"<value>"}}
-
-extractedFacts MUST use the exact canonical field IDs from the schemas below (e.g. "sell_situation", "ddpi_activation_status", "holding_on_record_date"). Never invent new field IDs here. Include all facts from the Known Set that map to a canonical ID.
-
-For direct queries:
-{"queryType":"direct","category":null,"questions":[],"stepTitle":"","reasoning":"","extractedFacts":{}}
-
-For clarify (area cannot be determined):
-{"queryType":"clarify","category":null,"questions":[],"stepTitle":"","reasoning":"","extractedFacts":{},"clarificationMessage":"one direct sentence"}
-
-category must be set for every "process" query. Set to null for "direct" and "clarify".
-
----
-
-EXISTING CONFIRMED ANSWERS (already collected — never re-ask):
-${existingAnswersJson}
-${answeredIds.length > 0 ? `\nALREADY ANSWERED IDs — do NOT generate any question with these IDs:\n${answeredIds.join(', ')}` : ''}
-
-CONVERSATION HISTORY:
-${conversationHistory || 'None'}
-
-LATEST MESSAGE:
-${query}
-
----
-
-FORBIDDEN QUESTIONS — never ask for these under any circumstance:
-The system has no access to user data. These are lookup values the agent already has in Finder.
-Instead, when an escalation needs these, include them in the FINAL ANSWER as "collect X from Finder and include in escalation".
-
-✗ Mobile number / phone number
-✗ Email address
-✗ PAN number / Aadhaar number
-✗ Order ID / SIP ID / Mandate ID
-✗ UTR number / transaction reference / payment reference
-✗ Bank account number (any digits)
-✗ Folio number / DP ID / Client ID / demat account number
-✗ Bond name / ISIN (agent can see this in Finder — include in answer if needed for escalation)
-
-ALLOWED question types:
-1. Finder-observable states: statuses, flags, and dates the agent can check in the CRM right now
-   Example: "What does AOF status show in Finder?" / "Check Finder: is there an active SIP?"
-2. User-reported symptoms: what the user told the agent they experienced
-   Example: "What error message did the user see?" / "Did the user try retrying?"
-
----
-
-PHASE 1 — UNDERSTAND THE SITUATION
-
-Read the latest message + conversation history. Identify:
-- The product area (KYC / Payment / Repayment / SIP / Sell / Referral / Dashboard / Taxation / FD / HUF)
-- The stage (first message or continuing from previous steps)
-- What's already known from EXISTING CONFIRMED ANSWERS and the conversation
-
-Extract facts explicitly stated in the message and add them to the Known Set. When you return {"questions":[]}, these extracted facts MUST be included in "extractedFacts" using the canonical field IDs from the schemas below:
-- "payment failed on Razorpay" → gateway=Razorpay (use as known, skip asking)
-- "paying via net banking" → payment_mode=Net Banking
-- "AOF has expired" → aof_status=expired
-- "DDPI is active but sell greyed" → ddpi_activation_status=Active, sell_situation=DDPI active but sell unavailable
-- "first-time investor / never invested before" → completed_one_investment=No
-- "payment went through / payment successful" → payment_status_confirmed=Yes
-- "user on UPI AutoPay" → mandate_type=UPI AutoPay
-- "contacting today on the due date" → contacted_on_repayment_date=Yes
-- "repayment date already passed" → contacted_on_repayment_date=No
-- "user was holding the bond on record date" → holding_on_record_date=Yes
-- "SIP amount deducted from bank" → sip_deducted_from_bank=Yes (does NOT mean active_sip_on_finder=Yes — still ask)
-- "mandate is eNACH / NACH" → mandate_type=eNACH
-- "DDPI not activating / activation issue" → sell_situation=DDPI not set up / user wants to activate DDPI
-
----
-
-PHASE 2 — CLASSIFY
-
-DIRECT — same answer regardless of user's state. No questions needed.
-Triggers: "how to", "what is", "explain", "what are the steps", "can a user", "is it possible to"
-Examples: how repayments work, DDPI explanation, UPI cap, TDS rate, SIP eligibility rules, Form 15G process
-→ Return: {"queryType":"direct","category":null,"questions":[],"stepTitle":""}
-
-CONVERSATIONAL — greeting, "thanks", "ok", acknowledgment
-→ Return: {"queryType":"direct","category":null,"questions":[],"stepTitle":""}
-
-CLARIFY — area genuinely cannot be determined from the message
-Only use this if two completely different product areas are equally likely.
-→ Return: {"queryType":"clarify","category":null,"clarificationMessage":"one direct sentence","questions":[],"stepTitle":""}
-Examples where clarify applies: "user is having an issue" / "something went wrong"
-Examples where clarify does NOT apply: "repayment not received" (clear) / "payment failing" (clear) / "KYC stuck" (clear)
-
-PROCESS — depends on the specific user's state. Continue to Phase 3.
-
----
-
-PHASE 3 — RUN THE CANONICAL FIELD SCHEMA
-
-Identify the category. Walk the schema steps top to bottom.
-A step is DONE if its field ID is already in the Known Set — skip it.
-A step is CONDITIONAL — only ask it if its condition is met by the Known Set.
-Return ONLY the questions for the FIRST step that is neither DONE nor CONDITIONAL-skipped.
-The moment the Known Set uniquely identifies one scenario → return {"questions":[]}.
-
-SEQUENCING RULE: Never ask a question whose relevance depends on the answer to another unanswered question. Ask the condition question first; the dependent question appears in the next step only if the condition is met.
-
-════════════════════════════════════════════
-REPAYMENT  (category: "repayment")
-════════════════════════════════════════════
-Triggers: repayment not received, interest/coupon/principal missing, repayment amount wrong
-
-Step 1 — id: holding_on_record_date
+// Monolithic schemas map for fallback and categories other than repayment
+const CATEGORY_SCHEMAS: Record<string, string> = {
+  repayment: `Step 1 — id: holding_on_record_date
   label: "Was the user holding this bond on the record date? (Check bond history in Finder)"
   type: select | options: ["Yes", "No"]
   → If No: STOP. Return {"questions":[]}. (Scenario: not entitled — not holding on record date)
@@ -190,14 +50,9 @@ Step 4b — ONLY if recent_bank_change=No:
   id: bank_ifsc_check
   label: "Check the IFSC linked to the user's bank account in Finder. Does it match the IFSC the user says is correct for their bank?"
   type: select | options: ["Yes — IFSC in Finder matches what user expects", "No — IFSC in Finder does not match what user expects"]
-  → STOP after answer. (Scenario 4a or 4b identified)
+  → STOP after answer. (Scenario 4a or 4b identified)`,
 
-════════════════════════════════════════════
-KYC  (category: "kyc")
-════════════════════════════════════════════
-Triggers: KYC stuck/pending, penny test, OTP not received, AOF, selfie failing, KRA issue, UCC pending, nominee update, form signing error, HUF KYC
-
-Step 1 — id: kyc_layer
+  kyc: `Step 1 — id: kyc_layer
   label: "Which stage is the KYC issue at?"
   type: select | options: [
     "A step is failing during KYC submission (e.g. penny test, OTP, selfie, proceed button)",
@@ -245,14 +100,9 @@ Step 2c — id: nominee_or_signing_issue
     "Nominee update — multiple nominees",
     "Signing error on a form (DDPI, 15G/H, Nominee, Bank, or Closure form)"
   ]
-  → STOP after answer. Scenario identified.
+  → STOP after answer. Scenario identified.`,
 
-════════════════════════════════════════════
-PAYMENT / BUY ORDER  (category: "payment")
-════════════════════════════════════════════
-Triggers: payment failing, bond not showing after payment, refund not received, unit limit
-
-Step 1 — id: payment_situation
+  payment: `Step 1 — id: payment_situation
   label: "What is the actual situation with the payment or order?"
   type: select | options: [
     "Payment went through but bond is not showing in portfolio",
@@ -265,7 +115,6 @@ PATH A/B — payment went through, bond not showing:
 Step 2a — id: first_investment
   label: "Is this the user's very first investment ever on Wint? (Check Finder)"
   type: select | options: ["Yes — first investment ever", "No — has invested before"]
-
   → If first_investment=Yes: STOP. Return {"questions":[]}. (Stage 2 handles the demat/KYC creation check)
 
 Step 3b — ONLY if first_investment=No:
@@ -310,14 +159,9 @@ Step 2e — id: refund_trigger
     "KYC was rejected after order was placed",
     "Order was cancelled"
   ]
-  → STOP after answer. Scenario identified.
+  → STOP after answer. Scenario identified.`,
 
-════════════════════════════════════════════
-SIP  (category: "sip")
-════════════════════════════════════════════
-Triggers: SIP setup failing, SIP date/amount change, SIP deducted but no bond, SIP cancellation, skip instalment
-
-Step 1 — id: sip_issue_type
+  sip: `Step 1 — id: sip_issue_type
   label: "What type of SIP issue is this?"
   type: select | options: [
     "Cannot set up SIP",
@@ -377,14 +221,9 @@ PATH E — skip instalment:
 Step 2e — id: t_minus_1_check
   label: "Is the SIP deduction date tomorrow? (If yes, autopay is already raised to NPCI and cannot be stopped)"
   type: select | options: ["Yes — deduction is tomorrow", "No — more than 1 day away"]
-  → STOP after answer. Scenario identified.
+  → STOP after answer. Scenario identified.`,
 
-════════════════════════════════════════════
-SELL / DDPI  (category: "sell")
-════════════════════════════════════════════
-Triggers: sell button greyed, DDPI not signed/active, sell proceeds not received, DDPI deactivation, sell cancellation
-
-Step 1 — id: sell_situation
+  sell: `Step 1 — id: sell_situation
   label: "What is the actual sell or DDPI situation?"
   type: select | options: [
     "DDPI not set up or user wants to activate DDPI",
@@ -418,14 +257,9 @@ Step 2c — id: t1_elapsed_since_order
   → STOP after answer. Scenario identified.
 
 PATH: Deactivation request OR sell order cancellation:
-  → STOP immediately. Return {"questions":[]}. Scenario identified (offline process).
+  → STOP immediately. Return {"questions":[]}. Scenario identified (offline process).`,
 
-════════════════════════════════════════════
-REFERRAL  (category: "referral")
-════════════════════════════════════════════
-Triggers: referral reward not credited, referral not mapped, reward calculation, remove/replace referee
-
-Step 1 — id: referral_issue_type
+  referral: `Step 1 — id: referral_issue_type
   label: "What is the referral issue?"
   type: select | options: [
     "Referral reward not credited or not showing",
@@ -461,16 +295,9 @@ PATH D — remove or replace referee:
 Step 2d — id: referee_has_investments
   label: "Check Finder: does the existing referee have any investments on Wint?"
   type: select | options: ["Yes — has investments", "No — no investments"]
-  → STOP after answer. Scenario identified.
+  → STOP after answer. Scenario identified.`,
 
-════════════════════════════════════════════
-TAXATION  (category: "taxation")
-════════════════════════════════════════════
-Triggers: TDS query, Form 15G/H, TDS despite 15G, LTCG/STCG, Form 26AS
-
-Most taxation queries are DIRECT (educational). Only route as PROCESS if a specific user situation is described.
-
-Step 1 — id: tax_issue_type
+  taxation: `Step 1 — id: tax_issue_type
   label: "What is the taxation issue?"
   type: select | options: [
     "Question about TDS rate or how TDS is calculated",
@@ -491,14 +318,9 @@ PATH: 26AS not updated:
 Step 2 — id: quarterly_deadline_passed
   label: "Has the quarterly TDS filing deadline passed for the relevant quarter? (Q1: 15 Aug, Q2: 15 Nov, Q3: 15 Feb, Q4: 15 Jun)"
   type: select | options: ["Yes — deadline has passed", "No — deadline has not passed yet"]
-  → STOP after answer. Scenario identified.
+  → STOP after answer. Scenario identified.`,
 
-════════════════════════════════════════════
-DASHBOARD / PROFILE  (category: "dashboard")
-════════════════════════════════════════════
-Triggers: bond not in portfolio, gains/value dropped, bank account update, mobile/email update, family account, account deletion
-
-Step 1 — id: profile_issue_type
+  dashboard: `Step 1 — id: profile_issue_type
   label: "What type of dashboard or profile issue is this?"
   type: select | options: [
     "Bond not showing in portfolio after payment",
@@ -534,61 +356,194 @@ PATH: Account deletion:
 Step 2h — id: active_holdings_check
   label: "Check Finder: does the user have any active bond holdings or active FD investments?"
   type: select | options: ["Yes — has active holdings or FDs", "No — portfolio is empty"]
-  → STOP after answer. Scenario identified.
+  → STOP after answer. Scenario identified.`,
 
-════════════════════════════════════════════
-FD  (category: "fd")
-════════════════════════════════════════════
-Triggers: FD setup, FD premature withdrawal, FD not visible in family account
-Most FD queries are educational (DIRECT). Only route as PROCESS for a specific user situation.
-
-For FD process issues → STOP immediately. Return {"questions":[]}. The KB has direct answers for all FD scenarios without needing additional context.
-
-════════════════════════════════════════════
-HUF ACCOUNT  (category: "huf")
-════════════════════════════════════════════
-Step 1 — id: huf_in_tracking_sheet
+  fd: `Premature withdrawal or visibility issue. No questions needed. All FD scenarios are directly mapped to static policies in Stage 2.`,
+  
+  huf: `Step 1 — id: huf_in_tracking_sheet
   label: "Check the HUF tracking sheet: is this user already in the sheet?"
   type: select | options: ["Yes — already in tracking sheet", "No — not in tracking sheet"]
-  → STOP after answer. Scenario identified.
+  → STOP after answer. Scenario identified.`
+};
 
----
+export async function POST(req: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-FINAL RULE:
-The moment the Known Set (EXISTING CONFIRMED ANSWERS + extracted facts) uniquely identifies one scenario in any category above → return {"questions":[],"extractedFacts":{...all known canonical field/value pairs}}.
-The answer generator handles the rest. Never ask more questions than the minimum needed to reach that point.`;
+  const { messages, allAnswers, imageData }: AnalyzeRequest = await req.json();
+  const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');
+  const query = latestUserMessage?.content || '';
+
+  const config = await readConfig();
+  const provider = config.llmProvider || 'gemini';
+  const geminiKeys = getOrderedGeminiKeys(config);
+
+  const conversationHistory = messages
+    .slice(0, -1)
+    .filter((m: any) => !m.content?.startsWith('[Already confirmed'))
+    .map((m: any) => `${m.role.toUpperCase()}: ${m.content}`)
+    .join('\n');
+
+  const existingAnswersJson = JSON.stringify(allAnswers || {}, null, 2);
+  const answeredIds = Object.keys(allAnswers || {});
 
   try {
-    let text = '{"questions":[],"reasoning":"","extractedFacts":{}}';
+    // --- STAGE 0: ROUTING ---
+    let routerPrompt = '';
+    const routerPath = path.join(process.cwd(), 'PROMPT_router.txt');
+    try {
+      routerPrompt = fs.readFileSync(routerPath, 'utf-8');
+    } catch (err) {
+      console.warn('[analyze] Failed to read PROMPT_router.txt from disk, using fallback.');
+      routerPrompt = `You are the intelligent router for the Wint Wealth CX support system.
+Determine the correct product category. Do NOT answer the user.
+RETURN FORMAT — return ONLY valid JSON:
+{"category":"repayment"|"kyc"|"payment"|"sip"|"sell"|"referral"|"taxation"|"dashboard"|"fd"|"huf"|"out_of_domain","queryType":"direct"|"process"|"clarify","confidence":0.0 to 1.0}`;
+    }
 
+    const routerInput = `${routerPrompt}\n[LATEST USER MESSAGE]\nUser: ${query}`;
+    const routerParts: any[] = [{ text: routerInput }];
+    if (imageData) {
+      routerParts.push({ inline_data: { mime_type: imageData.mimeType, data: imageData.base64 } });
+    }
+
+    let routerRaw = '';
     if (provider === 'claude') {
       const client = new Anthropic({ apiKey: config.anthropicApiKey });
-      const userContent: Anthropic.MessageParam['content'] = imageData
+      const claudeContent: Anthropic.MessageParam['content'] = imageData
         ? [
             { type: 'image', source: { type: 'base64', media_type: imageData.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: imageData.base64 } },
-            { type: 'text', text: analyzePrompt },
+            { type: 'text', text: routerInput }
           ]
-        : analyzePrompt;
+        : routerInput;
       const response = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 1024,
-        messages: [{ role: 'user', content: userContent }],
+        max_tokens: 256,
+        messages: [{ role: 'user', content: claudeContent }],
       });
-      text = response.content[0].type === 'text' ? response.content[0].text : text;
+      routerRaw = response.content[0].type === 'text' ? response.content[0].text : '';
     } else {
-      const parts: any[] = [{ text: analyzePrompt }];
-      if (imageData) parts.push({ inline_data: { mime_type: imageData.mimeType, data: imageData.base64 } });
-      text = await geminiGenerate(
+      routerRaw = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',
-        [{ role: 'user', parts }],
-        undefined,
-        60000  // analyze prompt is large — allow up to 60s
+        [{ role: 'user', parts: routerParts }],
+        { config: { responseMimeType: 'application/json' } },
+        15000
       );
     }
 
-    const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
-    const parsed = JSON.parse(cleaned);
+    const cleanedRoute = routerRaw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const routeResult = JSON.parse(cleanedRoute);
+
+    // If out of domain, stop and clarify
+    if (routeResult.category === 'out_of_domain') {
+      return NextResponse.json({
+        queryType: 'clarify',
+        category: null,
+        questions: [],
+        stepTitle: '',
+        reasoning: 'Inquiry is outside Wint Wealth domain.',
+        extractedFacts: {},
+        clarificationMessage: 'I am here to help you with Wint Wealth inquiries. Please ask about your KYC, SIPs, repayments, or dashboard issues.'
+      });
+    }
+
+    // Direct / Clarification responses
+    if (routeResult.queryType === 'direct' || routeResult.queryType === 'clarify') {
+      return NextResponse.json({
+        queryType: routeResult.queryType,
+        category: null,
+        questions: [],
+        stepTitle: '',
+        reasoning: '',
+        extractedFacts: {},
+        clarificationMessage: routeResult.clarificationMessage || (routeResult.queryType === 'clarify' ? 'Could you provide more context about your issue?' : '')
+      });
+    }
+
+    // --- STAGE 1: EXTRACTION ---
+    const targetCategory = routeResult.category || 'repayment';
+    let extractPrompt = '';
+
+    if (targetCategory === 'repayment') {
+      const repaymentPath = path.join(process.cwd(), 'PROMPT_extract_repayment.txt');
+      try {
+        extractPrompt = fs.readFileSync(repaymentPath, 'utf-8');
+      } catch {
+        extractPrompt = '';
+      }
+    }
+
+    // Dynamic generation if file not found or for other categories
+    if (!extractPrompt) {
+      const schema = CATEGORY_SCHEMAS[targetCategory] || '';
+      extractPrompt = `You are the triage layer of a Wint Wealth support system for the category: "${targetCategory}".
+Determine what information the support agent still needs to look up in Finder, then ask for it one step at a time using the exact field schemas below.
+The field IDs you generate MUST match the canonical IDs in the schemas below.
+
+RETURN FORMAT — return ONLY valid JSON, no markdown, no explanation:
+
+When asking a question (process, has questions):
+{"queryType":"process","category":"${targetCategory}","questions":[{"id":"field_id","label":"Question label","options":["opt1","opt2"],"type":"select"|"text"}],"stepTitle":"Step N: Description","reasoning":"One sentence reasoning why we need this information","extractedFacts":{}}
+
+When all facts are known and scenario is resolved (process, no questions):
+{"queryType":"process","category":"${targetCategory}","questions":[],"stepTitle":"Resolution","reasoning":"","extractedFacts":{"<canonical_field_id>":"<value>"}}
+
+EXISTING CONFIRMED ANSWERS (already collected — never re-ask):
+${existingAnswersJson}
+${answeredIds.length > 0 ? `\nALREADY ANSWERED IDs — do NOT generate any question with these IDs:\n${answeredIds.join(', ')}` : ''}
+
+CONVERSATION HISTORY:
+${conversationHistory || 'None'}
+
+LATEST MESSAGE:
+${query}
+
+---
+SCHEMA & LOGIC TREE (Walk top-to-bottom. Return only the FIRST unanswered step):
+
+${schema}`;
+    } else {
+      // Repayment prompt structure from filesystem has its own placeholder format, inject data:
+      extractPrompt = extractPrompt
+        .replace('[EXISTING CONFIRMED ANSWERS]', `EXISTING CONFIRMED ANSWERS:\n${existingAnswersJson}`)
+        .replace('[LATEST MESSAGE]', `LATEST MESSAGE:\nUser: ${query}`);
+    }
+
+    const extractParts: any[] = [{ text: extractPrompt }];
+    if (imageData) {
+      extractParts.push({ inline_data: { mime_type: imageData.mimeType, data: imageData.base64 } });
+    }
+
+    let extractRaw = '';
+    if (provider === 'claude') {
+      const client = new Anthropic({ apiKey: config.anthropicApiKey });
+      const claudeContent: Anthropic.MessageParam['content'] = imageData
+        ? [
+            { type: 'image', source: { type: 'base64', media_type: imageData.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: imageData.base64 } },
+            { type: 'text', text: extractPrompt }
+          ]
+        : extractPrompt;
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1024,
+        messages: [{ role: 'user', content: claudeContent }],
+      });
+      extractRaw = response.content[0].type === 'text' ? response.content[0].text : '';
+    } else {
+      extractRaw = await geminiGenerate(
+        geminiKeys,
+        'gemini-2.5-flash',
+        [{ role: 'user', parts: extractParts }],
+        { config: { responseMimeType: 'application/json' } },
+        40000
+      );
+    }
+
+    const cleanedExtract = extractRaw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const parsed = JSON.parse(cleanedExtract);
+
+    // Apply answered filter as fallback duplicate protection
     if (answeredIds.length && Array.isArray(parsed.questions)) {
       const before = parsed.questions.length;
       parsed.questions = parsed.questions.filter(
@@ -598,7 +553,9 @@ The answer generator handles the rest. Never ask more questions than the minimum
         console.warn(`[analyze] Filtered ${before - parsed.questions.length} duplicate question(s)`);
       }
     }
+
     return NextResponse.json(parsed);
+
   } catch (err) {
     console.error('[analyze] Error:', err);
     return NextResponse.json({ questions: [], queryType: 'direct', fallback: true });

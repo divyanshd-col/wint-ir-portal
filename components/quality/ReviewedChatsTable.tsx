@@ -142,7 +142,9 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
             <tr>
               <th style={th}>Chat ID</th>
               <th style={th}>Agent</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS</th>
+              <th style={{ ...th, textAlign: 'right' }}>IQS (Chat)</th>
+              <th style={{ ...th, textAlign: 'right' }}>IQS (Call)</th>
+              <th style={th}>Call Transcript</th>
               <th style={th}>CSAT</th>
               <th style={th}>Disposition</th>
               <th style={th}>Reviewed By</th>
@@ -154,7 +156,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 10 }).map((_, j) => (
                     <td key={j} style={td}>
                       <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '30%' : '60%' }} />
                     </td>
@@ -163,7 +165,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
               ))
             ) : chats.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+                <td colSpan={10} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                   No reviewed chats found
                 </td>
               </tr>
@@ -198,6 +200,34 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
                       }}>
                         {chat.iqsScore}
                       </span>
+                    </td>
+                    <td style={tdNum}>
+                      {chat.callIqsScore !== null ? (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
+                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                        }}>
+                          {chat.callIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      )}
+                    </td>
+                    <td style={td}>
+                      {chat.callTranscriptStatus === 'transcribed' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
+                          <span style={{ fontSize: 11 }}>✓</span> Transcribed
+                        </span>
+                      ) : chat.callTranscriptStatus === 'pending' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#ca8a04', fontWeight: 500 }}>
+                          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
+                          Pending
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>No Call</span>
+                      )}
                     </td>
                     <td style={td}>
                       {chat.csatScore == null ? (
@@ -294,7 +324,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
                       mode="view"
                       onDone={() => setExpandedId(null)}
                       onClose={() => setExpandedId(null)}
-                      colSpan={8}
+                      colSpan={10}
                     />
                   )}
                 </React.Fragment>
