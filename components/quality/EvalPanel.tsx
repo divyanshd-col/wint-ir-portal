@@ -376,9 +376,9 @@ export default function EvalPanel({
   // ── Transcript helpers ────────────────────────────────────────────────────
   const BOT_NAMES  = new Set(['bot', 'myra', 'wint bot', 'wintbot', 'robylon', 'robylon ai']);
   const USER_NAMES = new Set(['user', 'customer', 'visitor']);
-  function senderType(s: string): 'user' | 'bot' | 'agent' | 'system' | 'private_note' {
+  function senderType(s: string): 'user' | 'bot' | 'agent' | 'system' | 'internal_note' {
     const sl = (s || '').toLowerCase();
-    if (sl === 'private note') return 'private_note';
+    if (sl === 'private note' || sl === 'internal note') return 'internal_note';
     if (sl === 'system' || sl === 'activity') return 'system';
     if (USER_NAMES.has(sl))  return 'user';
     if (BOT_NAMES.has(sl))   return 'bot';
@@ -959,7 +959,7 @@ export default function EvalPanel({
                       );
                     }
 
-                    if (type === 'private_note') {
+                    if (type === 'internal_note') {
                       const noteTime = msg.timestamp
                         ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
                         : '';
@@ -979,7 +979,7 @@ export default function EvalPanel({
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                           }}>
                             <div style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#b45309', marginBottom: 4 }}>
-                              Private Note (Robylon AI){noteTime}
+                              Internal Note (Robylon AI){noteTime}
                             </div>
                             <div style={{ fontStyle: 'italic' }}>
                               {msg.content}

@@ -84,12 +84,12 @@ function messagesToTranscript(messages: RobyMessage[]): string {
     const content = (m.content || m.text || '').trim();
     if (!content) continue;
 
-    const isPrivateNote =
+    const isInternalNote =
       (sender === 'Robylon AI' || (m as any).sender_name === 'Robylon AI' || (m as any).agent_name === 'Robylon AI') &&
       (m.role === 'agent' || m.role === 'Agent' || (m as any).sender_type === 'agent' || (m as any).sender_type === 'Agent' || (m as any).agent_type === 'agent' || (m as any).agent_type === 'Agent');
 
-    if (isPrivateNote) {
-      lines.push(`Private Note: ${content}`);
+    if (isInternalNote) {
+      lines.push(`Internal Note: ${content}`);
       continue;
     }
 
@@ -110,14 +110,15 @@ export function transcriptFromJsonb(messages: any[]): string {
   if (!Array.isArray(messages)) return '';
   const lines: string[] = [];
   for (const m of messages) {
-    const isPrivateNote =
+    const isInternalNote =
       m.is_private === true ||
+      m.is_internal === true ||
       ((m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI' || m.sender === 'Robylon AI') &&
        (m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent' || m.role === 'agent' || m.role === 'Agent'));
 
-    if (isPrivateNote) {
+    if (isInternalNote) {
       const content = (m.content || '').trim();
-      if (content) lines.push(`Private Note: ${content}`);
+      if (content) lines.push(`Internal Note: ${content}`);
       continue;
     }
 
@@ -556,18 +557,18 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     const content = (m.content || m.text || '').trim();
     if (!content) continue;
 
-    const isPrivateNote =
+    const isInternalNote =
       (sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
       (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
 
-    if (isPrivateNote) {
+    if (isInternalNote) {
       const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
       transcriptForStorage.push({
         sender_type: 'agent',
         sender_name: 'Robylon AI',
         content,
         timestamp: isoTs,
-        is_private: true,
+        is_internal: true,
       });
       continue;
     }
@@ -792,17 +793,17 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
       const content = (m.content || m.text || '').trim();
       if (!content) continue;
 
-      const isPrivateNote =
+      const isInternalNote =
         (sender === 'Robylon AI' || (m as any).sender_name === 'Robylon AI' || (m as any).agent_name === 'Robylon AI') &&
         (m.role === 'agent' || m.role === 'Agent' || (m as any).sender_type === 'agent' || (m as any).sender_type === 'Agent' || (m as any).agent_type === 'agent' || (m as any).agent_type === 'Agent');
 
-      if (isPrivateNote) {
+      if (isInternalNote) {
         transcriptForStorage.push({
           sender_type: 'agent',
           sender_name: 'Robylon AI',
           content,
           timestamp: m.timestamp,
-          is_private: true,
+          is_internal: true,
         });
         continue;
       }
