@@ -215,7 +215,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore:     db.call_iqs_score ? parseInt(db.call_iqs_score) : null,
       callTranscriptStatus: callInfo.status,
       callTranscriptLabel: callInfo.label,
-      closedAt:         db.closed_at,
+      closedAt:         (db.closed_at as any) instanceof Date ? (db.closed_at as any).toISOString() : (db.closed_at || ''),
       csatScore:        db.csat_score ? parseInt(db.csat_score) : null,
       mobileNumber:     db.mobile_number ?? null,
       disposition:      db.disposition,
