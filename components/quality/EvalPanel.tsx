@@ -497,7 +497,6 @@ export default function EvalPanel({
                 // QA modes: CAT2 params are TL's domain — hide entirely from QA
                 const isTLParam = CAT2_PARAMS.has(pascal);
                 const qaReadOnly = (mode === 'submit' || mode === 'resolve') && isTLParam;
-                if (qaReadOnly) return null;
                 // In tl-browse, CAT1 changed params get a highlight
                 const tlChanged = mode === 'tl-browse' && changedParamsInTL.includes(pascal);
                 const paramReadOnly = isReadOnly || qaReadOnly;
