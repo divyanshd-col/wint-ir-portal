@@ -62,7 +62,7 @@ export interface EvalPanelProps {
   reviewedBy?:   string | null;
   reviewedAt?:   string | null;
   reviewNote?:   string | null;
-  onDone:        () => void;
+  onDone:        (action?: 'submit' | 'escalate') => void;
   onClose:       () => void;
   colSpan:       number;
 }
@@ -184,6 +184,13 @@ export default function EvalPanel({
   // QA submit/override: Prompt/KB update flag
   const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
 
+  // Escalate to TL state
+  const [showEscalate, setShowEscalate] = useState(false);
+  const [escalationNoteText, setEscalationNoteText] = useState('');
+  const [escalating, setEscalating] = useState(false);
+  const [escalateErr, setEscalateErr] = useState('');
+  const [escalateDone, setEscalateDone] = useState(false);
+
   // Build challenged params map (keyed by PascalCase)
   const disputeMap = new Map<string, { note: string }>(
     (dispute?.challengedParams ?? []).map(d => [d.param, { note: d.note }])
@@ -274,6 +281,32 @@ export default function EvalPanel({
     setSubmitErr('');
   }
 
+  // Escalate chat to TLs
+  async function escalate() {
+    if (!escalationNoteText.trim()) {
+      setEscalateErr('Please add a short note explaining the escalation.');
+      return;
+    }
+    setEscalating(true);
+    setEscalateErr('');
+    try {
+      const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'escalate', note: escalationNoteText.trim() }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
+      setEscalateDone(true);
+      setTimeout(() => {
+        onDone('escalate');
+      }, 1000);
+    } catch (e: any) {
+      setEscalateErr(e.message ?? 'Escalation failed');
+    } finally {
+      setEscalating(false);
+    }
+  }
+
   // Submit evaluation
   async function submit() {
     setSubmitting(true);
@@ -301,7 +334,7 @@ export default function EvalPanel({
         body:    JSON.stringify(body),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-      onDone();
+      onDone('submit');
     } catch (e: any) {
       setSubmitErr(e.message ?? 'Submit failed');
     } finally {
@@ -360,7 +393,7 @@ export default function EvalPanel({
         if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
         setTlDone('dispute');
       }
-      onDone();
+      onDone('submit');
     } catch (e: any) {
       setTlErr(e.message ?? 'Action failed');
     } finally {
@@ -731,8 +764,25 @@ export default function EvalPanel({
                   {tlDone === 'dispute' ? 'Dispute raised ✓' : tlDone === 'override' ? 'Override saved ✓' : 'Submitted ✓'}
                 </span>
               )}
+              {/* Escalate button (only in submit/resolve modes) */}
+              {(mode === 'submit' || mode === 'resolve') && !escalateDone && (
+                <button
+                  onClick={() => setShowEscalate(prev => !prev)}
+                  style={{
+                    height: 36, padding: '0 16px', borderRadius: 8,
+                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center',
+                    border: '1px solid var(--qa-border)',
+                    background: showEscalate ? 'var(--qa-fill-med)' : 'var(--qa-card)',
+                    color: 'var(--qa-text-2)',
+                  }}
+                >
+                  {showEscalate ? 'Cancel' : 'Escalate'}
+                </button>
+              )}
               {/* Primary action (submit/resolve modes) */}
-              {(mode === 'submit' || mode === 'resolve') && (
+              {(mode === 'submit' || mode === 'resolve') && !showEscalate && (
                 <button
                   onClick={submit}
                   disabled={submitting}
@@ -802,6 +852,52 @@ export default function EvalPanel({
                   />
                 )}
                 {tlErr && <div style={{ fontSize: 12, color: 'var(--qa-text)', marginTop: 4 }}>{tlErr}</div>}
+              </div>
+            )}
+
+            {/* QA escalation note area */}
+            {showEscalate && !escalateDone && (
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>
+                    Escalation Note (Required)
+                  </div>
+                  <textarea
+                    value={escalationNoteText}
+                    onChange={e => setEscalationNoteText(e.target.value)}
+                    placeholder="Provide a short note for the TL..."
+                    rows={2}
+                    style={{
+                      width: '100%', resize: 'vertical',
+                      border: '1px solid var(--qa-border)', borderRadius: 6,
+                      padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                      lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      onClick={escalate}
+                      disabled={escalating}
+                      style={{
+                        height: 30, padding: '0 12px', borderRadius: 6,
+                        fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                        cursor: escalating ? 'not-allowed' : 'pointer',
+                        border: '1px solid var(--qa-gray-700)',
+                        background: escalating ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
+                        color: '#fff',
+                      }}
+                    >
+                      {escalating ? 'Escalating...' : 'Confirm Escalation'}
+                    </button>
+                  </div>
+                </div>
+                {escalateErr && <div style={{ fontSize: 12, color: 'var(--qa-text)', marginTop: 4 }}>{escalateErr}</div>}
+              </div>
+            )}
+            {escalateDone && (
+              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)', color: 'green', fontSize: 13, fontWeight: 500 }}>
+                Chat escalated successfully ✓
               </div>
             )}
 
