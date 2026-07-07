@@ -553,57 +553,39 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       )}
                     </td>
                     <td style={td}>
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                        {chat.status === 'reopened' ? (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            height: 18,
-                            padding: '0 5px',
-                            borderRadius: 4,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            background: '#f3e8ff',
-                            color: '#6b21a8',
-                          }}>
-                            Reopened
-                          </span>
-                        ) : (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            height: 18,
-                            padding: '0 5px',
-                            borderRadius: 4,
-                            fontSize: 10,
-                            fontWeight: 600,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.05em',
-                            background: '#e0f2fe',
-                            color: '#0369a1',
-                          }}>
-                            Pending
-                          </span>
-                        )}
-                        {chat.parameters?.['__escalated_by'] && (
-                          <span style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            width: 18,
-                            height: 18,
-                            borderRadius: '50%',
-                            background: '#fef08a', // yellow-200
-                            color: '#854d0e', // yellow-800
-                            fontSize: 12,
-                            fontWeight: 'bold',
-                          }} title={`Escalated to TL by ${chat.parameters['__escalated_by']}`}>
-                            !
-                          </span>
-                        )}
-                      </div>
+                      {chat.status === 'reopened' ? (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          height: 18,
+                          padding: '0 5px',
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          background: '#f3e8ff',
+                          color: '#6b21a8',
+                        }}>
+                          Reopened
+                        </span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          height: 18,
+                          padding: '0 5px',
+                          borderRadius: 4,
+                          fontSize: 10,
+                          fontWeight: 600,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.05em',
+                          background: '#e0f2fe',
+                          color: '#0369a1',
+                        }}>
+                          Pending
+                        </span>
+                      )}
                     </td>
                     <td style={tdAct}>
                       <button
@@ -635,14 +617,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       parameters={chat.parameters}
                       mobileNumber={chat.mobileNumber}
                       mode="submit"
-                      onDone={(action) => {
-                        if (action === 'escalate') {
-                          setExpandedId(null);
-                          fetchData(page);
-                        } else {
-                          removeChat(chat.chatId);
-                        }
-                      }}
+                      onDone={() => removeChat(chat.chatId)}
                       onClose={() => setExpandedId(null)}
                       colSpan={7}
                     />
