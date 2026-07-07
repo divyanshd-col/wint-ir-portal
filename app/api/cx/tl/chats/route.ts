@@ -108,10 +108,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     `(i.parameters->>'${k}' IS NOT NULL AND (i.parameters->'${k}'->>'score')::boolean = false)`
   ).join(' OR ');
   // tl_reviewed_by stored in parameters JSON as __tl_reviewed_by to avoid DB migration
-  // Include chats explicitly escalated by QA
-  const baseWhere = `a.name = ANY($1) AND (i.parameters->>'__tl_reviewed_by' IS NULL) AND (
-    (i.iqs_score < 85 AND (${cat2Filter})) OR i.parameters->>'__escalated_by' IS NOT NULL
-  )`;
+  const baseWhere = `a.name = ANY($1) AND i.iqs_score < 85 AND (i.parameters->>'__tl_reviewed_by' IS NULL) AND (${cat2Filter})`;
   const t0 = Date.now();
 
   const [countRow] = await query<{ total: string }>(

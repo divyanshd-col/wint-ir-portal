@@ -8,8 +8,6 @@ import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
 import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
-import { sendSlackMessage } from '@/lib/slack';
-import { readConfig } from '@/lib/config';
 
 const ROUTE = 'cx/qa/review';
 
@@ -43,7 +41,7 @@ export async function PATCH(
   const email = ((session.user as any).email || session.user?.name || 'unknown') as string;
 
   let body: {
-    action:       'submit' | 'override' | 'resolve' | 'tl-submit' | 'tl-override' | 'reopen' | 'escalate';
+    action:       'submit' | 'override' | 'resolve' | 'tl-submit' | 'tl-override' | 'reopen';
     parameters?:  Record<string, { score: boolean | null; reasoning: string }>;
     note?:        string;
     flagId?:      string;
@@ -56,7 +54,7 @@ export async function PATCH(
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 });
 
   // QA actions restricted to quality/admin; TL actions restricted to tl/admin
-  const qaOnlyAction = action === 'submit' || action === 'override' || action === 'resolve' || action === 'reopen' || action === 'escalate';
+  const qaOnlyAction = action === 'submit' || action === 'override' || action === 'resolve' || action === 'reopen';
   const tlOnlyAction = action === 'tl-submit' || action === 'tl-override';
   if (qaOnlyAction && !['quality', 'admin'].includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -215,80 +213,6 @@ export async function PATCH(
         ts: new Date().toISOString(),
         meta: { note: note ?? null }
       } as IQSAuditEntry);
-    } else if (action === 'escalate') {
-      const existing = await query<{ parameters: any }>(
-        `SELECT parameters FROM iqs_scores WHERE chat_id = $1`, [chatId]
-      );
-      if (!existing.length) return NextResponse.json({ error: 'Chat not found' }, { status: 404 });
-
-      let existingParams = existing[0].parameters ?? {};
-      if (typeof existingParams === 'string') {
-        try { existingParams = JSON.parse(existingParams); } catch { existingParams = {}; }
-      }
-
-      const merged = {
-        ...existingParams,
-        __escalated_by: email,
-        __escalated_at: new Date().toISOString(),
-        __escalated_note: note || '',
-      };
-
-      await query(
-        `UPDATE iqs_scores
-         SET parameters = $1
-         WHERE chat_id = $2`,
-        [JSON.stringify(merged), chatId]
-      );
-
-      log.info(ROUTE, 'escalate', { chatId, actor: email });
-      await storeAppendAuditEntry({
-        id: randomUUID(),
-        action: 'chat_escalated',
-        chatId,
-        actorEmail: email,
-        actorRole: role,
-        ts: new Date().toISOString(),
-        meta: { note: note ?? null }
-      } as IQSAuditEntry);
-
-      // Fetch details for Slack alert
-      const chatDetails = await query<{
-        agent_name: string | null;
-        disposition: string | null;
-        iqs_score: number;
-      }>(
-        `SELECT a.name AS agent_name,
-                c.tags->>'disposition' AS disposition,
-                i.iqs_score
-         FROM conversations c
-         JOIN iqs_scores i ON i.chat_id = c.id
-         LEFT JOIN agents a ON a.id = c.agent_id
-         WHERE c.id = $1`,
-        [chatId]
-      );
-
-      const detail = chatDetails[0];
-      const agentName = detail?.agent_name ?? 'Unknown';
-      const disposition = detail?.disposition ?? 'Unknown';
-      const iqsScore = detail?.iqs_score;
-      const chatLink = `https://app.robylon.ai/unified-inbox/share/${chatId}`;
-
-      const slackMessage = `📣 *Chat Escalated to TL*\n` +
-        `• *Chat Link:* <${chatLink}|${chatId}>\n` +
-        `• *Agent:* ${agentName}\n` +
-        `• *Disposition:* ${disposition}\n` +
-        `• *IQS Score:* ${iqsScore !== undefined ? iqsScore + '%' : 'N/A'}\n` +
-        `• *QA Note:* ${note || 'No note provided'}`;
-
-      const config = await readConfig();
-      const slackToken = process.env.SLACK_BOT_TOKEN || config.slackUserToken || '';
-      const slackChannel = process.env.TL_ESCALATION_SLACK_CHANNEL || process.env.QUALITY_SLACK_CHANNEL || '';
-
-      if (slackToken && slackChannel) {
-        await sendSlackMessage(slackChannel, slackMessage, slackToken);
-      } else {
-        console.warn(`[escalate] Slack notification skipped: token/channel missing.`);
-      }
     }
 
     return NextResponse.json({ ok: true });
