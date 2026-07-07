@@ -432,8 +432,7 @@ export interface IQSAuditEntry {
     | 'tl_resolved_cat2'
     | 'tl_override'
     | 'tl_submit'
-    | 'review_reopened'
-    | 'chat_escalated';
+    | 'review_reopened';
   chatId: string;
   actorEmail: string;
   actorRole: string;
