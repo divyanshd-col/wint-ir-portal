@@ -87,7 +87,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
   const [chats,    setChats]    = useState<ChatToReviewRow[]>([]);
   const [total,    setTotal]    = useState(0);
   const [page,     setPage]     = useState(1);
-  const [pageSize, setPageSize] = useState(5);
+  const [pageSize, setPageSize] = useState(20);
   const [loading,  setLoading]  = useState(true);
 
   // ── Expanded row state ────────────────────────────────────────────────────
@@ -415,7 +415,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                 <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
                   Rows per page
                 </div>
-                {[5, 10, 25, 50].map(n => (
+                {[20, 50, 100].map(n => (
                   <div key={n} style={{ ...dropItem, fontWeight: pageSize === n ? 600 : 400 }}
                     onClick={() => { setPageSize(n); fetchData(1, n); setOpenDrop(null); }}>
                     {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
