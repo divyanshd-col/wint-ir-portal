@@ -252,9 +252,6 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
     webhookTrigger: 'CLASSIFICATION_UPDATED',
   });
 
-  // Also call updateConversationTags for clarity
-  await updateConversationTags(chatId, { disposition, sub_disposition: subDisposition });
-
   // Check if transcript already stored and not yet scored
   const conv = await getConversation(chatId);
   const alreadyScored = await isScored(chatId);

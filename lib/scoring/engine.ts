@@ -84,7 +84,7 @@ export async function scoreLinkedCallsForChat(
 
   const kbContext = await getKbContextForScoring(disposition, subDisposition, chatTranscriptText, config, true);
 
-  for (const call of calls) {
+  const promises = calls.map(async (call) => {
     let segments = Array.isArray(call.transcript) ? call.transcript : [];
     let callText  = segmentsToText(segments);
 
@@ -110,8 +110,6 @@ export async function scoreLinkedCallsForChat(
         
         segments = parsed.segments;
         callText = segmentsToText(segments);
-        call.interruption_count = intCount;
-        call.dead_air_count = daCount;
       } catch (err: any) {
         console.error(`[scoring-engine] scoreLinkedCalls auto-transcription failed for call ${call.id}:`, err.message);
       }
@@ -119,7 +117,7 @@ export async function scoreLinkedCallsForChat(
 
     if (!callText) {
       await updateCallRecordingStatus(call.id, 'scored');
-      continue;
+      return;
     }
 
     const combinedTranscript = `--- WHATSAPP CHAT TRANSCRIPT ---\n${chatTranscriptText}\n\n--- TELEPHONE CALL TRANSCRIPT ---\n${callText}`;
@@ -161,7 +159,9 @@ export async function scoreLinkedCallsForChat(
     } catch (err: any) {
       console.error(`[scoring-engine] Combined IQS scoring failed for call ${call.id}:`, err.message);
     }
-  }
+  });
+
+  await Promise.allSettled(promises);
 }
 
 // ── Core scoring (called from webhook + cron) ────────────────────────────────────

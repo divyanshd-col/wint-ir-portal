@@ -140,5 +140,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     paramOrder: CALL_PARAM_ORDER,
     paramNames: CALL_PARAM_NAMES,
     paramWeights: CALL_WEIGHTS,
+  }, {
+    headers: {
+      'Cache-Control': 'private, max-age=30',
+    }
   });
 }

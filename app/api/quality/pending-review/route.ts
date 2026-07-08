@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
-import { getAllScoredConversations, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
+import { getAllScoredConversations, getScoredConversationsFilterOptions, getAgentNamesByTL, getAgentNamesByQA, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
   const effectiveMax = Math.max(minScore, maxScore);
 
   // Base opts shared by all queries
-  const baseOpts: Parameters<typeof getAllScoredConversations>[1] = { iqsMax: 79, includeUncertain: true };
+  const baseOpts: GetScoredConversationsOptions = { iqsMax: 79, includeUncertain: true };
   if (scopedAgentNames !== null) {
     if (agentFilter) baseOpts.agentName = agentFilter;
     else baseOpts.agentNames = scopedAgentNames;
@@ -58,29 +58,23 @@ export async function GET(req: NextRequest) {
   // Soft disposition default for QA: pre-filter unless QA explicitly overrides with a tag
   if (assignedDispositions && !tag) baseOpts.dispositions = assignedDispositions;
 
-  // Fetch unfiltered set to build dropdown options
-  let allRows: any[] = [];
-  try {
-    allRows = await getAllScoredConversations(0, baseOpts);
-  } catch (e: any) {
-    return NextResponse.json({ error: 'Database error', detail: e?.message }, { status: 500 });
-  }
+  let availableAgents: string[] = [];
+  let availableDispositions: string[] = [];
+  let availableSubDispositions: string[] = [];
+  let dispositionSubMap: Record<string, string[]> = {};
 
-  // Build available filter options from full unfiltered set
-  const availableDispositions = [...new Set(allRows.map((r: any) => r.disposition).filter(Boolean))].sort() as string[];
-  const dispositionSubMap: Record<string, string[]> = {};
-  for (const r of allRows) {
-    if (!r.disposition) continue;
-    if (!dispositionSubMap[r.disposition]) dispositionSubMap[r.disposition] = [];
-    if (r.subDisposition && !dispositionSubMap[r.disposition].includes(r.subDisposition)) {
-      dispositionSubMap[r.disposition].push(r.subDisposition);
-    }
+  try {
+    const filters = await getScoredConversationsFilterOptions(baseOpts);
+    availableAgents = filters.availableAgents;
+    availableDispositions = filters.availableDispositions;
+    availableSubDispositions = filters.availableSubDispositions;
+    dispositionSubMap = filters.dispositionSubMap;
+  } catch (err: any) {
+    console.error('[pending-review] filter options fetch failed:', err.message);
   }
-  for (const k of Object.keys(dispositionSubMap)) dispositionSubMap[k].sort();
-  const availableSubDispositions = [...new Set(allRows.map((r: any) => r.subDisposition).filter(Boolean))].sort() as string[];
 
   // Apply filters to get final set
-  const filteredOpts: Parameters<typeof getAllScoredConversations>[1] = {
+  const filteredOpts: GetScoredConversationsOptions = {
     ...baseOpts,
     iqsMin: effectiveMin > 0 ? effectiveMin : undefined,
     iqsMax: effectiveMax < 100 ? effectiveMax : 79,
@@ -91,14 +85,11 @@ export async function GET(req: NextRequest) {
   };
 
   let rows: any[] = [];
-  if (dateFrom || dateTo || tag || subTag || effectiveMin > 0 || effectiveMax < 79 || agentFilter) {
-    try {
-      rows = await getAllScoredConversations(0, filteredOpts);
-    } catch (e: any) {
-      return NextResponse.json({ error: 'Database error', detail: e?.message }, { status: 500 });
-    }
-  } else {
-    rows = allRows;
+  try {
+    const res = await getAllScoredConversations({ ...filteredOpts, limit: 1000 });
+    rows = res.rows;
+  } catch (e: any) {
+    return NextResponse.json({ error: 'Database error', detail: e?.message }, { status: 500 });
   }
 
   // Build flag map: chatId → pending flag
@@ -150,12 +141,15 @@ export async function GET(req: NextRequest) {
     };
   });
 
-  const availableAgents = [...new Set(allRows.map((r: any) => r.agentName).filter(Boolean))].sort() as string[];
   const uncertainCount = items.filter(i => !!(i as any).uncertainParameters && !(i as any).qaStatus).length;
   return NextResponse.json({
     items, uncertainCount, availableDispositions, availableSubDispositions, dispositionSubMap,
     availableAgents,
     ...(assignedDispositions && { assignedDispositions }),
+  }, {
+    headers: {
+      'Cache-Control': 'private, max-age=30',
+    }
   });
 }
 

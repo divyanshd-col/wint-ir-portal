@@ -3,7 +3,7 @@ import { requireRole } from '@/lib/api-guard';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, trimTranscript, IQSScoreEntry } from '@/lib/quality';
-import { storeAppendIQSScore, storeSetTranscript, storeAppendCallSkipped } from '@/lib/store';
+import { storeSetTranscript, storeAppendCallSkipped } from '@/lib/store';
 import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -81,7 +81,50 @@ export async function POST(req: NextRequest) {
       ...parsed,
     };
 
-    await storeAppendIQSScore(entry);
+    // Ensure agent and conversation exist in Postgres
+    let agentId: number | null = null;
+    if (entry.agentName) {
+      const { upsertAgent } = await import('@/lib/robylon/db');
+      agentId = await upsertAgent(entry.agentName);
+    }
+    const { upsertConversation, insertIQSScore } = await import('@/lib/robylon/db');
+    await upsertConversation({
+      id: entry.chatId,
+      agentId,
+      conversationType: entry.conversationType || 'agent',
+      tags: entry.tags,
+    });
+
+    // Map entry.scores & entry.reasoning from PascalCase to DB format
+    const { PASCAL_TO_DB } = await import('@/lib/param-keys');
+    const parameters: Record<string, any> = {};
+    for (const [k, val] of Object.entries(entry.scores || {})) {
+      const dbKey = PASCAL_TO_DB[k] || k.toLowerCase();
+      parameters[dbKey] = {
+        score: val === 'Yes' ? true : val === 'No' ? false : null,
+        reasoning: (entry.reasoning || {})[k] || '',
+      };
+    }
+
+    // Insert score into Postgres
+    await insertIQSScore({
+      chatId: entry.chatId,
+      iqsScore: entry.iqs,
+      parameters,
+      modelVersion: entry.model,
+      uncertainParameters: entry.uncertainParameters,
+    });
+
+    // If manual CSAT is set, update conversation CSAT too
+    if (entry.csat) {
+      const csatNum = parseInt(entry.csat, 10);
+      if ([1, 3, 5].includes(csatNum)) {
+        const { updateConversationCsat } = await import('@/lib/robylon/db');
+        const csatLabel = csatNum === 5 ? 'good' : csatNum === 3 ? 'could_be_better' : 'bad';
+        await updateConversationCsat(entry.chatId, csatNum, csatLabel);
+      }
+    }
+
     if (transcript && chatId) {
       await storeSetTranscript(chatId, { rawTranscript: transcript });
     }

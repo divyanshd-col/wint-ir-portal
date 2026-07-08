@@ -78,7 +78,7 @@ export async function GET() {
     let qualityRows: any[] = [];
     let qualityError: string | null = null;
     try {
-      qualityRows = await getAllScoredConversations(5);
+      qualityRows = (await getAllScoredConversations({ limit: 5 })).rows;
     } catch (e: any) {
       qualityError = e?.message;
     }
@@ -120,7 +120,7 @@ export async function GET() {
   // Full quality pipeline simulation
   try {
     const { getAllScoredConversations } = await import('@/lib/robylon/db');
-    const allRows = await getAllScoredConversations(2000);
+    const allRows = (await getAllScoredConversations({ limit: 2000 })).rows;
 
     let parsed = 0, failed = 0, nullIqs = 0, passFilter = 0;
     const agentNames = new Set<string>();

@@ -1,4 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
+import { randomUUID } from 'crypto';
 
 /**
  * Returns the dedicated IQS Gemini key if configured, otherwise falls back
@@ -235,20 +239,59 @@ export async function fetchAndTranscribeAudio(
   if (ct && ct.startsWith('audio/')) {
     mimeType = ct.split(';')[0].trim();
   }
-  const audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+
+  // Create temporary local file
+  const tempDir = os.tmpdir();
+  const tempFileName = `gemini-audio-${randomUUID()}${path.extname(recordingUrl) || '.mp3'}`;
+  const tempFilePath = path.join(tempDir, tempFileName);
+
+  const arrayBuffer = await audioRes.arrayBuffer();
+  await fs.writeFile(tempFilePath, Buffer.from(arrayBuffer));
+
+  // Initialize Gemini File API client with the primary rotated API key
+  const primaryKey = geminiKeys[0];
+  const ai = new GoogleGenAI({ apiKey: primaryKey });
+
+  let uploadResult: any;
+  try {
+    uploadResult = await ai.files.upload({
+      file: tempFilePath,
+      config: {
+        mimeType,
+      },
+    });
+  } catch (err: any) {
+    // Clean up local file on upload error
+    try { await fs.unlink(tempFilePath); } catch {}
+    throw new Error(`Failed to upload audio to Gemini Files API: ${err?.message || err}`);
+  }
 
   const { CALL_TRANSCRIPTION_PROMPT, parseTranscriptionResponse } = await import('./call-quality');
 
-  const raw = await callGeminiForCall(
-    geminiKeys,
-    [{ parts: [
-      { inline_data: { mime_type: mimeType, data: audioBase64 } },
-      { text: CALL_TRANSCRIPTION_PROMPT },
-    ]}],
-    undefined,
-    timeoutMs,
-  );
-
-  return parseTranscriptionResponse(raw);
+  try {
+    const raw = await callGeminiForCall(
+      geminiKeys,
+      [{ parts: [
+        { file_data: { mime_type: mimeType, file_uri: uploadResult.uri } },
+        { text: CALL_TRANSCRIPTION_PROMPT },
+      ]}],
+      undefined,
+      timeoutMs,
+    );
+    return parseTranscriptionResponse(raw);
+  } finally {
+    // remote cleanup
+    try {
+      await ai.files.delete({ name: uploadResult.name });
+    } catch (e: any) {
+      console.warn(`[gemini] Failed to delete remote file ${uploadResult.name}:`, e?.message);
+    }
+    // local cleanup
+    try {
+      await fs.unlink(tempFilePath);
+    } catch (e: any) {
+      console.warn(`[gemini] Failed to delete local temp file ${tempFilePath}:`, e?.message);
+    }
+  }
 }
 

@@ -6,6 +6,7 @@
 import type { PortalConfig } from './config';
 import type { KnowledgeChunk, SavedConversation } from './types';
 import { log } from '@/lib/log';
+import { query } from '@/lib/cx/db';
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
@@ -204,88 +205,7 @@ export async function storeSetCorrections(entries: object[]): Promise<void> {
   await kv_set(CORRECTIONS_KEY, JSON.stringify(entries));
 }
 
-// --- IQS Quality Scores ---
-
-const IQS_SCORES_KEY = 'wint_iqs_scores';
-
-export async function storeAppendIQSScore(entry: object): Promise<void> {
-  try {
-    // No LTRIM — scores are kept forever
-    await kv_pipeline([['LPUSH', IQS_SCORES_KEY, JSON.stringify(entry)]]);
-  } catch {}
-}
-
-export async function storeGetIQSScores(limit = 0, start = 0): Promise<string[]> {
-  // limit=0 → return ALL entries. Use storeGetAllIQSScores() for safe batched access.
-  if (limit <= 0) return kv_lrange(IQS_SCORES_KEY, 0, -1);
-  return kv_lrange(IQS_SCORES_KEY, start, start + limit - 1);
-}
-
-/**
- * Fetch ALL IQS score entries safely by issuing parallel 500-entry LRANGE batches.
- * Each batch response stays well under Upstash's 1 MB limit (~150 KB per batch).
- * Total latency ≈ one round-trip because all batches fire simultaneously.
- */
-export async function storeGetAllIQSScores(): Promise<string[]> {
-  const total = await storeGetIQSScoreCount();
-  if (total === 0) return [];
-  const BATCH = 500;
-  const batchCount = Math.ceil(total / BATCH);
-  const results = await Promise.all(
-    Array.from({ length: batchCount }, (_, i) => storeGetIQSScores(BATCH, i * BATCH))
-  );
-  return results.flat();
-}
-
-export async function storeGetIQSScoreCount(): Promise<number> {
-  if (!ready()) return 0;
-  try {
-    const res = await fetch(`${UPSTASH_URL}/llen/${IQS_SCORES_KEY}`, {
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}` },
-      cache: 'no-store',
-    });
-    const data = await res.json();
-    return typeof data.result === 'number' ? data.result : 0;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Scan the IQS score list in 500-entry batches and call `match(entry)` on each.
- * When match returns a non-null update object, LSET that index and return true.
- * Avoids the Upstash 1 MB single-response limit that silently breaks lrange(0,-1).
- */
-async function kv_scanAndUpdate(
-  match: (entry: any) => Record<string, any> | null,
-): Promise<boolean> {
-  if (!ready()) return false;
-  const total = await storeGetIQSScoreCount();
-  if (total === 0) return false;
-  const BATCH = 500;
-  for (let start = 0; start < total; start += BATCH) {
-    const batch = await kv_lrange(IQS_SCORES_KEY, start, start + BATCH - 1);
-    for (let j = 0; j < batch.length; j++) {
-      try {
-        const entry = JSON.parse(batch[j]);
-        const updates = match(entry);
-        if (updates !== null) {
-          const updated = { ...entry, ...updates };
-          await kv_pipeline([['LSET', IQS_SCORES_KEY, String(start + j), JSON.stringify(updated)]]);
-          return true;
-        }
-      } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
-    }
-  }
-  return false;
-}
-
-/** Update the csat field on an existing IQS score by chatId. Returns true if found & updated. */
-export async function storeUpdateIQSScoreCsat(chatId: string, csat: string): Promise<boolean> {
-  return kv_scanAndUpdate(entry =>
-    String(entry.chatId) === String(chatId) ? { csat } : null
-  );
-}
+// --- IQS Quality Scores are stored in PostgreSQL iqs_scores table ---
 
 // --- IQS Score Flags (agent disputes a score, sent to quality for review) ---
 
@@ -330,43 +250,160 @@ export interface IQSFlagComment {
 
 export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
   try {
-    await kv_pipeline([['LPUSH', IQS_FLAGS_KEY, JSON.stringify(entry)], ['LTRIM', IQS_FLAGS_KEY, '0', '999']]);
-  } catch {}
+    // Ensure the conversation exists in Postgres before inserting
+    const convs = await query('SELECT id FROM conversations WHERE id = $1', [String(entry.chatId)]);
+    if (convs.length === 0) {
+      await query(`
+        INSERT INTO conversations (id, conversation_type, started_at, closed_at)
+        VALUES ($1, 'agent', NOW(), NOW())
+        ON CONFLICT DO NOTHING
+      `, [String(entry.chatId)]);
+    }
+
+    await query(`
+      INSERT INTO iqs_flags (
+        id, score_id, chat_id, agent_name, agent_email, agent_note,
+        challenged_params, flagged_at, updated_at, raised_by_role,
+        param_category, parent_flag_id, status, reviewed_by, reviewed_at, review_note
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ON CONFLICT (id) DO NOTHING
+    `, [
+      entry.id,
+      entry.scoreId || null,
+      String(entry.chatId),
+      entry.agentName || '',
+      entry.agentEmail || '',
+      entry.agentNote || '',
+      JSON.stringify(entry.challengedParams || []),
+      entry.flaggedAt || new Date().toISOString(),
+      entry.updatedAt || null,
+      entry.raisedByRole,
+      entry.paramCategory,
+      entry.parentFlagId || null,
+      entry.status,
+      entry.reviewedBy || null,
+      entry.reviewedAt || null,
+      entry.reviewNote || null,
+    ]);
+  } catch (err: any) {
+    log.warn('store', 'Failed to append flag', { err: err.message });
+  }
 }
 
 export async function storeGetIQSFlags(): Promise<string[]> {
-  return kv_lrange(IQS_FLAGS_KEY, 0, -1);
+  try {
+    const rows = await query(`
+      SELECT
+        id, score_id AS "scoreId", chat_id AS "chatId", agent_name AS "agentName",
+        agent_email AS "agentEmail", agent_note AS "agentNote", challenged_params AS "challengedParams",
+        flagged_at AS "flaggedAt", updated_at AS "updatedAt", raised_by_role AS "raisedByRole",
+        param_category AS "paramCategory", parent_flag_id AS "parentFlagId", status,
+        reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt", review_note AS "reviewNote"
+      FROM iqs_flags
+      ORDER BY flagged_at DESC
+    `);
+    // Map dates back to ISO strings, then stringify
+    return rows.map(row => {
+      const entry = {
+        ...row,
+        flaggedAt: row.flaggedAt ? new Date(row.flaggedAt).toISOString() : '',
+        updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
+        reviewedAt: row.reviewedAt ? new Date(row.reviewedAt).toISOString() : undefined,
+      };
+      return JSON.stringify(entry);
+    });
+  } catch (err: any) {
+    log.warn('store', 'Failed to get flags', { err: err.message });
+    return [];
+  }
 }
 
 export async function storeUpdateIQSFlag(
   id: string,
   updates: Partial<Pick<IQSFlag, 'status' | 'updatedAt' | 'reviewedBy' | 'reviewedAt' | 'reviewNote'>>,
 ): Promise<boolean> {
-  if (!ready()) return false;
-  const all = await storeGetIQSFlags();
-  const idx = all.findIndex(raw => { try { return JSON.parse(raw).id === id; } catch { return false; } });
-  if (idx < 0) return false;
   try {
-    const entry = { ...JSON.parse(all[idx]), ...updates };
-    await kv_pipeline([['LSET', IQS_FLAGS_KEY, String(idx), JSON.stringify(entry)]]);
-    return true;
-  } catch { return false; }
+    const fields: string[] = [];
+    const params: any[] = [id];
+
+    if (updates.status !== undefined) {
+      params.push(updates.status);
+      fields.push(`status = $${params.length}`);
+    }
+    if (updates.updatedAt !== undefined) {
+      params.push(updates.updatedAt);
+      fields.push(`updated_at = $${params.length}`);
+    }
+    if (updates.reviewedBy !== undefined) {
+      params.push(updates.reviewedBy);
+      fields.push(`reviewed_by = $${params.length}`);
+    }
+    if (updates.reviewedAt !== undefined) {
+      params.push(updates.reviewedAt);
+      fields.push(`reviewed_at = $${params.length}`);
+    }
+    if (updates.reviewNote !== undefined) {
+      params.push(updates.reviewNote);
+      fields.push(`review_note = $${params.length}`);
+    }
+
+    if (fields.length === 0) return true;
+
+    const res = await query(`
+      UPDATE iqs_flags
+      SET ${fields.join(', ')}
+      WHERE id = $1
+      RETURNING id
+    `, params);
+
+    return res.length > 0;
+  } catch (err: any) {
+    log.warn('store', 'Failed to update flag', { err: err.message });
+    return false;
+  }
 }
 
 // --- Flag Thread Comments ---
 
-function flagThreadKey(flagId: string) { return `wint_iqs_thread:${flagId}`; }
-
 export async function storeAppendFlagComment(comment: IQSFlagComment): Promise<void> {
   try {
-    const key = flagThreadKey(comment.flagId);
-    await kv_pipeline([['RPUSH', key, JSON.stringify(comment)], ['LTRIM', key, '-200', '-1']]);
-  } catch {}
+    await query(`
+      INSERT INTO iqs_flag_comments (id, flag_id, author_email, author_name, role, content, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (id) DO NOTHING
+    `, [
+      comment.id,
+      comment.flagId,
+      comment.authorEmail,
+      comment.authorName,
+      comment.role,
+      comment.content,
+      comment.createdAt || new Date().toISOString(),
+    ]);
+  } catch (err: any) {
+    log.warn('store', 'Failed to append comment', { err: err.message });
+  }
 }
 
 export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment[]> {
-  const raw = await kv_lrange(flagThreadKey(flagId), 0, -1);
-  return raw.map(r => { try { return JSON.parse(r) as IQSFlagComment; } catch { return null; } }).filter(Boolean) as IQSFlagComment[];
+  try {
+    const rows = await query(`
+      SELECT
+        id, flag_id AS "flagId", author_email AS "authorEmail", author_name AS "authorName",
+        role, content, created_at AS "createdAt"
+      FROM iqs_flag_comments
+      WHERE flag_id = $1
+      ORDER BY created_at ASC
+    `, [flagId]);
+
+    return rows.map(row => ({
+      ...row,
+      createdAt: row.createdAt ? new Date(row.createdAt).toISOString() : '',
+    }));
+  } catch (err: any) {
+    log.warn('store', 'Failed to get flag thread', { err: err.message });
+    return [];
+  }
 }
 
 // --- IQS Audit Trail ---
@@ -473,31 +510,7 @@ export async function storeGetAllPendingScoreIds(): Promise<string[]> {
   } catch { return []; }
 }
 
-/** Update disposition + subDisposition on an existing IQS score by chatId. */
-export async function storeUpdateIQSScoreTags(
-  chatId: string,
-  disposition: string,
-  subDisposition: string,
-): Promise<boolean> {
-  return kv_scanAndUpdate(entry =>
-    String(entry.chatId) === String(chatId)
-      ? { disposition, subDisposition, tags: disposition }
-      : null
-  );
-}
 
-/** Update any fields on an existing IQS score entry by id+chatId. Returns true if found & updated. */
-export async function storeUpdateIQSScoreEntry(
-  id: string,
-  chatId: string,
-  updates: Record<string, any>,
-): Promise<boolean> {
-  return kv_scanAndUpdate(entry =>
-    String(entry.id) === String(id) && String(entry.chatId) === String(chatId)
-      ? updates
-      : null
-  );
-}
 
 // --- Pending Classifications (store until TICKET_CLOSED is scored) ---
 

@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
-import { getAllScoredConversations } from '@/lib/robylon/db';
+import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -61,18 +61,19 @@ export async function GET(req: NextRequest) {
   const dateTo         = searchParams.get('dateTo') || '';
   const typeFilter     = searchParams.get('type') || '';
 
-  const rawRows = await getAllScoredConversations(10000); // higher limit for full export
+  const dbOpts: GetScoredConversationsOptions = { limit: 10000 };
+  if (agentFilter)  dbOpts.agentName = agentFilter;
+  if (tagFilter)    dbOpts.disposition = tagFilter;
+  if (subTagFilter) dbOpts.subDisposition = subTagFilter;
+  if (csatFilter)   dbOpts.csat = csatFilter;
+  if (dateFrom)     dbOpts.dateFrom = dateFrom;
+  if (dateTo)       dbOpts.dateTo = dateTo;
+  if (typeFilter)   dbOpts.conversationType = typeFilter;
+
+  const { rows: rawRows } = await getAllScoredConversations(dbOpts);
   let entries: IQSScoreEntry[] = rawRows.map(row => {
     try { return toIQSScoreEntry(row); } catch { return null; }
   }).filter(Boolean) as IQSScoreEntry[];
-
-  if (agentFilter)  entries = entries.filter(e => e.agentName === agentFilter);
-  if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
-  if (subTagFilter) entries = entries.filter(e => (e.subDisposition || '').toLowerCase() === subTagFilter.toLowerCase());
-  if (csatFilter)   entries = entries.filter(e => e.csat === csatFilter);
-  if (dateFrom)     entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) >= dateFrom || (e.date || '') >= dateFrom);
-  if (dateTo)       entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) <= dateTo   || (e.date || '') <= dateTo);
-  if (typeFilter)   entries = entries.filter(e => (e.conversationType || 'agent') === typeFilter);
 
   const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
 
