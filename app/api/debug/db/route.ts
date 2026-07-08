@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
+import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || session.user.role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const result: Record<string, any> = {
     env: {
@@ -92,13 +90,7 @@ export async function GET() {
       first_row_iqs_type: qualityRows[0] ? typeof qualityRows[0].iqs : null,
     };
 
-    // Test toIQSScoreEntry on those rows
-    const DB_KEY_TO_LEGACY: Record<string, string> = {
-      technical: 'Technical', all_questions: 'AllQuestions', expectation: 'Expectation',
-      contextual: 'Contextual', follow_up: 'FollowUp', sentences: 'Sentences',
-      process: 'Process', opening: 'Opening', call: 'Call', tags: 'Tags',
-      grammar: 'Grammar', empathy: 'Empathy',
-    };
+
 
     result.quality_test = sample.map((row: any, i: number) => {
       try {

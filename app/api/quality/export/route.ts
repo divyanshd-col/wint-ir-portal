@@ -4,36 +4,15 @@
  * Supports optional filters: agent, dateFrom, dateTo, tag
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
+import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 import { getAllScoredConversations } from '@/lib/robylon/db';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
-function qualityAccess(session: any) {
-  const role = session?.user?.role;
-  return !!role && ['admin', 'quality', 'tl'].includes(role);
-}
-
 function escapeCSV(v: unknown): string {
   return `"${String(v ?? '').replace(/"/g, '""')}"`;
 }
-
-// ── DB snake_case key → legacy PascalCase key used by the frontend ────────────
-const DB_KEY_TO_LEGACY: Record<string, string> = {
-  technical:    'Technical',
-  all_questions:'AllQuestions',
-  expectation:  'Expectation',
-  contextual:   'Contextual',
-  follow_up:    'FollowUp',
-  sentences:    'Sentences',
-  process:      'Process',
-  opening:      'Opening',
-  call:         'Call',
-  tags:         'Tags',
-  grammar:      'Grammar',
-  empathy:      'Empathy',
-};
 
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
 function toIQSScoreEntry(row: any): IQSScoreEntry {
@@ -70,10 +49,8 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   const { searchParams } = new URL(req.url);
   const agentFilter    = searchParams.get('agent') || '';

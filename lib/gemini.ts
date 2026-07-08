@@ -210,3 +210,45 @@ export async function geminiStream(
   }
   throw lastError;
 }
+
+export function mimeFromUrl(url: string): string {
+  const u = url.toLowerCase().split('?')[0];
+  if (u.endsWith('.mp3'))  return 'audio/mpeg';
+  if (u.endsWith('.wav'))  return 'audio/wav';
+  if (u.endsWith('.m4a'))  return 'audio/mp4';
+  if (u.endsWith('.ogg'))  return 'audio/ogg';
+  if (u.endsWith('.flac')) return 'audio/flac';
+  return 'audio/mpeg';
+}
+
+export async function fetchAndTranscribeAudio(
+  recordingUrl: string,
+  geminiKeys: string[],
+  timeoutMs = 270_000
+): Promise<{ language: string; segments: any[] }> {
+  let mimeType = mimeFromUrl(recordingUrl);
+  const audioRes = await fetch(recordingUrl);
+  if (!audioRes.ok) {
+    throw new Error(`HTTP ${audioRes.status} fetching audio`);
+  }
+  const ct = audioRes.headers.get('content-type');
+  if (ct && ct.startsWith('audio/')) {
+    mimeType = ct.split(';')[0].trim();
+  }
+  const audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
+
+  const { CALL_TRANSCRIPTION_PROMPT, parseTranscriptionResponse } = await import('./call-quality');
+
+  const raw = await callGeminiForCall(
+    geminiKeys,
+    [{ parts: [
+      { inline_data: { mime_type: mimeType, data: audioBase64 } },
+      { text: CALL_TRANSCRIPTION_PROMPT },
+    ]}],
+    undefined,
+    timeoutMs,
+  );
+
+  return parseTranscriptionResponse(raw);
+}
+

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { storeGetTranscript } from '@/lib/store';
 import { query } from '@/lib/cx/db';
 import { log } from '@/lib/log';
@@ -15,11 +14,6 @@ import { scoreLinkedCallsForChat } from '@/lib/scoring/engine';
 import { transcriptFromJsonb, parseRobyTimestamp } from '@/lib/scoring/transcript';
 
 const ROUTE = 'quality/transcript';
-
-function qualityAccess(session: any): boolean {
-  const role = session?.user?.role;
-  return !!role && ['admin', 'quality', 'tl', 'agent'].includes(role);
-}
 
 // Collapse internal newlines and extra spaces — WhatsApp line breaks within a bubble
 // become a single space so the portal display matches Robylon's rendered view.
@@ -61,10 +55,8 @@ function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: 
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const chatId = req.nextUrl.searchParams.get('chatId');
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });

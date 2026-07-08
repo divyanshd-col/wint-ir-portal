@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
-import { readLogs } from '@/lib/logger';
+import { requireRole } from '@/lib/api-guard';
+import { readLogs } from '@/lib/log';
 
 export async function GET(request: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const logs = await readLogs();
 

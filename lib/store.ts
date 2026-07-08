@@ -32,33 +32,38 @@ async function kv_get(key: string): Promise<string | null> {
   }
 }
 
-async function kv_set(key: string, value: string): Promise<void> {
-  if (!ready()) return;
+async function kv_pipeline(commands: any[][]): Promise<any> {
+  if (!ready()) return null;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
+    const res = await fetch(`${UPSTASH_URL}/pipeline`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${UPSTASH_TOKEN}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify([['SET', key, value]]),
+      body: JSON.stringify(commands),
     });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    if (!res.ok) {
+      throw new Error(`Upstash pipeline HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return data;
+  } catch (e: any) {
+    log.warn('store', 'kv pipeline error', { err: e?.message ?? String(e) });
+    throw e;
+  }
+}
+
+async function kv_set(key: string, value: string): Promise<void> {
+  try {
+    await kv_pipeline([['SET', key, value]]);
+  } catch {}
 }
 
 async function kv_lpush(key: string, value: string): Promise<void> {
-  if (!ready()) return;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${UPSTASH_TOKEN}`,
-        'Content-Type': 'application/json',
-      },
-      // Keep last 500 log entries
-      body: JSON.stringify([['LPUSH', key, value], ['LTRIM', key, '0', '499']]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['LPUSH', key, value], ['LTRIM', key, '0', '499']]);
+  } catch {}
 }
 
 async function kv_lrange(key: string, start: number, end: number): Promise<string[]> {
@@ -82,20 +87,10 @@ async function kv_lrange(key: string, start: number, end: number): Promise<strin
 export async function storeAcquireScoringLock(chatId: string): Promise<boolean> {
   if (!ready()) return true; // allow if KV not configured
   try {
-    const res = await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      // SET NX EX 1800 — only sets if key doesn't exist; returns "OK" or null
-      // 1800s (30 min) covers multi-call chats: KB fetch + media + LLM × N calls
-      body: JSON.stringify([['SET', `wint_scoring_lock:${chatId}`, '1', 'EX', '1800', 'NX']]),
-    });
-    const data = await res.json();
-    // Upstash pipeline response is an array: [{"result":"OK"}] or [{"result":null}]
-    const result = Array.isArray(data) ? data[0]?.result : data.result;
+    const data = await kv_pipeline([['SET', `wint_scoring_lock:${chatId}`, '1', 'EX', '1800', 'NX']]);
+    const result = Array.isArray(data) ? data[0]?.result : data?.result;
     return result === 'OK';
   } catch {
-    // Fail closed — on KV error, deny the lock so concurrent duplicate scoring
-    // doesn't proceed uncontrolled. The rejected scorer will be retried by cron.
     console.warn(`[store] Scoring lock KV error for chat ${chatId} — denying lock`);
     return false;
   }
@@ -125,15 +120,9 @@ export async function storeHasProcessedEvent(eventId: string): Promise<boolean> 
 }
 
 export async function storeMarkProcessedEvent(eventId: string): Promise<void> {
-  if (!ready()) return;
   try {
-    // Expires after 2 h — long enough to catch retries, short enough to not bloat KV
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['SET', `wint_webhook_event:${eventId}`, '1', 'EX', '7200']]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['SET', `wint_webhook_event:${eventId}`, '1', 'EX', '7200']]);
+  } catch {}
 }
 
 // --- Quality Slack alert deduplication ---
@@ -146,15 +135,9 @@ export async function storeHasQualityAlert(chatId: string): Promise<boolean> {
 }
 
 export async function storeMarkQualityAlert(chatId: string): Promise<void> {
-  if (!ready()) return;
   try {
-    // SET with EX 86400 = expires after 24 h
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['SET', `wint_quality_alerted:${chatId}`, '1', 'EX', '86400']]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['SET', `wint_quality_alerted:${chatId}`, '1', 'EX', '86400']]);
+  } catch {}
 }
 
 // --- Config ---
@@ -208,14 +191,9 @@ export async function storeClearKBCache(): Promise<void> {
 const CORRECTIONS_KEY = 'wint_corrections';
 
 export async function storeAppendCorrection(entry: object): Promise<void> {
-  if (!ready()) return;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LPUSH', CORRECTIONS_KEY, JSON.stringify(entry)], ['LTRIM', CORRECTIONS_KEY, '0', '199']]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['LPUSH', CORRECTIONS_KEY, JSON.stringify(entry)], ['LTRIM', CORRECTIONS_KEY, '0', '199']]);
+  } catch {}
 }
 
 export async function storeGetCorrections(): Promise<string[]> {
@@ -231,15 +209,10 @@ export async function storeSetCorrections(entries: object[]): Promise<void> {
 const IQS_SCORES_KEY = 'wint_iqs_scores';
 
 export async function storeAppendIQSScore(entry: object): Promise<void> {
-  if (!ready()) return;
   try {
     // No LTRIM — scores are kept forever
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LPUSH', IQS_SCORES_KEY, JSON.stringify(entry)]]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['LPUSH', IQS_SCORES_KEY, JSON.stringify(entry)]]);
+  } catch {}
 }
 
 export async function storeGetIQSScores(limit = 0, start = 0): Promise<string[]> {
@@ -298,11 +271,7 @@ async function kv_scanAndUpdate(
         const updates = match(entry);
         if (updates !== null) {
           const updated = { ...entry, ...updates };
-          await fetch(`${UPSTASH_URL}/pipeline`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify([['LSET', IQS_SCORES_KEY, String(start + j), JSON.stringify(updated)]]),
-          });
+          await kv_pipeline([['LSET', IQS_SCORES_KEY, String(start + j), JSON.stringify(updated)]]);
           return true;
         }
       } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
@@ -360,14 +329,9 @@ export interface IQSFlagComment {
 }
 
 export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
-  if (!ready()) return;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LPUSH', IQS_FLAGS_KEY, JSON.stringify(entry)], ['LTRIM', IQS_FLAGS_KEY, '0', '999']]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['LPUSH', IQS_FLAGS_KEY, JSON.stringify(entry)], ['LTRIM', IQS_FLAGS_KEY, '0', '999']]);
+  } catch {}
 }
 
 export async function storeGetIQSFlags(): Promise<string[]> {
@@ -384,11 +348,7 @@ export async function storeUpdateIQSFlag(
   if (idx < 0) return false;
   try {
     const entry = { ...JSON.parse(all[idx]), ...updates };
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LSET', IQS_FLAGS_KEY, String(idx), JSON.stringify(entry)]]),
-    });
+    await kv_pipeline([['LSET', IQS_FLAGS_KEY, String(idx), JSON.stringify(entry)]]);
     return true;
   } catch { return false; }
 }
@@ -398,15 +358,10 @@ export async function storeUpdateIQSFlag(
 function flagThreadKey(flagId: string) { return `wint_iqs_thread:${flagId}`; }
 
 export async function storeAppendFlagComment(comment: IQSFlagComment): Promise<void> {
-  if (!ready()) return;
   try {
     const key = flagThreadKey(comment.flagId);
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['RPUSH', key, JSON.stringify(comment)], ['LTRIM', key, '-200', '-1']]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['RPUSH', key, JSON.stringify(comment)], ['LTRIM', key, '-200', '-1']]);
+  } catch {}
 }
 
 export async function storeGetFlagThread(flagId: string): Promise<IQSFlagComment[]> {
@@ -441,13 +396,8 @@ export interface IQSAuditEntry {
 }
 
 export async function storeAppendAuditEntry(entry: IQSAuditEntry): Promise<void> {
-  if (!ready()) return;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LPUSH', IQS_AUDIT_KEY, JSON.stringify(entry)], ['LTRIM', IQS_AUDIT_KEY, '0', '1999']]),
-    });
+    await kv_pipeline([['LPUSH', IQS_AUDIT_KEY, JSON.stringify(entry)], ['LTRIM', IQS_AUDIT_KEY, '0', '1999']]);
   } catch (e: any) { log.warn('store', 'kv audit error', { err: e?.message ?? String(e) }); }
 }
 
@@ -486,14 +436,9 @@ export interface PendingScoreState {
 }
 
 async function kv_sadd(key: string, member: string): Promise<void> {
-  if (!ready()) return;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['SADD', key, member]]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['SADD', key, member]]);
+  } catch {}
 }
 
 export async function storeSavePendingScore(state: PendingScoreState): Promise<void> {
@@ -508,17 +453,12 @@ export async function storeGetPendingScore(chatId: string): Promise<PendingScore
 }
 
 export async function storeDeletePendingScore(chatId: string): Promise<void> {
-  if (!ready()) return;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([
-        ['DEL',  `${PENDING_SCORE_PREFIX}${chatId}`],
-        ['SREM', PENDING_SCORE_IDS_KEY, chatId],
-      ]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([
+      ['DEL',  `${PENDING_SCORE_PREFIX}${chatId}`],
+      ['SREM', PENDING_SCORE_IDS_KEY, chatId],
+    ]);
+  } catch {}
 }
 
 export async function storeGetAllPendingScoreIds(): Promise<string[]> {
@@ -577,12 +517,8 @@ export async function storeGetAndClearPendingTags(
   const val = await kv_get(`${PENDING_TAGS_PREFIX}${chatId}`);
   if (val && ready()) {
     try {
-      await fetch(`${UPSTASH_URL}/pipeline`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify([['DEL', `${PENDING_TAGS_PREFIX}${chatId}`]]),
-      });
-    } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+      await kv_pipeline([['DEL', `${PENDING_TAGS_PREFIX}${chatId}`]]);
+    } catch {}
     try { return JSON.parse(val); } catch {}
   }
   return null;
@@ -601,12 +537,8 @@ export async function storeGetAndClearPendingCsat(chatId: string | number): Prom
   if (val && ready()) {
     // Delete after reading
     try {
-      await fetch(`${UPSTASH_URL}/pipeline`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify([['DEL', `${PENDING_CSAT_PREFIX}${chatId}`]]),
-      });
-    } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+      await kv_pipeline([['DEL', `${PENDING_CSAT_PREFIX}${chatId}`]]);
+    } catch {}
   }
   return val;
 }
@@ -659,14 +591,9 @@ export interface CallSkippedEntry {
 }
 
 export async function storeAppendCallSkipped(entry: CallSkippedEntry): Promise<void> {
-  if (!ready()) return;
   try {
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LPUSH', CALL_SKIPPED_KEY, JSON.stringify(entry)], ['LTRIM', CALL_SKIPPED_KEY, '0', '999']]),
-    });
-  } catch (e: any) { log.warn('store', 'kv error', { err: e?.message ?? String(e) }); }
+    await kv_pipeline([['LPUSH', CALL_SKIPPED_KEY, JSON.stringify(entry)], ['LTRIM', CALL_SKIPPED_KEY, '0', '999']]);
+  } catch {}
 }
 
 // --- QA Review Status (per-chat review tracking for pending IQS < 80% chats) ---
@@ -697,11 +624,7 @@ export async function storeUpdateCallSkipped(
   if (idx < 0) return false;
   try {
     const entry = { ...JSON.parse(all[idx]), ...updates };
-    await fetch(`${UPSTASH_URL}/pipeline`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${UPSTASH_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify([['LSET', CALL_SKIPPED_KEY, String(idx), JSON.stringify(entry)]]),
-    });
+    await kv_pipeline([['LSET', CALL_SKIPPED_KEY, String(idx), JSON.stringify(entry)]]);
     return true;
   } catch { return false; }
 }

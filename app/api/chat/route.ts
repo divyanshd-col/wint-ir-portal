@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import Anthropic from '@anthropic-ai/sdk';
 import { fetchKnowledgeChunks, retrieveRelevantChunks, getTopKBScore } from '@/lib/drive';
 import { searchSlack } from '@/lib/slack';
 import { readConfig } from '@/lib/config';
-import { logChatMessage } from '@/lib/logger';
+import { logChatMessage } from '@/lib/log';
 import { getOrderedGeminiKeys, geminiGenerate, geminiStream } from '@/lib/gemini';
 import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/lib/prompts';
 
@@ -86,8 +85,8 @@ interface ChatRequest {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const { messages, formAnswers, queryType, category, imageData }: ChatRequest = await req.json();
   const latestUserMessage = [...messages].reverse().find((m: any) => m.role === 'user');

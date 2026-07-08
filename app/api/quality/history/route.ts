@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { getConversationHistory } from '@/lib/robylon/db';
 
-function qualityAccess(role: string | undefined) {
-  return !!role && ['admin', 'quality', 'tl', 'agent'].includes(role);
-}
-
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-
-  const role = (session.user as any)?.role;
-  if (!qualityAccess(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const chatId = new URL(req.url).searchParams.get('chatId') || '';
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });

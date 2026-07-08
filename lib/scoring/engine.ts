@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { fireQualityAlert } from '@/lib/quality-alert';
 import {
@@ -37,6 +37,37 @@ function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult
   };
 }
 
+// ── Shared KB Context Retrieval helper ───────────────────────────────────────────────
+export async function getKbContextForScoring(
+  disposition: string,
+  subDisposition: string,
+  transcriptText: string,
+  config: any,
+  requireDisposition = false
+): Promise<string> {
+  try {
+    const searchQuery = disposition
+      ? `${disposition} ${subDisposition}`.trim()
+      : (requireDisposition ? '' : extractQueryFromTranscript(transcriptText));
+
+    if (!searchQuery) return '';
+
+    const allChunks = await fetchKnowledgeChunks();
+    const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
+    if (!relevant.length) return '';
+
+    const docNames = config.knowledgeBaseDocNames || {};
+    return relevant.map(c => {
+      const driveId = c.fileName.trim();
+      const label = docNames[driveId] || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
+      return `[${label}]\n${c.content}`;
+    }).join('\n---\n');
+  } catch (err: any) {
+    console.warn('[scoring-engine] KB context retrieval failed:', err.message);
+    return '';
+  }
+}
+
 // ── Call IQS scoring for calls linked to a chat ─────────────────────────────────────
 export async function scoreLinkedCallsForChat(
   chatId: string,
@@ -51,22 +82,7 @@ export async function scoreLinkedCallsForChat(
   const geminiKeys = getIQSGeminiKeys(config);
   if (!geminiKeys.length) return;
 
-  let kbContext = '';
-  try {
-    const searchQuery = disposition ? `${disposition} ${subDisposition}`.trim() : '';
-    if (searchQuery) {
-      const allChunks = await fetchKnowledgeChunks();
-      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
-      if (relevant.length) {
-        const docNames = config.knowledgeBaseDocNames || {};
-        kbContext = relevant.map(c => {
-          const driveId = c.fileName.trim();
-          const label = docNames[driveId] || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
-          return `[${label}]\n${c.content}`;
-        }).join('\n---\n');
-      }
-    }
-  } catch {}
+  const kbContext = await getKbContextForScoring(disposition, subDisposition, chatTranscriptText, config, true);
 
   for (const call of calls) {
     let segments = Array.isArray(call.transcript) ? call.transcript : [];
@@ -75,53 +91,27 @@ export async function scoreLinkedCallsForChat(
     if (!callText && call.recording_url) {
       console.log(`[scoring-engine] Call ${call.id} transcript is empty/null. Attempting auto-transcription on the fly before scoring...`);
       try {
-        const audioRes = await fetch(call.recording_url);
-        if (audioRes.ok) {
-          let mimeType = 'audio/wav';
-          const u = call.recording_url.toLowerCase().split('?')[0];
-          if (u.endsWith('.mp3'))  mimeType = 'audio/mpeg';
-          if (u.endsWith('.wav'))  mimeType = 'audio/wav';
-          if (u.endsWith('.m4a'))  mimeType = 'audio/mp4';
-          if (u.endsWith('.ogg'))  mimeType = 'audio/ogg';
-          if (u.endsWith('.flac')) mimeType = 'audio/flac';
-          
-          const contentType = audioRes.headers.get('content-type');
-          if (contentType) mimeType = contentType.split(';')[0].trim() || mimeType;
-          
-          const audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
-          
-          const raw = await callGeminiForCall(
-            geminiKeys,
-            [{ parts: [
-              { inline_data: { mime_type: mimeType, data: audioBase64 } },
-              { text: CALL_TRANSCRIPTION_PROMPT },
-            ]}],
-            undefined,
-            270_000,
-          );
-          
-          const parsed = parseTranscriptionResponse(raw);
-          const intCount = parsed.segments.filter(s => s.type === 'interruption').length;
-          const daCount  = parsed.segments.filter(s => s.type === 'dead_air').length;
-          
-          await insertCallRecording({
-            id: call.id,
-            chatId: call.chat_id,
-            agentId: call.agent_id,
-            contactId: call.contact_id,
-            recordingUrl: call.recording_url,
-            durationSeconds: call.duration_seconds,
-            calledAt: call.called_at,
-            language: parsed.language,
-            transcript: parsed.segments,
-          });
-          await updateCallRecordingMetrics({ id: call.id, interruptionCount: intCount, deadAirCount: daCount, status: 'linked' });
-          
-          segments = parsed.segments;
-          callText = segmentsToText(segments);
-          call.interruption_count = intCount;
-          call.dead_air_count = daCount;
-        }
+        const parsed = await fetchAndTranscribeAudio(call.recording_url, geminiKeys);
+        const intCount = parsed.segments.filter(s => s.type === 'interruption').length;
+        const daCount  = parsed.segments.filter(s => s.type === 'dead_air').length;
+        
+        await insertCallRecording({
+          id: call.id,
+          chatId: call.chat_id,
+          agentId: call.agent_id,
+          contactId: call.contact_id,
+          recordingUrl: call.recording_url,
+          durationSeconds: call.duration_seconds,
+          calledAt: call.called_at,
+          language: parsed.language,
+          transcript: parsed.segments,
+        });
+        await updateCallRecordingMetrics({ id: call.id, interruptionCount: intCount, deadAirCount: daCount, status: 'linked' });
+        
+        segments = parsed.segments;
+        callText = segmentsToText(segments);
+        call.interruption_count = intCount;
+        call.dead_air_count = daCount;
       } catch (err: any) {
         console.error(`[scoring-engine] scoreLinkedCalls auto-transcription failed for call ${call.id}:`, err.message);
       }
@@ -230,28 +220,7 @@ export async function executeScoring(
   const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
   // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
-  let kbContext = '';
-  try {
-    const searchQuery = disposition
-      ? `${disposition} ${subDisposition}`.trim()
-      : extractQueryFromTranscript(transcriptText);
-
-    if (searchQuery) {
-      const allChunks = await fetchKnowledgeChunks();
-      const relevant  = retrieveRelevantChunks(allChunks, searchQuery, 5);
-      if (relevant.length) {
-        const docNames = config.knowledgeBaseDocNames || {};
-        kbContext = relevant.map(c => {
-          const driveId = c.fileName.trim();
-          const label = docNames[driveId] || (/^[A-Za-z0-9_-]{25,}$/.test(driveId) ? (c.content.split('\n')[0].trim() || 'KB Document') : driveId);
-          return `[${label}]\n${c.content}`;
-        }).join('\n---\n');
-        console.log(`[scoring-engine] KB context: ${relevant.length} chunks for query "${searchQuery}"`);
-      }
-    }
-  } catch (err: any) {
-    console.warn('[scoring-engine] KB fetch failed, scoring without context:', err.message);
-  }
+  const kbContext = await getKbContextForScoring(disposition, subDisposition, transcriptText, config, false);
 
   const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition, timing.conversationType);
   const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;

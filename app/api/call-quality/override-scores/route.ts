@@ -9,23 +9,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 import { calculateCallIQS, CALL_WEIGHTS } from '@/lib/call-quality';
 import type { CallParamScore } from '@/lib/call-quality';
 
 const CALL_PARAM_KEYS = Object.keys(CALL_WEIGHTS);
 
-function qualityAccess(session: any) {
-  return ['admin', 'quality', 'tl'].includes(session?.user?.role);
-}
-
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   let body: any;
   try { body = await req.json(); } catch {

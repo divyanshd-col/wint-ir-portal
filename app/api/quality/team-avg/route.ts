@@ -1,22 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
+import { avgOrNull as avg } from '@/lib/stats';
 import { getAllScoredConversations } from '@/lib/robylon/db';
 import { PARAM_ORDER } from '@/lib/quality';
 
 const SLA_SECS = 180;
 
-function avg(nums: number[]) {
-  if (!nums.length) return null;
-  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
-}
-
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const role = (session?.user as any)?.role;
-  if (!session || !['admin', 'quality', 'tl', 'agent'].includes(role || '')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const { searchParams } = new URL(req.url);
   const dateFrom = searchParams.get('dateFrom') || '';

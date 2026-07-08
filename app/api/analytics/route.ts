@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
-import { readLogs } from '@/lib/logger';
+import { requireRole } from '@/lib/api-guard';
+import { csatScore, avgOrNull } from '@/lib/stats';
+import { readLogs } from '@/lib/log';
 import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
@@ -113,18 +113,7 @@ function computeLogStats(logs: LogEntry[]) {
   };
 }
 
-// ── Quality data helpers ──────────────────────────────────────────────────────
-function csatScore(csat: string | undefined): number | null {
-  if (csat === '5') return 100;
-  if (csat === '3') return 50;
-  if (csat === '1') return 0;
-  return null;
-}
 
-function avgOrNull(nums: number[]): number | null {
-  if (!nums.length) return null;
-  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
-}
 
 function computeQualitySummary(entries: IQSScoreEntry[]) {
   if (!entries.length) return null;
@@ -221,10 +210,8 @@ function computeQualitySummary(entries: IQSScoreEntry[]) {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!(session?.user as any)?.isAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const body = await req.json().catch(() => ({}));
   const question: string = body.question?.trim() || '';

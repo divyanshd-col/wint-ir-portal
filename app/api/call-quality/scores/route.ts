@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { getAllScoredCalls, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
 import { CALL_PARAM_ORDER, CALL_PARAM_NAMES, CALL_WEIGHTS } from '@/lib/call-quality';
 
 const PAGE_SIZE = 50;
-
-function qualityAccess(session: any): boolean {
-  const role = session?.user?.role;
-  return !!role && ['admin', 'quality', 'tl', 'agent'].includes(role);
-}
 
 function avg(nums: number[]): number | null {
   if (!nums.length) return null;
@@ -39,10 +33,8 @@ function normParamsFromDb(params: any): { scores: Record<string, string>; reason
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) {
-    return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const user     = session.user as any;
   const role     = user?.role;

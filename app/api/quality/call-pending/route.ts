@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { storeGetCallSkipped, storeUpdateCallSkipped } from '@/lib/store';
 import { readConfig } from '@/lib/config';
 
-function qualityAccess(session: any) {
-  return ['admin', 'quality', 'tl'].includes(session?.user?.role || '');
-}
-
 // GET — list call-skipped chats, filtered to quality person's agents
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   const role  = (session.user as any)?.role;
   const email = (session.user as any)?.email || '';
@@ -45,8 +40,8 @@ export async function GET() {
 
 // PATCH — mark a call-skipped chat as reviewed
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   const { id, status, reviewNote } = await req.json();
   if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 });

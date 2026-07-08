@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSFlag, IQSChallengedParam, IQSAuditEntry } from '@/lib/store';
 import { CAT1_PARAMS, CAT2_PARAMS } from '@/lib/quality';
 import { randomUUID } from 'crypto';
 
-function qualityAccess(session: any) {
-  return ['admin', 'quality', 'tl', 'agent'].includes(session?.user?.role || '');
-}
 function reviewAccess(session: any) {
   return ['admin', 'quality', 'tl'].includes(session?.user?.role || '');
 }
 
-// POST — IR or TL flags a score for review
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const { scoreId, chatId, agentNote, challengedParams, raisedByRole } = await req.json();
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
@@ -76,8 +71,8 @@ export async function POST(req: NextRequest) {
 
 // GET — list flags (quality/admin/tl: all; agent: own only)
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const raw = await storeGetIQSFlags();
   const flags: IQSFlag[] = raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
@@ -110,10 +105,9 @@ export async function GET() {
   return NextResponse.json({ flags });
 }
 
-// PATCH — review a flag (quality/admin/tl) or cancel own flag (agent)
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const { id, status, reviewNote, action } = await req.json();
   if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 });

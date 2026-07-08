@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
+import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { csatScore, avg, avgOrNull, getWeekKey, getWeekLabel } from '@/lib/stats';
 import { getAllScoredConversations, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
 import { PARAM_ORDER } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
@@ -8,63 +9,6 @@ import type { IQSScoreEntry } from '@/lib/quality';
 const SLA_THRESHOLD_SECS = 180; // 3 minutes handoff SLA
 
 const PAGE_SIZE = 50;
-
-function qualityAccess(session: any): boolean {
-  const role = session?.user?.role;
-  return !!role && ['admin', 'quality', 'tl', 'agent'].includes(role);
-}
-
-function csatScore(csat: string | undefined): number | null {
-  if (csat === '5') return 100;
-  if (csat === '3') return 50;
-  if (csat === '1') return 0;
-  return null;
-}
-
-function avg(nums: number[]): number {
-  if (!nums.length) return 0;
-  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
-}
-
-function avgOrNull(nums: number[]): number | null {
-  if (!nums.length) return null;
-  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
-}
-
-function getWeekKey(iso: string): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const day = d.getUTCDay() || 7; // Mon=1 … Sun=7
-  const mon = new Date(d);
-  mon.setUTCDate(d.getUTCDate() - day + 1);
-  return mon.toISOString().slice(0, 10);
-}
-
-function getWeekLabel(key: string): string {
-  const mon = new Date(key + 'T00:00:00Z');
-  const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
-  const fmt = (dt: Date) => dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' });
-  return `${fmt(mon)} – ${fmt(sun)}`;
-}
-
-// ── DB snake_case key → legacy PascalCase key used by the frontend ────────────
-// DB stores: technical, all_questions, follow_up, sentences, ...
-// Frontend expects: Technical, AllQuestions, FollowUp, Sentences, ...
-const DB_KEY_TO_LEGACY: Record<string, string> = {
-  technical:    'Technical',
-  all_questions:'AllQuestions',
-  expectation:  'Expectation',
-  contextual:   'Contextual',
-  follow_up:    'FollowUp',
-  sentences:    'Sentences',
-  process:      'Process',
-  opening:      'Opening',
-  call:         'Call',
-  tags:         'Tags',
-  grammar:      'Grammar',
-  empathy:      'Empathy',
-};
 
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
 function toIQSScoreEntry(row: any): IQSScoreEntry {
@@ -119,10 +63,8 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  if (response) return response;
 
   const { searchParams } = new URL(req.url);
   const page          = Math.max(0, parseInt(searchParams.get('page') || '0'));

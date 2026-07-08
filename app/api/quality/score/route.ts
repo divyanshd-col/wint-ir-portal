@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
 import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, trimTranscript, IQSScoreEntry } from '@/lib/quality';
@@ -8,16 +7,9 @@ import { storeAppendIQSScore, storeSetTranscript, storeAppendCallSkipped } from 
 import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import Anthropic from '@anthropic-ai/sdk';
 
-function qualityAccess(session: any): boolean {
-  const role = session?.user?.role;
-  return !!role && ['admin', 'quality', 'tl'].includes(role);
-}
-
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   const body = await req.json();
   const {

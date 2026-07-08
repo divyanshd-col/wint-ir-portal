@@ -1,21 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 import { CALL_IQS_SYSTEM_PROMPT, buildCallScoringPrompt, parseCallScoringResponse, segmentsToText } from '@/lib/call-quality';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { readConfig } from '@/lib/config';
 
-function qualityAccess(role: string | undefined) {
-  return !!role && ['admin', 'quality', 'tl'].includes(role);
-}
-
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
   const user = session.user as any;
-  if (!qualityAccess(user?.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   let body: { callId?: string };
   try { body = await req.json(); } catch {

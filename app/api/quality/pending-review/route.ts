@@ -1,36 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
+import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 import { getAllScoredConversations, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 
-const DB_KEY_TO_LEGACY: Record<string, string> = {
-  technical:    'Technical',
-  all_questions:'AllQuestions',
-  expectation:  'Expectation',
-  contextual:   'Contextual',
-  follow_up:    'FollowUp',
-  sentences:    'Sentences',
-  process:      'Process',
-  opening:      'Opening',
-  call:         'Call',
-  grammar:      'Grammar',
-  empathy:      'Empathy',
-};
-
-function qualityAccess(role: string | undefined) {
-  return !!role && ['admin', 'quality', 'tl'].includes(role);
-}
-
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   const role  = (session.user as any)?.role;
   const email = (session.user as any)?.email || '';
-  if (!qualityAccess(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   let selfAgentName = '';
   let scopedAgentNames: string[] | null = null;
@@ -179,11 +160,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   const role = (session.user as any)?.role;
-  if (!qualityAccess(role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { chatId, reviewNote } = await req.json();
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });

@@ -20,7 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { readConfig } from '@/lib/config';
-import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   CALL_DISPOSITION_CLASSIFY_PROMPT,
@@ -50,6 +50,7 @@ import {
   transcriptFromJsonb,
   parseRobyTimestamp,
   extractAgentName,
+  normalizeRobylonMessages,
   type RobyMessage,
 } from '@/lib/scoring/transcript';
 import { analyzeConversationTiming, type TimedMessage } from '@/lib/quality';
@@ -134,60 +135,9 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
     }
   }
 
-  // Build timedMessages and filtered transcript array for storage
-  const timedMessages: TimedMessage[] = [];
-  const transcriptForStorage: any[] = [];
+  // Build timedMessages and filtered transcript array for storage using the unified normalizer
+  const { transcriptText, timedMessages, transcriptForStorage } = normalizeRobylonMessages(rawMessages, year);
 
-  for (const m of rawMessages) {
-    const sender  = (m.sender || m.role || '').trim();
-    const content = (m.content || m.text || '').trim();
-    if (!content) continue;
-
-    const isInternalNote =
-      (sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
-      (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
-
-    if (isInternalNote) {
-      const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
-      transcriptForStorage.push({
-        sender_type: 'agent',
-        sender_name: 'Robylon AI',
-        content,
-        timestamp: isoTs,
-        is_internal: true,
-      });
-      continue;
-    }
-
-    const low = content.toLowerCase();
-    if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
-      const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
-      transcriptForStorage.push({
-        sender_type: 'activity',
-        sender_name: 'system',
-        content,
-        timestamp: isoTs,
-      });
-      continue;
-    }
-    if (low.includes('please rate your experience') || m.buttons) continue;
-
-    const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
-    const senderLow = sender.toLowerCase();
-    const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
-                     : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
-                     : 'agent';
-
-    timedMessages.push({ sender, content, timestamp: isoTs });
-    transcriptForStorage.push({
-      sender_type: senderType,
-      sender_name: sender,
-      content,
-      timestamp: isoTs,
-    });
-  }
-
-  const transcriptText = messagesToTranscript(rawMessages);
   if (!transcriptText) {
     return NextResponse.json({ ok: true, scored: false, reason: 'Transcript empty after filtering' });
   }
@@ -367,51 +317,17 @@ async function handleLegacyPayload(body: any): Promise<NextResponse> {
   } = body;
 
   let transcriptText = '';
-  const timedMessages: TimedMessage[] = [];
-  const transcriptForStorage: any[] = [];
+  let timedMessages: TimedMessage[] = [];
+  let transcriptForStorage: any[] = [];
 
   if (rawTranscript) {
     transcriptText = String(rawTranscript).trim();
+    transcriptForStorage = [{ sender_type: 'agent', content: transcriptText }];
   } else if (Array.isArray(messages) && messages.length) {
-    transcriptText = messagesToTranscript(messages);
-    for (const m of messages as RobyMessage[]) {
-      const sender  = m.sender || m.role || '';
-      const content = (m.content || m.text || '').trim();
-      if (!content) continue;
-
-      const isInternalNote =
-        (sender === 'Robylon AI' || (m as any).sender_name === 'Robylon AI' || (m as any).agent_name === 'Robylon AI') &&
-        (m.role === 'agent' || m.role === 'Agent' || (m as any).sender_type === 'agent' || (m as any).sender_type === 'Agent' || (m as any).agent_type === 'agent' || (m as any).agent_type === 'Agent');
-
-      if (isInternalNote) {
-        transcriptForStorage.push({
-          sender_type: 'agent',
-          sender_name: 'Robylon AI',
-          content,
-          timestamp: m.timestamp,
-          is_internal: true,
-        });
-        continue;
-      }
-
-      const low = content.toLowerCase();
-      if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
-        transcriptForStorage.push({
-          sender_type: 'activity',
-          sender_name: 'system',
-          content,
-          timestamp: m.timestamp,
-        });
-        continue;
-      }
-      if (low.includes('please rate your experience') || (m as any).buttons) continue;
-      const senderLow = sender.toLowerCase();
-      const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
-                       : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
-                       : 'agent';
-      timedMessages.push({ sender, content, timestamp: m.timestamp });
-      transcriptForStorage.push({ sender_type: senderType, sender_name: sender, content, timestamp: m.timestamp });
-    }
+    const norm = normalizeRobylonMessages(messages);
+    transcriptText = norm.transcriptText;
+    timedMessages = norm.timedMessages;
+    transcriptForStorage = norm.transcriptForStorage;
   }
 
   if (!transcriptText) {
@@ -535,28 +451,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
         return;
       }
 
-      // Fetch audio into memory (never written to disk)
-      let audioBase64 = '';
-      let mimeType = mimeFromUrl(recordingUrl);
-      const audioRes = await fetch(recordingUrl);
-      if (!audioRes.ok) throw new Error(`HTTP ${audioRes.status} fetching audio`);
-      const ct = audioRes.headers.get('content-type');
-      if (ct && ct.startsWith('audio/')) mimeType = ct.split(';')[0].trim();
-      audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
-
-      // Gemini multimodal: audio → English segments (translates ALL non-English words in-place).
-      // callGeminiForCall: 5 retries × 5 models (flash-preview → flash → pro → 1.5-pro → 1.5-flash).
-      const raw = await callGeminiForCall(
-        geminiKeys,
-        [{ parts: [
-          { inline_data: { mime_type: mimeType, data: audioBase64 } },
-          { text: CALL_TRANSCRIPTION_PROMPT },
-        ]}],
-        undefined,
-        270_000,
-      );
-
-      const { language, segments } = parseTranscriptionResponse(raw);
+      const { language, segments } = await fetchAndTranscribeAudio(recordingUrl, geminiKeys);
       const interruptionCount = segments.filter(s => s.type === 'interruption').length;
       const deadAirCount      = segments.filter(s => s.type === 'dead_air').length;
 
