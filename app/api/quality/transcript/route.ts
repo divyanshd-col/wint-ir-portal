@@ -11,7 +11,8 @@ import {
   getCallRecordingsByContactWindow,
   linkCallToChat,
 } from '@/lib/robylon/db';
-import { scoreLinkedCallsForChat, transcriptFromJsonb } from '@/app/api/webhooks/chat/route';
+import { scoreLinkedCallsForChat } from '@/lib/scoring/engine';
+import { transcriptFromJsonb, parseRobyTimestamp } from '@/lib/scoring/transcript';
 
 const ROUTE = 'quality/transcript';
 
@@ -57,26 +58,6 @@ function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: 
     if (m.sender === 'Internal Note') return true;
     return !isInternalAnnotation(m.senderName, m.content);
   });
-}
-
-function parseRobyTimestamp(ts: string, year: number): string {
-  try {
-    const match = (ts || '').match(/^(\w+)\s+(\d+),\s+(\d+):(\d+)\s+(AM|PM)$/);
-    if (!match) return ts;
-    const [, mon, day, hr, min, ampm] = match;
-    let hour = parseInt(hr, 10);
-    if (ampm === 'PM' && hour !== 12) hour += 12;
-    if (ampm === 'AM' && hour === 12) hour = 0;
-    const months: Record<string, number> = {
-      Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5,
-      Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11,
-    };
-    const monthIdx = months[mon];
-    if (monthIdx === undefined) return ts;
-    const d = new Date(Date.UTC(year, monthIdx, parseInt(day, 10), hour, parseInt(min, 10)));
-    d.setMinutes(d.getMinutes() - 330); // IST → UTC
-    return d.toISOString();
-  } catch { return ts; }
 }
 
 export async function GET(req: NextRequest) {
@@ -172,7 +153,7 @@ export async function GET(req: NextRequest) {
                 (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
 
               if (isInternalNote) {
-                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
                 return {
                   sender_type: 'agent',
                   sender_name: 'Robylon AI',
@@ -184,11 +165,11 @@ export async function GET(req: NextRequest) {
 
               const low = content.toLowerCase();
               if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
-                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
                 return { sender_type: 'activity', sender_name: 'system', content, timestamp: isoTs };
               }
               if (low.includes('please rate your experience') || m.buttons) return null;
-              const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+              const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
               const senderLow = sender.toLowerCase();
               const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
                                : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
@@ -270,7 +251,7 @@ export async function GET(req: NextRequest) {
                 (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
 
               if (isInternalNote) {
-                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
                 return {
                   sender_type: 'agent',
                   sender_name: 'Robylon AI',
@@ -283,7 +264,7 @@ export async function GET(req: NextRequest) {
               const low = content.toLowerCase();
 
               if (low.includes('auto-assigned') || low.includes('assigned by') || low.includes('waiting to assign')) {
-                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+                const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
                 return {
                   sender_type: 'activity',
                   sender_name: 'system',
@@ -294,7 +275,7 @@ export async function GET(req: NextRequest) {
 
               if (low.includes('please rate your experience') || m.buttons) return null;
 
-              const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year) : undefined;
+              const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
               const senderLow = sender.toLowerCase();
               const senderType = senderLow === 'user' || senderLow === 'customer' ? 'customer'
                                : senderLow === 'bot' || senderLow === 'myra' ? 'bot'
