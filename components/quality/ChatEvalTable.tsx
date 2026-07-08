@@ -53,6 +53,169 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
 type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'callIqsScore';
 type SortDir = 'asc' | 'desc';
 
+const ChatEvalRow = React.memo(function ChatEvalRow({
+  chat,
+  isExpanded,
+  onToggleExpand,
+  onRemoveChat,
+  onCloseExpand,
+  td,
+  tdMono,
+  tdNum,
+  tdAct,
+}: {
+  chat: ChatToReviewRow;
+  isExpanded: boolean;
+  onToggleExpand: (chatId: string) => void;
+  onRemoveChat: (chatId: string) => void;
+  onCloseExpand: () => void;
+  td: React.CSSProperties;
+  tdMono: React.CSSProperties;
+  tdNum: React.CSSProperties;
+  tdAct: React.CSSProperties;
+}) {
+  return (
+    <React.Fragment>
+      <tr
+        onClick={() => onToggleExpand(chat.chatId)}
+        style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
+        onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
+        onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
+      >
+        <td style={tdMono}>
+          {/^\d+$/.test(chat.chatId.trim()) ? (
+            <a
+              href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={e => e.stopPropagation()}
+              style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
+              onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+              onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+            >
+              {chat.chatId}
+            </a>
+          ) : (
+            chat.chatId
+          )}
+        </td>
+        <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {chat.agentName}
+        </td>
+        <td style={tdNum}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
+            fontFamily: 'ui-monospace, monospace',
+            background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+            color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
+          }}>
+            {chat.iqsScore}
+          </span>
+        </td>
+        <td style={tdNum}>
+          {chat.callIqsScore !== null ? (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
+              fontFamily: 'ui-monospace, monospace',
+              background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+              color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+            }}>
+              {chat.callIqsScore}
+            </span>
+          ) : (
+            <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
+          )}
+        </td>
+        <td style={td}>
+          {chat.callTranscriptStatus === 'transcribed' ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
+              <span style={{ fontSize: 10 }}>✓</span> Transcribed
+            </span>
+          ) : chat.callTranscriptStatus === 'pending' ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#ca8a04', fontWeight: 500 }} title="Transcribing/scoring call automatically on-the-fly when Evaluated">
+              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
+              Pending
+            </span>
+          ) : (
+            <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>No Call</span>
+          )}
+        </td>
+        <td style={td}>
+          {chat.status === 'reopened' ? (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: 18,
+              padding: '0 5px',
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              background: '#f3e8ff',
+              color: '#6b21a8',
+            }}>
+              Reopened
+            </span>
+          ) : (
+            <span style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              height: 18,
+              padding: '0 5px',
+              borderRadius: 4,
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.05em',
+              background: '#e0f2fe',
+              color: '#0369a1',
+            }}>
+              Pending
+            </span>
+          )}
+        </td>
+        <td style={tdAct}>
+          <button
+            onClick={e => { e.stopPropagation(); onToggleExpand(chat.chatId); }}
+            style={{
+              background: 'none', border: 0, padding: 0,
+              fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+              color: 'var(--qa-text)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+            }}
+          >
+            Evaluate
+            <span style={{
+              fontSize: 11, color: 'var(--qa-text-2)',
+              transform: isExpanded ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.15s', display: 'inline-block',
+            }}>▾</span>
+          </button>
+        </td>
+      </tr>
+
+      {isExpanded && (
+        <EvalPanel
+          chatId={chat.chatId}
+          agentName={chat.agentName}
+          iqsScore={chat.iqsScore}
+          closedAt={chat.closedAt}
+          disposition={chat.disposition}
+          parameters={chat.parameters}
+          mobileNumber={chat.mobileNumber}
+          mode="submit"
+          onDone={() => onRemoveChat(chat.chatId)}
+          onClose={onCloseExpand}
+          colSpan={7}
+        />
+      )}
+    </React.Fragment>
+  );
+});
+
 export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
@@ -141,16 +304,23 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     return () => document.removeEventListener('click', handler);
   }, [openDrop]);
 
-  function toggleExpand(chatId: string) {
+  const toggleExpand = useCallback((chatId: string) => {
     setExpandedId(prev => prev === chatId ? null : chatId);
-  }
+  }, []);
 
-  function removeChat(chatId: string) {
+  const removeChat = useCallback((chatId: string) => {
     setChats(prev => prev.filter(c => c.chatId !== chatId));
-    setTotal(prev => Math.max(0, prev - 1));
+    setTotal(prev => {
+      const nextTotal = Math.max(0, prev - 1);
+      onCountChange?.(nextTotal);
+      return nextTotal;
+    });
     setExpandedId(null);
-    onCountChange?.(Math.max(0, total - 1));
-  }
+  }, [onCountChange]);
+
+  const closeExpand = useCallback(() => {
+    setExpandedId(null);
+  }, []);
 
   // ── Sorted view of current page ──────────────────────────────────────────
   const sortedChats = [...chats].sort((a, b) => {
@@ -485,144 +655,18 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
               </tr>
             ) : (
               sortedChats.map(chat => (
-                <React.Fragment key={chat.chatId}>
-                  <tr
-                    onClick={() => toggleExpand(chat.chatId)}
-                    style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
-                    onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
-                    onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
-                  >
-                    <td style={tdMono}>
-                      {/^\d+$/.test(chat.chatId.trim()) ? (
-                        <a
-                          href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
-                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                        >
-                          {chat.chatId}
-                        </a>
-                      ) : (
-                        chat.chatId
-                      )}
-                    </td>
-                    <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {chat.agentName}
-                    </td>
-                    <td style={tdNum}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
-                        fontFamily: 'ui-monospace, monospace',
-                        background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                        color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                      }}>
-                        {chat.iqsScore}
-                      </span>
-                    </td>
-                    <td style={tdNum}>
-                      {chat.callIqsScore !== null ? (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
-                          fontFamily: 'ui-monospace, monospace',
-                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
-                        }}>
-                          {chat.callIqsScore}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
-                      )}
-                    </td>
-                    <td style={td}>
-                      {chat.callTranscriptStatus === 'transcribed' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
-                          <span style={{ fontSize: 10 }}>✓</span> Transcribed
-                        </span>
-                      ) : chat.callTranscriptStatus === 'pending' ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#ca8a04', fontWeight: 500 }} title="Transcribing/scoring call automatically on-the-fly when Evaluated">
-                          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
-                          Pending
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>No Call</span>
-                      )}
-                    </td>
-                    <td style={td}>
-                      {chat.status === 'reopened' ? (
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          height: 18,
-                          padding: '0 5px',
-                          borderRadius: 4,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          background: '#f3e8ff',
-                          color: '#6b21a8',
-                        }}>
-                          Reopened
-                        </span>
-                      ) : (
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          height: 18,
-                          padding: '0 5px',
-                          borderRadius: 4,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          background: '#e0f2fe',
-                          color: '#0369a1',
-                        }}>
-                          Pending
-                        </span>
-                      )}
-                    </td>
-                    <td style={tdAct}>
-                      <button
-                        onClick={e => { e.stopPropagation(); toggleExpand(chat.chatId); }}
-                        style={{
-                          background: 'none', border: 0, padding: 0,
-                          fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                          color: 'var(--qa-text)', cursor: 'pointer',
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                        }}
-                      >
-                        Evaluate
-                        <span style={{
-                          fontSize: 11, color: 'var(--qa-text-2)',
-                          transform: expandedId === chat.chatId ? 'rotate(180deg)' : 'none',
-                          transition: 'transform 0.15s', display: 'inline-block',
-                        }}>▾</span>
-                      </button>
-                    </td>
-                  </tr>
-
-                  {expandedId === chat.chatId && (
-                    <EvalPanel
-                      chatId={chat.chatId}
-                      agentName={chat.agentName}
-                      iqsScore={chat.iqsScore}
-                      closedAt={chat.closedAt}
-                      disposition={chat.disposition}
-                      parameters={chat.parameters}
-                      mobileNumber={chat.mobileNumber}
-                      mode="submit"
-                      onDone={() => removeChat(chat.chatId)}
-                      onClose={() => setExpandedId(null)}
-                      colSpan={7}
-                    />
-                  )}
-                </React.Fragment>
+                <ChatEvalRow
+                  key={chat.chatId}
+                  chat={chat}
+                  isExpanded={expandedId === chat.chatId}
+                  onToggleExpand={toggleExpand}
+                  onRemoveChat={removeChat}
+                  onCloseExpand={closeExpand}
+                  td={td}
+                  tdMono={tdMono}
+                  tdNum={tdNum}
+                  tdAct={tdAct}
+                />
               ))
             )}
           </tbody>
