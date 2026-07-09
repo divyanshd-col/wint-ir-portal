@@ -1,17 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import dynamic from 'next/dynamic';
-
-const InsightsBarChart = dynamic(() => import('@/components/analytics/InsightsCharts').then(m => m.InsightsBarChart), {
-  ssr: false,
-  loading: () => <div className="h-[180px] bg-gray-50/50 rounded-xl animate-pulse flex items-center justify-center text-xs text-gray-400">Loading chart…</div>
-});
-
-const InsightsLineChart = dynamic(() => import('@/components/analytics/InsightsCharts').then(m => m.InsightsLineChart), {
-  ssr: false,
-  loading: () => <div className="h-[180px] bg-gray-50/50 rounded-xl animate-pulse flex items-center justify-center text-xs text-gray-400">Loading chart…</div>
-});
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  LineChart, Line, CartesianGrid,
+} from 'recharts';
 import type { AnalyticsFilters, InsightBlock, StreamChunk } from '@/lib/analytics/types';
 import PageNav from '@/components/PageNav';
 
@@ -352,7 +345,18 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{block.title}</div>
         )}
         <div className="bg-white rounded-xl border border-gray-100 px-3 py-3 shadow-sm">
-          <InsightsBarChart data={block.data} unit={block.unit} />
+          <ResponsiveContainer width="100%" height={Math.min(48 + block.data.length * 32, 360)}>
+            <BarChart data={block.data} layout="vertical" margin={{ left: 0, right: 28, top: 4, bottom: 4 }}>
+              <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false}
+                unit={block.unit ?? ''} />
+              <YAxis type="category" dataKey="name" width={148} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip
+                formatter={(v: any) => [`${v}${block.unit ?? ''}`, 'Value']}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #f0f0f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              />
+              <Bar dataKey="value" fill="#2d6a4f" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
     );
@@ -365,7 +369,17 @@ function BlockRenderer({ block }: { block: InsightBlock }) {
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{block.title}</div>
         )}
         <div className="bg-white rounded-xl border border-gray-100 px-3 py-3 shadow-sm">
-          <InsightsLineChart data={block.data} unit={block.unit} />
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={block.data} margin={{ left: 0, right: 20, top: 4, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f4" />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} unit={block.unit ?? ''} />
+              <Tooltip
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #f0f0f0', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+              />
+              <Line type="monotone" dataKey="value" stroke="#2d6a4f" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
       </div>
     );

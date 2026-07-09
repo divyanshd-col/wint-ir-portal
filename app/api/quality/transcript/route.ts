@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { storeGetTranscript } from '@/lib/store';
 import { query } from '@/lib/cx/db';
-import { log, withLogging } from '@/lib/log';
+import { log } from '@/lib/log';
 import { readConfig } from '@/lib/config';
 import {
   getAllCallRecordingsByChatId,
@@ -54,7 +54,7 @@ function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: 
   });
 }
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -315,5 +315,3 @@ async function _GET(req: NextRequest) {
     return NextResponse.json({ error: 'DB error', detail: err?.message }, { status: 500 });
   }
 }
-
-export const GET = withLogging(ROUTE, _GET);

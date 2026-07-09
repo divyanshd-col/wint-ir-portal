@@ -1,5 +1,3 @@
-const ROUTE = 'quality/my-analytics/ai';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -18,7 +16,7 @@ function normParam(raw: string): string {
   return DB_KEY_TO_PARAM[raw] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
 }
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== 'agent') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -236,8 +234,8 @@ Respond with ONLY valid JSON in this exact shape:
       const parsed = JSON.parse(jsonMatch[0]);
       return { summary: parsed.summary || '', items: parsed.items || [] };
     }
-  } catch (err: any) {
-    log.error(ROUTE, 'LLM error', { err: err?.message ?? String(err) });
+  } catch (err) {
+    console.error('[my-analytics/ai] LLM error:', err);
   }
 
   // Fallback if LLM fails
@@ -248,5 +246,3 @@ Respond with ONLY valid JSON in this exact shape:
     ],
   };
 }
-
-export const POST = withLogging(ROUTE, _POST);

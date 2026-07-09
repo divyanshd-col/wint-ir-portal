@@ -1,10 +1,8 @@
-const ROUTE = 'cx/admin/overview';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -60,5 +58,3 @@ async function _GET(req: NextRequest) {
 
   return NextResponse.json(row ?? {});
 }
-
-export const GET = withLogging(ROUTE, _GET);

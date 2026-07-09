@@ -1,6 +1,5 @@
-import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from '@/lib/models';
 import Anthropic from '@anthropic-ai/sdk';
-import { readConfig, type PortalConfig } from '@/lib/config';
+import { readConfig } from '@/lib/config';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { fireQualityAlert } from '@/lib/quality-alert';
@@ -43,7 +42,7 @@ export async function getKbContextForScoring(
   disposition: string,
   subDisposition: string,
   transcriptText: string,
-  config: PortalConfig,
+  config: any,
   requireDisposition = false
 ): Promise<string> {
   try {
@@ -75,7 +74,7 @@ export async function scoreLinkedCallsForChat(
   chatTranscriptText: string,
   disposition: string,
   subDisposition: string,
-  config: PortalConfig,
+  config: any,
 ): Promise<void> {
   const calls = await getLinkedUnscoredCallsForChat(chatId);
   if (!calls.length) return;
@@ -136,7 +135,7 @@ export async function scoreLinkedCallsForChat(
       const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
       const raw = await geminiGenerate(
         geminiKeys,
-        config.geminiModel || DEFAULT_GEMINI_MODEL,
+        'gemini-2.5-flash',
         [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + scoringPrompt }] }],
         {},
         60_000,
@@ -154,7 +153,7 @@ export async function scoreLinkedCallsForChat(
         transcript: segments,
       });
 
-      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: config.geminiModel || DEFAULT_GEMINI_MODEL });
+      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
       await updateCallRecordingStatus(call.id, 'scored');
       console.log(`[scoring-engine] Scored combined chat+call for ${chatId} → IQS ${parsed.iqs}`);
     } catch (err: any) {
@@ -230,14 +229,14 @@ export async function executeScoring(
   if (provider === 'claude' && anthropicKey) {
     const client = new Anthropic({ apiKey: anthropicKey });
     const resp = await client.messages.create({
-      model: DEFAULT_CLAUDE_MODEL, max_tokens: 2000,
+      model: 'claude-sonnet-4-6', max_tokens: 2000,
       system: iqsSystemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     });
     rawResponse = resp.content[0].type === 'text' ? resp.content[0].text : '';
   } else if (geminiKeys.length) {
     rawResponse = await geminiGenerate(
-      geminiKeys, config.geminiModel || DEFAULT_GEMINI_MODEL,
+      geminiKeys, 'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
       {}, 60000,
     );
@@ -246,7 +245,7 @@ export async function executeScoring(
   }
 
   const parsed = parseScoringResponse(rawResponse, chatId, timing.conversationType);
-  const modelVersion = provider === 'claude' ? DEFAULT_CLAUDE_MODEL : (config.geminiModel || DEFAULT_GEMINI_MODEL);
+  const modelVersion = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
 
   // Convert ParamScore → IQSParameterResult for PostgreSQL storage
   const parameters: Record<string, IQSParameterResult> = {};

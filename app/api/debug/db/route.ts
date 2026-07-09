@@ -1,10 +1,8 @@
-const ROUTE = 'debug/db';
-import { log, withLogging } from '@/lib/log';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 
-async function _GET() {
+export async function GET() {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -164,5 +162,3 @@ async function _GET() {
 
   return NextResponse.json(result);
 }
-
-export const GET = withLogging(ROUTE, _GET);

@@ -1,12 +1,10 @@
-const ROUTE = 'corrections';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { appendCorrection, getCorrections, CorrectionEntry } from '@/lib/corrections';
 
 // POST — any logged-in agent submits a correction
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -32,12 +30,12 @@ async function _POST(req: NextRequest) {
   };
 
   await appendCorrection(entry);
-  log.info(ROUTE, `[corrections] New correction submitted by ${entry.submittedBy} (id: ${entry.id})`);
+  console.log(`[corrections] New correction submitted by ${entry.submittedBy} (id: ${entry.id})`);
   return NextResponse.json({ ok: true, id: entry.id });
 }
 
 // GET — admin lists corrections (optionally filtered by ?status=pending)
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -55,6 +53,3 @@ async function _GET(req: NextRequest) {
   corrections.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   return NextResponse.json({ corrections });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const POST = withLogging(ROUTE, _POST);

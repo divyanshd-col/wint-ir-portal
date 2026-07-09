@@ -1,5 +1,3 @@
-const ROUTE = 'corrections/apply';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -7,10 +5,9 @@ import { getCorrections, updateCorrection } from '@/lib/corrections';
 import { updateDocSection, getServiceAccountEmail } from '@/lib/gdocs';
 import { readConfig, writeConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
-import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from '@/lib/models';
 import Anthropic from '@anthropic-ai/sdk';
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -44,7 +41,7 @@ async function _POST(req: NextRequest) {
     const result = await updateDocSection(chunk.fileId, chunk.breadcrumb, chunk.excerpt, finalCorrection);
     results.docUpdates.push({ fileName: chunk.fileName, ...result });
     if (!result.success) {
-      log.warn(ROUTE, `[corrections/apply] Doc update failed for ${chunk.fileName}: ${result.error}`);
+      console.warn(`[corrections/apply] Doc update failed for ${chunk.fileName}: ${result.error}`);
     }
   }
 
@@ -75,7 +72,7 @@ QUESTION: Is there a specific one-sentence addition or correction to the system 
       if (provider === 'claude' && config.anthropicApiKey) {
         const client = new Anthropic({ apiKey: config.anthropicApiKey });
         const resp = await client.messages.create({
-          model: DEFAULT_CLAUDE_MODEL,
+          model: 'claude-sonnet-4-6',
           max_tokens: 256,
           messages: [{ role: 'user', content: suggestionPrompt }],
         });
@@ -83,7 +80,7 @@ QUESTION: Is there a specific one-sentence addition or correction to the system 
       } else if (geminiKeys.length) {
         const text = await geminiGenerate(
           geminiKeys,
-          config.geminiModel || DEFAULT_GEMINI_MODEL,
+          'gemini-2.5-flash',
           [{ role: 'user', parts: [{ text: suggestionPrompt }] }],
           undefined,
           15000
@@ -93,7 +90,7 @@ QUESTION: Is there a specific one-sentence addition or correction to the system 
 
       if (promptSuggestion === 'NO_PROMPT_CHANGE') promptSuggestion = undefined;
     } catch (err: any) {
-      log.warn(ROUTE, '[corrections/apply] Prompt suggestion error:', err?.message);
+      console.warn('[corrections/apply] Prompt suggestion error:', err?.message);
     }
   }
 
@@ -105,7 +102,7 @@ QUESTION: Is there a specific one-sentence addition or correction to the system 
       await writeConfig({ ...config, systemPrompt: updated.trim() });
       results.promptApplied = true;
     } catch (err: any) {
-      log.warn(ROUTE, '[corrections/apply] Prompt apply error:', err?.message);
+      console.warn('[corrections/apply] Prompt apply error:', err?.message);
       results.promptApplied = false;
     }
   }
@@ -122,5 +119,3 @@ QUESTION: Is there a specific one-sentence addition or correction to the system 
   results.serviceAccountEmail = getServiceAccountEmail();
   return NextResponse.json({ ok: true, action: 'approved', promptSuggestion, ...results });
 }
-
-export const POST = withLogging(ROUTE, _POST);

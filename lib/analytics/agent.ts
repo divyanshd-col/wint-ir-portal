@@ -1,6 +1,5 @@
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 import { readConfig } from '@/lib/config';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { executeRawSQL } from './executor';
 import { readTranscripts } from './transcript-reader';
 import type { AnalyticsFilters } from './types';
@@ -718,6 +717,9 @@ export async function runSynthesizerPhase(
 // Primary: gemini-2.0-flash (faster, lower latency)
 // Fallback: gemini-2.5-flash (only on timeout — fully transparent to the user)
 
+const PRIMARY_MODEL  = 'gemini-2.5-flash';
+const FALLBACK_MODEL_ANALYTICS = 'gemini-2.5-flash';
+
 async function geminiWithFallback(
   keys: string[],
   contents: any[],
@@ -725,15 +727,13 @@ async function geminiWithFallback(
   primaryTimeoutMs: number,
   fallbackTimeoutMs: number,
 ): Promise<string> {
-  const config = await readConfig();
-  const model = config.geminiModel || DEFAULT_GEMINI_MODEL;
   try {
-    return await geminiGenerate(keys, model, contents, extra, primaryTimeoutMs);
+    return await geminiGenerate(keys, PRIMARY_MODEL, contents, extra, primaryTimeoutMs);
   } catch (err: any) {
     const isTimeout = String(err?.message ?? '').toLowerCase().includes('timeout');
     if (!isTimeout) throw err;
-    console.warn(`[analytics/agent] ${model} timed out — retrying with fallback`);
-    return await geminiGenerate(keys, model, contents, extra, fallbackTimeoutMs);
+    console.warn('[analytics/agent] gemini-2.5-flash timed out — retrying with fallback');
+    return await geminiGenerate(keys, FALLBACK_MODEL_ANALYTICS, contents, extra, fallbackTimeoutMs);
   }
 }
 

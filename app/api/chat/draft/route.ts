@@ -1,13 +1,10 @@
-const ROUTE = 'chat/draft';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -53,7 +50,7 @@ Return ONLY valid JSON with no markdown fencing:
   try {
     const raw = await geminiGenerate(
       geminiKeys,
-      config.geminiModel || DEFAULT_GEMINI_MODEL,
+      'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: draftPrompt }] }],
       undefined,
       20000
@@ -62,10 +59,8 @@ Return ONLY valid JSON with no markdown fencing:
     const parsed = JSON.parse(cleaned);
     if (!parsed.draft) throw new Error('No draft in response');
     return NextResponse.json({ draft: parsed.draft });
-  } catch (e: any) {
-    log.error(ROUTE, 'Failed to generate draft', { err: e?.message ?? String(e) });
+  } catch (e) {
+    console.error('[draft] Failed:', e);
     return NextResponse.json({ error: 'Failed to generate draft' }, { status: 500 });
   }
 }
-
-export const POST = withLogging(ROUTE, _POST);

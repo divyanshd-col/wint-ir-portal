@@ -1,5 +1,3 @@
-const ROUTE = 'webhooks/call';
-import { log, withLogging } from '@/lib/log';
 /**
  * POST /api/webhooks/call
  *
@@ -20,7 +18,6 @@ import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   parseTranscriptionResponse,
@@ -41,10 +38,7 @@ import {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) {
-    log.error(ROUTE, '[webhook/call] WEBHOOK_SECRET not set — rejecting request');
-    return false;
-  }
+  if (!secret) return true;
   const header = req.headers.get('authorization') ?? '';
   if (header === `Bearer ${secret}`) return true;
   const url = new URL(req.url);
@@ -74,7 +68,7 @@ async function processCallWebhook(body: any): Promise<void> {
   const customerPhone = body.customer_phone || body.phone || undefined;
 
   if (!recordingUrl) {
-    log.warn(ROUTE, `[call-webhook] call_id=${callId} has no recording_url — skipping`);
+    console.warn(`[call-webhook] call_id=${callId} has no recording_url — skipping`);
     return;
   }
 
@@ -93,14 +87,14 @@ async function processCallWebhook(body: any): Promise<void> {
     if (contentType) mimeType = contentType.split(';')[0].trim() || mimeType;
     audioBase64 = Buffer.from(await audioRes.arrayBuffer()).toString('base64');
   } catch (err: any) {
-    log.error(ROUTE, `[call-webhook] Failed to fetch audio for call ${callId}:`, err.message);
+    console.error(`[call-webhook] Failed to fetch audio for call ${callId}:`, err.message);
     return;
   }
 
   const config = await readConfig();
   const geminiKeys = getIQSGeminiKeys(config);
   if (!geminiKeys.length) {
-    log.error(ROUTE, '[call-webhook] No Gemini API key configured — cannot transcribe');
+    console.error('[call-webhook] No Gemini API key configured — cannot transcribe');
     return;
   }
 
@@ -108,7 +102,7 @@ async function processCallWebhook(body: any): Promise<void> {
   try {
     transcriptionRaw = await geminiGenerate(
       geminiKeys,
-      config.geminiModel || DEFAULT_GEMINI_MODEL,
+      'gemini-2.5-flash',
       [{
         role: 'user',
         parts: [
@@ -120,12 +114,12 @@ async function processCallWebhook(body: any): Promise<void> {
       120_000,
     );
   } catch (err: any) {
-    log.error(ROUTE, `[call-webhook] Transcription failed for call ${callId}:`, err.message);
+    console.error(`[call-webhook] Transcription failed for call ${callId}:`, err.message);
     return;
   }
 
   const { language, segments } = parseTranscriptionResponse(transcriptionRaw);
-  log.info(ROUTE, `[call-webhook] Transcribed call ${callId} → ${segments.length} segments (${language})`);
+  console.log(`[call-webhook] Transcribed call ${callId} → ${segments.length} segments (${language})`);
 
   await insertCallRecording({
     id: callId,
@@ -151,7 +145,7 @@ async function processCallWebhook(body: any): Promise<void> {
     if (conv) {
       resolvedChatId = conv.id;
       await linkCallToChat(callId, resolvedChatId);
-      log.info(ROUTE, `[call-webhook] Late-linked call ${callId} → chat ${resolvedChatId} (ticket closed during transcription)`);
+      console.log(`[call-webhook] Late-linked call ${callId} → chat ${resolvedChatId} (ticket closed during transcription)`);
     }
   }
 
@@ -162,12 +156,12 @@ async function processCallWebhook(body: any): Promise<void> {
     status: resolvedChatId ? 'linked' : 'pending_link',
   });
 
-  log.info(ROUTE, `[call-webhook] Stored call ${callId} — interruptions=${interruptionCount} dead_air=${deadAirCount} status=${resolvedChatId ? 'linked' : 'pending_link'}`);
+  console.log(`[call-webhook] Stored call ${callId} — interruptions=${interruptionCount} dead_air=${deadAirCount} status=${resolvedChatId ? 'linked' : 'pending_link'}`);
   // Scoring fires from the chat webhook at TICKET_CLOSED / CLASSIFICATION_UPDATED.
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
-async function _POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   if (!isAuthorised(req)) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   }
@@ -186,16 +180,14 @@ async function _POST(req: NextRequest): Promise<NextResponse> {
 
   const eventId = body.event_id || callId;
   if (await storeHasProcessedEvent(`call_${eventId}`)) {
-    log.info(ROUTE, `[call-webhook] Duplicate event ${eventId} — skipped`);
+    console.log(`[call-webhook] Duplicate event ${eventId} — skipped`);
     return NextResponse.json({ ok: true, duplicate: true });
   }
   await storeMarkProcessedEvent(`call_${eventId}`);
 
   processCallWebhook(body).catch(err =>
-    log.error(ROUTE, `[call-webhook] processCallWebhook error for ${callId}:`, err),
+    console.error(`[call-webhook] processCallWebhook error for ${callId}:`, err),
   );
 
   return NextResponse.json({ ok: true, call_id: callId, status: 'processing' }, { status: 202 });
 }
-
-export const POST = withLogging(ROUTE, _POST);

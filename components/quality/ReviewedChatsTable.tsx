@@ -16,172 +16,6 @@ function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-interface ReviewedChatRowProps {
-  chat: ChatToReviewRow;
-  isExpanded: boolean;
-  onToggleExpand: (chatId: string) => void;
-  onReopen: (chat: ChatToReviewRow) => void;
-  isReopening: boolean;
-  onCloseExpand: () => void;
-  td: React.CSSProperties;
-  tdMono: React.CSSProperties;
-  tdNum: React.CSSProperties;
-  tdAct: React.CSSProperties;
-}
-
-const ReviewedChatRow = React.memo(function ReviewedChatRow({
-  chat,
-  isExpanded,
-  onToggleExpand,
-  onReopen,
-  isReopening,
-  onCloseExpand,
-  td,
-  tdMono,
-  tdNum,
-  tdAct,
-}: ReviewedChatRowProps) {
-  return (
-    <React.Fragment>
-      <tr
-        style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined }}
-        onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
-        onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
-      >
-        <td style={tdMono}>
-          {/^\d+$/.test(chat.chatId.trim()) ? (
-            <a
-              href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
-              target="_blank" rel="noopener noreferrer"
-              style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-              onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-              onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-            >
-              {chat.chatId}
-            </a>
-          ) : chat.chatId}
-        </td>
-        <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
-        <td style={tdNum}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-            background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-            color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
-          }}>
-            {chat.iqsScore}
-          </span>
-        </td>
-        <td style={tdNum}>
-          {chat.callIqsScore !== null ? (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-              background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-              color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
-            }}>
-              {chat.callIqsScore}
-            </span>
-          ) : (
-            <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-          )}
-        </td>
-        <td style={td}>
-          {chat.callTranscriptStatus === 'transcribed' ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
-              <span style={{ fontSize: 11 }}>✓</span> Transcribed
-            </span>
-          ) : chat.callTranscriptStatus === 'pending' ? (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#ca8a04', fontWeight: 500 }}>
-              <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
-              Pending
-            </span>
-          ) : (
-            <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>No Call</span>
-          )}
-        </td>
-        <td style={td}>
-          {chat.csatScore == null ? (
-            <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-          ) : (
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
-              fontFamily: 'ui-monospace, monospace',
-              background: chat.csatScore === 1 ? '#fee2e2' : chat.csatScore === 3 ? '#fef9c3' : '#dcfce7',
-              color:      chat.csatScore === 1 ? '#b91c1c' : chat.csatScore === 3 ? '#713f12' : '#15803d',
-            }}>
-              {chat.csatScore === 1 ? 'Bad' : chat.csatScore === 3 ? 'Neutral' : 'Good'}
-            </span>
-          )}
-        </td>
-        <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
-          {chat.disposition}
-          {chat.subDisposition && <span style={{ color: 'var(--qa-text-3)' }}> › {chat.subDisposition}</span>}
-        </td>
-        <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>{chat.reviewedBy ?? '—'}</td>
-        <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
-          {chat.reviewedAt ? fmtDate(chat.reviewedAt) : '—'}
-        </td>
-        <td style={tdAct}>
-          <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
-            <button
-              onClick={() => onToggleExpand(chat.chatId)}
-              style={{
-                background: 'none', border: 0, padding: 0,
-                fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                color: 'var(--qa-text)', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-              }}
-            >
-              View{' '}
-              <span style={{
-                fontSize: 11, color: 'var(--qa-text-2)',
-                transform: isExpanded ? 'rotate(180deg)' : 'none',
-                transition: 'transform 0.15s', display: 'inline-block',
-              }}>▾</span>
-            </button>
-            <button
-              disabled={isReopening}
-              onClick={(e) => {
-                e.stopPropagation();
-                onReopen(chat);
-              }}
-              style={{
-                background: 'none', border: 0, padding: 0,
-                fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                color: isReopening ? 'var(--qa-text-3, #a1a1aa)' : 'var(--qa-active-blue, #2563eb)',
-                cursor: isReopening ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {isReopening ? 'Reopening...' : 'Reopen'}
-            </button>
-          </div>
-        </td>
-      </tr>
-
-      {isExpanded && (
-        <EvalPanel
-          chatId={chat.chatId}
-          agentName={chat.agentName}
-          iqsScore={chat.iqsScore}
-          closedAt={chat.closedAt}
-          disposition={chat.disposition}
-          parameters={chat.parameters}
-          mobileNumber={chat.mobileNumber}
-          reviewedBy={chat.reviewedBy}
-          reviewedAt={chat.reviewedAt}
-          reviewNote={chat.reviewNote}
-          mode="view"
-          onDone={onCloseExpand}
-          onClose={onCloseExpand}
-          colSpan={10}
-        />
-      )}
-    </React.Fragment>
-  );
-});
-
 export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props) {
   const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
   const [total,         setTotal]         = useState(0);
@@ -198,38 +32,6 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
   const [customFrom,   setCustomFrom]   = useState('');
   const [customTo,     setCustomTo]     = useState('');
   const [showPicker,   setShowPicker]   = useState(false);
-
-  const toggleExpand = useCallback((chatId: string) => {
-    setExpandedId(prev => prev === chatId ? null : chatId);
-  }, []);
-
-  const closeExpand = useCallback(() => {
-    setExpandedId(null);
-  }, []);
-
-  const handleReopen = useCallback(async (chat: ChatToReviewRow) => {
-    if (!window.confirm(`Are you sure you want to reopen chat ${chat.chatId} for review?`)) return;
-    setReopeningId(chat.chatId);
-    try {
-      const res = await fetch(`/api/cx/qa/review/${chat.chatId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reopen' }),
-      });
-      if (!res.ok) {
-        alert(`Failed to reopen chat: ${await res.text()}`);
-        return;
-      }
-      // Remove from list
-      setChats(prev => prev.filter(c => c.chatId !== chat.chatId));
-      setTotal(prev => Math.max(0, prev - 1));
-      setFilteredCount(prev => Math.max(0, prev - 1));
-    } catch (err: any) {
-      alert(`Error: ${err.message}`);
-    } finally {
-      setReopeningId(null);
-    }
-  }, []);
 
   const fetchData = useCallback(async (pg = 1) => {
     setLoading(true);
@@ -249,6 +51,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
       }
       setChats(rows);
       setTotal(data.total ?? 0);
+      // When agent search is active, total from API is unfiltered — track separately
       setFilteredCount(agentSearch ? rows.length : (data.total ?? 0));
       setPage(pg);
     } finally {
@@ -256,9 +59,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
     }
   }, [chatIdSearch, agentSearch, customFrom, customTo, pageSize, agentFilter]);
 
-  useEffect(() => {
-    fetchData(1);
-  }, [fetchData]);
+  useEffect(() => { fetchData(1); }, [fetchData]);
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -370,19 +171,163 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
               </tr>
             ) : (
               chats.map(chat => (
-                <ReviewedChatRow
-                  key={chat.chatId}
-                  chat={chat}
-                  isExpanded={expandedId === chat.chatId}
-                  onToggleExpand={toggleExpand}
-                  onReopen={handleReopen}
-                  isReopening={reopeningId === chat.chatId}
-                  onCloseExpand={closeExpand}
-                  td={td}
-                  tdMono={tdMono}
-                  tdNum={tdNum}
-                  tdAct={tdAct}
-                />
+                <React.Fragment key={chat.chatId}>
+                  <tr
+                    style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
+                    onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
+                    onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
+                  >
+                    <td style={tdMono}>
+                      {/^\d+$/.test(chat.chatId.trim()) ? (
+                        <a
+                          href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                        >
+                          {chat.chatId}
+                        </a>
+                      ) : chat.chatId}
+                    </td>
+                    <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
+                    <td style={tdNum}>
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
+                        background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                        color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
+                      }}>
+                        {chat.iqsScore}
+                      </span>
+                    </td>
+                    <td style={tdNum}>
+                      {chat.callIqsScore !== null ? (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
+                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                        }}>
+                          {chat.callIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      )}
+                    </td>
+                    <td style={td}>
+                      {chat.callTranscriptStatus === 'transcribed' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
+                          <span style={{ fontSize: 11 }}>✓</span> Transcribed
+                        </span>
+                      ) : chat.callTranscriptStatus === 'pending' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#ca8a04', fontWeight: 500 }}>
+                          <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
+                          Pending
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>No Call</span>
+                      )}
+                    </td>
+                    <td style={td}>
+                      {chat.csatScore == null ? (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      ) : (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
+                          fontFamily: 'ui-monospace, monospace',
+                          background: chat.csatScore === 1 ? '#fee2e2' : chat.csatScore === 3 ? '#fef9c3' : '#dcfce7',
+                          color:      chat.csatScore === 1 ? '#b91c1c' : chat.csatScore === 3 ? '#713f12' : '#15803d',
+                        }}>
+                          {chat.csatScore === 1 ? 'Bad' : chat.csatScore === 3 ? 'Neutral' : 'Good'}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                      {chat.disposition}
+                      {chat.subDisposition && <span style={{ color: 'var(--qa-text-3)' }}> › {chat.subDisposition}</span>}
+                    </td>
+                    <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>{chat.reviewedBy ?? '—'}</td>
+                    <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                      {chat.reviewedAt ? fmtDate(chat.reviewedAt) : '—'}
+                    </td>
+                    <td style={tdAct}>
+                      <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end', alignItems: 'center' }}>
+                        <button
+                          onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
+                          style={{
+                            background: 'none', border: 0, padding: 0,
+                            fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                            color: 'var(--qa-text)', cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', gap: 5,
+                          }}
+                        >
+                          View{' '}
+                          <span style={{
+                            fontSize: 11, color: 'var(--qa-text-2)',
+                            transform: expandedId === chat.chatId ? 'rotate(180deg)' : 'none',
+                            transition: 'transform 0.15s', display: 'inline-block',
+                          }}>▾</span>
+                        </button>
+                        <button
+                          disabled={reopeningId === chat.chatId}
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            if (!window.confirm(`Are you sure you want to reopen chat ${chat.chatId} for review?`)) return;
+                            setReopeningId(chat.chatId);
+                            try {
+                              const res = await fetch(`/api/cx/qa/review/${chat.chatId}`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ action: 'reopen' }),
+                              });
+                              if (!res.ok) {
+                                alert(`Failed to reopen chat: ${await res.text()}`);
+                                return;
+                              }
+                              // Remove from list
+                              setChats(prev => prev.filter(c => c.chatId !== chat.chatId));
+                              setTotal(prev => Math.max(0, prev - 1));
+                              setFilteredCount(prev => Math.max(0, prev - 1));
+                            } catch (err: any) {
+                              alert(`Error: ${err.message}`);
+                            } finally {
+                              setReopeningId(null);
+                            }
+                          }}
+                          style={{
+                            background: 'none', border: 0, padding: 0,
+                            fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                            color: reopeningId === chat.chatId ? 'var(--qa-text-3, #a1a1aa)' : 'var(--qa-active-blue, #2563eb)',
+                            cursor: reopeningId === chat.chatId ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          {reopeningId === chat.chatId ? 'Reopening...' : 'Reopen'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+
+                  {expandedId === chat.chatId && (
+                    <EvalPanel
+                      chatId={chat.chatId}
+                      agentName={chat.agentName}
+                      iqsScore={chat.iqsScore}
+                      closedAt={chat.closedAt}
+                      disposition={chat.disposition}
+                      parameters={chat.parameters}
+                      mobileNumber={chat.mobileNumber}
+                      reviewedBy={chat.reviewedBy}
+                      reviewedAt={chat.reviewedAt}
+                      reviewNote={chat.reviewNote}
+                      mode="view"
+                      onDone={() => setExpandedId(null)}
+                      onClose={() => setExpandedId(null)}
+                      colSpan={10}
+                    />
+                  )}
+                </React.Fragment>
               ))
             )}
           </tbody>

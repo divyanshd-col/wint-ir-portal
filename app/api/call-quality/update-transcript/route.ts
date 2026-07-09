@@ -1,5 +1,3 @@
-const ROUTE = 'call-quality/update-transcript';
-import { log, withLogging } from '@/lib/log';
 /**
  * PATCH /api/call-quality/update-transcript
  *
@@ -15,7 +13,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 
-async function _PATCH(req: NextRequest): Promise<NextResponse> {
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
@@ -59,5 +57,3 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({ ok: true, callId, segmentCount: body.segments.length });
 }
-
-export const PATCH = withLogging(ROUTE, _PATCH);

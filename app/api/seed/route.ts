@@ -1,5 +1,3 @@
-const ROUTE = 'seed';
-import { log, withLogging } from '@/lib/log';
 /**
  * POST /api/seed — seeds Upstash KV with the bundled portal-config.json.
  * Protected by SEED_SECRET env var. Call once after first deploy.
@@ -7,7 +5,7 @@ import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { storeSetConfig } from '@/lib/store';
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const secret = process.env.SEED_SECRET;
   if (!secret) return NextResponse.json({ error: 'SEED_SECRET not set' }, { status: 500 });
 
@@ -26,5 +24,3 @@ async function _POST(req: NextRequest) {
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
-
-export const POST = withLogging(ROUTE, _POST);

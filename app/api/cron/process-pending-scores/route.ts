@@ -1,5 +1,3 @@
-const ROUTE = 'cron/process-pending-scores';
-import { log, withLogging } from '@/lib/log';
 /**
  * GET /api/cron/process-pending-scores
  *
@@ -15,7 +13,7 @@ import { readConfig } from '@/lib/config';
 import { executeScoring, scoreLinkedCallsForChat } from '@/lib/scoring/engine';
 import { transcriptFromJsonb } from '@/lib/scoring/transcript';
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;
   if (cronSecret) {
     const auth = req.headers.get('authorization') || '';
@@ -43,10 +41,10 @@ async function _GET(req: NextRequest) {
         chatResults.push({ chatId: conv.id, reason: 'skipped — no entry returned' });
         continue;
       }
-      log.info(ROUTE, `[cron] Scored chat ${conv.id} → IQS ${scored.iqs}%`);
+      console.log(`[cron] Scored chat ${conv.id} → IQS ${scored.iqs}%`);
       chatResults.push({ chatId: conv.id, iqs: scored.iqs });
     } catch (err: any) {
-      log.error(ROUTE, `[cron] Error scoring chat ${conv.id}:`, err.message);
+      console.error(`[cron] Error scoring chat ${conv.id}:`, err.message);
       chatResults.push({ chatId: conv.id, reason: `error: ${err.message}` });
     }
   }
@@ -68,17 +66,17 @@ async function _GET(req: NextRequest) {
 
     try {
       await scoreLinkedCallsForChat(conv.id, chatTranscriptText, disposition, subDisposition, config);
-      log.info(ROUTE, `[cron] Scored linked calls for chat ${conv.id}`);
+      console.log(`[cron] Scored linked calls for chat ${conv.id}`);
       callResults.push({ chatId: conv.id, callsScored: true });
     } catch (err: any) {
-      log.error(ROUTE, `[cron] Error scoring calls for chat ${conv.id}:`, err.message);
+      console.error(`[cron] Error scoring calls for chat ${conv.id}:`, err.message);
       callResults.push({ chatId: conv.id, reason: `error: ${err.message}` });
     }
   }
 
   const chatProcessed = chatResults.filter(r => r.iqs !== undefined).length;
   const callProcessed = callResults.filter(r => r.callsScored).length;
-  log.info(ROUTE, `[cron] process-pending-scores: chats=${chatProcessed}/${convs.length}, call-scoring-runs=${callProcessed}/${callConvs.length}`);
+  console.log(`[cron] process-pending-scores: chats=${chatProcessed}/${convs.length}, call-scoring-runs=${callProcessed}/${callConvs.length}`);
 
   return NextResponse.json({
     ok: true,
@@ -86,5 +84,3 @@ async function _GET(req: NextRequest) {
     calls: { processed: callProcessed, total: callConvs.length, results: callResults },
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

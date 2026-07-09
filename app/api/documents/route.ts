@@ -1,5 +1,3 @@
-const ROUTE = 'documents';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig, writeConfig } from '@/lib/config';
 import { getServerSession } from 'next-auth';
@@ -12,7 +10,7 @@ async function requireAdmin() {
   return session;
 }
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { url } = await req.json();
@@ -30,7 +28,7 @@ async function _POST(req: NextRequest) {
   return NextResponse.json({ success: true, knowledgeBaseUrls: updated.knowledgeBaseUrls });
 }
 
-async function _DELETE(req: NextRequest) {
+export async function DELETE(req: NextRequest) {
   if (!await requireAdmin()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { url } = await req.json();
@@ -41,6 +39,3 @@ async function _DELETE(req: NextRequest) {
 
   return NextResponse.json({ success: true, knowledgeBaseUrls: updated.knowledgeBaseUrls });
 }
-
-export const POST = withLogging(ROUTE, _POST);
-export const DELETE = withLogging(ROUTE, _DELETE);

@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 
@@ -47,7 +46,7 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
       <div className="px-5 py-4 border-b border-white/10">
         <Link href="/chat">
           <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
-            <Image src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" unoptimized />
+            <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
           </div>
         </Link>
         <p className="text-gray-500 text-xs mt-2">

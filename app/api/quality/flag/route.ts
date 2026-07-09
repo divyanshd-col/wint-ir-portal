@@ -1,5 +1,3 @@
-const ROUTE = 'quality/flag';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
@@ -11,7 +9,7 @@ function reviewAccess(session: any) {
   return ['admin', 'quality', 'tl'].includes(session?.user?.role || '');
 }
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -72,7 +70,7 @@ async function _POST(req: NextRequest) {
 }
 
 // GET — list flags (quality/admin/tl: all; agent: own only)
-async function _GET() {
+export async function GET() {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -107,7 +105,7 @@ async function _GET() {
   return NextResponse.json({ flags });
 }
 
-async function _PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -143,7 +141,3 @@ async function _PATCH(req: NextRequest) {
   if (!ok) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const POST = withLogging(ROUTE, _POST);
-export const PATCH = withLogging(ROUTE, _PATCH);
