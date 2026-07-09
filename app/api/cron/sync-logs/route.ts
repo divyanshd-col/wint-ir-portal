@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { google } from 'googleapis';
-import { readLogs } from '@/lib/logger';
+import { readLogs } from '@/lib/log';
 
 const SHEET_ID  = process.env.LOGS_SHEET_ID  || '1d8LE5opfdIDdsHYZ9AxaX1Z7TImUwAW_Kzk29xtzOTA';
 const SHEET_TAB = process.env.LOGS_SHEET_TAB || 'Logs';
@@ -121,10 +120,8 @@ export async function GET(request: Request) {
 
 // Called manually by admins from the Analytics page
 export async function POST() {
-  const session = await getServerSession(authOptions);
-  if (!(session?.user as any)?.isAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   try {
     const result = await runSync();

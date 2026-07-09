@@ -10,8 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUnscoredConversations, getAgentName, getConversationsWithUnscoredLinkedCalls } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
-import { executeScoring, scoreLinkedCallsForChat } from '@/app/api/webhooks/chat/route';
-import { transcriptFromJsonb } from '@/app/api/webhooks/chat/route';
+import { executeScoring, scoreLinkedCallsForChat } from '@/lib/scoring/engine';
+import { transcriptFromJsonb } from '@/lib/scoring/transcript';
 
 export async function GET(req: NextRequest) {
   const cronSecret = process.env.CRON_SECRET;

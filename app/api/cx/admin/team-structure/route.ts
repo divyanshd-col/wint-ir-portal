@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   // Teams from new schema
   const teams = await query<{ id: number; name: string; type: string }>(
@@ -68,9 +66,8 @@ export async function GET() {
 
 // PATCH — assign agent to team
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || session.user.role !== 'admin')
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const { agent_id, team_id } = await req.json();
   if (!agent_id) return NextResponse.json({ error: 'agent_id required' }, { status: 400 });

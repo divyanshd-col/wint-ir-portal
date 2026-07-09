@@ -27,7 +27,7 @@ import {
   linkCallToChat,
 } from '@/lib/robylon/db';
 import { query } from '@/lib/cx/db';
-import { scoreLinkedCallsForChat } from '@/app/api/webhooks/chat/route';
+import { scoreLinkedCallsForChat } from '@/lib/scoring/engine';
 import {
   CALL_DISPOSITION_PROMPT,
   CALL_IQS_SYSTEM_PROMPT,

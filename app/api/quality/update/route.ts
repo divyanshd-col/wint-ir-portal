@@ -1,34 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
+import { PASCAL_TO_DB } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
 import { calculateIQS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 
 const PARAM_KEYS = ['Technical','AllQuestions','Expectation','Contextual','FollowUp','Sentences','Process','Opening','Call','Grammar','Empathy'];
 
-// PascalCase frontend key → DB snake_case key
-const LEGACY_TO_DB: Record<string, string> = {
-  Technical:    'technical',
-  AllQuestions: 'all_questions',
-  Expectation:  'expectation',
-  Contextual:   'contextual',
-  FollowUp:     'follow_up',
-  Sentences:    'sentences',
-  Process:      'process',
-  Opening:      'opening',
-  Call:         'call',
-  Grammar:      'grammar',
-  Empathy:      'empathy',
-};
-
-function qualityAccess(session: any) {
-  return ['admin', 'quality', 'tl'].includes(session?.user?.role);
-}
-
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
@@ -65,14 +46,14 @@ export async function PATCH(req: NextRequest) {
       const normalised: Record<string, any> = {};
       for (const [k, v] of Object.entries(params)) {
         if (k.startsWith('__')) { normalised[k] = v; continue; }
-        const snakeKey = LEGACY_TO_DB[k] ?? k;
+        const snakeKey = PASCAL_TO_DB[k] ?? k;
         normalised[snakeKey] = v;
       }
       params = normalised;
 
       if (scores) {
         for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
-          const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
+          const dbKey = PASCAL_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
           if (!params[dbKey]) params[dbKey] = {};
           params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : null;
           if (reasoning?.[legacyKey] !== undefined) params[dbKey].reasoning = reasoning[legacyKey];
@@ -81,7 +62,7 @@ export async function PATCH(req: NextRequest) {
 
       if (reasoning) {
         for (const [legacyKey, text] of Object.entries(reasoning) as [string, string][]) {
-          const dbKey = LEGACY_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
+          const dbKey = PASCAL_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
           if (!params[dbKey]) params[dbKey] = {};
           params[dbKey].reasoning = text;
         }

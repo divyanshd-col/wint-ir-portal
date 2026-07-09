@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { getUnscoredConversations, countUnscoredConversations, getAgentName } from '@/lib/robylon/db';
-import { executeScoring } from '@/app/api/webhooks/chat/route';
+import { executeScoring } from '@/lib/scoring/engine';
 
 // Scores ONE chat per call — caller loops until done === true.
 // Uses minHoursOld=0 so manual backfill catches ALL unscored chats,

@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 import { getCxBenchmark } from '@/lib/cx/benchmark';
 import { getCompositeRankings } from '@/lib/cx/composite';
 import { prevWeek } from '@/lib/cx/week';
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const { searchParams } = new URL(req.url);
   const weekStart = searchParams.get('week_start');
@@ -102,11 +100,9 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(rows);
 }
 
-// PATCH — update tl_name and/or qa_name by agent name
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user || session.user.role !== 'admin')
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const { agent_name, tl_name, qa_name } = await req.json();
   if (!agent_name) return NextResponse.json({ error: 'agent_name required' }, { status: 400 });

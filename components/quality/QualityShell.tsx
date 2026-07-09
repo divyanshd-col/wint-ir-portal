@@ -1,22 +1,14 @@
 'use client';
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+
+import React from 'react';
+import RoleShell from '../RoleShell';
 
 interface Props {
   role:     string;
-  email:    string;
+  email?:   string;
   name:     string;
   children: React.ReactNode;
 }
-
-const NAV_ALL = [
-  { label: 'Analytics',        href: '/quality',                roles: ['admin', 'quality'] },
-  { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', roles: ['admin', 'quality'] },
-  { label: 'Call Evaluation',  href: '/quality/call-evaluation', roles: ['admin', 'quality'] },
-  { label: 'Team Chats',       href: '/quality/tl-evaluation',  roles: ['admin', 'tl'] },
-  { label: 'Member Analytics', href: '/tl/member-analytics',    roles: ['admin'] },
-];
 
 const BarChartIcon = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -45,13 +37,13 @@ const UserIcon = () => (
   </svg>
 );
 
-const NAV_ICONS: Record<string, () => React.ReactElement> = {
-  '/quality':                BarChartIcon,
-  '/quality/chat-evaluation': ChatIcon,
-  '/quality/call-evaluation': PhoneIcon,
-  '/quality/tl-evaluation':   UsersIcon,
-  '/tl/member-analytics':     UserIcon,
-};
+const NAV_ALL = [
+  { label: 'Analytics',        href: '/quality',                icon: BarChartIcon, roles: ['admin', 'quality'] },
+  { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,     roles: ['admin', 'quality'] },
+  { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,    roles: ['admin', 'quality'] },
+  { label: 'Team Chats',       href: '/quality/tl-evaluation',   icon: UsersIcon,    roles: ['admin', 'tl'] },
+  { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,     roles: ['admin'] },
+];
 
 const ROLE_LABELS: Record<string, string> = {
   admin:   'Admin',
@@ -59,81 +51,15 @@ const ROLE_LABELS: Record<string, string> = {
   tl:      'Team Lead',
 };
 
-// Initials avatar from name
-function initials(name: string) {
-  return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?';
-}
-
 export default function QualityShell({ role, name, children }: Props) {
-  const pathname = usePathname();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return <div className="quality-shell-container" />;
-  }
-
   return (
-    <div className="quality-shell-container">
-
-      {/* ── Top Nav ─────────────────────────────────────────────────── */}
-      <header className="quality-shell-header">
-        {/* Wordmark */}
-        <div className="quality-shell-wordmark">
-          Wint Wealth
-        </div>
-
-        {/* Role pill */}
-        <div className="quality-shell-role-container">
-          <span className="quality-shell-role-pill">
-            <span className="quality-shell-role-pill-dot" />
-            {ROLE_LABELS[role] ?? role}
-          </span>
-        </div>
-
-        {/* User */}
-        <div className="quality-shell-user">
-          <span className="quality-shell-user-avatar">
-            {initials(name)}
-          </span>
-          <span>{name}</span>
-          <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
-        </div>
-      </header>
-
-      <div className="quality-shell-body">
-        {/* ── Sidebar ───────────────────────────────────────────────── */}
-        <aside className="quality-shell-sidebar">
-          <div className="quality-shell-sidebar-title">
-            {ROLE_LABELS[role] ?? role}
-          </div>
-
-          {NAV_ALL.filter(item => item.roles.includes(role)).map((item) => {
-            const Icon = NAV_ICONS[item.href] ?? BarChartIcon;
-            const active = pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
-              >
-                <span>
-                  <Icon />
-                </span>
-                {item.label}
-              </Link>
-            );
-          })}
-        </aside>
-
-        {/* ── Main content ──────────────────────────────────────────── */}
-        <main className="quality-shell-main">
-          {children}
-        </main>
-      </div>
-    </div>
+    <RoleShell
+      role={role}
+      name={name}
+      navItems={NAV_ALL}
+      roleLabel={ROLE_LABELS[role] ?? role}
+    >
+      {children}
+    </RoleShell>
   );
 }

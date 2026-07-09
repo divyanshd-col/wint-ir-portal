@@ -3,7 +3,7 @@ import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
 import SettingsClient from '@/components/SettingsClient';
-import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/app/api/chat/route';
+import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/lib/prompts';
 import { IQS_SYSTEM_PROMPT } from '@/lib/quality';
 import { PLANNER_PROMPT, SYNTHESIZER_PROMPT } from '@/lib/analytics/agent';
 
