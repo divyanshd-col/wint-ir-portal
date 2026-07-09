@@ -41,7 +41,10 @@ import {
 // ── Auth ──────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) return true;
+  if (!secret) {
+    log.error(ROUTE, '[webhook/call] WEBHOOK_SECRET not set — rejecting request');
+    return false;
+  }
   const header = req.headers.get('authorization') ?? '';
   if (header === `Bearer ${secret}`) return true;
   const url = new URL(req.url);

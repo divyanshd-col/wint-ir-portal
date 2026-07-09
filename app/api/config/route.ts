@@ -69,14 +69,11 @@ async function _PATCH(req: NextRequest) {
 }
 
 async function _POST(req: NextRequest) {
-  const config = await readConfig();
-
-  if (config.isConfigured) {
-    if (!await getAdminSession()) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+  if (!await getAdminSession()) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const config = await readConfig();
   const body = await req.json();
 
   const users = await Promise.all(
