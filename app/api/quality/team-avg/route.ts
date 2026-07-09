@@ -1,5 +1,3 @@
-const ROUTE = 'quality/team-avg';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { getScoredConversationsSummary } from '@/lib/robylon/db';
@@ -21,7 +19,7 @@ const PARAM_DB_KEYS: Record<string, string> = {
   Call: 'call'
 };
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -106,5 +104,3 @@ async function _GET(req: NextRequest) {
     }
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

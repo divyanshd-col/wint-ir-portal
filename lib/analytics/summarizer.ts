@@ -1,5 +1,4 @@
 import { geminiGenerate } from '@/lib/gemini';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import type { ConversationTranscript } from './transcript-reader';
 
 const PROMPT = `You are summarising a batch of customer service conversations for a senior CX analyst at Wint Wealth.
@@ -32,7 +31,7 @@ export async function miniSummarizeTranscripts(
   try {
     const result = await geminiGenerate(
       keys,
-      DEFAULT_GEMINI_MODEL,
+      'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: formatted }] }],
       {
         systemInstruction: { parts: [{ text: PROMPT.replace('{INTENT}', intent) }] },

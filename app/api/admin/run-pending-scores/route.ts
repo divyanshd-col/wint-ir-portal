@@ -1,5 +1,3 @@
-const ROUTE = 'admin/run-pending-scores';
-import { log, withLogging } from '@/lib/log';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -9,7 +7,7 @@ import { executeScoring } from '@/lib/scoring/engine';
 // Scores ONE chat per call — caller loops until done === true.
 // Uses minHoursOld=0 so manual backfill catches ALL unscored chats,
 // not just those older than 12 h (which is only the cron's safety net).
-async function _POST() {
+export async function POST() {
   const session = await getServerSession(authOptions);
   if (session?.user?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -62,5 +60,3 @@ async function _POST() {
   // Every chat in this batch is locked — signal done to stop the loop
   return NextResponse.json({ ok: true, done: true, remaining: 0, chatId: null });
 }
-
-export const POST = withLogging(ROUTE, _POST);

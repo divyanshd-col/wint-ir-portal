@@ -1,5 +1,3 @@
-const ROUTE = 'call-analysis/run';
-import { log, withLogging } from '@/lib/log';
 /**
  * POST /api/call-analysis/run
  *
@@ -22,7 +20,7 @@ function send(controller: ReadableStreamDefaultController, event: string, data: 
   controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 }
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const user    = session?.user as any;
   if (!user || (!user.isAdmin && user.role !== 'tl')) {
@@ -70,5 +68,3 @@ async function _POST(req: NextRequest) {
     },
   });
 }
-
-export const POST = withLogging(ROUTE, _POST);

@@ -1,5 +1,3 @@
-const ROUTE = 'analytics/query';
-import { log, withLogging } from '@/lib/log';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { getDispositions } from '@/lib/analytics/dispositions';
@@ -16,7 +14,7 @@ function send(controller: ReadableStreamDefaultController, chunk: StreamChunk, e
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
 }
 
-async function _POST(req: Request) {
+export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return new Response('Forbidden', { status: 403 });
@@ -107,7 +105,7 @@ async function _POST(req: Request) {
 
         send(controller, { event: 'done' }, encoder);
       } catch (err: any) {
-        log.error(ROUTE, '[analytics/query]', err?.message ?? err);
+        console.error('[analytics/query]', err?.message ?? err);
         send(controller, { event: 'error', message: err?.message ?? 'Something went wrong.' }, encoder);
       } finally {
         controller.close();
@@ -124,5 +122,3 @@ async function _POST(req: Request) {
     },
   });
 }
-
-export const POST = withLogging(ROUTE, _POST);

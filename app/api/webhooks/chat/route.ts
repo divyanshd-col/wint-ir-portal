@@ -1,5 +1,3 @@
-const ROUTE = 'webhooks/chat';
-import { log, withLogging } from '@/lib/log';
 /**
  * POST /api/webhooks/chat
  *
@@ -21,7 +19,7 @@ import { log, withLogging } from '@/lib/log';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
-import { readConfig, type PortalConfig } from '@/lib/config';
+import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import {
   CALL_TRANSCRIPTION_PROMPT,
@@ -60,10 +58,7 @@ import { analyzeConversationTiming, type TimedMessage } from '@/lib/quality';
 // ── Auth ────────────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) {
-    log.error(ROUTE, '[webhook] WEBHOOK_SECRET not set — rejecting request');
-    return false;
-  }
+  if (!secret) { console.warn('[webhook] WEBHOOK_SECRET not set — accepting all requests'); return true; }
   const authHeader = req.headers.get('authorization') || '';
   if (authHeader === `Bearer ${secret}`) return true;
   const url = new URL(req.url);
@@ -90,13 +85,13 @@ async function linkAndScoreCallsForChat(
   chatTranscriptText: string,
   disposition: string,
   subDisposition: string,
-  config: PortalConfig,
+  config: any,
 ): Promise<void> {
   const unlinked = await getUnlinkedCallsForContact(contactId, startedAt, closedAt);
   if (!unlinked.length) return;
 
   await Promise.all(unlinked.map(c => linkCallToChat(c.id, chatId)));
-  log.info(ROUTE, `[webhook] Linked ${unlinked.length} call(s) to chat ${chatId}`);
+  console.log(`[webhook] Linked ${unlinked.length} call(s) to chat ${chatId}`);
 
   if (disposition) {
     await scoreLinkedCallsForChat(chatId, chatTranscriptText, disposition, subDisposition, config);
@@ -104,106 +99,11 @@ async function linkAndScoreCallsForChat(
 }
 
 
-export interface BaseRobylonEvent {
-  event_type: string;
-  event_id?: string;
-  chat_id?: string | number;
-  created_at?: string;
-}
-
-export interface TicketClosedEvent extends BaseRobylonEvent {
-  event_type: 'TICKET_CLOSED';
-  data?: {
-    transcript?: {
-      messages: any[];
-      conversation_started?: string;
-      conversation_ended?: string;
-      chat_id?: string | number;
-      requester_info?: {
-        phone_number?: string;
-      };
-    };
-    closed_at?: string;
-    ended_at?: string;
-    requester_info?: {
-      phone_number?: string;
-    };
-    user_phone?: string;
-    customer_phone?: string;
-    phone_number?: string;
-    mobile?: string;
-  };
-  requester_info?: {
-    phone_number?: string;
-  };
-  user_phone?: string;
-  customer_phone?: string;
-  phone_number?: string;
-  mobile?: string;
-}
-
-export interface ClassificationUpdatedEvent extends BaseRobylonEvent {
-  event_type: 'CLASSIFICATION_UPDATED';
-  data?: {
-    classifications?: Array<{
-      level_number?: number;
-      names?: {
-        l1?: string;
-        l2?: string;
-      };
-    }>;
-  };
-}
-
-export interface CsatSubmittedEvent extends BaseRobylonEvent {
-  event_type: 'CSAT_SUBMITTED';
-  data?: {
-    rating?: string | number;
-  };
-}
-
-export interface CcVoiceCallCompleteEvent extends BaseRobylonEvent {
-  event_type: 'CC_VOICE_CALL_COMPLETE';
-  chat_id: string | number;
-  requester_info?: {
-    phone_number?: string;
-  };
-  data?: {
-    phone_number?: string;
-    recording_url?: string;
-    started_at?: string;
-    ended_at?: string;
-    call_duration?: number;
-  };
-}
-
-export interface LegacyWebhookEvent {
-  event_type?: string;
-  event_id?: string;
-  chat_id?: string | number;
-  conversation_id?: string | number;
-  agent_name?: string;
-  tags?: string;
-  csat?: string;
-  conversation_started?: string;
-  conversation_ended?: string;
-  channel?: 'chat' | 'call';
-  messages?: any[];
-  transcript?: string;
-}
-
-export type RobylonWebhookEvent =
-  | TicketClosedEvent
-  | ClassificationUpdatedEvent
-  | CsatSubmittedEvent
-  | CcVoiceCallCompleteEvent
-  | LegacyWebhookEvent;
-
 // ── Handler: TICKET_CLOSED ────────────────────────────────────────────────────
-async function handleTicketClosed(body: TicketClosedEvent): Promise<NextResponse> {
+async function handleTicketClosed(body: any): Promise<NextResponse> {
   const transcriptObj = body.data?.transcript;
   if (!transcriptObj || !Array.isArray(transcriptObj.messages) || !transcriptObj.messages.length) {
-    log.info(ROUTE, '[webhook] TICKET_CLOSED — no messages in data.transcript');
+    console.log('[webhook] TICKET_CLOSED — no messages in data.transcript');
     return NextResponse.json({ ok: true, scored: false, reason: 'No messages in data.transcript' });
   }
 
@@ -310,7 +210,7 @@ async function handleTicketClosed(body: TicketClosedEvent): Promise<NextResponse
       }
     } else {
       // No tags yet — link calls now; scoring fires at CLASSIFICATION_UPDATED
-      callLinkPromise.catch(err => log.error(ROUTE, '[webhook] Call link error:', err));
+      callLinkPromise.catch(err => console.error('[webhook] Call link error:', err));
     }
   } else if (hasTags && existingConv) {
     const scored = await executeScoring(existingConv, effectiveWebhookAgent, disposition, subDisposition, mobileNumber);
@@ -324,21 +224,21 @@ async function handleTicketClosed(body: TicketClosedEvent): Promise<NextResponse
     }
   }
 
-  log.info(ROUTE, `[webhook] Transcript stored for chat ${chatId} — waiting for classification`);
+  console.log(`[webhook] Transcript stored for chat ${chatId} — waiting for classification`);
   return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'classification' });
 }
 
 // ── Handler: CLASSIFICATION_UPDATED ──────────────────────────────────────────
-async function handleClassificationUpdated(body: ClassificationUpdatedEvent): Promise<NextResponse> {
+async function handleClassificationUpdated(body: any): Promise<NextResponse> {
   const chatId          = String(body.chat_id || '');
   const classifications: any[] = body.data?.classifications || [];
 
-  log.info(ROUTE, `[webhook][CLASSIFICATION_UPDATED] chat=${chatId} count=${classifications.length}`);
+  console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} count=${classifications.length}`);
 
   // Sort by level_number desc to pick the most specific classification (l2 > l1)
   const primary = [...classifications].sort((a, b) => (b.level_number ?? 0) - (a.level_number ?? 0))[0];
   if (!primary) {
-    log.info(ROUTE, `[webhook][CLASSIFICATION_UPDATED] chat=${chatId} — no classifications in payload, skipping tags`);
+    console.log(`[webhook][CLASSIFICATION_UPDATED] chat=${chatId} — no classifications in payload, skipping tags`);
     return NextResponse.json({ ok: true, scored: false, reason: 'No classifications in payload' });
   }
 
@@ -383,12 +283,12 @@ async function handleClassificationUpdated(body: ClassificationUpdatedEvent): Pr
     }
   }
 
-  log.info(ROUTE, `[webhook] Tags stored for chat ${chatId}: ${disposition} > ${subDisposition}${conv?.transcript ? ' — waiting for scoring' : ' — waiting for transcript'}`);
+  console.log(`[webhook] Tags stored for chat ${chatId}: ${disposition} > ${subDisposition}${conv?.transcript ? ' — waiting for scoring' : ' — waiting for transcript'}`);
   return NextResponse.json({ ok: true, event: 'tags_stored', chat_id: chatId, disposition, subDisposition, waiting: conv?.transcript ? 'scoring' : 'transcript' });
 }
 
 // ── Handler: CSAT_SUBMITTED — only updates conversation row, never triggers scoring ──
-async function handleCsatEvent(body: CsatSubmittedEvent): Promise<NextResponse> {
+async function handleCsatEvent(body: any): Promise<NextResponse> {
   const chatId = String(body.chat_id || '');
   const rating  = body.data?.rating;
   if (!rating) {
@@ -401,12 +301,12 @@ async function handleCsatEvent(body: CsatSubmittedEvent): Promise<NextResponse> 
   }
 
   await updateConversationCsat(chatId, normalised.score, normalised.label);
-  log.info(ROUTE, `[webhook] CSAT updated for chat ${chatId}: ${normalised.score} (${normalised.label})`);
+  console.log(`[webhook] CSAT updated for chat ${chatId}: ${normalised.score} (${normalised.label})`);
   return NextResponse.json({ ok: true, event: 'csat_updated', chat_id: chatId, csat: normalised.score });
 }
 
 // ── Handler: legacy flat payload (backward compat) ────────────────────────────────
-async function handleLegacyPayload(body: LegacyWebhookEvent): Promise<NextResponse> {
+async function handleLegacyPayload(body: any): Promise<NextResponse> {
   const {
     chat_id, conversation_id, agent_name,
     tags = '', csat, conversation_started, conversation_ended,
@@ -428,7 +328,7 @@ async function handleLegacyPayload(body: LegacyWebhookEvent): Promise<NextRespon
   }
 
   if (!transcriptText) {
-    log.info(ROUTE, 'No transcript extracted', { received_keys: Object.keys(body) });
+    console.log('[webhook] No transcript extracted. received_keys:', Object.keys(body));
     return NextResponse.json({
       ok: true, scored: false,
       reason: 'No transcript extracted — raw payload logged for inspection',
@@ -467,7 +367,7 @@ async function handleLegacyPayload(body: LegacyWebhookEvent): Promise<NextRespon
   }
 
   if (!tags) {
-    log.info(ROUTE, `[webhook] Legacy payload for chat ${chatId} parked — waiting for tags`);
+    console.log(`[webhook] Legacy payload for chat ${chatId} parked — waiting for tags`);
     return NextResponse.json({ ok: true, event: 'transcript_stored', chat_id: chatId, waiting: 'waiting for tags' });
   }
 
@@ -499,7 +399,7 @@ function mimeFromUrl(url: string): string {
 }
 
 // ── Handler: CC_VOICE_CALL_COMPLETE ────────────────────────────────────────────
-async function handleCallComplete(body: CcVoiceCallCompleteEvent): Promise<NextResponse> {
+async function handleCallComplete(body: any): Promise<NextResponse> {
   // In CC_VOICE_CALL_COMPLETE, body.chat_id is the CALL ID (Robylon's voice
   // ticket ID), NOT a WhatsApp chat ID. The real WhatsApp chat_id is only
   // known at TICKET_CLOSED, where we link via phone number.
@@ -510,16 +410,15 @@ async function handleCallComplete(body: CcVoiceCallCompleteEvent): Promise<NextR
 
   // Derive duration: prefer call_duration field, fall back to ended_at − started_at
   let durationSeconds: number | null = null;
-  const callDuration = body.data?.call_duration;
-  if (callDuration !== undefined && callDuration > 0) {
-    durationSeconds = Math.round(callDuration);
+  if (body.data?.call_duration > 0) {
+    durationSeconds = Math.round(body.data.call_duration);
   } else if (body.data?.started_at && body.data?.ended_at) {
     const diff = Math.round((new Date(body.data.ended_at).getTime() - new Date(body.data.started_at).getTime()) / 1000);
     if (diff > 0) durationSeconds = diff;
   }
 
   if (!recordingUrl) {
-    log.warn(ROUTE, `[webhook] CC_VOICE_CALL_COMPLETE call_id=${callId} has no recording_url — skipping`);
+    console.warn(`[webhook] CC_VOICE_CALL_COMPLETE call_id=${callId} has no recording_url — skipping`);
     return NextResponse.json({ ok: true, skipped: true, reason: 'no recording_url' });
   }
 
@@ -545,7 +444,7 @@ async function handleCallComplete(body: CcVoiceCallCompleteEvent): Promise<NextR
       const config = await readConfig();
       const geminiKeys = getIQSGeminiKeys(config);
       if (!geminiKeys.length) {
-        log.error(ROUTE, `[webhook] No Gemini key — cannot transcribe call ${callId}`);
+        console.error(`[webhook] No Gemini key — cannot transcribe call ${callId}`);
         return;
       }
 
@@ -567,7 +466,7 @@ async function handleCallComplete(body: CcVoiceCallCompleteEvent): Promise<NextR
       });
       await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
 
-      log.info(ROUTE, `[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
+      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
 
       // ── Step 4: Classify disposition (constrained to official 14-category list) ──
       const callTranscriptText = segmentsToText(segments);
@@ -585,42 +484,42 @@ async function handleCallComplete(body: CcVoiceCallCompleteEvent): Promise<NextR
           disposition    = classified.disposition;
           subDisposition = classified.subDisposition;
         } catch (err: any) {
-          log.error(ROUTE, `[webhook] Disposition classify failed for call ${callId}:`, err.message);
+          console.error(`[webhook] Disposition classify failed for call ${callId}:`, err.message);
         }
 
         // ── Step 5: Store disposition ───────────────────────────────────────────
         if (disposition) {
           try {
             await updateCallDisposition(callId, disposition, subDisposition);
-            log.info(ROUTE, `[webhook] Call ${callId} classified — ${disposition} > ${subDisposition}`);
+            console.log(`[webhook] Call ${callId} classified — ${disposition} > ${subDisposition}`);
           } catch (err: any) {
-            log.error(ROUTE, `[webhook] Failed to store disposition for call ${callId}:`, err.message);
+            console.error(`[webhook] Failed to store disposition for call ${callId}:`, err.message);
           }
         }
 
         // ── Step 6: Chunking removed ─────────────────────────────────────────
       }
     } catch (err: any) {
-      log.error(ROUTE, `[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
+      console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);
       try {
         await query(`UPDATE call_recordings SET transcript = NULL, status = 'failed' WHERE id = $1`, [callId]);
       } catch (dbErr: any) {
-        log.error(ROUTE, `[webhook] Failed to update failed call status for ${callId}:`, dbErr.message);
+        console.error(`[webhook] Failed to update failed call status for ${callId}:`, dbErr.message);
       }
     }
   })());
 
-  log.info(ROUTE, `[webhook] CC_VOICE_CALL_COMPLETE received call ${callId} — transcription started, phone=${phone}`);
+  console.log(`[webhook] CC_VOICE_CALL_COMPLETE received call ${callId} — transcription started, phone=${phone}`);
   return NextResponse.json({ ok: true, event: 'call_received', call_id: callId, status: 'transcribing' });
 }
 
 // ── Main handler ───────────────────────────────────────────────────────────────────
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   if (!isAuthorised(req)) {
     return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   }
 
-  let body: RobylonWebhookEvent;
+  let body: any;
   try {
     body = await req.json();
   } catch {
@@ -629,9 +528,9 @@ async function _POST(req: NextRequest) {
 
   // Log only non-sensitive metadata — never dump full payload in production
   if (process.env.NODE_ENV !== 'production') {
-    log.info(ROUTE, 'Incoming payload', { payload: body });
+    console.log('[webhook] Incoming payload:', JSON.stringify(body, null, 2));
   } else {
-    log.info(ROUTE, `Received event_type=${body.event_type || 'unknown'} chat_id=${body.chat_id || 'n/a'}`);
+    console.log(`[webhook] Received event_type=${body.event_type || 'unknown'} chat_id=${body.chat_id || 'n/a'}`);
   }
 
   const eventType = String(body.event_type || '');
@@ -645,17 +544,15 @@ async function _POST(req: NextRequest) {
   if (eventId) {
     const dedupKey = eventType ? `${eventType}:${eventId}` : eventId;
     if (await storeHasProcessedEvent(dedupKey)) {
-      log.info(ROUTE, `[webhook] Duplicate ${dedupKey} — skipping`);
+      console.log(`[webhook] Duplicate ${dedupKey} — skipping`);
       return NextResponse.json({ ok: true, skipped: true, reason: 'duplicate_event_id' });
     }
     await storeMarkProcessedEvent(dedupKey);
   }
 
-  if (eventType === 'TICKET_CLOSED')           return handleTicketClosed(body as TicketClosedEvent);
-  if (eventType === 'CLASSIFICATION_UPDATED')  return handleClassificationUpdated(body as ClassificationUpdatedEvent);
-  if (eventType === 'CSAT_SUBMITTED')          return handleCsatEvent(body as CsatSubmittedEvent);
-  if (eventType === 'CC_VOICE_CALL_COMPLETE')  return handleCallComplete(body as CcVoiceCallCompleteEvent);
-  return handleLegacyPayload(body as LegacyWebhookEvent);
+  if (eventType === 'TICKET_CLOSED')           return handleTicketClosed(body);
+  if (eventType === 'CLASSIFICATION_UPDATED')  return handleClassificationUpdated(body);
+  if (eventType === 'CSAT_SUBMITTED')          return handleCsatEvent(body);
+  if (eventType === 'CC_VOICE_CALL_COMPLETE')  return handleCallComplete(body);
+  return handleLegacyPayload(body);
 }
-
-export const POST = withLogging(ROUTE, _POST);

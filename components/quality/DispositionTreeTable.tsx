@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import type { DispositionRow } from './QAAnalyticsDashboard';
 
 interface Props {
@@ -81,123 +81,12 @@ const DownloadIcon = () => (
 
 type SortCol = 'count' | 'csatChat' | 'csatCall' | 'aiChatCsat' | 'pctDeflected' | 'iqsChat' | 'iqsCall' | 'resolutionSecs';
 
-interface DispositionTreeRowProps {
-  row: DispositionRow;
-  isOpen: boolean;
-  onToggle: (key: string) => void;
-  mode: 'csat' | 'iqs';
-  sortCol: SortCol;
-  sortDir: 'desc' | 'asc';
-  td: React.CSSProperties;
-  tdNum: React.CSSProperties;
-  tdChild: React.CSSProperties;
-  tdChildNum: React.CSSProperties;
-}
-
-const DispositionTreeRow = React.memo(function DispositionTreeRow({
-  row,
-  isOpen,
-  onToggle,
-  mode,
-  sortCol,
-  sortDir,
-  td,
-  tdNum,
-  tdChild,
-  tdChildNum,
-}: DispositionTreeRowProps) {
-  const hasChildren = row.children.length > 0;
-
-  const sortedChildren = useMemo(() => {
-    return [...row.children].sort((a, b) => {
-      const av = (a as any)[sortCol] ?? -Infinity;
-      const bv = (b as any)[sortCol] ?? -Infinity;
-      return sortDir === 'desc' ? bv - av : av - bv;
-    });
-  }, [row.children, sortCol, sortDir]);
-
-  return (
-    <React.Fragment>
-      {/* Parent row */}
-      <tr
-        onClick={() => hasChildren && onToggle(row.disposition)}
-        style={{ cursor: hasChildren ? 'pointer' : 'default' }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
-        onMouseLeave={e => (e.currentTarget.style.background = '')}
-      >
-        <td style={td}>
-          {hasChildren && (
-            <span style={{
-              display: 'inline-block', width: 10, marginRight: 10, fontSize: 10,
-              color: 'var(--qa-text-2)',
-              transform: isOpen ? 'rotate(90deg)' : 'none',
-              transition: 'transform 0.15s',
-              transformOrigin: 'center',
-            }}>▶</span>
-          )}
-          {row.disposition}
-        </td>
-        <td style={tdNum}>
-          {row.count.toLocaleString()}
-          {' '}<span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>{fmt(row.pct)}</span>
-        </td>
-        {mode === 'csat' ? (
-          <React.Fragment>
-            <td style={tdNum}>{fmt(row.csatChat)}</td>
-            <td style={tdNum}>{fmt(row.csatCall)}</td>
-            <td style={tdNum}>—</td>
-            <td style={tdNum}>{fmt(row.aiChatCsat)}</td>
-            <td style={tdNum}>{fmt(row.pctDeflected)}</td>
-          </React.Fragment>
-        ) : (
-          <React.Fragment>
-            <td style={tdNum}>{fmtIQS(row.iqsChat)}</td>
-            <td style={tdNum}>{fmtIQS(row.iqsCall)}</td>
-            <td style={tdNum}>—</td>
-            <td style={tdNum}>{fmtTime(row.resolutionSecs)}</td>
-          </React.Fragment>
-        )}
-      </tr>
-
-      {/* Child rows */}
-      {isOpen && sortedChildren.map(child => (
-        <tr key={`${row.disposition}:${child.subDisposition}`}
-          onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
-          onMouseLeave={e => (e.currentTarget.style.background = '')}
-        >
-          <td style={tdChild}>{child.subDisposition}</td>
-          <td style={tdChildNum}>
-            {child.count.toLocaleString()}
-            {' '}<span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>{fmt(child.pct)}</span>
-          </td>
-          {mode === 'csat' ? (
-            <React.Fragment>
-              <td style={tdChildNum}>{fmt(child.csatChat)}</td>
-              <td style={tdChildNum}>{fmt(child.csatCall)}</td>
-              <td style={tdChildNum}>—</td>
-              <td style={tdChildNum}>{fmt(child.aiChatCsat)}</td>
-              <td style={tdChildNum}>{fmt(child.pctDeflected)}</td>
-            </React.Fragment>
-          ) : (
-            <React.Fragment>
-              <td style={tdChildNum}>{fmtIQS(child.iqsChat)}</td>
-              <td style={tdChildNum}>{fmtIQS(child.iqsCall)}</td>
-              <td style={tdChildNum}>—</td>
-              <td style={tdChildNum}>{fmtTime(child.resolutionSecs)}</td>
-            </React.Fragment>
-          )}
-        </tr>
-      ))}
-    </React.Fragment>
-  );
-});
-
 export default function DispositionTreeTable({ mode, rows, loading, periodLabel }: Props) {
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
   const [sortCol, setSortCol]   = useState<SortCol>('count');
   const [sortDir, setSortDir]   = useState<'desc' | 'asc'>('desc');
 
-  const toggle = useCallback((key: string) => {
+  function toggle(key: string) {
     setOpenKeys(prev => {
       const next = new Set(prev);
       if (next.has(key)) {
@@ -207,19 +96,16 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
       }
       return next;
     });
-  }, []);
+  }
 
-  const handleSort = useCallback((col: SortCol) => {
-    setSortCol(prevCol => {
-      if (prevCol === col) {
-        setSortDir(d => d === 'desc' ? 'asc' : 'desc');
-        return prevCol;
-      } else {
-        setSortDir('desc');
-        return col;
-      }
-    });
-  }, []);
+  function handleSort(col: SortCol) {
+    if (sortCol === col) {
+      setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortCol(col);
+      setSortDir('desc');
+    }
+  }
 
   const sortedRows = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -241,10 +127,10 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
   };
   const thNum: React.CSSProperties = { ...th, textAlign: 'right' };
 
-  const renderSortArrow = (col: SortCol) => {
+  function SortArrow({ col }: { col: SortCol }) {
     if (sortCol !== col) return <span style={{ marginLeft: 4, opacity: 0.25, fontSize: 10 }}>⇅</span>;
     return <span style={{ marginLeft: 4, fontSize: 10 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>;
-  };
+  }
 
   function thSort(): React.CSSProperties {
     return { ...thNum, cursor: 'pointer', userSelect: 'none' };
@@ -287,21 +173,21 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
             {mode === 'csat' ? (
               <tr>
                 <th style={{ ...th, width: '30%' }}>Intent</th>
-                <th style={thSort()} onClick={() => handleSort('count')}>Count{renderSortArrow('count')}</th>
-                <th style={thSort()} onClick={() => handleSort('csatChat')}>CSAT · Chats{renderSortArrow('csatChat')}</th>
-                <th style={thSort()} onClick={() => handleSort('csatCall')}>CSAT · Calls{renderSortArrow('csatCall')}</th>
+                <th style={thSort()} onClick={() => handleSort('count')}>Count<SortArrow col="count" /></th>
+                <th style={thSort()} onClick={() => handleSort('csatChat')}>CSAT · Chats<SortArrow col="csatChat" /></th>
+                <th style={thSort()} onClick={() => handleSort('csatCall')}>CSAT · Calls<SortArrow col="csatCall" /></th>
                 <th style={thNum}>CSAT · Emails</th>
-                <th style={thSort()} onClick={() => handleSort('aiChatCsat')}>AI Chat CSAT{renderSortArrow('aiChatCsat')}</th>
-                <th style={thSort()} onClick={() => handleSort('pctDeflected')}>% Deflected{renderSortArrow('pctDeflected')}</th>
+                <th style={thSort()} onClick={() => handleSort('aiChatCsat')}>AI Chat CSAT<SortArrow col="aiChatCsat" /></th>
+                <th style={thSort()} onClick={() => handleSort('pctDeflected')}>% Deflected<SortArrow col="pctDeflected" /></th>
               </tr>
             ) : (
               <tr>
                 <th style={{ ...th, width: '36%' }}>Intent</th>
-                <th style={thSort()} onClick={() => handleSort('count')}>Count{renderSortArrow('count')}</th>
-                <th style={thSort()} onClick={() => handleSort('iqsChat')}>IQS · Chats{renderSortArrow('iqsChat')}</th>
-                <th style={thSort()} onClick={() => handleSort('iqsCall')}>IQS · Calls{renderSortArrow('iqsCall')}</th>
+                <th style={thSort()} onClick={() => handleSort('count')}>Count<SortArrow col="count" /></th>
+                <th style={thSort()} onClick={() => handleSort('iqsChat')}>IQS · Chats<SortArrow col="iqsChat" /></th>
+                <th style={thSort()} onClick={() => handleSort('iqsCall')}>IQS · Calls<SortArrow col="iqsCall" /></th>
                 <th style={thNum}>IQS · Emails</th>
-                <th style={thSort()} onClick={() => handleSort('resolutionSecs')}>Resolution Time{renderSortArrow('resolutionSecs')}</th>
+                <th style={thSort()} onClick={() => handleSort('resolutionSecs')}>Resolution Time<SortArrow col="resolutionSecs" /></th>
               </tr>
             )}
           </thead>
@@ -325,21 +211,90 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
               </tr>
             ) : (
               <>
-                {sortedRows.map(row => (
-                  <DispositionTreeRow
-                    key={row.disposition}
-                    row={row}
-                    isOpen={openKeys.has(row.disposition)}
-                    onToggle={toggle}
-                    mode={mode}
-                    sortCol={sortCol}
-                    sortDir={sortDir}
-                    td={td}
-                    tdNum={tdNum}
-                    tdChild={tdChild}
-                    tdChildNum={tdChildNum}
-                  />
-                ))}
+                {sortedRows.map(row => {
+                  const isOpen = openKeys.has(row.disposition);
+                  const hasChildren = row.children.length > 0;
+
+                  return (
+                    <React.Fragment key={row.disposition}>
+                      {/* Parent row */}
+                      <tr
+                        onClick={() => hasChildren && toggle(row.disposition)}
+                        style={{ cursor: hasChildren ? 'pointer' : 'default' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = '')}
+                      >
+                        <td style={td}>
+                          {hasChildren && (
+                            <span style={{
+                              display: 'inline-block', width: 10, marginRight: 10, fontSize: 10,
+                              color: 'var(--qa-text-2)',
+                              transform: isOpen ? 'rotate(90deg)' : 'none',
+                              transition: 'transform 0.15s',
+                              transformOrigin: 'center',
+                            }}>▶</span>
+                          )}
+                          {row.disposition}
+                        </td>
+                        <td style={tdNum}>
+                          {row.count.toLocaleString()}
+                          {' '}<span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>{fmt(row.pct)}</span>
+                        </td>
+                        {mode === 'csat' ? (
+                          <>
+                            <td style={tdNum}>{fmt(row.csatChat)}</td>
+                            <td style={tdNum}>{fmt(row.csatCall)}</td>
+                            <td style={tdNum}>—</td>
+                            <td style={tdNum}>{fmt(row.aiChatCsat)}</td>
+                            <td style={tdNum}>{fmt(row.pctDeflected)}</td>
+                          </>
+                        ) : (
+                          <>
+                            <td style={tdNum}>{fmtIQS(row.iqsChat)}</td>
+                            <td style={tdNum}>{fmtIQS(row.iqsCall)}</td>
+                            <td style={tdNum}>—</td>
+                            <td style={tdNum}>{fmtTime(row.resolutionSecs)}</td>
+                          </>
+                        )}
+                      </tr>
+
+                      {/* Child rows — sorted by the same active column */}
+                      {isOpen && [...row.children].sort((a, b) => {
+                        const av = (a as any)[sortCol] ?? -Infinity;
+                        const bv = (b as any)[sortCol] ?? -Infinity;
+                        return sortDir === 'desc' ? bv - av : av - bv;
+                      }).map(child => (
+                        <tr key={`${row.disposition}:${child.subDisposition}`}
+                          style={{ display: isOpen ? 'table-row' : 'none' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = '')}
+                        >
+                          <td style={tdChild}>{child.subDisposition}</td>
+                          <td style={tdChildNum}>
+                            {child.count.toLocaleString()}
+                            {' '}<span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>{fmt(child.pct)}</span>
+                          </td>
+                          {mode === 'csat' ? (
+                            <>
+                              <td style={tdChildNum}>{fmt(child.csatChat)}</td>
+                              <td style={tdChildNum}>{fmt(child.csatCall)}</td>
+                              <td style={tdChildNum}>—</td>
+                              <td style={tdChildNum}>{fmt(child.aiChatCsat)}</td>
+                              <td style={tdChildNum}>{fmt(child.pctDeflected)}</td>
+                            </>
+                          ) : (
+                            <>
+                              <td style={tdChildNum}>{fmtIQS(child.iqsChat)}</td>
+                              <td style={tdChildNum}>{fmtIQS(child.iqsCall)}</td>
+                              <td style={tdChildNum}>—</td>
+                              <td style={tdChildNum}>{fmtTime(child.resolutionSecs)}</td>
+                            </>
+                          )}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
 
                 {/* Total row */}
                 {totalRows > 0 && (() => {

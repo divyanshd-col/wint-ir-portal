@@ -1,5 +1,3 @@
-const ROUTE = 'quality/pending-review';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
@@ -8,7 +6,7 @@ import { storeGetIQSFlags } from '@/lib/store';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -72,7 +70,7 @@ async function _GET(req: NextRequest) {
     availableSubDispositions = filters.availableSubDispositions;
     dispositionSubMap = filters.dispositionSubMap;
   } catch (err: any) {
-    log.error(ROUTE, '[pending-review] filter options fetch failed:', err.message);
+    console.error('[pending-review] filter options fetch failed:', err.message);
   }
 
   // Apply filters to get final set
@@ -155,7 +153,7 @@ async function _GET(req: NextRequest) {
   });
 }
 
-async function _PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -177,6 +175,3 @@ async function _PATCH(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const PATCH = withLogging(ROUTE, _PATCH);

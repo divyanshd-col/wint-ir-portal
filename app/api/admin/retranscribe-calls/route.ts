@@ -1,5 +1,3 @@
-const ROUTE = 'admin/retranscribe-calls';
-import { log, withLogging } from '@/lib/log';
 /**
  * POST /api/admin/retranscribe-calls
  *
@@ -121,14 +119,14 @@ async function transcribeCall(
       subDisposition = classified.subDisposition;
       if (disposition) await updateCallDisposition(callId, disposition, subDisposition);
     } catch (err: any) {
-      log.error(ROUTE, `[retranscribe] Disposition failed for call ${callId}:`, err.message);
+      console.error(`[retranscribe] Disposition failed for call ${callId}:`, err.message);
     }
   }
 
   return { disposition, subDisposition, segments: segments.length };
 }
 
-async function _POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
@@ -168,7 +166,7 @@ async function _POST(req: NextRequest): Promise<NextResponse> {
   const settled = await Promise.allSettled(
     calls.map(async call => {
       const r = await transcribeCall(call, geminiKeys);
-      log.info(ROUTE, `[retranscribe] call ${call.id} — ${r.segments} segments, disposition=${r.disposition}`);
+      console.log(`[retranscribe] call ${call.id} — ${r.segments} segments, disposition=${r.disposition}`);
       return { callId: call.id, ...r };
     })
   );
@@ -189,7 +187,7 @@ async function _POST(req: NextRequest): Promise<NextResponse> {
 }
 
 // GET: preview how many calls today have null transcript
-async function _GET(): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
@@ -212,6 +210,3 @@ async function _GET(): Promise<NextResponse> {
     callIds: rows[0]?.ids ?? [],
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const POST = withLogging(ROUTE, _POST);

@@ -2,12 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import MetricCard from './MetricCard';
-import dynamic from 'next/dynamic';
-
-const WoWChart = dynamic(() => import('./WoWChart'), {
-  ssr: false,
-  loading: () => <div className="h-[220px] bg-gray-50/50 rounded-xl animate-pulse flex items-center justify-center text-xs text-gray-400">Loading chart…</div>
-});
+import WoWChart from './WoWChart';
 
 interface PerformancePoint {
   week_start: string;

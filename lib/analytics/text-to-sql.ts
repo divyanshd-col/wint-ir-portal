@@ -1,6 +1,5 @@
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 import { readConfig } from '@/lib/config';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import type { AnalyticsFilters } from './types';
 
 // ── Full DB schema embedded for the LLM ──────────────────────────────────────
@@ -211,7 +210,7 @@ export async function generateSQL(
   try {
     raw = await geminiGenerate(
       keys,
-      config.geminiModel || DEFAULT_GEMINI_MODEL,
+      'gemini-2.5-flash',
       [{ role: 'user', parts: [{ text: prompt }] }],
       {},
       20_000,

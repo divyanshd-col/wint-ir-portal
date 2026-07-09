@@ -1,5 +1,3 @@
-const ROUTE = 'quality/flag-thread';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { storeGetFlagThread, storeAppendFlagComment } from '@/lib/store';
@@ -7,7 +5,7 @@ import type { IQSFlagComment } from '@/lib/store';
 import { randomUUID } from 'crypto';
 
 // GET — load thread for a flag
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -19,7 +17,7 @@ async function _GET(req: NextRequest) {
 }
 
 // POST — add a comment to a flag thread
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -46,6 +44,3 @@ async function _POST(req: NextRequest) {
   await storeAppendFlagComment(comment);
   return NextResponse.json({ ok: true, comment });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const POST = withLogging(ROUTE, _POST);

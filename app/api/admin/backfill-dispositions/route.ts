@@ -1,5 +1,3 @@
-const ROUTE = 'admin/backfill-dispositions';
-import { log, withLogging } from '@/lib/log';
 /**
  * POST /api/admin/backfill-dispositions
  *
@@ -26,7 +24,7 @@ interface BackfillRow {
   subDisposition: string;
 }
 
-async function _POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
@@ -93,7 +91,7 @@ async function _POST(req: NextRequest): Promise<NextResponse> {
 }
 
 /** GET: preview how many conversations currently have no disposition tag */
-async function _GET(req: NextRequest): Promise<NextResponse> {
+export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
@@ -118,6 +116,3 @@ async function _GET(req: NextRequest): Promise<NextResponse> {
     newest: rows[0]?.newest ?? null,
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const POST = withLogging(ROUTE, _POST);

@@ -1,5 +1,3 @@
-const ROUTE = 'cx/tl/team-analytics';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -88,7 +86,7 @@ const CALL_PARAM_LATERAL = `
 
 // ── Main handler ───────────────────────────────────────────────────────────────
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const userAny = session.user as Record<string, string | undefined>;
@@ -341,5 +339,3 @@ async function _GET(req: NextRequest) {
     },
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

@@ -6,7 +6,7 @@ import { calculateIQS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
-import { log, withLogging } from '@/lib/log';
+import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
 
 const ROUTE = 'cx/qa/review';
@@ -26,7 +26,7 @@ const DB_TO_PASCAL: Record<string, string> = {
   empathy:      'Empathy',
 };
 
-async function _PATCH(
+export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ chatId: string }> }
 ) {
@@ -257,5 +257,3 @@ async function _PATCH(
     return NextResponse.json({ error: e.message ?? 'Internal error' }, { status: 500 });
   }
 }
-
-export const PATCH = withLogging(ROUTE, _PATCH);

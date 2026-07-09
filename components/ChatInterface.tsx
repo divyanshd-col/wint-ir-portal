@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import Image from 'next/image';
 import type { SavedConversation } from '@/lib/types';
 import type { SourceChunk } from '@/lib/corrections';
 import CorrectionPanel from './CorrectionPanel';
@@ -255,7 +254,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
 
   const compressImage = (file: File): Promise<{ base64: string; mimeType: string; previewUrl: string }> =>
     new Promise((resolve, reject) => {
-      const img = new window.Image();
+      const img = new Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
         const MAX = 1280;
@@ -691,7 +690,8 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-4">
               <div className="mb-5 bg-white rounded-xl px-4 py-2.5 shadow-sm border border-gray-100 inline-block">
-                <Image src="/wint-logo.png" alt="Wint Wealth" width={110} height={40} className="object-contain block" unoptimized />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/wint-logo.png" alt="Wint Wealth" width={110} height={40} className="object-contain block" />
               </div>
               <h2 className="text-[19px] font-[650] text-[#0a0a0a] mb-1.5 tracking-[-0.01em]">IR Support Assistant</h2>
               <p className="text-[13.5px] text-gray-400 max-w-xs mb-8 leading-relaxed">
@@ -717,7 +717,8 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                   {msg.role === 'assistant' && (index === 0 || messages[index - 1]?.role !== 'assistant') && (
                     <div className="flex items-center gap-2 mb-2 ml-0.5">
                       <div className="w-5 h-5 rounded-md overflow-hidden shrink-0 bg-white border border-gray-200 shadow-sm flex items-center justify-center p-0.5">
-                        <Image src="/wint-logo.png" alt="Wint" width={18} height={18} className="object-contain w-full h-full" unoptimized />
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src="/wint-logo.png" alt="Wint" className="object-contain w-full h-full" />
                       </div>
                       <span className="text-[11.5px] font-[600] text-gray-400 tracking-wide uppercase">Wint IR</span>
                     </div>
@@ -738,7 +739,8 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                       </button>
                       <div className="flex flex-col items-end gap-1.5 max-w-full">
                         {msg.imagePreviewUrl && (
-                          <Image src={msg.imagePreviewUrl} alt="Attached screenshot" width={220} height={160} className="rounded-xl max-w-[220px] max-h-[160px] object-cover border border-white/20 shadow-sm" unoptimized />
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={msg.imagePreviewUrl} alt="Attached screenshot" className="rounded-xl max-w-[220px] max-h-[160px] object-cover border border-white/20 shadow-sm" />
                         )}
                         {msg.content && (
                           <div className="px-4 py-3 rounded-2xl rounded-tr-sm text-[14.5px] leading-[1.6] font-[450] bg-[#2d9e4f] text-white shadow-sm">
@@ -1160,7 +1162,8 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
         {attachedImage && (
           <div className="mb-3 flex items-start gap-2">
             <div className="relative inline-block">
-              <Image src={attachedImage.previewUrl} alt="Attached" width={100} height={64} className="h-16 w-auto rounded-lg object-cover border border-gray-200 shadow-sm" unoptimized />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={attachedImage.previewUrl} alt="Attached" className="h-16 w-auto rounded-lg object-cover border border-gray-200 shadow-sm" />
               <button
                 type="button"
                 onClick={() => setAttachedImage(null)}

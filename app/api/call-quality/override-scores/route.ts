@@ -1,5 +1,3 @@
-const ROUTE = 'call-quality/override-scores';
-import { log, withLogging } from '@/lib/log';
 /**
  * PATCH /api/call-quality/override-scores
  *
@@ -18,7 +16,7 @@ import type { CallParamScore } from '@/lib/call-quality';
 
 const CALL_PARAM_KEYS = Object.keys(CALL_WEIGHTS);
 
-async function _PATCH(req: NextRequest): Promise<NextResponse> {
+export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -77,5 +75,3 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({ ok: true, chatId, callIqsScore });
 }
-
-export const PATCH = withLogging(ROUTE, _PATCH);

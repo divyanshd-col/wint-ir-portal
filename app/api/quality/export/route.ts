@@ -1,5 +1,3 @@
-const ROUTE = 'quality/export';
-import { log, withLogging } from '@/lib/log';
 /**
  * GET /api/quality/export
  * Returns ALL IQS scores ever stored as a CSV file download.
@@ -50,7 +48,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
   } as IQSScoreEntry;
 }
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -120,5 +118,3 @@ async function _GET(req: NextRequest) {
     },
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

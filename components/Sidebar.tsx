@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import Image from 'next/image';
 import { signOut } from 'next-auth/react';
 import type { SavedConversation } from '@/lib/types';
 import TimeAgo from '@/components/TimeAgo';
@@ -84,7 +83,8 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
             <>
               <div className="flex items-center justify-between mb-2">
                 <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
-                  <Image src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" unoptimized />
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
                 </div>
                 <button
                   onClick={() => setAndPersistCollapsed(!collapsed)}
@@ -103,7 +103,8 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           ) : (
             <>
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shrink-0">
-                <Image src="/wint-logo.png" alt="W" width={20} height={20} className="object-contain" unoptimized />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/wint-logo.png" alt="W" width={20} height={20} className="object-contain" />
               </div>
             </>
           )}

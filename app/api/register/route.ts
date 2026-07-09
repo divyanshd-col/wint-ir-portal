@@ -1,5 +1,3 @@
-const ROUTE = 'register';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import { readConfig, writeConfig } from '@/lib/config';
@@ -8,7 +6,7 @@ import { isRateLimited } from '@/lib/rate-limit';
 
 const ALLOWED_DOMAIN = 'wintwealth.com';
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   // 5 registration attempts per IP per 15 minutes
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   if (await isRateLimited(`register:${ip}`, 5, 900)) {
@@ -77,5 +75,3 @@ async function _POST(req: NextRequest) {
 
   return NextResponse.json({ success: true });
 }
-
-export const POST = withLogging(ROUTE, _POST);

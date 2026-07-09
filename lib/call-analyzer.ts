@@ -7,11 +7,9 @@
  * Uses Gemini File API (upload once, reuse URI for both passes).
  */
 
-import { DEFAULT_GEMINI_MODEL } from './models';
-
 const GEMINI_UPLOAD_BASE = 'https://generativelanguage.googleapis.com/upload/v1beta/files';
 const GEMINI_API_BASE    = 'https://generativelanguage.googleapis.com/v1beta';
-const MODEL              = DEFAULT_GEMINI_MODEL;
+const MODEL              = 'gemini-2.5-flash';
 
 const MIME_MAP: Record<string, string> = {
   mp3:  'audio/mpeg',
