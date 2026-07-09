@@ -1,4 +1,5 @@
 import { storeGetConfig, storeSetConfig } from './store';
+import { DEFAULT_GEMINI_MODEL } from './models';
 
 export type UserRole = 'agent' | 'admin' | 'quality' | 'tl';
 
@@ -56,7 +57,7 @@ const DEFAULT_CONFIG: PortalConfig = {
   activeGeminiKey: 1,
   anthropicApiKey: '',
   llmProvider: 'gemini',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: DEFAULT_GEMINI_MODEL,
   knowledgeBaseUrls: [],
   users: [],
   systemPrompt: '',

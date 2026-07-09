@@ -4,6 +4,7 @@ import { authOptions } from '@/auth';
 import Anthropic from '@anthropic-ai/sdk';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from '@/lib/models';
 import fs from 'fs';
 import path from 'path';
 
@@ -417,7 +418,7 @@ RETURN FORMAT — return ONLY valid JSON:
           ]
         : routerInput;
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: DEFAULT_CLAUDE_MODEL,
         max_tokens: 256,
         messages: [{ role: 'user', content: claudeContent }],
       });
@@ -425,7 +426,7 @@ RETURN FORMAT — return ONLY valid JSON:
     } else {
       routerRaw = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        config.geminiModel || DEFAULT_GEMINI_MODEL,
         [{ role: 'user', parts: routerParts }],
         { config: { responseMimeType: 'application/json' } },
         15000
@@ -525,7 +526,7 @@ ${schema}`;
           ]
         : extractPrompt;
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: DEFAULT_CLAUDE_MODEL,
         max_tokens: 1024,
         messages: [{ role: 'user', content: claudeContent }],
       });
@@ -533,7 +534,7 @@ ${schema}`;
     } else {
       extractRaw = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        config.geminiModel || DEFAULT_GEMINI_MODEL,
         [{ role: 'user', parts: extractParts }],
         { config: { responseMimeType: 'application/json' } },
         40000

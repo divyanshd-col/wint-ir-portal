@@ -26,7 +26,14 @@ function LoginForm() {
       if (result?.error) {
         setLoginError('Invalid email or password.');
       } else if (result?.url) {
-        window.location.href = result.url;
+        let redirectUrl = result.url;
+        try {
+          const parsedUrl = new URL(result.url);
+          redirectUrl = parsedUrl.pathname + parsedUrl.search + parsedUrl.hash;
+        } catch {
+          // If it fails to parse (e.g. it is already a relative path), use as is
+        }
+        window.location.href = redirectUrl;
       }
     } catch {
       setLoginError('Network error. Please try again.');

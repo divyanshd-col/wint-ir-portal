@@ -127,10 +127,10 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
   };
   const thNum: React.CSSProperties = { ...th, textAlign: 'right' };
 
-  function SortArrow({ col }: { col: SortCol }) {
+  const renderSortArrow = (col: SortCol) => {
     if (sortCol !== col) return <span style={{ marginLeft: 4, opacity: 0.25, fontSize: 10 }}>⇅</span>;
     return <span style={{ marginLeft: 4, fontSize: 10 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>;
-  }
+  };
 
   function thSort(): React.CSSProperties {
     return { ...thNum, cursor: 'pointer', userSelect: 'none' };
@@ -173,21 +173,21 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
             {mode === 'csat' ? (
               <tr>
                 <th style={{ ...th, width: '30%' }}>Intent</th>
-                <th style={thSort()} onClick={() => handleSort('count')}>Count<SortArrow col="count" /></th>
-                <th style={thSort()} onClick={() => handleSort('csatChat')}>CSAT · Chats<SortArrow col="csatChat" /></th>
-                <th style={thSort()} onClick={() => handleSort('csatCall')}>CSAT · Calls<SortArrow col="csatCall" /></th>
+                <th style={thSort()} onClick={() => handleSort('count')}>Count{renderSortArrow('count')}</th>
+                <th style={thSort()} onClick={() => handleSort('csatChat')}>CSAT · Chats{renderSortArrow('csatChat')}</th>
+                <th style={thSort()} onClick={() => handleSort('csatCall')}>CSAT · Calls{renderSortArrow('csatCall')}</th>
                 <th style={thNum}>CSAT · Emails</th>
-                <th style={thSort()} onClick={() => handleSort('aiChatCsat')}>AI Chat CSAT<SortArrow col="aiChatCsat" /></th>
-                <th style={thSort()} onClick={() => handleSort('pctDeflected')}>% Deflected<SortArrow col="pctDeflected" /></th>
+                <th style={thSort()} onClick={() => handleSort('aiChatCsat')}>AI Chat CSAT{renderSortArrow('aiChatCsat')}</th>
+                <th style={thSort()} onClick={() => handleSort('pctDeflected')}>% Deflected{renderSortArrow('pctDeflected')}</th>
               </tr>
             ) : (
               <tr>
                 <th style={{ ...th, width: '36%' }}>Intent</th>
-                <th style={thSort()} onClick={() => handleSort('count')}>Count<SortArrow col="count" /></th>
-                <th style={thSort()} onClick={() => handleSort('iqsChat')}>IQS · Chats<SortArrow col="iqsChat" /></th>
-                <th style={thSort()} onClick={() => handleSort('iqsCall')}>IQS · Calls<SortArrow col="iqsCall" /></th>
+                <th style={thSort()} onClick={() => handleSort('count')}>Count{renderSortArrow('count')}</th>
+                <th style={thSort()} onClick={() => handleSort('iqsChat')}>IQS · Chats{renderSortArrow('iqsChat')}</th>
+                <th style={thSort()} onClick={() => handleSort('iqsCall')}>IQS · Calls{renderSortArrow('iqsCall')}</th>
                 <th style={thNum}>IQS · Emails</th>
-                <th style={thSort()} onClick={() => handleSort('resolutionSecs')}>Resolution Time<SortArrow col="resolutionSecs" /></th>
+                <th style={thSort()} onClick={() => handleSort('resolutionSecs')}>Resolution Time{renderSortArrow('resolutionSecs')}</th>
               </tr>
             )}
           </thead>

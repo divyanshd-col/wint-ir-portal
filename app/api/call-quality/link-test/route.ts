@@ -14,6 +14,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import {
   CALL_TRANSCRIPTION_PROMPT,
@@ -255,7 +256,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       chatId: chat_id,
       callIqsScore: iqs,
       callParameters: parameters,
-      callModelVersion: 'gemini-2.5-flash-preview-05-20',
+      callModelVersion: config.geminiModel || DEFAULT_GEMINI_MODEL,
     });
     await updateCallRecordingStatus(call_id, 'scored');
   } catch (err: any) {

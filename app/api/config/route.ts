@@ -3,6 +3,7 @@ import { readConfig, writeConfig, PortalConfig } from '@/lib/config';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import bcrypt from 'bcryptjs';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 
 async function getAdminSession() {
   const session = await getServerSession(authOptions);
@@ -24,7 +25,7 @@ export async function GET() {
     activeGeminiKey: config.activeGeminiKey || 1,
     anthropicApiKey: config.anthropicApiKey ? '••••' + config.anthropicApiKey.slice(-4) : '',
     llmProvider: config.llmProvider || 'gemini',
-    geminiModel: config.geminiModel || 'gemini-2.5-flash',
+    geminiModel: config.geminiModel || DEFAULT_GEMINI_MODEL,
     knowledgeBaseUrls: config.knowledgeBaseUrls,
     knowledgeBaseDocNames: config.knowledgeBaseDocNames || {},
     systemPrompt: config.systemPrompt || '',
