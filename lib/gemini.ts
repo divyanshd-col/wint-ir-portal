@@ -3,6 +3,22 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { randomUUID } from 'crypto';
+import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from './models';
+
+export { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL };
+
+/**
+ * DOUBLE GEMINI CLIENTS DOCUMENTATION:
+ * This file maintains two distinct pathways for interfacing with Gemini:
+ * 1. geminiGenerate (SDK Path): Wraps the standard @google/genai SDK for general,
+ *    structured, or streaming generation.
+ * 2. callGeminiForCall (Raw-Fetch Path): A custom fetch path optimized for structured
+ *    audio-scoring tasks. It exists because the audio-transcription pipeline requires
+ *    requesting application/json response format with thinkingBudget set to 0 (disabling
+ *    thought blocks on Flash models to minimize latency and token count). It also performs
+ *    a custom reverse-part candidate iteration to strip/ignore the thinking sections from
+ *    Pro responses, which the SDK does not natively handle cleanly.
+ */
 
 /**
  * Returns the dedicated IQS Gemini key if configured, otherwise falls back

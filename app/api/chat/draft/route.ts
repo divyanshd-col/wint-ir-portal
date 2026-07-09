@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -50,7 +51,7 @@ Return ONLY valid JSON with no markdown fencing:
   try {
     const raw = await geminiGenerate(
       geminiKeys,
-      'gemini-2.5-flash',
+      config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{ role: 'user', parts: [{ text: draftPrompt }] }],
       undefined,
       20000

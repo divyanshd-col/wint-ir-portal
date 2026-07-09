@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   parseTranscriptionResponse,
@@ -102,7 +103,7 @@ async function processCallWebhook(body: any): Promise<void> {
   try {
     transcriptionRaw = await geminiGenerate(
       geminiKeys,
-      'gemini-2.5-flash',
+      config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{
         role: 'user',
         parts: [

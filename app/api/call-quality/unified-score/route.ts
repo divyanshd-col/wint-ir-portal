@@ -18,6 +18,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import {
   getConversation,
@@ -405,7 +406,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     scoringTasks.push(
       geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        config.geminiModel || DEFAULT_GEMINI_MODEL,
         [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + combinedPrompt }] }],
         {},
         60_000,

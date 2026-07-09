@@ -1,5 +1,6 @@
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 import { readConfig } from '@/lib/config';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import type { AnalyticsFilters, ClassifierResult, ClassifierEntities } from './types';
 
 const TEMPLATE_IDS = [
@@ -226,7 +227,7 @@ export async function classifyQuery(
   try {
     raw = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{ role: 'user', parts: [{ text: userPrompt }] }],
       { systemInstruction: { parts: [{ text: systemPrompt }] } },
       12_000,

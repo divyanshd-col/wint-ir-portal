@@ -1,3 +1,4 @@
+import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from '@/lib/models';
 import Anthropic from '@anthropic-ai/sdk';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
@@ -135,7 +136,7 @@ export async function scoreLinkedCallsForChat(
       const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
       const raw = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        config.geminiModel || DEFAULT_GEMINI_MODEL,
         [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + scoringPrompt }] }],
         {},
         60_000,
@@ -153,7 +154,7 @@ export async function scoreLinkedCallsForChat(
         transcript: segments,
       });
 
-      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
+      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: config.geminiModel || DEFAULT_GEMINI_MODEL });
       await updateCallRecordingStatus(call.id, 'scored');
       console.log(`[scoring-engine] Scored combined chat+call for ${chatId} → IQS ${parsed.iqs}`);
     } catch (err: any) {
@@ -229,14 +230,14 @@ export async function executeScoring(
   if (provider === 'claude' && anthropicKey) {
     const client = new Anthropic({ apiKey: anthropicKey });
     const resp = await client.messages.create({
-      model: 'claude-sonnet-4-6', max_tokens: 2000,
+      model: DEFAULT_CLAUDE_MODEL, max_tokens: 2000,
       system: iqsSystemPrompt,
       messages: [{ role: 'user', content: userPrompt }],
     });
     rawResponse = resp.content[0].type === 'text' ? resp.content[0].text : '';
   } else if (geminiKeys.length) {
     rawResponse = await geminiGenerate(
-      geminiKeys, 'gemini-2.5-flash',
+      geminiKeys, config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
       {}, 60000,
     );
@@ -245,7 +246,7 @@ export async function executeScoring(
   }
 
   const parsed = parseScoringResponse(rawResponse, chatId, timing.conversationType);
-  const modelVersion = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
+  const modelVersion = provider === 'claude' ? DEFAULT_CLAUDE_MODEL : (config.geminiModel || DEFAULT_GEMINI_MODEL);
 
   // Convert ParamScore → IQSParameterResult for PostgreSQL storage
   const parameters: Record<string, IQSParameterResult> = {};

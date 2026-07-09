@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from '@/lib/models';
 import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, trimTranscript, IQSScoreEntry } from '@/lib/quality';
 import { storeSetTranscript, storeAppendCallSkipped } from '@/lib/store';
 import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
@@ -41,7 +42,7 @@ export async function POST(req: NextRequest) {
     if (provider === 'claude' && anthropicKey) {
       const client = new Anthropic({ apiKey: anthropicKey });
       const resp = await client.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: DEFAULT_CLAUDE_MODEL,
         max_tokens: 2000,
         system: iqsSystemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
     } else if (geminiKeys.length > 0) {
       rawResponse = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        config.geminiModel || DEFAULT_GEMINI_MODEL,
         [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
         {},
         60000,
@@ -71,7 +72,7 @@ export async function POST(req: NextRequest) {
       scoredAt: now,
       updatedAt: now,
       provider,
-      model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash',
+      model: provider === 'claude' ? DEFAULT_CLAUDE_MODEL : (config.geminiModel || DEFAULT_GEMINI_MODEL),
       scoredBy: session.user?.email || session.user?.name || 'unknown',
       agentName: agentName || (parsed as any).extractedAgentName || '',
       date,

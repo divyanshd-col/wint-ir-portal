@@ -7,6 +7,7 @@ import { readConfig } from '@/lib/config';
 import { logChatMessage } from '@/lib/log';
 import { getOrderedGeminiKeys, geminiGenerate, geminiStream } from '@/lib/gemini';
 import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/lib/prompts';
+import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL, CAPABLE_GEMINI_MODEL } from '@/lib/models';
 
 
 /**
@@ -22,7 +23,7 @@ async function expandQuery(keys: string[], query: string): Promise<string> {
   try {
     const result = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      DEFAULT_GEMINI_MODEL,
       [{
         role: 'user',
         parts: [{
@@ -98,7 +99,7 @@ export async function POST(req: NextRequest) {
   const config = await readConfig();
   const provider = config.llmProvider || 'gemini';
   // Final answers always use the most capable model per provider
-  const modelName = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-3-flash-preview';
+  const modelName = provider === 'claude' ? DEFAULT_CLAUDE_MODEL : CAPABLE_GEMINI_MODEL;
   const geminiKeys = getOrderedGeminiKeys(config);
 
   if (provider === 'gemini' && geminiKeys.length === 0) {
@@ -386,7 +387,7 @@ Return ONLY valid JSON with no markdown fencing:
 
           const raw = await geminiGenerate(
             geminiKeys,
-            'gemini-2.5-flash',
+            config.geminiModel || DEFAULT_GEMINI_MODEL,
             [{ role: 'user', parts: [{ text: educationPrompt }] }],
             undefined,
             20000

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys } from '@/lib/gemini';
 import { GoogleGenAI } from '@google/genai';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -20,7 +21,7 @@ export async function GET() {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
         await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: config.geminiModel || DEFAULT_GEMINI_MODEL,
           contents: [{ role: 'user', parts: [{ text: 'say ok' }] }],
         });
         return { index: i + 1, key: masked, status: 'ok' };

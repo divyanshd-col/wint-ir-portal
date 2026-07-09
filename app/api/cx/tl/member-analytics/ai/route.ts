@@ -5,6 +5,7 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { PARAM_DEFS, normKey } from '../route';
 
 function getDateRange(period: string, from?: string | null, to?: string | null) {
@@ -201,7 +202,7 @@ Rules:
 
     const raw = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{ role: 'user', parts: [{ text: prompt }] }],
       { config: { responseMimeType: 'application/json', temperature: 0.3 } },
       30_000,

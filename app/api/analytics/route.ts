@@ -5,6 +5,7 @@ import { readLogs } from '@/lib/log';
 import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry } from '@/lib/quality';
@@ -377,7 +378,7 @@ QUESTION: ${question}`;
   try {
     const raw = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{ role: 'user', parts: [{ text: userPrompt }] }],
       { systemInstruction: { parts: [{ text: systemPrompt }] } },
       45000
