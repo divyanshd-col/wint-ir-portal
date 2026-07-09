@@ -60,7 +60,10 @@ import { analyzeConversationTiming, type TimedMessage } from '@/lib/quality';
 // ── Auth ────────────────────────────────────────────────────────────────────────────
 function isAuthorised(req: NextRequest): boolean {
   const secret = process.env.WEBHOOK_SECRET;
-  if (!secret) { log.warn(ROUTE, '[webhook] WEBHOOK_SECRET not set — accepting all requests'); return true; }
+  if (!secret) {
+    log.error(ROUTE, '[webhook] WEBHOOK_SECRET not set — rejecting request');
+    return false;
+  }
   const authHeader = req.headers.get('authorization') || '';
   if (authHeader === `Bearer ${secret}`) return true;
   const url = new URL(req.url);
