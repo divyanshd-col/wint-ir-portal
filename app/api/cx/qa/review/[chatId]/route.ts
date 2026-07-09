@@ -64,6 +64,12 @@ export async function PATCH(
   }
 
   try {
+    const beforeState = await query<{ iqs_score: number; parameters: any }>(
+      `SELECT iqs_score, parameters FROM iqs_scores WHERE chat_id = $1`, [chatId]
+    );
+    const oldScore = beforeState[0]?.iqs_score ?? null;
+    const oldParams = beforeState[0]?.parameters ?? null;
+
     if (action === 'tl-submit') {
       // TL accepts bot scoring — mark as TL-reviewed in parameters JSON
       const existing = await query<{ parameters: any }>(
@@ -213,6 +219,36 @@ export async function PATCH(
         ts: new Date().toISOString(),
         meta: { note: note ?? null }
       } as IQSAuditEntry);
+    }
+
+    if (['submit', 'override', 'resolve', 'tl-submit', 'tl-override'].includes(action)) {
+      const afterState = await query<{ iqs_score: number; parameters: any }>(
+        `SELECT iqs_score, parameters FROM iqs_scores WHERE chat_id = $1`, [chatId]
+      );
+      if (afterState.length > 0) {
+        await query(
+          `INSERT INTO chat_review_comparisons (
+            chat_id, ai_score, human_score, ai_parameters, human_parameters, action, reviewed_by, review_note, reviewed_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+          ON CONFLICT (chat_id) DO UPDATE SET
+            human_score = EXCLUDED.human_score,
+            human_parameters = EXCLUDED.human_parameters,
+            action = EXCLUDED.action,
+            reviewed_by = EXCLUDED.reviewed_by,
+            review_note = EXCLUDED.review_note,
+            reviewed_at = EXCLUDED.reviewed_at`,
+          [
+            chatId,
+            oldScore,
+            afterState[0].iqs_score,
+            oldParams ? JSON.stringify(oldParams) : null,
+            JSON.stringify(afterState[0].parameters),
+            action,
+            email,
+            note ?? null
+          ]
+        );
+      }
     }
 
     return NextResponse.json({ ok: true });
