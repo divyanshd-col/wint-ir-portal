@@ -1,2 +1,5 @@
 import handler from '@/auth';
-export { handler as GET, handler as POST };
+import { withLogging } from '@/lib/log';
+
+export const GET = withLogging('auth', handler);
+export const POST = withLogging('auth', handler);

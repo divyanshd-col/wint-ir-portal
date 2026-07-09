@@ -1,3 +1,5 @@
+const ROUTE = 'analytics/plan';
+import { log, withLogging } from '@/lib/log';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -13,7 +15,7 @@ import type { AnalyticsFilters, InsightBlock, HistoryEntry } from '@/lib/analyti
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -98,3 +100,5 @@ export async function POST(req: Request) {
     sql_results: planResult.sql_results,
   });
 }
+
+export const POST = withLogging(ROUTE, _POST);

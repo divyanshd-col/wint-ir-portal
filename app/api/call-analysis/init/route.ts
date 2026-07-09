@@ -1,3 +1,5 @@
+const ROUTE = 'call-analysis/init';
+import { log, withLogging } from '@/lib/log';
 /**
  * POST /api/call-analysis/init
  *
@@ -25,7 +27,7 @@ const MIME_MAP: Record<string, string> = {
   flac: 'audio/flac',
 };
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   const user    = session?.user as any;
   if (!user || (!user.isAdmin && user.role !== 'tl')) {
@@ -72,3 +74,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Init network error: ${err.message}` }, { status: 502 });
   }
 }
+
+export const POST = withLogging(ROUTE, _POST);

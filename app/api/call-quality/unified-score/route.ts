@@ -1,3 +1,4 @@
+const ROUTE = 'call-quality/unified-score';
 /**
  * POST /api/call-quality/unified-score
  *
@@ -17,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
+import { log, withLogging } from '@/lib/log';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
@@ -145,7 +147,7 @@ function buildMergedTimeline(
   return items.map(({ source, ts, data }) => ({ source, ts, data }));
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+async function _POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
@@ -369,7 +371,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         };
         kbContext = relevant.map(c => `[${chunkLabel(c)}]\n${c.content}`).join('\n---\n');
       }
-    } catch {}
+    } catch (err: any) {
+      log.warn('unified-score/kb-fetch', 'Failed to fetch KB chunks', { err: err?.message ?? String(err) });
+    }
   }
 
   // ── Score BOTH in parallel ────────────────────────────────────────────────
@@ -498,3 +502,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     totalMs: Date.now() - t0,
   });
 }
+
+export const POST = withLogging(ROUTE, _POST);

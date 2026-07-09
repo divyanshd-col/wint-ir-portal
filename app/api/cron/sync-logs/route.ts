@@ -1,7 +1,8 @@
+const ROUTE = 'cron/sync-logs';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { google } from 'googleapis';
-import { readLogs } from '@/lib/log';
+import { readLogs, log, withLogging } from '@/lib/log';
 
 const SHEET_ID  = process.env.LOGS_SHEET_ID  || '1d8LE5opfdIDdsHYZ9AxaX1Z7TImUwAW_Kzk29xtzOTA';
 const SHEET_TAB = process.env.LOGS_SHEET_TAB || 'Logs';
@@ -72,13 +73,13 @@ async function runSync() {
 
   await ensureHeader(sheets);
   const lastTs = await getLastSyncedTimestamp(sheets);
-  console.log(`[cron/sync-logs] Last synced timestamp: ${lastTs ?? 'none (first run)'}`);
+  log.info(ROUTE, `[cron/sync-logs] Last synced timestamp: ${lastTs ?? 'none (first run)'}`);
 
   const logs = await readLogs();
   const newLogs = lastTs ? logs.filter(l => l.timestamp > lastTs) : logs;
 
   if (newLogs.length === 0) {
-    console.log('[cron/sync-logs] No new logs to sync');
+    log.info(ROUTE, '[cron/sync-logs] No new logs to sync');
     return { synced: 0, lastTs };
   }
 
@@ -92,20 +93,20 @@ async function runSync() {
     requestBody: { values: rows },
   });
 
-  console.log(`[cron/sync-logs] Synced ${rows.length} new entries`);
+  log.info(ROUTE, `[cron/sync-logs] Synced ${rows.length} new entries`);
   return { synced: rows.length, lastTs };
 }
 
 // Called by Vercel cron (hourly)
 // Auth: x-vercel-cron header (automatically added by Vercel) OR CRON_SECRET bearer token
-export async function GET(request: Request) {
+async function _GET(request: Request) {
   const isVercelCron = request.headers.get('x-vercel-cron') === '1';
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
   const hasValidSecret = cronSecret && authHeader === `Bearer ${cronSecret}`;
 
   if (!isVercelCron && !hasValidSecret) {
-    console.warn('[cron/sync-logs] Unauthorized GET — missing x-vercel-cron header and no valid CRON_SECRET');
+    log.warn(ROUTE, '[cron/sync-logs] Unauthorized GET — missing x-vercel-cron header and no valid CRON_SECRET');
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -113,13 +114,13 @@ export async function GET(request: Request) {
     const result = await runSync();
     return NextResponse.json(result);
   } catch (err: any) {
-    console.error('[cron/sync-logs] Error:', err?.message || err);
+    log.error(ROUTE, '[cron/sync-logs] Error:', err?.message || err);
     return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 });
   }
 }
 
 // Called manually by admins from the Analytics page
-export async function POST() {
+async function _POST() {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -127,7 +128,10 @@ export async function POST() {
     const result = await runSync();
     return NextResponse.json(result);
   } catch (err: any) {
-    console.error('[cron/sync-logs] Manual sync error:', err?.message || err);
+    log.error(ROUTE, '[cron/sync-logs] Manual sync error:', err?.message || err);
     return NextResponse.json({ error: err?.message || 'Unknown error' }, { status: 500 });
   }
 }
+
+export const GET = withLogging(ROUTE, _GET);
+export const POST = withLogging(ROUTE, _POST);

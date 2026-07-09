@@ -1,3 +1,5 @@
+const ROUTE = 'config';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig, writeConfig, PortalConfig } from '@/lib/config';
 import { getServerSession } from 'next-auth';
@@ -10,7 +12,7 @@ async function getAdminSession() {
   return session?.user?.isAdmin ? session : null;
 }
 
-export async function GET() {
+async function _GET() {
   const config = await readConfig();
   const session = await getServerSession(authOptions);
   if (config.isConfigured && !session) {
@@ -36,7 +38,7 @@ export async function GET() {
   });
 }
 
-export async function PATCH(req: NextRequest) {
+async function _PATCH(req: NextRequest) {
   if (!await getAdminSession()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await req.json();
@@ -66,7 +68,7 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ success: true, llmProvider: updated.llmProvider });
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const config = await readConfig();
 
   if (config.isConfigured) {
@@ -103,3 +105,7 @@ export async function POST(req: NextRequest) {
   await writeConfig(newConfig);
   return NextResponse.json({ success: true });
 }
+
+export const GET = withLogging(ROUTE, _GET);
+export const POST = withLogging(ROUTE, _POST);
+export const PATCH = withLogging(ROUTE, _PATCH);

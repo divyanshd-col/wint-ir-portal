@@ -1,3 +1,5 @@
+const ROUTE = 'debug/keys';
+import { log, withLogging } from '@/lib/log';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { NextResponse } from 'next/server';
@@ -6,7 +8,7 @@ import { getOrderedGeminiKeys } from '@/lib/gemini';
 import { GoogleGenAI } from '@google/genai';
 import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 
-export async function GET() {
+async function _GET() {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -38,3 +40,5 @@ export async function GET() {
     keys: results,
   });
 }
+
+export const GET = withLogging(ROUTE, _GET);

@@ -1,3 +1,5 @@
+const ROUTE = 'quality/scores';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
@@ -72,7 +74,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
   } as IQSScoreEntry;
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -157,12 +159,12 @@ export async function GET(req: NextRequest) {
     totalFiltered = total;
     displayEntries = rows.map(row => {
       try { return toIQSScoreEntry(row); } catch (e: any) {
-        console.error('[quality/scores] toIQSScoreEntry failed:', e?.message, JSON.stringify(row).slice(0, 200));
+        log.error(ROUTE, 'toIQSScoreEntry failed', { err: e?.message, row: JSON.stringify(row).slice(0, 200) });
         return null;
       }
     }).filter(Boolean) as IQSScoreEntry[];
   } catch (dbErr: any) {
-    console.error('[quality/scores] DB fetch failed:', dbErr?.message ?? dbErr);
+    log.error(ROUTE, 'DB fetch failed', { err: dbErr?.message ?? String(dbErr) });
     return NextResponse.json({ error: 'Database error', detail: dbErr?.message }, { status: 500 });
   }
 
@@ -192,7 +194,7 @@ export async function GET(req: NextRequest) {
     availableSubDispositions = filters.availableSubDispositions;
     dispositionSubMap = filters.dispositionSubMap;
   } catch (err: any) {
-    console.error('[quality/scores] DB filter options fetch failed:', err?.message);
+    log.error(ROUTE, '[quality/scores] DB filter options fetch failed:', err?.message);
   }
 
   // Stats over ALL filtered entries calculated via SQL aggregates
@@ -214,7 +216,7 @@ export async function GET(req: NextRequest) {
       ]);
     }
   } catch (statsErr: any) {
-    console.error('[quality/scores] Stats computation failed:', statsErr?.message);
+    log.error(ROUTE, '[quality/scores] Stats computation failed:', statsErr?.message);
   }
 
   return NextResponse.json({
@@ -247,3 +249,5 @@ export async function GET(req: NextRequest) {
     }
   });
 }
+
+export const GET = withLogging(ROUTE, _GET);

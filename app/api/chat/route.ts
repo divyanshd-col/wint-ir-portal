@@ -1,10 +1,11 @@
+const ROUTE = 'chat';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import Anthropic from '@anthropic-ai/sdk';
 import { fetchKnowledgeChunks, retrieveRelevantChunks, getTopKBScore } from '@/lib/drive';
 import { searchSlack } from '@/lib/slack';
 import { readConfig } from '@/lib/config';
-import { logChatMessage } from '@/lib/log';
+import { logChatMessage, log, withLogging } from '@/lib/log';
 import { getOrderedGeminiKeys, geminiGenerate, geminiStream } from '@/lib/gemini';
 import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/lib/prompts';
 import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL, CAPABLE_GEMINI_MODEL } from '@/lib/models';
@@ -67,7 +68,7 @@ Output:`,
       15000
     );
     const expanded = result.trim();
-    console.log(`[chat] Query expansion: "${query}" → "${expanded}"`);
+    log.info(ROUTE, `[chat] Query expansion: "${query}" → "${expanded}"`);
     // Return ONLY the distilled keywords — not the full original query.
     // Original query has too much noise for long/conversational messages
     // (negations, filler words, repeated context all inflate irrelevant KB scores).
@@ -85,7 +86,7 @@ interface ChatRequest {
   imageData?: { base64: string; mimeType: string };
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -115,13 +116,13 @@ export async function POST(req: NextRequest) {
   let relevantChunks: { content: string; fileId: string; fileName: string }[] = [];
 
   try {
-    console.log('[chat] Fetching knowledge base + expanding query in parallel...');
+    log.info(ROUTE, '[chat] Fetching knowledge base + expanding query in parallel...');
     // Run KB fetch and query expansion simultaneously — no added latency
     const [chunks, expandedQuery] = await Promise.all([
       fetchKnowledgeChunks(),
       expandQuery(geminiKeys, query),
     ]);
-    console.log(`[chat] KB ready: ${chunks.length} chunks`);
+    log.info(ROUTE, `[chat] KB ready: ${chunks.length} chunks`);
 
     // Category keywords directly target the right KB section
     const categoryKeywords: Record<string, string> = {
@@ -154,14 +155,14 @@ export async function POST(req: NextRequest) {
     const relevant = retrieveRelevantChunks(chunks, searchQuery, topK);
     const topScore = getTopKBScore(chunks, searchQuery);
     originalTopScore = topScore; // expansion now returns distilled keywords so topScore is the meaningful signal
-    console.log(`[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore})`);
+    log.info(ROUTE, `[chat] Relevant chunks: ${relevant.length} (topK=${topK}, topScore=${topScore})`);
     relevantChunks = relevant;
     if (relevant.length > 0 && topScore > 0) {
       context = relevant.map((c, i) => `[Source ${i + 1}: ${c.fileName}]\n${c.content}`).join('\n\n---\n\n');
       sources = relevant.map(c => ({ fileId: c.fileId, fileName: c.fileName, excerpt: c.content.slice(0, 200) + '...' }));
     }
-  } catch (err) {
-    console.error('[chat] KB error:', err);
+  } catch (err: any) {
+    log.warn('chat/kb-fetch', 'Failed to fetch KB chunks', { err: err?.message ?? String(err) });
   }
 
   // Named entity detection: extract capitalized multi-word phrases from original query
@@ -176,7 +177,7 @@ export async function POST(req: NextRequest) {
     namedEntities.every(e => !allKBText.includes(e.toLowerCase()));
 
   if (namedEntities.length > 0) {
-    console.log(`[chat] Named entities detected: ${namedEntities.join(', ')} | missing from KB: ${entityMissingFromKB}`);
+    log.info(ROUTE, `[chat] Named entities detected: ${namedEntities.join(', ')} | missing from KB: ${entityMissingFromKB}`);
   }
 
   // Trigger Slack when:
@@ -187,7 +188,7 @@ export async function POST(req: NextRequest) {
   let fromSlack = false;
   if ((weakKBMatch || entityMissingFromKB) && config.slackUserToken && query) {
     try {
-      console.log(`[chat] Trying Slack fallback (weakKB=${weakKBMatch}, entityMissing=${entityMissingFromKB})...`);
+      log.info(ROUTE, `[chat] Trying Slack fallback (weakKB=${weakKBMatch}, entityMissing=${entityMissingFromKB})...`);
       const slackResults = await searchSlack(query, config.slackUserToken);
       if (slackResults.length > 0) {
         fromSlack = true;
@@ -199,10 +200,10 @@ export async function POST(req: NextRequest) {
           fileName: `Slack #${r.channelName}`,
           excerpt: r.text.slice(0, 200) + '...',
         }));
-        console.log(`[chat] Slack fallback: ${slackResults.length} validated result(s)`);
+        log.info(ROUTE, `[chat] Slack fallback: ${slackResults.length} validated result(s)`);
       }
-    } catch (err) {
-      console.error('[chat] Slack fallback error:', err);
+    } catch (err: any) {
+      log.error(ROUTE, 'Slack fallback error', { err: err?.message ?? String(err) });
     }
   }
 
@@ -301,7 +302,7 @@ ${kbSection}`;
       controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'sources', sources })}\n\n`));
       let briefingText = '';
       try {
-        console.log(`[chat] Calling ${provider} (${modelName})...`);
+        log.info(ROUTE, `[chat] Calling ${provider} (${modelName})...`);
 
         if (provider === 'claude') {
           const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -358,9 +359,9 @@ ${kbSection}`;
           }
         }
 
-        console.log('[chat] Stream complete');
+        log.info(ROUTE, '[chat] Stream complete');
       } catch (err: any) {
-        console.error('[chat] LLM error:', err?.message, err?.status);
+        log.error(ROUTE, 'LLM error', { err: err?.message, status: err?.status });
         controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'text', text: `Error: ${err.message}` })}\n\n`));
       }
       controller.enqueue(encoder.encode('data: [DONE]\n\n'));
@@ -397,8 +398,8 @@ Return ONLY valid JSON with no markdown fencing:
           if (parsed.education) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'education', text: parsed.education })}\n\n`));
           }
-        } catch (e) {
-          console.error('[chat] Education call failed:', e);
+        } catch (e: any) {
+          log.error(ROUTE, 'Education call failed', { err: e?.message ?? String(e) });
         }
       }
 
@@ -416,3 +417,5 @@ Return ONLY valid JSON with no markdown fencing:
     },
   });
 }
+
+export const POST = withLogging(ROUTE, _POST);
