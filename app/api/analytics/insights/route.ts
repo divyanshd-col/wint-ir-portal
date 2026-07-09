@@ -1,3 +1,5 @@
+const ROUTE = 'analytics/insights';
+import { log, withLogging } from '@/lib/log';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
@@ -18,7 +20,7 @@ function send(controller: ReadableStreamDefaultController, chunk: StreamChunk, e
   controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return new Response('Forbidden', { status: 403 });
@@ -90,7 +92,7 @@ export async function POST(req: Request) {
 
         send(controller, { event: 'done' }, encoder);
       } catch (err: any) {
-        console.error('[analytics/insights]', err?.message ?? err);
+        log.error(ROUTE, '[analytics/insights]', err?.message ?? err);
         send(controller, { event: 'error', message: err?.message ?? 'Something went wrong.' }, encoder);
       } finally {
         controller.close();
@@ -107,3 +109,5 @@ export async function POST(req: Request) {
     },
   });
 }
+
+export const POST = withLogging(ROUTE, _POST);

@@ -1,3 +1,5 @@
+const ROUTE = 'analytics/export-transcripts';
+import { log, withLogging } from '@/lib/log';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
@@ -59,7 +61,7 @@ function transcriptToText(transcript: any): string {
     .join('\n');
 }
 
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!(session?.user as any)?.isAdmin) {
     return new Response('Forbidden', { status: 403 });
@@ -156,3 +158,5 @@ export async function POST(req: Request) {
     },
   });
 }
+
+export const POST = withLogging(ROUTE, _POST);

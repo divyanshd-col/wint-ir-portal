@@ -1,3 +1,4 @@
+const ROUTE = 'call-quality/link-test';
 /**
  * POST /api/call-quality/link-test
  *
@@ -12,8 +13,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { readConfig } from '@/lib/config';
+import { readConfig, type PortalConfig } from '@/lib/config';
+import { log, withLogging } from '@/lib/log';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import {
   CALL_TRANSCRIPTION_PROMPT,
@@ -60,7 +63,7 @@ function transcriptFromJsonb(messages: any[]): string {
   return lines.join('\n');
 }
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+async function _POST(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
   const user = session.user as any;
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const recordingUrl = recording_url.trim();
 
   // ── Load Gemini config ─────────────────────────────────────────────────────
-  let config: any, geminiKeys: string[];
+  let config: PortalConfig, geminiKeys: string[];
   try {
     config     = await readConfig();
     geminiKeys = getIQSGeminiKeys(config);
@@ -199,7 +202,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const allChunks = await fetchKnowledgeChunks();
       const relevant  = retrieveRelevantChunks(allChunks, kbQuery, 5);
       if (relevant.length) kbContext = relevant.map(c => `[${c.fileName}]\n${c.content}`).join('\n---\n');
-    } catch {}
+    } catch (err: any) {
+      log.warn('link-test/kb-fetch', 'Failed to fetch KB chunks', { err: err?.message ?? String(err) });
+    }
   }
 
   // ── Pass 2: Text IQS scoring ──────────────────────────────────────────────
@@ -255,17 +260,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       chatId: chat_id,
       callIqsScore: iqs,
       callParameters: parameters,
-      callModelVersion: 'gemini-2.5-flash-preview-05-20',
+      callModelVersion: config.geminiModel || DEFAULT_GEMINI_MODEL,
     });
     await updateCallRecordingStatus(call_id, 'scored');
   } catch (err: any) {
     dbError = err.message;
-    console.error('[link-test] DB persist error:', err.message);
+    log.error(ROUTE, '[link-test] DB persist error:', err.message);
   }
 
   const totalMs = Date.now() - t0;
 
-  console.log(`[link-test] call ${call_id} → chat ${chat_id} | IQS ${iqs} | ${totalMs}ms`);
+  log.info(ROUTE, `[link-test] call ${call_id} → chat ${chat_id} | IQS ${iqs} | ${totalMs}ms`);
 
   return NextResponse.json({
     ok: true,
@@ -289,3 +294,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     ...(dbError ? { dbWarning: `Scoring succeeded but DB save failed: ${dbError}` } : {}),
   });
 }
+
+export const POST = withLogging(ROUTE, _POST);

@@ -1,10 +1,12 @@
+const ROUTE = 'users/me/password';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig, writeConfig } from '@/lib/config';
 import bcrypt from 'bcryptjs';
 
-export async function PATCH(req: NextRequest) {
+async function _PATCH(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
 
@@ -33,3 +35,5 @@ export async function PATCH(req: NextRequest) {
   await writeConfig(config);
   return NextResponse.json({ success: true });
 }
+
+export const PATCH = withLogging(ROUTE, _PATCH);

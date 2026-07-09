@@ -1,10 +1,12 @@
+const ROUTE = 'cx/admin/breakdown';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 
 const CSAT = `CASE WHEN c.csat_score=5 THEN 100 WHEN c.csat_score=3 THEN 50 WHEN c.csat_score=1 THEN 0 END`;
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -102,3 +104,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json(groups);
 }
+
+export const GET = withLogging(ROUTE, _GET);

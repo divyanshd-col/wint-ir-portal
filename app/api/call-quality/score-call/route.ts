@@ -1,3 +1,4 @@
+const ROUTE = 'call-quality/score-call';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
@@ -5,8 +6,9 @@ import { CALL_IQS_SYSTEM_PROMPT, buildCallScoringPrompt, parseCallScoringRespons
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { readConfig } from '@/lib/config';
+import { log, withLogging } from '@/lib/log';
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+async function _POST(req: NextRequest): Promise<NextResponse> {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
   const user = session.user as any;
@@ -95,7 +97,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           return `[${label}]\n${c.content}`;
         }).join('\n---\n');
       }
-    } catch {}
+    } catch (err: any) {
+      log.warn('score-call/kb-fetch', 'Failed to fetch KB chunks', { err: err?.message ?? String(err) });
+    }
   }
 
   // Score
@@ -134,3 +138,5 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     summary: result.summary ?? '',
   });
 }
+
+export const POST = withLogging(ROUTE, _POST);

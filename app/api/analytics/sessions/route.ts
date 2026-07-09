@@ -1,3 +1,5 @@
+const ROUTE = 'analytics/sessions';
+import { log, withLogging } from '@/lib/log';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -10,7 +12,7 @@ async function getEmail(): Promise<string | null> {
 }
 
 // POST — create a new session
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const email = await getEmail();
   if (!email) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const body = await req.json().catch(() => ({}));
@@ -20,7 +22,7 @@ export async function POST(req: Request) {
 }
 
 // PATCH — rename a session
-export async function PATCH(req: Request) {
+async function _PATCH(req: Request) {
   const email = await getEmail();
   if (!email) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const body = await req.json().catch(() => ({}));
@@ -31,7 +33,7 @@ export async function PATCH(req: Request) {
 }
 
 // DELETE — remove a session and its messages
-export async function DELETE(req: Request) {
+async function _DELETE(req: Request) {
   const email = await getEmail();
   if (!email) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { searchParams } = new URL(req.url);
@@ -40,3 +42,7 @@ export async function DELETE(req: Request) {
   await deleteSession(email, id);
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withLogging(ROUTE, _POST);
+export const DELETE = withLogging(ROUTE, _DELETE);
+export const PATCH = withLogging(ROUTE, _PATCH);

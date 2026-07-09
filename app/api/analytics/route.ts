@@ -1,10 +1,12 @@
+const ROUTE = 'analytics';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { csatScore, avgOrNull } from '@/lib/stats';
-import { readLogs } from '@/lib/log';
+import { readLogs, log, withLogging } from '@/lib/log';
 import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry } from '@/lib/quality';
@@ -246,7 +248,7 @@ function computeQualitySummary(entries: IQSScoreEntry[]) {
 }
 
 // ── Main handler ──────────────────────────────────────────────────────────────
-export async function POST(req: Request) {
+async function _POST(req: Request) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -261,7 +263,7 @@ export async function POST(req: Request) {
     allLogs = await readLogsFromSheet();
     source = 'sheet';
   } catch (err: any) {
-    console.warn(`[analytics] Sheet read failed (${err.message}), falling back to KV`);
+    log.warn(ROUTE, `[analytics] Sheet read failed (${err.message}), falling back to KV`);
     allLogs = await readLogs();
     source = 'kv';
   }
@@ -294,7 +296,7 @@ export async function POST(req: Request) {
     qualityAgents = [...new Set(entries.map(e => e.agentName).filter(Boolean))].sort();
     qualitySummary = computeQualitySummary(entries);
   } catch (err: any) {
-    console.warn('[analytics] Quality scores load failed:', err.message);
+    log.warn(ROUTE, '[analytics] Quality scores load failed:', err.message);
   }
 
   if (!question) {
@@ -377,7 +379,7 @@ QUESTION: ${question}`;
   try {
     const raw = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{ role: 'user', parts: [{ text: userPrompt }] }],
       { systemInstruction: { parts: [{ text: systemPrompt }] } },
       45000
@@ -399,7 +401,9 @@ QUESTION: ${question}`;
 
     return NextResponse.json({ stats, qualitySummary, qualityAgents, answer, blocks });
   } catch (err: any) {
-    console.error('[analytics] LLM error:', err);
+    log.error(ROUTE, '[analytics] LLM error:', err);
     return NextResponse.json({ stats, qualitySummary, qualityAgents, answer: `Analysis failed: ${err.message}`, blocks: [] });
   }
 }
+
+export const POST = withLogging(ROUTE, _POST);

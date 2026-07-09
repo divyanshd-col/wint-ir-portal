@@ -1,9 +1,11 @@
+const ROUTE = 'kb-refresh';
+import { log, withLogging } from '@/lib/log';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { resetKBCache } from '@/lib/drive';
 
-export async function POST() {
+async function _POST() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -13,3 +15,5 @@ export async function POST() {
   await resetKBCache();
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withLogging(ROUTE, _POST);

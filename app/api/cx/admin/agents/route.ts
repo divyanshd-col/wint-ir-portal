@@ -1,3 +1,5 @@
+const ROUTE = 'cx/admin/agents';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
@@ -5,7 +7,7 @@ import { getCxBenchmark } from '@/lib/cx/benchmark';
 import { getCompositeRankings } from '@/lib/cx/composite';
 import { prevWeek } from '@/lib/cx/week';
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -100,7 +102,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(rows);
 }
 
-export async function PATCH(req: NextRequest) {
+async function _PATCH(req: NextRequest) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -120,3 +122,6 @@ export async function PATCH(req: NextRequest) {
   }
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withLogging(ROUTE, _GET);
+export const PATCH = withLogging(ROUTE, _PATCH);

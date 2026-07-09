@@ -72,6 +72,66 @@ export interface ConversationRow {
   resolution_seconds: number | null;
 }
 
+export interface LatestConversationRow {
+  chatId: string;
+  closedAt: string | null;
+  tags: any;
+  agentId: number | null;
+  agentName: string | null;
+}
+
+export interface ConversationHistoryItem {
+  chatId: string;
+  date: string | null;
+  conversationType: string | null;
+  csat_score: number | null;
+  tags: any;
+  agentName: string | null;
+  iqs: number | null;
+  scoredAt: string | null;
+}
+
+export interface ScoredConversationRow {
+  chatId: string;
+  date: string | null;
+  conversationType: string | null;
+  frt: number | null;
+  botToTeamSecs: number | null;
+  resolutionTime: number | null;
+  csat_score: number | null;
+  csat_label: string | null;
+  tags: any;
+  disposition: string | null;
+  subDisposition: string | null;
+  agentName: string | null;
+  iqs: number;
+  parameters: Record<string, IQSParameterResult>;
+  modelVersion: string;
+  scoredAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+}
+
+export interface ScoredCallRow {
+  callId: string;
+  chatId: string | null;
+  calledAt: string | null;
+  date: string | null;
+  durationSeconds: number | null;
+  language: string | null;
+  interruptionCount: number;
+  deadAirCount: number;
+  agentName: string | null;
+  iqs: number;
+  parameters: Record<string, IQSParameterResult>;
+  modelVersion: string;
+  scoredAt: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+}
+
 export async function upsertConversation(data: {
   id: string;
   contactId?: number | null;
@@ -151,8 +211,8 @@ export async function getConversation(chatId: string): Promise<ConversationRow |
   return rows[0] ?? null;
 }
 
-export async function getLatestConversationByPhone(phone: string): Promise<any | null> {
-  const rows = await query<any>(`
+export async function getLatestConversationByPhone(phone: string): Promise<LatestConversationRow | null> {
+  const rows = await query<LatestConversationRow>(`
     SELECT c.id AS "chatId", c.closed_at AS "closedAt", c.tags,
            c.agent_id AS "agentId", a.name AS "agentName"
     FROM conversations c
@@ -166,8 +226,8 @@ export async function getLatestConversationByPhone(phone: string): Promise<any |
   return rows[0] ?? null;
 }
 
-export async function getConversationHistory(chatId: string, limit = 10): Promise<any[]> {
-  return query(`
+export async function getConversationHistory(chatId: string, limit = 10): Promise<ConversationHistoryItem[]> {
+  return query<ConversationHistoryItem>(`
     SELECT c.id AS "chatId", COALESCE(c.closed_at, c.started_at)::date AS "date",
            c.conversation_type AS "conversationType", c.csat_score, c.tags,
            a.name AS "agentName", s.iqs_score AS "iqs", s.scored_at AS "scoredAt"
@@ -348,7 +408,7 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
 
 export async function getAllScoredConversations(
   opts: GetScoredConversationsOptions = {},
-): Promise<{ rows: any[]; total: number }> {
+): Promise<{ rows: ScoredConversationRow[]; total: number }> {
   const { conditions, params } = buildFilters(opts);
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -372,7 +432,7 @@ export async function getAllScoredConversations(
     limitSql = `LIMIT $${params.length - 1} OFFSET $${params.length}`;
   }
 
-  const rows = await query(`
+  const rows = await query<ScoredConversationRow>(`
     SELECT
       c.id                        AS "chatId",
       COALESCE(c.closed_at, c.started_at)::date AS "date",
@@ -951,7 +1011,7 @@ export async function getAllScoredCalls(opts: {
   dispositions?: string[];
   page?: number;
   pageSize?: number;
-} = {}): Promise<{ rows: any[]; total: number }> {
+} = {}): Promise<{ rows: ScoredCallRow[]; total: number }> {
   // Join call_recordings → iqs_scores (via chat_id) — call_iqs_score must exist
   const conditions: string[] = ['s.call_iqs_score IS NOT NULL'];
   const params: any[] = [];
@@ -1006,7 +1066,7 @@ export async function getAllScoredCalls(opts: {
   const offsetVal = page * pageSize;
   params.push(pageSize, offsetVal);
 
-  const rows = await query(`
+  const rows = await query<ScoredCallRow>(`
     SELECT
       r.id                                    AS "callId",
       r.chat_id                               AS "chatId",

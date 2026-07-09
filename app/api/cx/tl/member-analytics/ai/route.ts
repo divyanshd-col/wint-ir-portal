@@ -1,3 +1,5 @@
+const ROUTE = 'cx/tl/member-analytics/ai';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -5,6 +7,7 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { PARAM_DEFS, normKey } from '../route';
 
 function getDateRange(period: string, from?: string | null, to?: string | null) {
@@ -22,7 +25,7 @@ const PASS_RATE_SELECT = `
         / NULLIF(COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),0)*100,1)::float AS pass_rate
 `;
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const userAny = session.user as Record<string, string | undefined>;
@@ -201,7 +204,7 @@ Rules:
 
     const raw = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      config.geminiModel || DEFAULT_GEMINI_MODEL,
       [{ role: 'user', parts: [{ text: prompt }] }],
       { config: { responseMimeType: 'application/json', temperature: 0.3 } },
       30_000,
@@ -217,7 +220,9 @@ Rules:
 
     return NextResponse.json({ summary: parsed.summary ?? '', items: parsed.items ?? [] });
   } catch (err: any) {
-    console.error('[member-analytics/ai]', err);
+    log.error(ROUTE, '[member-analytics/ai]', err);
     return NextResponse.json({ error: err.message ?? 'Gemini error' }, { status: 500 });
   }
 }
+
+export const GET = withLogging(ROUTE, _GET);

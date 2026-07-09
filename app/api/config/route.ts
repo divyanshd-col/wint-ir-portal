@@ -1,15 +1,18 @@
+const ROUTE = 'config';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig, writeConfig, PortalConfig } from '@/lib/config';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import bcrypt from 'bcryptjs';
+import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 
 async function getAdminSession() {
   const session = await getServerSession(authOptions);
   return session?.user?.isAdmin ? session : null;
 }
 
-export async function GET() {
+async function _GET() {
   const config = await readConfig();
   const session = await getServerSession(authOptions);
   if (config.isConfigured && !session) {
@@ -24,7 +27,7 @@ export async function GET() {
     activeGeminiKey: config.activeGeminiKey || 1,
     anthropicApiKey: config.anthropicApiKey ? '••••' + config.anthropicApiKey.slice(-4) : '',
     llmProvider: config.llmProvider || 'gemini',
-    geminiModel: config.geminiModel || 'gemini-2.5-flash',
+    geminiModel: config.geminiModel || DEFAULT_GEMINI_MODEL,
     knowledgeBaseUrls: config.knowledgeBaseUrls,
     knowledgeBaseDocNames: config.knowledgeBaseDocNames || {},
     systemPrompt: config.systemPrompt || '',
@@ -35,7 +38,7 @@ export async function GET() {
   });
 }
 
-export async function PATCH(req: NextRequest) {
+async function _PATCH(req: NextRequest) {
   if (!await getAdminSession()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const body = await req.json();
@@ -65,15 +68,12 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ success: true, llmProvider: updated.llmProvider });
 }
 
-export async function POST(req: NextRequest) {
-  const config = await readConfig();
-
-  if (config.isConfigured) {
-    if (!await getAdminSession()) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+async function _POST(req: NextRequest) {
+  if (!await getAdminSession()) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
+  const config = await readConfig();
   const body = await req.json();
 
   const users = await Promise.all(
@@ -102,3 +102,7 @@ export async function POST(req: NextRequest) {
   await writeConfig(newConfig);
   return NextResponse.json({ success: true });
 }
+
+export const GET = withLogging(ROUTE, _GET);
+export const POST = withLogging(ROUTE, _POST);
+export const PATCH = withLogging(ROUTE, _PATCH);
