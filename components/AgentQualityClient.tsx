@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, fmtDuration, iqsTheme } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
@@ -612,8 +613,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
             Back to chat
           </Link>
           <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/wint-logo.png" alt="Wint" width={64} height={22} className="object-contain block" />
+            <Image src="/wint-logo.png" alt="Wint" width={64} height={22} className="object-contain block" unoptimized />
           </div>
           <p className="text-slate-500 text-[10px] mt-1.5 font-semibold uppercase tracking-wider">My Quality</p>
         </div>
