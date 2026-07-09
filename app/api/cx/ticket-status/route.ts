@@ -1,3 +1,5 @@
+const ROUTE = 'cx/ticket-status';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getLatestConversationByPhone } from '@/lib/robylon/db';
 
@@ -9,7 +11,7 @@ import { getLatestConversationByPhone } from '@/lib/robylon/db';
  *
  * Auth: CX_API_KEY header (set CX_API_KEY env var), or open if not configured.
  */
-export async function GET(req: NextRequest): Promise<NextResponse> {
+async function _GET(req: NextRequest): Promise<NextResponse> {
   const apiKey = process.env.CX_API_KEY;
   if (apiKey) {
     const provided = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace(/^Bearer\s+/i, '');
@@ -38,3 +40,5 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ticketRaised: tags.ticket_raised || null,
   });
 }
+
+export const GET = withLogging(ROUTE, _GET);

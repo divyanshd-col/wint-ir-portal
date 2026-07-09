@@ -1,3 +1,5 @@
+const ROUTE = 'chat/analyze';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -367,7 +369,7 @@ Step 2h — id: active_holdings_check
   → STOP after answer. Scenario identified.`
 };
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -395,7 +397,7 @@ export async function POST(req: NextRequest) {
     try {
       routerPrompt = fs.readFileSync(routerPath, 'utf-8');
     } catch (err) {
-      console.warn('[analyze] Failed to read PROMPT_router.txt from disk, using fallback.');
+      log.warn(ROUTE, '[analyze] Failed to read PROMPT_router.txt from disk, using fallback.');
       routerPrompt = `You are the intelligent router for the Wint Wealth CX support system.
 Determine the correct product category. Do NOT answer the user.
 RETURN FORMAT — return ONLY valid JSON:
@@ -551,14 +553,16 @@ ${schema}`;
         (q: { id: string }) => !answeredIds.includes(q.id)
       );
       if (parsed.questions.length < before) {
-        console.warn(`[analyze] Filtered ${before - parsed.questions.length} duplicate question(s)`);
+        log.warn(ROUTE, `[analyze] Filtered ${before - parsed.questions.length} duplicate question(s)`);
       }
     }
 
     return NextResponse.json(parsed);
 
-  } catch (err) {
-    console.error('[analyze] Error:', err);
+  } catch (err: any) {
+    log.error(ROUTE, 'Error', { err: err?.message ?? String(err) });
     return NextResponse.json({ questions: [], queryType: 'direct', fallback: true });
   }
 }
+
+export const POST = withLogging(ROUTE, _POST);

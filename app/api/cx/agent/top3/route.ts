@@ -1,9 +1,11 @@
+const ROUTE = 'cx/agent/top3';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 import { getCompositeRankings } from '@/lib/cx/composite';
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const { session, response } = await requireRole('agent');
   if (response) return response;
 
@@ -36,3 +38,5 @@ export async function GET(req: NextRequest) {
     my_metrics_used: mine?.metricsUsed ?? [],
   });
 }
+
+export const GET = withLogging(ROUTE, _GET);

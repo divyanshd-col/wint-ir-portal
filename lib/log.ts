@@ -51,9 +51,9 @@ export const log = {
  */
 export function withLogging<T extends unknown[]>(
   route: string,
-  handler: (req: NextRequest, ...args: T) => Promise<NextResponse>
-): (req: NextRequest, ...args: T) => Promise<NextResponse> {
-  return async (req: NextRequest, ...args: T): Promise<NextResponse> => {
+  handler: (req: NextRequest, ...args: T) => Response | NextResponse | Promise<Response | NextResponse>
+): (req: NextRequest, ...args: T) => Promise<Response | NextResponse> {
+  return async (req: NextRequest, ...args: T): Promise<Response | NextResponse> => {
     const start = Date.now();
     const reqId =
       req.headers.get('x-vercel-id') ??

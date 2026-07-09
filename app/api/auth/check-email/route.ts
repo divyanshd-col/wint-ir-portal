@@ -1,10 +1,12 @@
+const ROUTE = 'auth/check-email';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
 import { isRateLimited } from '@/lib/rate-limit';
 
 const ALLOWED_DOMAIN = 'wintwealth.com';
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   // 10 checks per IP per 15 minutes — prevents email enumeration abuse
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
   if (await isRateLimited(`check-email:${ip}`, 10, 900)) {
@@ -32,3 +34,5 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = withLogging(ROUTE, _POST);

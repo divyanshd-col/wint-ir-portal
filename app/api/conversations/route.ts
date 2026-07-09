@@ -1,3 +1,5 @@
+const ROUTE = 'conversations';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -7,7 +9,7 @@ import type { SavedConversation } from '@/lib/types';
 
 const MAX_CONVERSATIONS = 5;
 
-export async function GET() {
+async function _GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -19,7 +21,7 @@ export async function GET() {
   return NextResponse.json(convs);
 }
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -37,3 +39,6 @@ export async function POST(req: NextRequest) {
   await storeSetConversations(username, updated);
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withLogging(ROUTE, _GET);
+export const POST = withLogging(ROUTE, _POST);

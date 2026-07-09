@@ -1,3 +1,5 @@
+const ROUTE = 'quality/score';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { readConfig } from '@/lib/config';
@@ -8,7 +10,7 @@ import { storeSetTranscript, storeAppendCallSkipped } from '@/lib/store';
 import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import Anthropic from '@anthropic-ai/sdk';
 
-export async function POST(req: NextRequest) {
+async function _POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -149,3 +151,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Parse error: ${err.message}`, raw: rawResponse }, { status: 500 });
   }
 }
+
+export const POST = withLogging(ROUTE, _POST);

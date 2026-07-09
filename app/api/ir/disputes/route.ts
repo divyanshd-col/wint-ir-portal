@@ -1,3 +1,5 @@
+const ROUTE = 'ir/disputes';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -8,7 +10,7 @@ function agentAccess(session: any) {
   return ['admin', 'agent'].includes(session?.user?.role || '');
 }
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session || !agentAccess(session)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
@@ -74,3 +76,5 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({ disputes: enriched });
 }
+
+export const GET = withLogging(ROUTE, _GET);

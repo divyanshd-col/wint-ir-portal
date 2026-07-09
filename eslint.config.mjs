@@ -20,6 +20,12 @@ const eslintConfig = defineConfig([
     }
   },
   {
+    files: ["app/api/**/*.ts", "app/api/**/*.js"],
+    rules: {
+      "no-console": ["error", { allow: ["warn", "error"] }]
+    }
+  },
+  {
     linterOptions: {
       reportUnusedDisableDirectives: "off",
     }

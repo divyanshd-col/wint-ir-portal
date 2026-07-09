@@ -1,9 +1,11 @@
+const ROUTE = 'call-quality/transcript';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { getCallRecording } from '@/lib/robylon/db';
 
-export async function GET(req: NextRequest): Promise<NextResponse> {
+async function _GET(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
@@ -26,3 +28,5 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     segments: Array.isArray(row.transcript) ? row.transcript : [],
   });
 }
+
+export const GET = withLogging(ROUTE, _GET);

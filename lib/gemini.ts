@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { randomUUID } from 'crypto';
 import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from './models';
+import { PortalConfig } from './config';
 
 export { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL };
 
@@ -25,13 +26,13 @@ export { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL };
  * to the ordered chat keys. Use this for all quality-scoring LLM calls so
  * spend can be tracked separately from chat.
  */
-export function getIQSGeminiKeys(config: any): string[] {
+export function getIQSGeminiKeys(config: PortalConfig): string[] {
   if (config.iqsGeminiApiKey) return [config.iqsGeminiApiKey];
   return getOrderedGeminiKeys(config);
 }
 
 /** Returns all configured Gemini keys in fixed order 1→2→3→4→5. */
-export function getOrderedGeminiKeys(config: any): string[] {
+export function getOrderedGeminiKeys(config: PortalConfig): string[] {
   return [
     config.geminiApiKey,
     config.geminiApiKey2,

@@ -1,8 +1,10 @@
+const ROUTE = 'quality/audio-proxy';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 
-export async function GET(req: NextRequest) {
+async function _GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) {
     return new Response('Unauthorized', { status: 401 });
@@ -32,3 +34,5 @@ export async function GET(req: NextRequest) {
     return new Response(`Audio proxy error: ${err.message}`, { status: 500 });
   }
 }
+
+export const GET = withLogging(ROUTE, _GET);

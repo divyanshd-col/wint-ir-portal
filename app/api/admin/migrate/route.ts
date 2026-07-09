@@ -1,3 +1,5 @@
+const ROUTE = 'admin/migrate';
+import { log, withLogging } from '@/lib/log';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -8,7 +10,7 @@ import { query } from '@/lib/cx/db';
  * One-time migration: adds tl_name + qa_name columns to the agents table
  * and back-fills from cx_agents/cx_teams/cx_users. Idempotent.
  */
-export async function POST() {
+async function _POST() {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -59,3 +61,5 @@ export async function POST() {
     return NextResponse.json({ ok: false, steps, error: err?.message }, { status: 500 });
   }
 }
+
+export const POST = withLogging(ROUTE, _POST);

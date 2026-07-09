@@ -1,6 +1,6 @@
 import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from '@/lib/models';
 import Anthropic from '@anthropic-ai/sdk';
-import { readConfig } from '@/lib/config';
+import { readConfig, type PortalConfig } from '@/lib/config';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { fireQualityAlert } from '@/lib/quality-alert';
@@ -43,7 +43,7 @@ export async function getKbContextForScoring(
   disposition: string,
   subDisposition: string,
   transcriptText: string,
-  config: any,
+  config: PortalConfig,
   requireDisposition = false
 ): Promise<string> {
   try {
@@ -75,7 +75,7 @@ export async function scoreLinkedCallsForChat(
   chatTranscriptText: string,
   disposition: string,
   subDisposition: string,
-  config: any,
+  config: PortalConfig,
 ): Promise<void> {
   const calls = await getLinkedUnscoredCallsForChat(chatId);
   if (!calls.length) return;

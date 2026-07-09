@@ -1,8 +1,10 @@
+const ROUTE = 'cx/admin/team-structure';
+import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 
-export async function GET() {
+async function _GET() {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -65,7 +67,7 @@ export async function GET() {
 }
 
 // PATCH — assign agent to team
-export async function PATCH(req: NextRequest) {
+async function _PATCH(req: NextRequest) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -78,3 +80,6 @@ export async function PATCH(req: NextRequest) {
   );
   return NextResponse.json({ ok: true });
 }
+
+export const GET = withLogging(ROUTE, _GET);
+export const PATCH = withLogging(ROUTE, _PATCH);
