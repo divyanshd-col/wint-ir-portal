@@ -1,12 +1,49 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
-import { readLogs } from '@/lib/logger';
+import { requireRole } from '@/lib/api-guard';
+import { csatScore, avgOrNull } from '@/lib/stats';
+import { readLogs } from '@/lib/log';
 import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
-import { storeGetIQSScores } from '@/lib/store';
+import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
+import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry } from '@/lib/quality';
+
+// ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
+function toIQSScoreEntry(row: any): IQSScoreEntry {
+  const params = row.parameters || {};
+  const scores: Record<string, string> = {};
+  const reasoning: Record<string, string> = {};
+  for (const [key, val] of Object.entries(params) as [string, any][]) {
+    const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
+    scores[k]    = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
+    reasoning[k] = val?.reasoning || '';
+  }
+  const csatStr = row.csat_score ? String(row.csat_score) : '';
+  const tagsStr = row.tags
+    ? Object.values(row.tags).filter(Boolean).join(', ')
+    : '';
+
+  return {
+    id:              `${row.scoredAt}-${row.chatId}`,
+    chatId:          row.chatId,
+    scoredAt:        row.scoredAt ? new Date(row.scoredAt).toISOString() : '',
+    agentName:       row.agentName || '',
+    date:            row.date ? String(row.date).slice(0, 10) : '',
+    iqs:             row.iqs,
+    csat:            csatStr,
+    scores,
+    reasoning,
+    summary:         '',
+    provider:        row.modelVersion?.includes('gemini') ? 'gemini' : 'claude',
+    model:           row.modelVersion || '',
+    conversationType: row.conversationType || 'agent',
+    frt:             row.frt ?? undefined,
+    botToTeamSecs:   row.botToTeamSecs ?? undefined,
+    resolutionTime:  row.resolutionTime ?? undefined,
+    tags:            tagsStr,
+  } as any;
+}
 
 interface LogEntry {
   timestamp: string;
@@ -113,18 +150,7 @@ function computeLogStats(logs: LogEntry[]) {
   };
 }
 
-// ── Quality data helpers ──────────────────────────────────────────────────────
-function csatScore(csat: string | undefined): number | null {
-  if (csat === '5') return 100;
-  if (csat === '3') return 50;
-  if (csat === '1') return 0;
-  return null;
-}
 
-function avgOrNull(nums: number[]): number | null {
-  if (!nums.length) return null;
-  return Math.round(nums.reduce((s, n) => s + n, 0) / nums.length);
-}
 
 function computeQualitySummary(entries: IQSScoreEntry[]) {
   if (!entries.length) return null;
@@ -221,10 +247,8 @@ function computeQualitySummary(entries: IQSScoreEntry[]) {
 
 // ── Main handler ──────────────────────────────────────────────────────────────
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!(session?.user as any)?.isAdmin) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const body = await req.json().catch(() => ({}));
   const question: string = body.question?.trim() || '';
@@ -257,13 +281,15 @@ export async function POST(req: Request) {
   let qualitySummary: ReturnType<typeof computeQualitySummary> = null;
   let qualityAgents: string[] = [];
   try {
-    const raw = await storeGetIQSScores();
-    let entries: IQSScoreEntry[] = raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+    const dbOpts: GetScoredConversationsOptions = {};
+    if (filters.dateFrom) dbOpts.dateFrom = filters.dateFrom;
+    if (filters.dateTo) dbOpts.dateTo = filters.dateTo;
+    if (filters.agent) dbOpts.agentName = filters.agent;
 
-    // Apply same date/agent filters to quality data
-    if (filters.dateFrom) entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10) || '') >= filters.dateFrom!);
-    if (filters.dateTo)   entries = entries.filter(e => (e.date || e.scoredAt?.slice(0, 10) || '') <= filters.dateTo!);
-    if (filters.agent)    entries = entries.filter(e => e.agentName === filters.agent);
+    const { rows: raw } = await getAllScoredConversations(dbOpts);
+    const entries: IQSScoreEntry[] = raw.map(row => {
+      try { return toIQSScoreEntry(row); } catch { return null; }
+    }).filter(Boolean) as any[];
 
     qualityAgents = [...new Set(entries.map(e => e.agentName).filter(Boolean))].sort();
     qualitySummary = computeQualitySummary(entries);

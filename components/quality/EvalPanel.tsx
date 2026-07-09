@@ -3,25 +3,9 @@ import React, { useState, useEffect } from 'react';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
+import { PASCAL_TO_DB } from '@/lib/param-keys';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
-
-const DB_TO_PASCAL: Record<string, string> = {
-  technical:    'Technical',
-  all_questions:'AllQuestions',
-  expectation:  'Expectation',
-  contextual:   'Contextual',
-  follow_up:    'FollowUp',
-  sentences:    'Sentences',
-  process:      'Process',
-  opening:      'Opening',
-  call:         'Call',
-  grammar:      'Grammar',
-  empathy:      'Empathy',
-};
-const PASCAL_TO_DB: Record<string, string> = Object.fromEntries(
-  Object.entries(DB_TO_PASCAL).map(([d, p]) => [p, d])
-);
 
 // Param weight as display string
 function pctLabel(key: string): string {

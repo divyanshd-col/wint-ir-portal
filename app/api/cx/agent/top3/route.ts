@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 import { getCompositeRankings } from '@/lib/cx/composite';
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if (session.user.role !== 'agent') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { session, response } = await requireRole('agent');
+  if (response) return response;
 
   const { searchParams } = new URL(req.url);
   const weekStart = searchParams.get('week_start');

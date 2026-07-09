@@ -4,36 +4,15 @@
  * Supports optional filters: agent, dateFrom, dateTo, tag
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
-import { getAllScoredConversations } from '@/lib/robylon/db';
+import { requireRole } from '@/lib/api-guard';
+import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
-
-function qualityAccess(session: any) {
-  const role = session?.user?.role;
-  return !!role && ['admin', 'quality', 'tl'].includes(role);
-}
 
 function escapeCSV(v: unknown): string {
   return `"${String(v ?? '').replace(/"/g, '""')}"`;
 }
-
-// ── DB snake_case key → legacy PascalCase key used by the frontend ────────────
-const DB_KEY_TO_LEGACY: Record<string, string> = {
-  technical:    'Technical',
-  all_questions:'AllQuestions',
-  expectation:  'Expectation',
-  contextual:   'Contextual',
-  follow_up:    'FollowUp',
-  sentences:    'Sentences',
-  process:      'Process',
-  opening:      'Opening',
-  call:         'Call',
-  tags:         'Tags',
-  grammar:      'Grammar',
-  empathy:      'Empathy',
-};
 
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
 function toIQSScoreEntry(row: any): IQSScoreEntry {
@@ -70,10 +49,8 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session || !qualityAccess(session)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  if (response) return response;
 
   const { searchParams } = new URL(req.url);
   const agentFilter    = searchParams.get('agent') || '';
@@ -84,18 +61,19 @@ export async function GET(req: NextRequest) {
   const dateTo         = searchParams.get('dateTo') || '';
   const typeFilter     = searchParams.get('type') || '';
 
-  const rawRows = await getAllScoredConversations(10000); // higher limit for full export
+  const dbOpts: GetScoredConversationsOptions = { limit: 10000 };
+  if (agentFilter)  dbOpts.agentName = agentFilter;
+  if (tagFilter)    dbOpts.disposition = tagFilter;
+  if (subTagFilter) dbOpts.subDisposition = subTagFilter;
+  if (csatFilter)   dbOpts.csat = csatFilter;
+  if (dateFrom)     dbOpts.dateFrom = dateFrom;
+  if (dateTo)       dbOpts.dateTo = dateTo;
+  if (typeFilter)   dbOpts.conversationType = typeFilter;
+
+  const { rows: rawRows } = await getAllScoredConversations(dbOpts);
   let entries: IQSScoreEntry[] = rawRows.map(row => {
     try { return toIQSScoreEntry(row); } catch { return null; }
   }).filter(Boolean) as IQSScoreEntry[];
-
-  if (agentFilter)  entries = entries.filter(e => e.agentName === agentFilter);
-  if (tagFilter)    entries = entries.filter(e => (e.disposition || '').toLowerCase() === tagFilter.toLowerCase());
-  if (subTagFilter) entries = entries.filter(e => (e.subDisposition || '').toLowerCase() === subTagFilter.toLowerCase());
-  if (csatFilter)   entries = entries.filter(e => e.csat === csatFilter);
-  if (dateFrom)     entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) >= dateFrom || (e.date || '') >= dateFrom);
-  if (dateTo)       entries = entries.filter(e => (e.scoredAt || '').slice(0, 10) <= dateTo   || (e.date || '') <= dateTo);
-  if (typeFilter)   entries = entries.filter(e => (e.conversationType || 'agent') === typeFilter);
 
   const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
 

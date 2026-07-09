@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
+import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { log, withLogging } from '@/lib/log';
 import { readConfig } from '@/lib/config';
-
-const PASCAL_TO_DB: Record<string, string> = {
-  Technical: 'technical', AllQuestions: 'all_questions', Expectation: 'expectation',
-  Contextual: 'contextual', FollowUp: 'follow_up', Sentences: 'sentences',
-  Process: 'process', Opening: 'opening', Call: 'call', Grammar: 'grammar', Empathy: 'empathy',
-};
-const DB_TO_PASCAL: Record<string, string> = Object.fromEntries(
-  Object.entries(PASCAL_TO_DB).map(([p, d]) => [d, p])
-);
 
 const ROUTE = 'cx/tl/chats';
 
@@ -33,14 +24,10 @@ export interface TLChatRow {
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { session, response } = await requireRole(['tl', 'admin']);
+  if (response) return response;
   const role  = (session.user as any).role as string;
   const email = ((session.user as any).email || '') as string;
-
-  if (!['tl', 'admin'].includes(role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const { searchParams } = new URL(req.url);
 
@@ -153,7 +140,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const failedParams: string[] = [];
     for (const [dbKey, val] of Object.entries(params) as [string, any][]) {
       if (!dbKey.startsWith('__') && val?.score === false) {
-        const pascal = DB_TO_PASCAL[dbKey];
+        const pascal = DB_KEY_TO_LEGACY[dbKey];
         if (pascal) failedParams.push(pascal);
       }
     }

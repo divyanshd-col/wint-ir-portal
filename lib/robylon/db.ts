@@ -1,4 +1,5 @@
 import { query } from '@/lib/cx/db';
+import { PASCAL_TO_DB } from '@/lib/param-keys';
 
 // ── Agent helpers ─────────────────────────────────────────────────────────────
 
@@ -259,16 +260,32 @@ export async function updateIQSCsat(chatId: string, csatScore: number, csatLabel
 
 // ── Fetch all scored conversations (for quality dashboard) ────────────────────
 
-export async function getAllScoredConversations(
-  limit = 0,
-  opts: { dateFrom?: string; dateTo?: string; agentName?: string; agentNames?: string[]; iqsMin?: number; iqsMax?: number; includeUncertain?: boolean; disposition?: string; subDisposition?: string; dispositions?: string[] } = {},
-): Promise<any[]> {
+export interface GetScoredConversationsOptions {
+  page?: number;
+  pageSize?: number;
+  limit?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  agentName?: string;
+  agentNames?: string[];
+  iqsMin?: number;
+  iqsMax?: number;
+  includeUncertain?: boolean;
+  disposition?: string;
+  subDisposition?: string;
+  dispositions?: string[];
+  csat?: string;
+  conversationType?: string;
+  minUserMessages?: number;
+  chatIdSearch?: string;
+}
+
+function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: string[]; params: any[] } {
   const conditions: string[] = [];
   const params: any[] = [];
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    // Use closed_at — always populated; started_at can be NULL causing silent 0 results
     conditions.push(`c.closed_at::date >= $${params.length}`);
   }
   if (opts.dateTo) {
@@ -296,14 +313,12 @@ export async function getAllScoredConversations(
     params.push(opts.agentNames);
     conditions.push(`a.name = ANY($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
-    // Scoped role with no assigned agents — return nothing
     conditions.push(`1=0`);
   }
   if (opts.disposition) {
     params.push(opts.disposition);
     conditions.push(`(c.tags->>'disposition') = $${params.length}`);
   } else if (opts.dispositions && opts.dispositions.length > 0) {
-    // Multi-value default scope (e.g. QA's assigned dispositions)
     params.push(opts.dispositions);
     conditions.push(`(c.tags->>'disposition') = ANY($${params.length})`);
   }
@@ -311,11 +326,53 @@ export async function getAllScoredConversations(
     params.push(opts.subDisposition);
     conditions.push(`(c.tags->>'sub_disposition') = $${params.length}`);
   }
+  if (opts.csat) {
+    params.push(parseInt(opts.csat, 10));
+    conditions.push(`c.csat_score = $${params.length}`);
+  }
+  if (opts.conversationType) {
+    params.push(opts.conversationType);
+    conditions.push(`c.conversation_type = $${params.length}`);
+  }
+  if (opts.minUserMessages !== undefined && opts.minUserMessages > 0) {
+    params.push(opts.minUserMessages);
+    conditions.push(`(c.raw_payload->'counts'->>'user_message_count')::int >= $${params.length}`);
+  }
+  if (opts.chatIdSearch) {
+    params.push(`%${opts.chatIdSearch.trim()}%`);
+    conditions.push(`c.id LIKE $${params.length}`);
+  }
 
-  const where    = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-  const limitSql = limit > 0 ? `LIMIT ${limit}` : '';
+  return { conditions, params };
+}
 
-  return query(`
+export async function getAllScoredConversations(
+  opts: GetScoredConversationsOptions = {},
+): Promise<{ rows: any[]; total: number }> {
+  const { conditions, params } = buildFilters(opts);
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const countRows = await query<{ count: string }>(`
+    SELECT COUNT(*) AS count
+    FROM conversations c
+    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    ${where}
+  `, params);
+  const total = parseInt(countRows[0]?.count ?? '0', 10);
+
+  let limitSql = '';
+  if (opts.limit !== undefined && opts.limit > 0) {
+    limitSql = `LIMIT ${opts.limit}`;
+  } else if (opts.page !== undefined || opts.pageSize !== undefined) {
+    const page = opts.page ?? 0;
+    const pageSize = opts.pageSize ?? 50;
+    const offsetVal = page * pageSize;
+    params.push(pageSize, offsetVal);
+    limitSql = `LIMIT $${params.length - 1} OFFSET $${params.length}`;
+  }
+
+  const rows = await query(`
     SELECT
       c.id                        AS "chatId",
       COALESCE(c.closed_at, c.started_at)::date AS "date",
@@ -343,6 +400,264 @@ export async function getAllScoredConversations(
     ORDER BY c.closed_at DESC NULLS LAST, s.scored_at DESC
     ${limitSql}
   `, params);
+
+  return { rows, total };
+}
+
+export async function getScoredConversationsFilterOptions(
+  opts: GetScoredConversationsOptions = {},
+): Promise<{
+  availableAgents: string[];
+  availableDispositions: string[];
+  availableSubDispositions: string[];
+  dispositionSubMap: Record<string, string[]>;
+}> {
+  const { conditions, params } = buildFilters(opts);
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const rows = await query<{
+    agentName: string | null;
+    disposition: string | null;
+    subDisposition: string | null;
+  }>(`
+    SELECT DISTINCT
+      a.name AS "agentName",
+      c.tags->>'disposition' AS "disposition",
+      c.tags->>'sub_disposition' AS "subDisposition"
+    FROM conversations c
+    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    ${where}
+  `, params);
+
+  const availableAgents = [...new Set(rows.map(r => r.agentName).filter(Boolean))].sort() as string[];
+  const availableDispositions = [...new Set(rows.map(r => r.disposition).filter(Boolean))].sort() as string[];
+  const availableSubDispositions = [...new Set(rows.map(r => r.subDisposition).filter(Boolean))].sort() as string[];
+
+  const dispositionSubMap: Record<string, string[]> = {};
+  for (const r of rows) {
+    if (!r.disposition) continue;
+    if (!dispositionSubMap[r.disposition]) {
+      dispositionSubMap[r.disposition] = [];
+    }
+    if (r.subDisposition && !dispositionSubMap[r.disposition].includes(r.subDisposition)) {
+      dispositionSubMap[r.disposition].push(r.subDisposition);
+    }
+  }
+  for (const k of Object.keys(dispositionSubMap)) {
+    dispositionSubMap[k].sort();
+  }
+
+  return {
+    availableAgents,
+    availableDispositions,
+    availableSubDispositions,
+    dispositionSubMap,
+  };
+}
+
+export async function getScoredConversationsSummary(opts: GetScoredConversationsOptions = {}): Promise<any> {
+  const { conditions, params } = buildFilters(opts);
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const rows = await query<any>(`
+    SELECT
+      COUNT(*)::int AS "totalConvos",
+      COUNT(*) FILTER (WHERE c.conversation_type = 'bot')::int AS "botConvos",
+      COUNT(*) FILTER (WHERE c.conversation_type != 'bot')::int AS "agentConvos",
+      AVG(CASE WHEN c.csat_score = 5 THEN 100 WHEN c.csat_score = 3 THEN 50 WHEN c.csat_score = 1 THEN 0 ELSE NULL END) AS "overallCsat",
+      AVG(CASE WHEN c.csat_score = 5 THEN 100 WHEN c.csat_score = 3 THEN 50 WHEN c.csat_score = 1 THEN 0 ELSE NULL END) FILTER (WHERE c.conversation_type = 'bot') AS "botCsat",
+      AVG(CASE WHEN c.csat_score = 5 THEN 100 WHEN c.csat_score = 3 THEN 50 WHEN c.csat_score = 1 THEN 0 ELSE NULL END) FILTER (WHERE c.conversation_type != 'bot') AS "agentCsat",
+      COUNT(*) FILTER (WHERE c.csat_score = 5)::int AS "good",
+      COUNT(*) FILTER (WHERE c.csat_score IN (1, 3))::int AS "cbbBad",
+      COUNT(*) FILTER (WHERE c.csat_score IN (1, 3, 5))::int AS "withC",
+      AVG(c.frt_seconds) AS "avgFrt",
+      AVG(c.bot_to_team_seconds) AS "avgBotToTeam",
+      COUNT(*) FILTER (WHERE c.bot_to_team_seconds <= 180)::int AS "slaOk",
+      COUNT(c.bot_to_team_seconds)::int AS "slaTotal",
+      AVG(c.resolution_seconds) AS "avgResolution",
+      AVG(s.iqs_score) AS "avgIqs",
+      COUNT(s.iqs_score)::int AS "iqsSampleSize"
+    FROM conversations c
+    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    ${where}
+  `, params);
+
+  const r = rows[0] || {};
+  const totalFiltered = r.totalConvos || 0;
+  const withC = r.withC || 0;
+  const slaTotal = r.slaTotal || 0;
+  const slaOk = r.slaOk || 0;
+  const iqsSampleSize = r.iqsSampleSize || 0;
+
+  return {
+    totalConvos: totalFiltered,
+    botConvos: r.botConvos || 0,
+    agentConvos: r.agentConvos || 0,
+    overallCsat: r.overallCsat != null ? Math.round(Number(r.overallCsat)) : null,
+    botCsat: r.botCsat != null ? Math.round(Number(r.botCsat)) : null,
+    agentCsat: r.agentCsat != null ? Math.round(Number(r.agentCsat)) : null,
+    good: r.good || 0,
+    cbbBad: r.cbbBad || 0,
+    cbbBadPct: withC > 0 ? Math.round((r.cbbBad / withC) * 100) : 0,
+    avgFrt: r.avgFrt != null ? Math.round(Number(r.avgFrt)) : null,
+    avgBotToTeam: r.avgBotToTeam != null ? Math.round(Number(r.avgBotToTeam)) : null,
+    slaPercent: slaTotal > 0 ? Math.round((slaOk / slaTotal) * 100) : null,
+    slaThresholdSecs: 180,
+    avgResolution: r.avgResolution != null ? Math.round(Number(r.avgResolution)) : null,
+    avgClosure: null,
+    avgIqs: r.avgIqs != null ? Math.round(Number(r.avgIqs)) : null,
+    iqsSampleSize,
+    samplingPct: totalFiltered > 0 ? Math.round((iqsSampleSize / totalFiltered) * 100) : 0,
+  };
+}
+
+export async function getScoredConversationsAgentStats(opts: GetScoredConversationsOptions = {}): Promise<any[]> {
+  const { conditions, params } = buildFilters(opts);
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const rows = await query<any>(`
+    SELECT
+      COALESCE(a.name, 'Unknown') AS "agent",
+      COUNT(*)::int AS "chats",
+      AVG(s.iqs_score) AS "avgIqs",
+      MIN(s.iqs_score)::int AS "minIqs",
+      MAX(s.iqs_score)::int AS "maxIqs",
+      COUNT(*) FILTER (WHERE s.iqs_score >= 90)::int AS "high",
+      COUNT(*) FILTER (WHERE s.iqs_score < 70)::int AS "atRisk",
+      AVG(c.frt_seconds) AS "avgFrt",
+      AVG(c.resolution_seconds) AS "avgResolution",
+      AVG(c.bot_to_team_seconds) AS "avgBotToTeam",
+      COUNT(*) FILTER (WHERE c.csat_score = 5)::int AS "csatGood",
+      COUNT(*) FILTER (WHERE c.csat_score = 3)::int AS "csatCbb",
+      COUNT(*) FILTER (WHERE c.csat_score = 1)::int AS "csatBad",
+      COUNT(*) FILTER (WHERE c.csat_score IN (1, 3, 5))::int AS "csatTotal"
+    FROM conversations c
+    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    ${where}
+    GROUP BY COALESCE(a.name, 'Unknown')
+    ORDER BY AVG(s.iqs_score) ASC
+  `, params);
+
+  return rows.map(r => {
+    const csatTotal = r.csatTotal || 0;
+    return {
+      agent: r.agent,
+      chats: r.chats,
+      avgIqs: r.avgIqs != null ? Math.round(Number(r.avgIqs)) : 0,
+      minIqs: r.minIqs ?? 0,
+      maxIqs: r.maxIqs ?? 0,
+      high: r.high,
+      atRisk: r.atRisk,
+      avgFrt: r.avgFrt != null ? Math.round(Number(r.avgFrt)) : null,
+      avgResolution: r.avgResolution != null ? Math.round(Number(r.avgResolution)) : null,
+      avgClosure: null,
+      avgBotToTeam: r.avgBotToTeam != null ? Math.round(Number(r.avgBotToTeam)) : null,
+      csatGood: r.csatGood,
+      csatCbb: r.csatCbb,
+      csatBad: r.csatBad,
+      csatPct: csatTotal > 0 ? Math.round((r.csatGood / csatTotal) * 100) : null,
+    };
+  });
+}
+
+export async function getScoredConversationsParamFails(opts: GetScoredConversationsOptions = {}): Promise<Record<string, number>> {
+  const { conditions, params } = buildFilters(opts);
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const rows = await query<any>(`
+    SELECT
+      COUNT(*)::int AS "total",
+      COUNT(*) FILTER (WHERE (s.parameters->'opening'->>'score')::boolean = false)::int AS "opening",
+      COUNT(*) FILTER (WHERE (s.parameters->'grammar'->>'score')::boolean = false)::int AS "grammar",
+      COUNT(*) FILTER (WHERE (s.parameters->'sentences'->>'score')::boolean = false)::int AS "sentences",
+      COUNT(*) FILTER (WHERE (s.parameters->'empathy'->>'score')::boolean = false)::int AS "empathy",
+      COUNT(*) FILTER (WHERE (s.parameters->'all_questions'->>'score')::boolean = false)::int AS "all_questions",
+      COUNT(*) FILTER (WHERE (s.parameters->'contextual'->>'score')::boolean = false)::int AS "contextual",
+      COUNT(*) FILTER (WHERE (s.parameters->'technical'->>'score')::boolean = false)::int AS "technical",
+      COUNT(*) FILTER (WHERE (s.parameters->'expectation'->>'score')::boolean = false)::int AS "expectation",
+      COUNT(*) FILTER (WHERE (s.parameters->'follow_up'->>'score')::boolean = false)::int AS "follow_up",
+      COUNT(*) FILTER (WHERE (s.parameters->'process'->>'score')::boolean = false)::int AS "process",
+      COUNT(*) FILTER (WHERE (s.parameters->'tags'->>'score')::boolean = false)::int AS "tags",
+      COUNT(*) FILTER (WHERE (s.parameters->'call'->>'score')::boolean = false)::int AS "call"
+    FROM conversations c
+    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    ${where}
+  `, params);
+
+  const r = rows[0] || {};
+  const total = r.total || 0;
+  const paramFails: Record<string, number> = {};
+
+  if (total > 0) {
+    const keys = ['opening', 'grammar', 'sentences', 'empathy', 'all_questions', 'contextual', 'technical', 'expectation', 'follow_up', 'process', 'tags', 'call'];
+    for (const k of keys) {
+      const dbVal = r[k] || 0;
+      // Map DB snake_case key to legacy PascalCase
+      const legacyKey = k === 'all_questions' ? 'AllQuestions'
+                      : k === 'follow_up' ? 'FollowUp'
+                      : k.charAt(0).toUpperCase() + k.slice(1);
+      paramFails[legacyKey] = Math.round((dbVal / total) * 100);
+    }
+  }
+
+  return paramFails;
+}
+
+export async function getScoredConversationsWeeklyParams(opts: GetScoredConversationsOptions = {}): Promise<any[]> {
+  const { conditions, params } = buildFilters(opts);
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const rows = await query<any>(`
+    SELECT
+      date_trunc('week', COALESCE(s.scored_at, c.closed_at) AT TIME ZONE 'UTC')::date::text AS "weekStart",
+      COUNT(*)::int AS "total",
+      COUNT(*) FILTER (WHERE (s.parameters->'opening'->>'score')::boolean = false)::int AS "opening",
+      COUNT(*) FILTER (WHERE (s.parameters->'grammar'->>'score')::boolean = false)::int AS "grammar",
+      COUNT(*) FILTER (WHERE (s.parameters->'sentences'->>'score')::boolean = false)::int AS "sentences",
+      COUNT(*) FILTER (WHERE (s.parameters->'empathy'->>'score')::boolean = false)::int AS "empathy",
+      COUNT(*) FILTER (WHERE (s.parameters->'all_questions'->>'score')::boolean = false)::int AS "all_questions",
+      COUNT(*) FILTER (WHERE (s.parameters->'contextual'->>'score')::boolean = false)::int AS "contextual",
+      COUNT(*) FILTER (WHERE (s.parameters->'technical'->>'score')::boolean = false)::int AS "technical",
+      COUNT(*) FILTER (WHERE (s.parameters->'expectation'->>'score')::boolean = false)::int AS "expectation",
+      COUNT(*) FILTER (WHERE (s.parameters->'follow_up'->>'score')::boolean = false)::int AS "follow_up",
+      COUNT(*) FILTER (WHERE (s.parameters->'process'->>'score')::boolean = false)::int AS "process",
+      COUNT(*) FILTER (WHERE (s.parameters->'tags'->>'score')::boolean = false)::int AS "tags",
+      COUNT(*) FILTER (WHERE (s.parameters->'call'->>'score')::boolean = false)::int AS "call"
+    FROM conversations c
+    JOIN iqs_scores s ON s.chat_id = c.id
+    LEFT JOIN agents a ON a.id = c.agent_id
+    ${where}
+    GROUP BY date_trunc('week', COALESCE(s.scored_at, c.closed_at) AT TIME ZONE 'UTC')::date
+    ORDER BY "weekStart" DESC
+  `, params);
+
+  const { getWeekLabel } = await import('@/lib/stats');
+
+  return rows.map(row => {
+    const key = row.weekStart;
+    const total = row.total || 0;
+    const paramPercent: Record<string, number> = {};
+
+    const keys = ['opening', 'grammar', 'sentences', 'empathy', 'all_questions', 'contextual', 'technical', 'expectation', 'follow_up', 'process', 'tags', 'call'];
+    for (const k of keys) {
+      const dbVal = row[k] || 0;
+      const legacyKey = k === 'all_questions' ? 'AllQuestions'
+                      : k === 'follow_up' ? 'FollowUp'
+                      : k.charAt(0).toUpperCase() + k.slice(1);
+      paramPercent[legacyKey] = total ? Math.round((dbVal / total) * 100) : 0;
+    }
+
+    return {
+      key,
+      label: getWeekLabel(key),
+      total,
+      params: paramPercent,
+    };
+  });
 }
 
 /** Get conversations ready to score (have transcript + tags but no iqs_scores row) */
@@ -751,15 +1066,31 @@ export interface CallTranscriptChunk {
 
 /** Batch-insert topic chunks extracted from a call transcript. */
 export async function insertCallTranscriptChunks(chunks: CallTranscriptChunk[]): Promise<void> {
-  for (const c of chunks) {
-    await query(
-      `INSERT INTO call_transcript_chunks
-         (call_id, chat_id, contact_id, agent_id, called_at, topic, summary, content, chunk_index)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [c.callId, c.chatId ?? null, c.contactId ?? null, c.agentId ?? null,
-       c.calledAt ?? null, c.topic, c.summary, c.content, c.chunkIndex],
+  if (!chunks.length) return;
+  const values: string[] = [];
+  const params: any[] = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const c = chunks[i];
+    const offset = i * 9;
+    values.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`);
+    params.push(
+      c.callId,
+      c.chatId ?? null,
+      c.contactId ?? null,
+      c.agentId ?? null,
+      c.calledAt ?? null,
+      c.topic,
+      c.summary,
+      c.content,
+      c.chunkIndex
     );
   }
+  await query(
+    `INSERT INTO call_transcript_chunks
+       (call_id, chat_id, contact_id, agent_id, called_at, topic, summary, content, chunk_index)
+     VALUES ${values.join(', ')}`,
+    params
+  );
 }
 
 /** Retrieve the N most recent chunks for a contact (or globally) for RAG retrieval. */

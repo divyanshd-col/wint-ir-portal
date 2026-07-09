@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { readConfig, writeConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log } from '@/lib/log';
@@ -9,14 +8,10 @@ const ROUTE = 'cx/qa/disposition-config';
 
 // GET — returns the current QA's assigned dispositions (or all mappings for admin)
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const { session, response } = await requireRole(['quality', 'admin']);
+  if (response) return response;
   const role = (session.user as any).role;
   const email = (session.user as any).email || '';
-
-  if (!['quality', 'admin'].includes(role)) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
 
   const config = await readConfig();
   const map = config.qaDispositionMap ?? [];
@@ -46,11 +41,8 @@ export async function GET() {
 
 // PATCH — admin only: upsert a QA's disposition list
 export async function PATCH(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  if ((session.user as any).role !== 'admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
+  const { session, response } = await requireRole('admin');
+  if (response) return response;
 
   const body = await req.json();
   const { email, dispositions } = body as { email: string; dispositions: string[] };
