@@ -113,6 +113,8 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [editingDocName, setEditingDocName] = useState('');
   const [refreshingKB, setRefreshingKB] = useState(false);
   const [kbRefreshed, setKbRefreshed] = useState(false);
+  const [autoDocNames, setAutoDocNames] = useState<Record<string, string>>({});
+
 
   // ── Prompt state — initialised with override, falling back to default ─────
   const [systemPrompt, setSystemPrompt] = useState(config.systemPrompt || config.defaultChatPrompt || '');
@@ -236,8 +238,27 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     } catch {} finally { setLoadingUsers(false); }
   };
 
+  const loadDocNamesFromDrive = async () => {
+    try {
+      const res = await fetch('/api/files');
+      if (res.ok) {
+        const data = await res.json();
+        const mapping: Record<string, string> = {};
+        for (const file of data.files || []) {
+          const driveId = extractDriveId(file.id);
+          mapping[driveId] = file.name;
+        }
+        setAutoDocNames(mapping);
+      }
+    } catch (err) {
+      console.error('[settings] Failed to load doc names from drive:', err);
+    }
+  };
+
   useEffect(() => { loadUsers(); }, []);
   useEffect(() => { if (activeSection === 'qa') loadQAAssignments(); }, [activeSection]);
+  useEffect(() => { if (activeSection === 'kb') loadDocNamesFromDrive(); }, [activeSection]);
+
 
   // ── API helpers ────────────────────────────────────────────────────────────
   const patchConfig = async (payload: Record<string, unknown>) => {
@@ -323,6 +344,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       setNewUrl('');
       setNewDocName('');
       showToast('Document added');
+      loadDocNamesFromDrive();
     } catch { setDocError('Network error'); }
     finally { setAddingDoc(false); }
   };
@@ -339,9 +361,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
         setDocs(data.knowledgeBaseUrls);
         setDocNames(data.knowledgeBaseDocNames || {});
         showToast('Document removed');
+        loadDocNamesFromDrive();
       }
     } catch {}
   };
+
 
   const saveDocName = async (url: string) => {
     try {
@@ -372,8 +396,10 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       setKbRefreshed(true);
       showToast('KB cache refreshed');
       setTimeout(() => setKbRefreshed(false), 3000);
+      loadDocNamesFromDrive();
     } finally { setRefreshingKB(false); }
   };
+
 
   const saveSystemPrompt = async () => {
     setSavingPrompt(true);
@@ -619,11 +645,13 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   function docDisplayName(url: string): string {
     const driveId = extractDriveId(url);
     if (docNames[driveId]) return docNames[driveId];
+    if (autoDocNames[driveId]) return autoDocNames[driveId];
     try {
       if (driveId !== url) return driveId.slice(0, 20) + '…';
       return url.slice(0, 40) + '…';
     } catch { return url; }
   }
+
 
   return (
     <div className="min-h-screen bg-[#f5f3ee] flex font-sans antialiased">
