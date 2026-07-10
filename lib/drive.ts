@@ -1,3 +1,4 @@
+import { google } from 'googleapis';
 import { KnowledgeChunk } from './types';
 import { readConfig } from './config';
 import { storeGetKBCache, storeSetKBCache, storeClearKBCache } from './store';
@@ -5,11 +6,58 @@ import { storeGetKBCache, storeSetKBCache, storeClearKBCache } from './store';
 declare global {
   var __kbCache: KnowledgeChunk[] | null;
   var __kbCacheTime: number;
+  var __driveFileNames: Record<string, string> | null;
 }
 
 global.__kbCache = global.__kbCache || null;
 global.__kbCacheTime = global.__kbCacheTime || 0;
+global.__driveFileNames = global.__driveFileNames || {};
+
 const CACHE_TTL = 30 * 60 * 1000;
+
+function getDriveClient() {
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  if (!raw) return null;
+  let credentials: any;
+  try {
+    credentials = JSON.parse(raw);
+  } catch {
+    try {
+      credentials = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+    } catch (err) {
+      console.error('[drive] Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON:', err);
+      return null;
+    }
+  }
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
+  });
+  return google.drive({ version: 'v3', auth });
+}
+
+export async function fetchFileNameFromDrive(id: string): Promise<string> {
+  if (global.__driveFileNames && global.__driveFileNames[id]) {
+    return global.__driveFileNames[id];
+  }
+  const drive = getDriveClient();
+  if (!drive) return id;
+  try {
+    const res = await drive.files.get({
+      fileId: id,
+      fields: 'name',
+    });
+    const name = res.data.name || id;
+    if (global.__driveFileNames) {
+      global.__driveFileNames[id] = name;
+    }
+    return name;
+  } catch (err: any) {
+    console.error(`[drive] Failed to fetch metadata for file ${id}:`, err?.message ?? err);
+    return id;
+  }
+}
+
 
 async function fetchWithTimeout(url: string, ms = 10000): Promise<Response> {
   const controller = new AbortController();
@@ -55,13 +103,16 @@ export async function fetchGoogleDoc(url: string): Promise<{ text: string; name:
   if (isDoc) {
     const [textRes, name] = await Promise.all([
       fetchWithTimeout(`https://docs.google.com/document/d/${id}/export?format=txt`),
-      fetchDocTitle(id),
+      fetchFileNameFromDrive(id),
     ]);
     if (!textRes.ok) throw new Error(`Failed to fetch doc: ${textRes.status}`);
     return { text: await textRes.text(), name };
   }
 
-  const res = await fetchWithTimeout(`https://drive.google.com/uc?export=download&id=${id}`);
+  const [res, name] = await Promise.all([
+    fetchWithTimeout(`https://drive.google.com/uc?export=download&id=${id}`),
+    fetchFileNameFromDrive(id),
+  ]);
   if (!res.ok) throw new Error(`Failed to fetch file: ${res.status}`);
   const contentType = res.headers.get('content-type') || '';
 
@@ -70,10 +121,11 @@ export async function fetchGoogleDoc(url: string): Promise<{ text: string; name:
     const pdfParseModule = await import('pdf-parse');
     const pdfParse = (pdfParseModule as any).default ?? pdfParseModule;
     const parsed = await pdfParse(buffer);
-    return { text: parsed.text, name: id };
+    return { text: parsed.text, name };
   }
-  return { text: await res.text(), name: id };
+  return { text: await res.text(), name };
 }
+
 
 /**
  * Detects whether a line is a section header and returns its depth level (1–4).
@@ -362,9 +414,20 @@ export function getTopKBScore(chunks: KnowledgeChunk[], query: string): number {
 
 export async function listDriveFiles() {
   const config = await readConfig();
-  return (config.knowledgeBaseUrls || []).map(url => ({
-    id: url,
-    name: getDocName(url),
-    mimeType: url.includes('/document/') ? 'application/vnd.google-apps.document' : 'application/pdf',
-  }));
+  const urls = config.knowledgeBaseUrls || [];
+  return Promise.all(
+    urls.map(async url => {
+      const { id } = extractIds(url);
+      let name = getDocName(url);
+      if (id) {
+        name = await fetchFileNameFromDrive(id);
+      }
+      return {
+        id: url,
+        name,
+        mimeType: url.includes('/document/') ? 'application/vnd.google-apps.document' : 'application/pdf',
+      };
+    })
+  );
 }
+

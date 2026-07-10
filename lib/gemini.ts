@@ -119,6 +119,7 @@ export async function geminiGenerate(
 // Raw-fetch implementation: responseMimeType=application/json, thinkingBudget=0 for flash,
 // reverse-part iteration to skip thought entries, 5 retries with 10s gaps, model fallback.
 const CALL_MODEL_CHAIN = [
+  'gemini-3.1-flash-lite-preview',
   'gemini-2.5-flash-preview-05-20',
   'gemini-2.5-flash',
   'gemini-2.5-pro',

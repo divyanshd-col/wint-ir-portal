@@ -157,6 +157,14 @@ export async function scoreLinkedCallsForChat(
       await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: config.geminiModel || DEFAULT_GEMINI_MODEL });
       await updateCallRecordingStatus(call.id, 'scored');
       console.log(`[scoring-engine] Scored combined chat+call for ${chatId} → IQS ${parsed.iqs}`);
+
+      try {
+        const { runCallPipeline } = await import('@/lib/scoring/call-pipeline');
+        await runCallPipeline(call.id);
+        console.log(`[scoring-engine] Automatically executed call-pipeline for call ${call.id}`);
+      } catch (pipelineErr: any) {
+        console.error(`[scoring-engine] Call pipeline trigger failed for call ${call.id}:`, pipelineErr.message);
+      }
     } catch (err: any) {
       console.error(`[scoring-engine] Combined IQS scoring failed for call ${call.id}:`, err.message);
     }
