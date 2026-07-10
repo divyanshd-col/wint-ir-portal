@@ -1,6 +1,6 @@
 const ROUTE = 'admin/re-evaluate-calls';
 import { log, withLogging } from '@/lib/log';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { query } from '@/lib/cx/db';
 import { runCallPipeline } from '@/lib/scoring/call-pipeline';
 
@@ -10,14 +10,14 @@ function send(controller: ReadableStreamDefaultController, event: string, data: 
   controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
 }
 
-async function _GET(req: NextRequest) {
+async function _GET(req: NextRequest): Promise<NextResponse> {
   const cronSecret = process.env.CRON_SECRET;
   const { searchParams } = new URL(req.url);
   
   if (cronSecret) {
     const auth = req.headers.get('authorization') || '';
     if (auth !== `Bearer ${cronSecret}` && searchParams.get('secret') !== cronSecret) {
-      return new Response(JSON.stringify({ error: 'Unauthorised' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+      return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
     }
   }
 
@@ -69,7 +69,7 @@ async function _GET(req: NextRequest) {
     }
   });
 
-  return new Response(stream, {
+  return new NextResponse(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
