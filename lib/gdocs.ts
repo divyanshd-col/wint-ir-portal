@@ -4,7 +4,14 @@ import { storeClearKBCache } from './store';
 function getDocsAuth() {
   const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
   if (!raw) throw new Error('GOOGLE_SERVICE_ACCOUNT_JSON env var not set');
-  const credentials = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+  
+  let credentials: any;
+  try {
+    credentials = JSON.parse(raw);
+  } catch {
+    credentials = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+  }
+
   return new google.auth.GoogleAuth({
     credentials,
     scopes: [
@@ -76,7 +83,12 @@ export function getServiceAccountEmail(): string {
   try {
     const raw = process.env.GOOGLE_SERVICE_ACCOUNT_JSON;
     if (!raw) return '';
-    const creds = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+    let creds: any;
+    try {
+      creds = JSON.parse(raw);
+    } catch {
+      creds = JSON.parse(Buffer.from(raw, 'base64').toString('utf-8'));
+    }
     return creds.client_email || '';
   } catch {
     return '';
