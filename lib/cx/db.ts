@@ -48,3 +48,4 @@ export async function query<T = any>(sql: string, params?: any[]): Promise<T[]> 
     client.release();
   }
 }
+// Hot-reload trigger.
