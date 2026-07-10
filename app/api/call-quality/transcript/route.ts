@@ -23,6 +23,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     deadAirCount: row.dead_air_count,
     durationSeconds: row.duration_seconds,
     calledAt: row.called_at,
+    recordingUrl: row.recording_url,
     segments: Array.isArray(row.transcript) ? row.transcript : [],
   });
 }
