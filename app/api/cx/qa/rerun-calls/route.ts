@@ -57,9 +57,29 @@ async function runRerunInBackground(statusFilter: string, limit: number | null, 
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  const user    = session?.user as any;
-  if (!user || (!user.isAdmin && user.role !== 'tl')) {
+  let authorized = false;
+
+  // 1. Check for SEED_SECRET in headers or query parameters
+  const seedSecret = process.env.SEED_SECRET;
+  if (seedSecret) {
+    const authHeader = req.headers.get('authorization') || '';
+    const url = new URL(req.url);
+    const urlSecret = url.searchParams.get('secret');
+    if (authHeader === `Bearer ${seedSecret}` || urlSecret === seedSecret) {
+      authorized = true;
+    }
+  }
+
+  // 2. Fallback to NextAuth session
+  if (!authorized) {
+    const session = await getServerSession(authOptions);
+    const user    = session?.user as any;
+    if (user && (user.isAdmin || user.role === 'tl')) {
+      authorized = true;
+    }
+  }
+
+  if (!authorized) {
     return new Response('Forbidden', { status: 403 });
   }
 
