@@ -282,10 +282,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         resolutionSecs: avgOrNull(sres, sresc),
       };
     });
-    // Drop the "(none)" bucket unless it is the only sub-dispo (e.g. Calls_Directly)
-    const filteredChildren = children.length === 1
-      ? children
-      : children.filter(c => c.subDisposition !== '(none)');
+    // Drop the "(none)" bucket if it is the only sub-dispo (to avoid redundant expand button),
+    // but keep it if there are other sub-dispositions so the breakdown count matches the parent count.
+    const filteredChildren = (children.length === 1 && children[0].subDisposition === '(none)')
+      ? []
+      : children;
 
     return {
       disposition:    dispo,
