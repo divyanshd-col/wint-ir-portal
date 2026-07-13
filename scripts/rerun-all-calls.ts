@@ -17,7 +17,7 @@ if (existsSync(envFile)) {
 }
 
 // Ensure NODE_ENV is set so SSL matches the local env (ssl=false)
-process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+// (handled automatically by env context)
 
 // ── Parse CLI Arguments ──────────────────────────────────────────────────────
 const args = process.argv.slice(2);
