@@ -203,7 +203,9 @@ async function geminiGenerate(
     }],
     generationConfig: {
       temperature: 0.1,
-      maxOutputTokens: 8192,
+      // Gemini 2.5 counts thinking tokens against maxOutputTokens, so this must
+      // be large enough for thinkingBudget + a full long-call transcript.
+      maxOutputTokens: 65536,
       thinkingConfig: {
         thinkingBudget: 2048,
       },
@@ -230,6 +232,10 @@ async function geminiGenerate(
     }
     const data = await res.json();
     console.log('[Gemini debug] Raw Response Data:', JSON.stringify(data, null, 2));
+    const finishReason = data?.candidates?.[0]?.finishReason;
+    if (finishReason && finishReason !== 'STOP') {
+      console.warn(`[Gemini] Response finished with reason ${finishReason} — output may be truncated`);
+    }
     const parts: any[] = data?.candidates?.[0]?.content?.parts ?? [];
     let fullText = '';
     for (const p of parts) {
@@ -245,7 +251,7 @@ async function geminiGenerate(
 
 // ── JSON extraction ───────────────────────────────────────────────────────────
 
-function extractJson(raw: string): any {
+function extractJson(raw: string, allowRepair = true): any {
   // Pre-process to repair colon timestamps like 1:02.9 to raw seconds
   const sanitized = raw.replace(/:\s*(\d+):(\d+(?:\.\d+)?)/g, (match, mins, secs) => {
     const totalSeconds = parseInt(mins, 10) * 60 + parseFloat(secs);
@@ -258,7 +264,66 @@ function extractJson(raw: string): any {
   if (start >= 0 && end > start) {
     try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
   }
+  if (allowRepair) {
+    const repaired = repairTruncatedJson(cleaned);
+    if (repaired !== null) {
+      console.warn('[Gemini] JSON output was truncated — salvaged the complete portion');
+      return repaired;
+    }
+  }
   throw new Error(`Cannot extract JSON from: ${raw.slice(0, 2000)}`);
+}
+
+/**
+ * Salvage a JSON object whose tail was cut off mid-stream (e.g. the model hit
+ * maxOutputTokens). Truncates back to the last fully-closed nested value and
+ * appends the missing closing brackets.
+ */
+function repairTruncatedJson(cleaned: string): any | null {
+  const start = cleaned.indexOf('{');
+  if (start < 0) return null;
+  const s = cleaned.slice(start);
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let lastComplete = -1;            // index just past the last fully-closed nested value
+  let stackAtLastComplete: string[] = [];
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') { inString = true; continue; }
+    if (c === '{' || c === '[') {
+      stack.push(c);
+    } else if (c === '}' || c === ']') {
+      if (stack.length === 0) return null; // malformed beyond repair
+      stack.pop();
+      // A value just closed at nesting depth <= 2 (e.g. one segment inside the
+      // top-level "segments" array) — a safe point to cut back to.
+      if (stack.length > 0 && stack.length <= 2) {
+        lastComplete = i + 1;
+        stackAtLastComplete = stack.slice();
+      }
+    }
+  }
+
+  if (lastComplete < 0) return null;
+  const closers = stackAtLastComplete
+    .slice()
+    .reverse()
+    .map(b => (b === '{' ? '}' : ']'))
+    .join('');
+  try {
+    return JSON.parse(s.slice(0, lastComplete) + closers);
+  } catch {
+    return null;
+  }
 }
 
 // ── Pass 1 prompt ─────────────────────────────────────────────────────────────
@@ -474,7 +539,8 @@ export async function analyzeCallFromUri(opts: {
     try {
       const raw = await geminiGenerate(apiKey, PASS1_PROMPT, fileUri, mimeType, 90_000);
       onProgress?.(`Pass 1 — Gemini responded in ${((Date.now() - p1Start) / 1000).toFixed(1)}s, parsing JSON…`);
-      const data = extractJson(raw);
+      // Only salvage truncated output on the final attempt — prefer a clean retry.
+      const data = extractJson(raw, attempt === 2);
       pass1 = validatePass1(data, attempt);
       onProgress?.(`Pass 1 complete — ${pass1.events.length} events, duration=${pass1.duration_seconds}s`);
       break;
@@ -488,26 +554,36 @@ export async function analyzeCallFromUri(opts: {
   if (!pass1) throw new Error('Pass 1 did not produce a result');
 
   // ── Pass 2: Transcription + analysis ─────────────────────────────────────
-  onProgress?.('Pass 2 — transcription + analysis, sending audio + structure to Gemini…');
   const pass2Prompt = buildPass2Prompt(pass1);
   onProgress?.(`Pass 2 prompt built (${(pass2Prompt.length / 1000).toFixed(1)}k chars)`);
-  const p2Start = Date.now();
-  let pass2Raw: string;
-  try {
-    pass2Raw = await geminiGenerate(apiKey, pass2Prompt, fileUri, mimeType, 180_000);
-    onProgress?.(`Pass 2 — Gemini responded in ${((Date.now() - p2Start) / 1000).toFixed(1)}s, parsing JSON…`);
-  } catch (err: any) {
-    throw new Error(`Pass 2 LLM error: ${err.message}`);
-  }
+  let pass2: any = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    onProgress?.(`Pass 2 — transcription + analysis${attempt > 1 ? ' (retry)' : ''}, sending audio + structure to Gemini…`);
+    const p2Start = Date.now();
+    let pass2Raw: string;
+    try {
+      pass2Raw = await geminiGenerate(apiKey, pass2Prompt, fileUri, mimeType, 180_000);
+      onProgress?.(`Pass 2 — Gemini responded in ${((Date.now() - p2Start) / 1000).toFixed(1)}s, parsing JSON…`);
+    } catch (err: any) {
+      if (attempt === 2) throw new Error(`Pass 2 LLM error: ${err.message}`);
+      onProgress?.(`Pass 2 LLM error (attempt ${attempt}): ${err.message} — retrying in 3 seconds…`);
+      await new Promise(r => setTimeout(r, 3000));
+      continue;
+    }
 
-  let pass2: any;
-  try {
-    pass2 = extractJson(pass2Raw);
-    onProgress?.(`Pass 2 parsed — ${pass2?.segments?.length ?? 0} segments`);
-  } catch (err: any) {
-    onProgress?.(`Pass 2 raw output (first 300 chars): ${pass2Raw.slice(0, 300)}`);
-    throw new Error(`Pass 2 JSON parse failed: ${err.message}`);
+    try {
+      // Only salvage truncated output on the final attempt — prefer a clean retry.
+      pass2 = extractJson(pass2Raw, attempt === 2);
+      onProgress?.(`Pass 2 parsed — ${pass2?.segments?.length ?? 0} segments`);
+      break;
+    } catch (err: any) {
+      onProgress?.(`Pass 2 raw output (first 300 chars): ${pass2Raw.slice(0, 300)}`);
+      if (attempt === 2) throw new Error(`Pass 2 JSON parse failed: ${err.message}`);
+      onProgress?.(`Pass 2 JSON parse failed (attempt ${attempt}) — retrying in 3 seconds…`);
+      await new Promise(r => setTimeout(r, 3000));
+    }
   }
+  if (!pass2) throw new Error('Pass 2 did not produce a result');
 
   onProgress?.('Building final result…');
   const rawSegments = pass2.segments ?? [];
