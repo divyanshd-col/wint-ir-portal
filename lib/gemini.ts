@@ -33,11 +33,11 @@ function isRetryable(err: any): boolean {
 }
 
 // Fallback chain: follow links until no next entry or a cycle is detected.
-// gemini-2.5-flash → gemini-3-flash-preview → gemini-3.1-flash-lite-preview → gemini-2.5-pro
+// gemini-2.5-flash → gemini-3-flash-preview → gemini-3.5-flash → gemini-2.5-pro
 const FALLBACK_MODEL: Record<string, string> = {
   'gemini-2.5-flash':              'gemini-3-flash-preview',
-  'gemini-3-flash-preview':        'gemini-3.1-flash-lite-preview',
-  'gemini-3.1-flash-lite-preview': 'gemini-2.5-pro',
+  'gemini-3-flash-preview':        'gemini-3.5-flash',
+  'gemini-3.5-flash':              'gemini-2.5-pro',
 };
 
 function buildModelChain(model: string): string[] {
@@ -102,7 +102,7 @@ export async function geminiGenerate(
 // Raw-fetch implementation: responseMimeType=application/json, thinkingBudget=0 for flash,
 // reverse-part iteration to skip thought entries, 5 retries with 10s gaps, model fallback.
 const CALL_MODEL_CHAIN = [
-  'gemini-3.1-flash-lite-preview',
+  'gemini-3.5-flash',
   'gemini-2.5-flash-preview-05-20',
   'gemini-2.5-flash',
   'gemini-2.5-pro',
