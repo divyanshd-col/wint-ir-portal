@@ -116,18 +116,22 @@ export function calculateCallIQS(scores: Record<string, CallParamScore>): number
 }
 
 // ── Build readable text from segments (for LLM scoring input) ─────────────────
-export function segmentsToText(segments: CallSegment[]): string {
+export function segmentsToText(segments: any[]): string {
   const lines: string[] = [];
   let speechIdx = 0;
   for (const seg of segments) {
-    if (seg.type === 'speech') {
+    if (seg.type === 'speech' || seg.type === 'turn') {
       speechIdx++;
       const content = seg.text || '';
       lines.push(`[${speechIdx}] ${seg.speaker}: ${content}${seg.translated ? ' [translated]' : ''}`);
     } else if (seg.type === 'interruption') {
       lines.push(`[INTERRUPTION: ${seg.interrupted_speaker} cut off by ${seg.interrupted_by} after ${seg.words_spoken ?? '?'} words]`);
+    } else if (seg.type === 'overlap') {
+      lines.push(`[INTERRUPTION: by ${seg.interruption_by || seg.interrupted_by || 'Unknown'} — cut off ${seg.speaker_interrupted || 'Unknown'}]`);
     } else if (seg.type === 'dead_air') {
       lines.push(`[DEAD AIR: ${seg.duration ?? 'unknown'} — resumed by ${seg.resumed_by}]`);
+    } else if (seg.type === 'silence' && seg.silence_type === 'dead_air') {
+      lines.push(`[DEAD AIR: ${seg.duration ?? 'unknown'}s]`);
     }
   }
   return lines.join('\n');

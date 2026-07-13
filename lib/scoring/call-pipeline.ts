@@ -244,7 +244,9 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
   }
 
   const tempDir = os.tmpdir();
-  const tempFileName = `pipeline-audio-${randomUUID()}${path.extname(recordingUrl) || '.mp3'}`;
+  const cleanUrl = recordingUrl.split('?')[0];
+  const ext = path.extname(cleanUrl) || '.mp3';
+  const tempFileName = `pipeline-audio-${randomUUID()}${ext}`;
   const tempFilePath = path.join(tempDir, tempFileName);
 
   const arrayBuffer = await audioRes.arrayBuffer();
@@ -259,6 +261,20 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
     if (!uploadResult.uri) {
       throw new Error('Gemini File upload did not return a URI');
     }
+
+    // Wait for the file to become ACTIVE (fully processed by Gemini)
+    let fileInfo = uploadResult;
+    let pollCount = 0;
+    while (fileInfo.state === 'PROCESSING' && pollCount < 20) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      fileInfo = await ai.files.get({ name: uploadResult.name });
+      pollCount++;
+    }
+
+    if (fileInfo.state !== 'ACTIVE') {
+      throw new Error(`Gemini File state is ${fileInfo.state}, expected ACTIVE`);
+    }
+
     return { fileUri: uploadResult.uri, mimeType };
   } finally {
     try { await fs.unlink(tempFilePath); } catch {}
@@ -268,8 +284,9 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
 /**
  * Full implementation of the 5-stage Call Evaluation Pipeline.
  */
-export async function runCallPipeline(callId: string): Promise<any> {
+export async function runCallPipeline(callId: string, onProgress?: (msg: string) => void): Promise<any> {
   log.info('call-pipeline', `Starting pipeline for call ${callId}`);
+  onProgress?.(`[System] Starting pipeline for call ${callId}`);
 
   // Fetch the call recording row
   const rows = await query(`
@@ -304,13 +321,16 @@ export async function runCallPipeline(callId: string): Promise<any> {
     }
 
     log.info('call-pipeline', `Running Pass 1 & 2 analysis on audio for call ${callId}`);
+    onProgress?.(`[Stage 1] Downloading and uploading audio to Gemini...`);
     try {
       const { fileUri, mimeType } = await downloadAndUploadAudio(call.recording_url, apiKey);
+      onProgress?.(`[Stage 2] Audio uploaded (${fileUri}). Starting structural analysis & transcription...`);
       const analysis = await analyzeCallFromUri({
         fileUri,
         fileName: `call_${callId}.mp3`,
         mimeType,
-        apiKey
+        apiKey,
+        onProgress
       });
 
       segments = analysis.segments || [];
@@ -318,8 +338,8 @@ export async function runCallPipeline(callId: string): Promise<any> {
       language = analysis.detected_language;
       speakerIdConfidence = analysis.speaker_identification_confidence || 'low';
       
-      const intCount = segments.filter((s: any) => s.type === 'interruption').length;
-      const daCount = segments.filter((s: any) => s.type === 'dead_air').length;
+      const intCount = segments.filter((s: any) => s.type === 'overlap').length;
+      const daCount = segments.filter((s: any) => s.type === 'silence' && s.silence_type === 'dead_air').length;
 
       // Update call recordings table
       await query(`
@@ -327,11 +347,14 @@ export async function runCallPipeline(callId: string): Promise<any> {
         SET transcript = $1, duration_seconds = $2, language = $3,
             interruption_count = $4, dead_air_count = $5, status = 'transcribed', updated_at = NOW()
         WHERE id = $6
-      `, [JSON.stringify(segments), duration, language, intCount, daCount, callId]);
+      `, [JSON.stringify(segments), Math.round(duration), language, intCount, daCount, callId]);
+      
       
       status = 'transcribed';
+      onProgress?.(`[Stage 2] Transcription completed successfully. Saved to database.`);
     } catch (err: any) {
       await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
+      onProgress?.(`[Error] Transcription stage failed: ${err.message}`);
       throw new Error(`Transcription stage failed: ${err.message}`);
     }
   }
@@ -353,10 +376,12 @@ export async function runCallPipeline(callId: string): Promise<any> {
     `, [callId, call.chat_id, call.agent_id]);
 
     await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [callId]);
+    onProgress?.(`[Stage 3] Call marked as NOT_SCOREABLE.`);
     return { callId, verdict: 'NOT_SCOREABLE', iqs: null };
   }
 
   // ── Stage 3b: Context Assembly ─────────────────────────────────────────────
+  onProgress?.(`[Stage 3] Assembling context (chat history & prior calls)...`);
   let chatContext: any[] | null = null;
   let priorCallTranscripts: any[] = [];
   let contextTruncated = false;
@@ -505,6 +530,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
 
   // ── Stage 4a: Prompt 1 (Critical gates pass) ───────────────────────────────
   log.info('call-pipeline', `Running Prompt 1 compliance gates for call ${callId}`);
+  onProgress?.(`[Stage 4a] Running Critical Compliance Gates pass...`);
   let gatesResult: any;
   try {
     const rawGates = await callGeminiForCall(
@@ -521,6 +547,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
 
   // ── Stage 4b: Prompt 2 (IQS scoring pass) ───────────────────────────────────
   log.info('call-pipeline', `Running Prompt 2 parameters scoring for call ${callId}`);
+  onProgress?.(`[Stage 4b] Running IQS Parameters scoring pass...`);
   let scoresResult: any;
   try {
     const rawScores = await callGeminiForCall(
@@ -537,6 +564,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
 
   // ── Stage 5: Compute + Persist ─────────────────────────────────────────────
   log.info('call-pipeline', `Persisting results for call ${callId}`);
+  onProgress?.(`[Stage 5] Computing final verdict and persisting to database...`);
   
   const gateVerdict = gatesResult.call_gate_result || 'PASS';
   const { iqs_percent, applicable_weight } = computeCallIQS(scoresResult.scores || {});
@@ -589,6 +617,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
   await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [callId]);
 
   log.info('call-pipeline', `Pipeline complete for call ${callId} — IQS ${iqs_percent}% — Verdict: ${finalVer}`);
+  onProgress?.(`[Done] Pipeline complete! IQS: ${iqs_percent}% — Verdict: ${finalVer}`);
   return {
     callId,
     iqs: iqs_percent,

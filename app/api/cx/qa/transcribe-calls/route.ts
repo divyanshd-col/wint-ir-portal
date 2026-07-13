@@ -10,15 +10,15 @@ export const maxDuration = 300;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function runRerunInBackground(statusFilter: string, limit: number | null, delayMs: number, forceRetranscribe: boolean) {
-  log.info('cx/qa/rerun-calls', `Starting background rerun: status=${statusFilter}, limit=${limit}`);
+async function runTranscribeInBackground(statusFilter: string, limit: number | null, delayMs: number) {
+  log.info('cx/qa/transcribe-calls', `Starting background re-transcription: status=${statusFilter}, limit=${limit}`);
   
   try {
-    let sql = `SELECT id FROM call_recordings`;
+    let sql = `SELECT id FROM call_recordings WHERE recording_url IS NOT NULL`;
     const params: any[] = [];
 
     if (statusFilter !== 'all') {
-      sql += ` WHERE status = $1`;
+      sql += ` AND status = $1`;
       params.push(statusFilter);
     }
 
@@ -30,7 +30,7 @@ async function runRerunInBackground(statusFilter: string, limit: number | null, 
     }
 
     const calls = await query(sql, params);
-    log.info('cx/qa/rerun-calls', `Found ${calls.length} calls to re-evaluate in background`);
+    log.info('cx/qa/transcribe-calls', `Found ${calls.length} calls to re-transcribe in background`);
 
     let successCount = 0;
     let failCount = 0;
@@ -38,23 +38,25 @@ async function runRerunInBackground(statusFilter: string, limit: number | null, 
     for (let i = 0; i < calls.length; i++) {
       const call = calls[i];
       try {
-        if (forceRetranscribe) {
-          await query(`
-            UPDATE call_recordings
-            SET transcript = NULL,
-                status = 'stored',
-                language = NULL,
-                duration_seconds = NULL,
-                interruption_count = 0,
-                dead_air_count = 0,
-                updated_at = NOW()
-            WHERE id = $1
-          `, [call.id]);
-        }
+        log.info('cx/qa/transcribe-calls', `[${i + 1}/${calls.length}] Resetting and transcribing call ID: ${call.id}`);
+        
+        // Reset transcription status in the database to force runCallPipeline to transcribe
+        await query(`
+          UPDATE call_recordings
+          SET transcript = NULL,
+              status = 'stored',
+              language = NULL,
+              duration_seconds = NULL,
+              interruption_count = 0,
+              dead_air_count = 0,
+              updated_at = NOW()
+          WHERE id = $1
+        `, [call.id]);
+
         await runCallPipeline(call.id);
         successCount++;
       } catch (err: any) {
-        log.error('cx/qa/rerun-calls', `Failed re-evaluating call ${call.id}: ${err.message}`);
+        log.error('cx/qa/transcribe-calls', `Failed transcribing call ${call.id}: ${err.message}`);
         failCount++;
       }
 
@@ -63,16 +65,15 @@ async function runRerunInBackground(statusFilter: string, limit: number | null, 
       }
     }
 
-    log.info('cx/qa/rerun-calls', `Background rerun finished successfully. Success: ${successCount}, Fail: ${failCount}`);
+    log.info('cx/qa/transcribe-calls', `Background re-transcription finished. Success: ${successCount}, Fail: ${failCount}`);
   } catch (err: any) {
-    log.error('cx/qa/rerun-calls', `Background rerun process crashed: ${err.message}`);
+    log.error('cx/qa/transcribe-calls', `Background re-transcription process crashed: ${err.message}`);
   }
 }
 
 export async function POST(req: NextRequest) {
   let authorized = false;
 
-  // 1. Check for secrets in headers or query parameters
   const seedSecret = process.env.SEED_SECRET;
   const webhookSecret = process.env.WEBHOOK_SECRET;
   const cronSecret = process.env.CRON_SECRET;
@@ -90,11 +91,10 @@ export async function POST(req: NextRequest) {
     authorized = true;
   }
 
-  // 2. Fallback to NextAuth session
   if (!authorized) {
     const session = await getServerSession(authOptions);
     const user    = session?.user as any;
-    if (user && (user.isAdmin || user.role === 'tl')) {
+    if (user && (user.isAdmin || user.role === 'tl' || user.role === 'admin' || user.role === 'quality')) {
       authorized = true;
     }
   }
@@ -108,19 +108,18 @@ export async function POST(req: NextRequest) {
     body = await req.json();
   } catch {}
 
-  const statusFilter = body.status || 'scored';
+  const statusFilter = body.status || 'all';
   const limit = body.limit !== undefined && body.limit !== null ? Number(body.limit) : null;
   const delayMs = body.delay !== undefined && body.delay !== null ? Number(body.delay) : 1500;
-  const forceRetranscribe = body.forceRetranscribe === true;
 
-  // Fire and forget
-  runRerunInBackground(statusFilter, limit, delayMs, forceRetranscribe).catch((err) => {
-    log.error('cx/qa/rerun-calls', `Failed to initiate rerun: ${err.message}`);
+  // Fire-and-forget
+  runTranscribeInBackground(statusFilter, limit, delayMs).catch((err) => {
+    log.error('cx/qa/transcribe-calls', `Failed to initiate re-transcription: ${err.message}`);
   });
 
   return NextResponse.json({
     ok: true,
-    message: 'Rerun process initiated in background',
+    message: 'Re-transcription process initiated in background',
     config: {
       status: statusFilter,
       limit,

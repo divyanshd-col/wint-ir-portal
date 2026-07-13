@@ -52,7 +52,7 @@ interface Pass1Result {
 }
 
 interface TranscriptSegment {
-  event_type: 'turn';
+  type: 'turn';
   speaker: SpeakerRole;
   start: number;
   end: number;
@@ -65,14 +65,14 @@ interface TranscriptSegment {
   talk_speed: 'slow' | 'normal' | 'fast';
 }
 interface SilenceSegment {
-  event_type: 'silence';
+  type: 'silence';
   start: number;
   end: number;
   duration: number;
   silence_type: 'dead_air' | 'processing_pause' | 'hold';
 }
 interface OverlapSegment {
-  event_type: 'overlap';
+  type: 'overlap';
   start: number;
   end: number;
   interruption_by: SpeakerRole;
@@ -202,9 +202,11 @@ async function geminiGenerate(
       ],
     }],
     generationConfig: {
-      temperature: 0,
-      responseMimeType: 'application/json',
+      temperature: 0.1,
       maxOutputTokens: 8192,
+      thinkingConfig: {
+        thinkingBudget: 2048,
+      },
     },
   };
 
@@ -212,6 +214,7 @@ async function geminiGenerate(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    console.log('[Gemini debug] Sending request to:', `${GEMINI_API_BASE}/models/${MODEL}:generateContent`);
     const res = await fetch(
       `${GEMINI_API_BASE}/models/${MODEL}:generateContent?key=${apiKey}`,
       {
@@ -226,7 +229,15 @@ async function geminiGenerate(
       throw new Error(`Gemini generate failed (${res.status}): ${text.slice(0, 300)}`);
     }
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    console.log('[Gemini debug] Raw Response Data:', JSON.stringify(data, null, 2));
+    const parts: any[] = data?.candidates?.[0]?.content?.parts ?? [];
+    let fullText = '';
+    for (const p of parts) {
+      if (!p.thought && p.text) {
+        fullText += p.text;
+      }
+    }
+    return fullText.trim();
   } finally {
     clearTimeout(timer);
   }
@@ -235,14 +246,19 @@ async function geminiGenerate(
 // ── JSON extraction ───────────────────────────────────────────────────────────
 
 function extractJson(raw: string): any {
-  const cleaned = raw.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
+  // Pre-process to repair colon timestamps like 1:02.9 to raw seconds
+  const sanitized = raw.replace(/:\s*(\d+):(\d+(?:\.\d+)?)/g, (match, mins, secs) => {
+    const totalSeconds = parseInt(mins, 10) * 60 + parseFloat(secs);
+    return `: ${totalSeconds}`;
+  });
+  const cleaned = sanitized.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '').trim();
   try { return JSON.parse(cleaned); } catch {}
   const start = cleaned.indexOf('{');
   const end   = cleaned.lastIndexOf('}');
   if (start >= 0 && end > start) {
     try { return JSON.parse(cleaned.slice(start, end + 1)); } catch {}
   }
-  throw new Error(`Cannot extract JSON from: ${raw.slice(0, 200)}`);
+  throw new Error(`Cannot extract JSON from: ${raw.slice(0, 2000)}`);
 }
 
 // ── Pass 1 prompt ─────────────────────────────────────────────────────────────
@@ -255,39 +271,26 @@ Do NOT transcribe any words. Your only job is to detect and return:
 3. OVERLAP: Any moment where two voices speak simultaneously.
 
 Return ONLY this JSON structure, nothing else:
+{"duration_seconds":0.0,"events":[["turn","A",0.0,0.0],["silence",0.0,0.0,0.0],["overlap",0.0,0.0,"A","B"]]}
 
-{
-  "duration_seconds": 0.0,
-  "events": [
-    {
-      "type": "turn",
-      "speaker": "A" or "B",
-      "start": 0.0,
-      "end": 0.0
-    },
-    {
-      "type": "silence",
-      "start": 0.0,
-      "end": 0.0,
-      "duration": 0.0
-    },
-    {
-      "type": "overlap",
-      "start": 0.0,
-      "end": 0.0,
-      "speaker_continuing": "A" or "B",
-      "speaker_interrupting": "A" or "B"
-    }
-  ]
-}
+Format for events:
+- Turn: ["turn", speaker, start, end] (where speaker is "A" or "B")
+- Silence: ["silence", start, end, duration]
+- Overlap: ["overlap", start, end, speaker_continuing, speaker_interrupting] (where speakers are "A" or "B")
 
 RULES:
+- You MUST process the ENTIRE audio file from beginning to end. DO NOT STOP EARLY. The events array must cover the full duration of the audio.
 - Use only "A" and "B" as speaker labels — do not guess names or roles yet.
 - Speaker "A" is always the first voice heard, even if it is just "Hello".
 - Every second of audio must be accounted for across events — no gaps.
 - Timestamps must not exceed duration_seconds.
 - Overlap events take priority — if two voices speak simultaneously, do not log it as a turn. Log it as overlap.
-- Silence threshold: only log silences of 2.0 seconds or longer.`;
+- Silence threshold: only log silences of 2.0 seconds or longer.
+- CRITICAL: All timestamps ("start", "end", "duration") MUST be raw decimal numbers of seconds (e.g. 65.5, 142.8). Never use colon format like "1:05.5" or "2:22.8".
+- Merge consecutive speech turns by the same speaker if the gap between them is less than 2.0 seconds. Do not split a speaker's turn into tiny, repetitive segments (e.g., less than 1.5 seconds each) unless they are completely isolated utterances.
+- EXTREMELY CRITICAL: If you hear hold music, ringing, or background noise, do NOT log it as rapid alternating short speech turns. Instead, output a SINGLE continuous 'silence' event covering the ENTIRE duration of that noise (even if it lasts for minutes).
+- After the hold music/noise ends, you MUST resume logging the rest of the conversation until the end of the audio. DO NOT STOP EARLY.
+- You MUST output MINIFIED JSON. Do not include spaces, indentation, or newlines in the JSON output, to save tokens.`;
 
 // ── Pass 2 prompt ─────────────────────────────────────────────────────────────
 
@@ -350,46 +353,33 @@ For each "silence" event, classify it:
 
 For each "overlap" event: map speaker labels to actual roles.
 
-RETURN FORMAT — ONLY valid JSON, no markdown, no explanation:
+RETURN FORMAT — ONLY valid JSON, no markdown, no explanation.
+To fit long calls within token budgets, represent the segments array as a compact list of arrays. Each event must be represented exactly as:
+- For turn: ["turn", speaker, start, end, text, translated, sentiment, aggression, confidence, empathy, talk_speed]
+  (where speaker is "IR_EXECUTIVE" or "INVESTOR", confidence/empathy are numbers or null, translated is true or false)
+- For silence: ["silence", start, end, duration, silence_type]
+  (where silence_type is "dead_air" | "processing_pause" | "hold")
+- For overlap: ["overlap", start, end, interruption_by, speaker_interrupted]
+  (where interruption_by and speaker_interrupted are "IR_EXECUTIVE" or "INVESTOR")
 
+Example output:
 {
   "speaker_map": {
-    "A": "IR_EXECUTIVE" or "INVESTOR",
-    "B": "IR_EXECUTIVE" or "INVESTOR"
+    "A": "IR_EXECUTIVE",
+    "B": "INVESTOR"
   },
-  "speaker_identification_confidence": "high" | "medium" | "low",
-  "speaker_identification_signal": "exact quote that identified the executive, or empty string",
-  "detected_language": "e.g. Hindi, English",
+  "speaker_identification_confidence": "high",
+  "speaker_identification_signal": "This is Priya from Wint Wealth",
+  "detected_language": "English",
   "segments": [
-    {
-      "event_type": "turn",
-      "speaker": "IR_EXECUTIVE" or "INVESTOR",
-      "start": 0.0,
-      "end": 0.0,
-      "text": "transcribed and translated text",
-      "translated": true or false,
-      "sentiment": "positive" | "neutral" | "negative",
-      "aggression": 0-10,
-      "confidence": 0-10 or null,
-      "empathy": 0-10 or null,
-      "talk_speed": "slow" | "normal" | "fast"
-    },
-    {
-      "event_type": "silence",
-      "start": 0.0,
-      "end": 0.0,
-      "duration": 0.0,
-      "silence_type": "dead_air" | "processing_pause" | "hold"
-    },
-    {
-      "event_type": "overlap",
-      "start": 0.0,
-      "end": 0.0,
-      "interruption_by": "IR_EXECUTIVE" or "INVESTOR",
-      "speaker_interrupted": "IR_EXECUTIVE" or "INVESTOR"
-    }
+    ["silence", 0.0, 2.5, 2.5, "dead_air"],
+    ["turn", "IR_EXECUTIVE", 2.5, 6.2, "Hello sir, good morning.", false, "positive", 0, 9, 8, "normal"],
+    ["overlap", 6.2, 7.0, "INVESTOR", "IR_EXECUTIVE"]
   ]
-}`;
+}
+- CRITICAL: All timestamps ("start", "end", "duration") in the segments array must match the input turn structure and remain raw decimal numbers of seconds (e.g. 62.9, 142.8). Never use colon notation like "1:02.9" or "2:22.8".
+- EXTREMELY CRITICAL: You MUST output MINIFIED JSON. Do NOT include spaces, indentation, or newlines in the JSON output, to save tokens.
+`;
 }
 
 // ── Pass 1 validation ─────────────────────────────────────────────────────────
@@ -401,6 +391,22 @@ function validatePass1(data: any, attempt: number): Pass1Result {
   if (!data.duration_seconds || data.duration_seconds <= 0) {
     throw new Error(`Pass 1 attempt ${attempt}: invalid duration_seconds`);
   }
+
+  // Map arrays back to objects
+  const mappedEvents: StructureEvent[] = data.events.map((e: any) => {
+    if (Array.isArray(e)) {
+      if (e[0] === 'turn') {
+        return { type: 'turn', speaker: e[1], start: e[2], end: e[3] } as TurnEvent;
+      } else if (e[0] === 'silence') {
+        return { type: 'silence', start: e[1], end: e[2], duration: e[3] } as SilenceEvent;
+      } else if (e[0] === 'overlap') {
+        return { type: 'overlap', start: e[1], end: e[2], speaker_continuing: e[3], speaker_interrupting: e[4] } as OverlapEvent;
+      }
+    }
+    return e as StructureEvent; // fallback in case it's already an object
+  }).filter(Boolean);
+  
+  data.events = mappedEvents;
   const hasTurns = data.events.some((e: any) => e.type === 'turn');
   if (!hasTurns) {
     throw new Error(`Pass 1 attempt ${attempt}: no turn events found — likely garbage output`);
@@ -420,9 +426,9 @@ function validatePass1(data: any, attempt: number): Pass1Result {
 // ── Summary computation ───────────────────────────────────────────────────────
 
 function computeSummary(segments: OutputSegment[]): CallAnalysisResult['summary'] {
-  const turns    = segments.filter((s): s is TranscriptSegment => s.event_type === 'turn');
-  const silences = segments.filter((s): s is SilenceSegment   => s.event_type === 'silence');
-  const overlaps = segments.filter((s): s is OverlapSegment   => s.event_type === 'overlap');
+  const turns    = segments.filter((s): s is TranscriptSegment => s.type === 'turn');
+  const silences = segments.filter((s): s is SilenceSegment   => s.type === 'silence');
+  const overlaps = segments.filter((s): s is OverlapSegment   => s.type === 'overlap');
 
   const execTurns     = turns.filter(t => t.speaker === 'IR_EXECUTIVE');
   const investorTurns = turns.filter(t => t.speaker === 'INVESTOR');
@@ -504,7 +510,43 @@ export async function analyzeCallFromUri(opts: {
   }
 
   onProgress?.('Building final result…');
-  const segments: OutputSegment[] = pass2.segments ?? [];
+  const rawSegments = pass2.segments ?? [];
+  const segments: OutputSegment[] = rawSegments.map((s: any) => {
+    if (!Array.isArray(s) || s.length === 0) return null;
+    const type = s[0];
+    if (type === 'turn') {
+      return {
+        type: 'turn',
+        speaker: s[1],
+        start: s[2],
+        end: s[3],
+        text: s[4],
+        translated: s[5],
+        sentiment: s[6],
+        aggression: s[7],
+        confidence: s[8],
+        empathy: s[9],
+        talk_speed: s[10]
+      } as TranscriptSegment;
+    } else if (type === 'silence') {
+      return {
+        type: 'silence',
+        start: s[1],
+        end: s[2],
+        duration: s[3],
+        silence_type: s[4]
+      } as SilenceSegment;
+    } else if (type === 'overlap') {
+      return {
+        type: 'overlap',
+        start: s[1],
+        end: s[2],
+        interruption_by: s[3],
+        speaker_interrupted: s[4]
+      } as OverlapSegment;
+    }
+    return null;
+  }).filter(Boolean) as OutputSegment[];
   const summary = computeSummary(segments);
 
   return {

@@ -159,12 +159,15 @@ export async function callGeminiForCall(
           if (isCapacity)   { lastError = new Error(errMsg || `HTTP ${res.status}`); break; }
           if (!res.ok)      throw new Error(errMsg || `API error ${res.status}`);
 
-          // Reverse-iterate parts to skip thought:true entries (Gemini 2.5 Pro)
+          // Concatenate all text parts to handle chunked responses properly
           const parts: any[] = data.candidates?.[0]?.content?.parts ?? [];
-          for (let i = parts.length - 1; i >= 0; i--) {
-            if (!parts[i].thought && parts[i].text) return (parts[i].text as string).trim();
+          let fullText = '';
+          for (const p of parts) {
+            if (!p.thought && p.text) {
+              fullText += p.text;
+            }
           }
-          return '';
+          return fullText.trim();
         } catch (err: any) {
           const msg = String(err?.message ?? '').toLowerCase();
           const isCapacity = msg.includes('demand') || msg.includes('503') || msg.includes('429');
@@ -243,7 +246,9 @@ export async function fetchAndTranscribeAudio(
 
   // Create temporary local file
   const tempDir = os.tmpdir();
-  const tempFileName = `gemini-audio-${randomUUID()}${path.extname(recordingUrl) || '.mp3'}`;
+  const cleanUrl = recordingUrl.split('?')[0];
+  const ext = path.extname(cleanUrl) || '.mp3';
+  const tempFileName = `gemini-audio-${randomUUID()}${ext}`;
   const tempFilePath = path.join(tempDir, tempFileName);
 
   const arrayBuffer = await audioRes.arrayBuffer();
@@ -261,6 +266,19 @@ export async function fetchAndTranscribeAudio(
         mimeType,
       },
     });
+
+    // Wait for the file to become ACTIVE (fully processed by Gemini)
+    let fileInfo = uploadResult;
+    let pollCount = 0;
+    while (fileInfo.state === 'PROCESSING' && pollCount < 20) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      fileInfo = await ai.files.get({ name: uploadResult.name });
+      pollCount++;
+    }
+
+    if (fileInfo.state !== 'ACTIVE') {
+      throw new Error(`Gemini File state is ${fileInfo.state}, expected ACTIVE`);
+    }
   } catch (err: any) {
     // Clean up local file on upload error
     try { await fs.unlink(tempFilePath); } catch {}
