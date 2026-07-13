@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 
 interface SafeConfig {
   llmProvider?: string;
@@ -78,7 +77,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
 
   // ── General state ──────────────────────────────────────────────────────────
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'claude'>((config.llmProvider as any) || 'gemini');
-  const [geminiModel, setGeminiModel] = useState(config.geminiModel || DEFAULT_GEMINI_MODEL);
+  const [geminiModel, setGeminiModel] = useState(config.geminiModel || 'gemini-2.5-flash');
   const [activeGeminiKey, setActiveGeminiKey] = useState<1 | 2 | 3 | 4 | 5>((config.activeGeminiKey as any) || 1);
   const [geminiKeysSet, setGeminiKeysSet] = useState<Record<number, boolean>>({
     1: !!config.hasGeminiKey,

@@ -1,5 +1,3 @@
-const ROUTE = 'quality/my-analytics';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -65,7 +63,7 @@ function normalizeParamKey(raw: string): string {
   return DB_KEY_TO_PARAM[raw] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
 }
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== 'agent') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -335,5 +333,3 @@ async function _GET(req: NextRequest) {
     wowParams,
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

@@ -1,12 +1,10 @@
-const ROUTE = 'admin/reset-password';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth/next';
 import bcrypt from 'bcryptjs';
 import { authOptions } from '@/auth';
 import { readConfig, writeConfig } from '@/lib/config';
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (session?.user?.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -34,5 +32,3 @@ async function _POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
-
-export const POST = withLogging(ROUTE, _POST);

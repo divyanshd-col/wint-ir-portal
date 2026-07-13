@@ -1,9 +1,8 @@
-const ROUTE = 'logs';
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { readLogs, log, withLogging } from '@/lib/log';
+import { readLogs } from '@/lib/log';
 
-async function _GET(request: Request) {
+export async function GET(request: Request) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -26,5 +25,3 @@ async function _GET(request: Request) {
 
   return NextResponse.json({ logs });
 }
-
-export const GET = withLogging(ROUTE, _GET);

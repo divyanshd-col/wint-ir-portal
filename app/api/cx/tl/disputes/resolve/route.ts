@@ -1,14 +1,13 @@
-const ROUTE = 'cx/tl/disputes/resolve';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
-import { log, withLogging } from '@/lib/log';
+import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
 
 // POST — TL resolves a CAT2 IR dispute (no forward to QA needed)
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role  = (session.user as any).role as string;
@@ -58,5 +57,3 @@ async function _POST(req: NextRequest) {
   log.info('cx/tl/disputes/resolve', 'resolved', { flagId, actor: email });
   return NextResponse.json({ ok: true });
 }
-
-export const POST = withLogging(ROUTE, _POST);

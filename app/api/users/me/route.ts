@@ -1,11 +1,9 @@
-const ROUTE = 'users/me';
-import { log, withLogging } from '@/lib/log';
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 
-async function _GET() {
+export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
 
@@ -20,5 +18,3 @@ async function _GET() {
     isAdmin:   user?.role === 'admin' || !!(session.user as any)?.isAdmin,
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

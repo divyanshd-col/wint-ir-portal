@@ -1,6 +1,4 @@
 import { storeGetConfig, storeSetConfig } from './store';
-import { DEFAULT_GEMINI_MODEL } from './models';
-import { log } from './log';
 
 export type UserRole = 'agent' | 'admin' | 'quality' | 'tl';
 
@@ -58,7 +56,7 @@ const DEFAULT_CONFIG: PortalConfig = {
   activeGeminiKey: 1,
   anthropicApiKey: '',
   llmProvider: 'gemini',
-  geminiModel: DEFAULT_GEMINI_MODEL,
+  geminiModel: 'gemini-2.5-flash',
   knowledgeBaseUrls: [],
   users: [],
   systemPrompt: '',
@@ -130,7 +128,5 @@ async function writeToFile(config: PortalConfig): Promise<void> {
     const path = require('path');
     const CONFIG_PATH = path.join(process.cwd(), 'portal-config.json');
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2), 'utf-8');
-  } catch (err: any) {
-    log.warn('config/write-file', 'Failed to write config file', { err: err?.message ?? String(err) });
-  }
+  } catch {}
 }

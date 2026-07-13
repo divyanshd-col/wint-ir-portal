@@ -1,12 +1,10 @@
-const ROUTE = 'quality/call-pending';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { storeGetCallSkipped, storeUpdateCallSkipped } from '@/lib/store';
 import { readConfig } from '@/lib/config';
 
 // GET — list call-skipped chats, filtered to quality person's agents
-async function _GET() {
+export async function GET() {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -41,7 +39,7 @@ async function _GET() {
 }
 
 // PATCH — mark a call-skipped chat as reviewed
-async function _PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -58,6 +56,3 @@ async function _PATCH(req: NextRequest) {
   if (!ok) return NextResponse.json({ error: 'Item not found' }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const PATCH = withLogging(ROUTE, _PATCH);

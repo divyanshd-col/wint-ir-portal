@@ -1,5 +1,3 @@
-const ROUTE = 'quality/update';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
@@ -9,7 +7,7 @@ import type { ParamScore } from '@/lib/quality';
 
 const PARAM_KEYS = ['Technical','AllQuestions','Expectation','Contextual','FollowUp','Sentences','Process','Opening','Call','Grammar','Empathy'];
 
-async function _PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -88,7 +86,7 @@ async function _PATCH(req: NextRequest) {
           [chatId, JSON.stringify(params), newIqs, note || null]
         );
       }
-      log.info(ROUTE, `[quality/update] Saved override for ${chatId}: iqs=${newIqs}, by=${updatedBy}`);
+      console.log(`[quality/update] Saved override for ${chatId}: iqs=${newIqs}, by=${updatedBy}`);
     }
 
     // ── Update conversations (csat, tags, agent) ──────────────────────────────
@@ -153,9 +151,7 @@ async function _PATCH(req: NextRequest) {
       },
     });
   } catch (err: any) {
-    log.error(ROUTE, '[quality/update] PATCH error:', err?.message ?? err);
+    console.error('[quality/update] PATCH error:', err?.message ?? err);
     return NextResponse.json({ error: err?.message || 'Database error' }, { status: 500 });
   }
 }
-
-export const PATCH = withLogging(ROUTE, _PATCH);

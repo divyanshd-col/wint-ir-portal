@@ -1,7 +1,6 @@
 import { query } from '@/lib/cx/db';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 import { readConfig } from '@/lib/config';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { computeParamFailureRates } from './executor';
 import { PARAM_NAMES as PARAM_DISPLAY } from '@/lib/quality';
 import type { AnalyticsFilters, InsightBlock } from './types';
@@ -120,7 +119,7 @@ ${convBlocks.join('\n\n')}`;
 
   const raw = await geminiGenerate(
     keys,
-    DEFAULT_GEMINI_MODEL,
+    'gemini-2.5-flash',
     [{ role: 'user', parts: [{ text: prompt }] }],
     {},
     18_000,
@@ -155,7 +154,7 @@ ${numbered}`;
 
   const raw = await geminiGenerate(
     keys,
-    DEFAULT_GEMINI_MODEL,
+    'gemini-2.5-flash',
     [{ role: 'user', parts: [{ text: prompt }] }],
     {},
     20_000,

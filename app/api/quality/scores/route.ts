@@ -1,5 +1,3 @@
-const ROUTE = 'quality/scores';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
@@ -74,7 +72,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
   } as IQSScoreEntry;
 }
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
@@ -159,12 +157,12 @@ async function _GET(req: NextRequest) {
     totalFiltered = total;
     displayEntries = rows.map(row => {
       try { return toIQSScoreEntry(row); } catch (e: any) {
-        log.error(ROUTE, 'toIQSScoreEntry failed', { err: e?.message, row: JSON.stringify(row).slice(0, 200) });
+        console.error('[quality/scores] toIQSScoreEntry failed:', e?.message, JSON.stringify(row).slice(0, 200));
         return null;
       }
     }).filter(Boolean) as IQSScoreEntry[];
   } catch (dbErr: any) {
-    log.error(ROUTE, 'DB fetch failed', { err: dbErr?.message ?? String(dbErr) });
+    console.error('[quality/scores] DB fetch failed:', dbErr?.message ?? dbErr);
     return NextResponse.json({ error: 'Database error', detail: dbErr?.message }, { status: 500 });
   }
 
@@ -194,7 +192,7 @@ async function _GET(req: NextRequest) {
     availableSubDispositions = filters.availableSubDispositions;
     dispositionSubMap = filters.dispositionSubMap;
   } catch (err: any) {
-    log.error(ROUTE, '[quality/scores] DB filter options fetch failed:', err?.message);
+    console.error('[quality/scores] DB filter options fetch failed:', err?.message);
   }
 
   // Stats over ALL filtered entries calculated via SQL aggregates
@@ -216,7 +214,7 @@ async function _GET(req: NextRequest) {
       ]);
     }
   } catch (statsErr: any) {
-    log.error(ROUTE, '[quality/scores] Stats computation failed:', statsErr?.message);
+    console.error('[quality/scores] Stats computation failed:', statsErr?.message);
   }
 
   return NextResponse.json({
@@ -249,5 +247,3 @@ async function _GET(req: NextRequest) {
     }
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

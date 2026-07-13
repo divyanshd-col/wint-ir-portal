@@ -1,5 +1,3 @@
-const ROUTE = 'call-quality/pending-review';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { getAllScoredCalls, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
@@ -27,7 +25,7 @@ function normParams(params: any): { scores: Record<string, string>; reasoning: R
   return { scores, reasoning };
 }
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -135,7 +133,7 @@ async function _GET(req: NextRequest) {
   });
 }
 
-async function _PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
@@ -184,6 +182,3 @@ async function _PATCH(req: NextRequest) {
 
   return NextResponse.json({ ok: true });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const PATCH = withLogging(ROUTE, _PATCH);

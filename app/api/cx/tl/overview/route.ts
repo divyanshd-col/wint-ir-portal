@@ -1,11 +1,9 @@
-const ROUTE = 'cx/tl/overview';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 
-async function _GET(req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const role = session.user.role;
@@ -123,5 +121,3 @@ async function _GET(req: NextRequest) {
     iqs_params:     paramRows,
   });
 }
-
-export const GET = withLogging(ROUTE, _GET);

@@ -4,7 +4,6 @@ import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
 import SettingsClient from '@/components/SettingsClient';
 import { DEFAULT_CHAT_PROCESS_PROMPT } from '@/lib/prompts';
-import { DEFAULT_GEMINI_MODEL } from '@/lib/models';
 import { IQS_SYSTEM_PROMPT } from '@/lib/quality';
 import { PLANNER_PROMPT, SYNTHESIZER_PROMPT } from '@/lib/analytics/agent';
 
@@ -18,7 +17,7 @@ export default async function SettingsPage() {
   // Strip actual key values — only pass presence flags to client
   const safeConfig = {
     llmProvider: config.llmProvider,
-    geminiModel: config.geminiModel || DEFAULT_GEMINI_MODEL,
+    geminiModel: config.geminiModel || 'gemini-2.5-flash',
     hasGeminiKey: !!config.geminiApiKey,
     hasGeminiKey2: !!config.geminiApiKey2,
     hasGeminiKey3: !!config.geminiApiKey3,

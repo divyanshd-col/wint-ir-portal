@@ -2,12 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { readConfig, writeConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
-import { log, withLogging } from '@/lib/log';
+import { log } from '@/lib/log';
 
 const ROUTE = 'cx/qa/disposition-config';
 
 // GET — returns the current QA's assigned dispositions (or all mappings for admin)
-async function _GET() {
+export async function GET() {
   const { session, response } = await requireRole(['quality', 'admin']);
   if (response) return response;
   const role = (session.user as any).role;
@@ -40,7 +40,7 @@ async function _GET() {
 }
 
 // PATCH — admin only: upsert a QA's disposition list
-async function _PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
@@ -63,6 +63,3 @@ async function _PATCH(req: NextRequest) {
   log.info(ROUTE, 'PATCH', { by: (session.user as any).email, targetEmail: email, dispositionCount: dispositions.length });
   return NextResponse.json({ ok: true, map });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const PATCH = withLogging(ROUTE, _PATCH);

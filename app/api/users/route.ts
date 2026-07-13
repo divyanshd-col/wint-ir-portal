@@ -1,5 +1,3 @@
-const ROUTE = 'users';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -12,7 +10,7 @@ async function adminOnly() {
 }
 
 // GET — list users (no passwords)
-async function _GET() {
+export async function GET() {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const config = await readConfig();
   return NextResponse.json(config.users.map(u => ({
@@ -26,7 +24,7 @@ async function _GET() {
 }
 
 // POST — add/invite a user by email with a role
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { email, role, agentName, assignedDispositions } = await req.json();
   if (!email?.trim()) return NextResponse.json({ error: 'Email required' }, { status: 400 });
@@ -60,7 +58,7 @@ async function _POST(req: NextRequest) {
 }
 
 // PATCH — update a user's role and/or agentName
-async function _PATCH(req: NextRequest) {
+export async function PATCH(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { email, role, agentName, assignedDispositions } = await req.json();
   if (!email) return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
@@ -83,7 +81,7 @@ async function _PATCH(req: NextRequest) {
 }
 
 // DELETE — remove user
-async function _DELETE(req: NextRequest) {
+export async function DELETE(req: NextRequest) {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   const { email } = await req.json();
 
@@ -96,8 +94,3 @@ async function _DELETE(req: NextRequest) {
   await writeConfig(config);
   return NextResponse.json({ success: true });
 }
-
-export const GET = withLogging(ROUTE, _GET);
-export const POST = withLogging(ROUTE, _POST);
-export const DELETE = withLogging(ROUTE, _DELETE);
-export const PATCH = withLogging(ROUTE, _PATCH);

@@ -5,31 +5,6 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
-  {
-    rules: {
-      "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": "off",
-      "prefer-const": "off",
-      "react/no-unescaped-entities": "off",
-      "@typescript-eslint/no-require-imports": "off",
-      "react-hooks/exhaustive-deps": "off",
-      "@next/next/no-img-element": "off",
-      "react-hooks/set-state-in-effect": "off",
-      "react-hooks/purity": "off",
-      "react-hooks/use-memo": "off",
-    }
-  },
-  {
-    files: ["app/api/**/*.ts", "app/api/**/*.js"],
-    rules: {
-      "no-console": ["error", { allow: ["warn", "error"] }]
-    }
-  },
-  {
-    linterOptions: {
-      reportUnusedDisableDirectives: "off",
-    }
-  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

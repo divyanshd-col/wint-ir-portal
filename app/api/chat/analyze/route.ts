@@ -1,12 +1,9 @@
-const ROUTE = 'chat/analyze';
-import { log, withLogging } from '@/lib/log';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import Anthropic from '@anthropic-ai/sdk';
 import { readConfig } from '@/lib/config';
 import { getOrderedGeminiKeys, geminiGenerate } from '@/lib/gemini';
-import { DEFAULT_GEMINI_MODEL, DEFAULT_CLAUDE_MODEL } from '@/lib/models';
 import fs from 'fs';
 import path from 'path';
 
@@ -369,7 +366,7 @@ Step 2h — id: active_holdings_check
   → STOP after answer. Scenario identified.`
 };
 
-async function _POST(req: NextRequest) {
+export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
@@ -397,7 +394,7 @@ async function _POST(req: NextRequest) {
     try {
       routerPrompt = fs.readFileSync(routerPath, 'utf-8');
     } catch (err) {
-      log.warn(ROUTE, '[analyze] Failed to read PROMPT_router.txt from disk, using fallback.');
+      console.warn('[analyze] Failed to read PROMPT_router.txt from disk, using fallback.');
       routerPrompt = `You are the intelligent router for the Wint Wealth CX support system.
 Determine the correct product category. Do NOT answer the user.
 RETURN FORMAT — return ONLY valid JSON:
@@ -420,7 +417,7 @@ RETURN FORMAT — return ONLY valid JSON:
           ]
         : routerInput;
       const response = await client.messages.create({
-        model: DEFAULT_CLAUDE_MODEL,
+        model: 'claude-sonnet-4-6',
         max_tokens: 256,
         messages: [{ role: 'user', content: claudeContent }],
       });
@@ -428,7 +425,7 @@ RETURN FORMAT — return ONLY valid JSON:
     } else {
       routerRaw = await geminiGenerate(
         geminiKeys,
-        config.geminiModel || DEFAULT_GEMINI_MODEL,
+        'gemini-2.5-flash',
         [{ role: 'user', parts: routerParts }],
         { config: { responseMimeType: 'application/json' } },
         15000
@@ -528,7 +525,7 @@ ${schema}`;
           ]
         : extractPrompt;
       const response = await client.messages.create({
-        model: DEFAULT_CLAUDE_MODEL,
+        model: 'claude-sonnet-4-6',
         max_tokens: 1024,
         messages: [{ role: 'user', content: claudeContent }],
       });
@@ -536,7 +533,7 @@ ${schema}`;
     } else {
       extractRaw = await geminiGenerate(
         geminiKeys,
-        config.geminiModel || DEFAULT_GEMINI_MODEL,
+        'gemini-2.5-flash',
         [{ role: 'user', parts: extractParts }],
         { config: { responseMimeType: 'application/json' } },
         40000
@@ -553,16 +550,14 @@ ${schema}`;
         (q: { id: string }) => !answeredIds.includes(q.id)
       );
       if (parsed.questions.length < before) {
-        log.warn(ROUTE, `[analyze] Filtered ${before - parsed.questions.length} duplicate question(s)`);
+        console.warn(`[analyze] Filtered ${before - parsed.questions.length} duplicate question(s)`);
       }
     }
 
     return NextResponse.json(parsed);
 
-  } catch (err: any) {
-    log.error(ROUTE, 'Error', { err: err?.message ?? String(err) });
+  } catch (err) {
+    console.error('[analyze] Error:', err);
     return NextResponse.json({ questions: [], queryType: 'direct', fallback: true });
   }
 }
-
-export const POST = withLogging(ROUTE, _POST);
