@@ -59,15 +59,22 @@ async function runRerunInBackground(statusFilter: string, limit: number | null, 
 export async function POST(req: NextRequest) {
   let authorized = false;
 
-  // 1. Check for SEED_SECRET in headers or query parameters
+  // 1. Check for secrets in headers or query parameters
   const seedSecret = process.env.SEED_SECRET;
-  if (seedSecret) {
-    const authHeader = req.headers.get('authorization') || '';
-    const url = new URL(req.url);
-    const urlSecret = url.searchParams.get('secret');
-    if (authHeader === `Bearer ${seedSecret}` || urlSecret === seedSecret) {
-      authorized = true;
-    }
+  const webhookSecret = process.env.WEBHOOK_SECRET;
+  const cronSecret = process.env.CRON_SECRET;
+
+  const authHeader = req.headers.get('authorization') || '';
+  const url = new URL(req.url);
+  const urlSecret = url.searchParams.get('secret');
+
+  const checkSecret = (sec: string | undefined) => {
+    if (!sec) return false;
+    return authHeader === `Bearer ${sec}` || urlSecret === sec;
+  };
+
+  if (checkSecret(seedSecret) || checkSecret(webhookSecret) || checkSecret(cronSecret)) {
+    authorized = true;
   }
 
   // 2. Fallback to NextAuth session
