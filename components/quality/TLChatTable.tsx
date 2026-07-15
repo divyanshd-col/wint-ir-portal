@@ -296,6 +296,7 @@ export default function TLChatTable() {
                       onDone={() => setExpandedId(null)}
                       onClose={() => setExpandedId(null)}
                       colSpan={7}
+                      conversationType={chat.conversationType}
                     />
                   )}
                 </React.Fragment>

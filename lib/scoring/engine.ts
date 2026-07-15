@@ -1,10 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { fireQualityAlert } from '@/lib/quality-alert';
 import {
-  IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse,
+  getSystemPrompt, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
 } from '@/lib/quality';
 import type { TimedMessage, ParamScore } from '@/lib/quality';
@@ -32,7 +33,7 @@ import { transcriptFromJsonb, extractQueryFromTranscript } from './transcript';
 // ── Convert ParamScore → IQSParameterResult ───────────────────────────────────────────
 function toParamResult(score: ParamScore, reasoning: string): IQSParameterResult {
   return {
-    score: score === 'Yes' ? true : score === 'No' ? false : null,
+    score: score === 'Yes' ? true : score === 'No' ? false : score === 'Half' ? 0.5 : null,
     reasoning,
   };
 }
@@ -129,10 +130,11 @@ export async function scoreLinkedCallsForChat(
       kbContext,
       subDisposition,
       'agent',
+      true,
     );
 
     try {
-      const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
+      const iqsSystemPrompt = getSystemPrompt('agent', config.iqsScoringPrompt);
       const raw = await geminiGenerate(
         geminiKeys,
         'gemini-2.5-flash',
@@ -230,8 +232,16 @@ export async function executeScoring(
   // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
   const kbContext = await getKbContextForScoring(disposition, subDisposition, transcriptText, config, false);
 
-  const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition, timing.conversationType);
-  const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
+  let hasCall = false;
+  try {
+    const calls = await query<any>('SELECT id FROM call_recordings WHERE chat_id = $1', [chatId]);
+    hasCall = calls.length > 0;
+  } catch (err) {
+    console.error(`[scoring-engine] executeScoring error checking calls:`, err);
+  }
+
+  const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition, timing.conversationType, hasCall);
+  const iqsSystemPrompt = getSystemPrompt(timing.conversationType, config.iqsScoringPrompt);
 
   let rawResponse: string;
   if (provider === 'claude' && anthropicKey) {

@@ -21,6 +21,7 @@ export interface TLChatRow {
   failedParams:  string[];
   reviewedBy:    string | null;
   reviewedAt:    string | null;
+  conversationType?: 'bot' | 'agent' | 'hybrid';
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -114,6 +115,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     closed_at: string; disposition: string; sub_disposition: string | null;
     csat_score: string | null; parameters: any; mobile_number: string | null;
     reviewed_by: string | null; reviewed_at: string | null;
+    conversation_type: string | null;
   }>(
     `SELECT c.id AS chat_id, a.name AS agent_name,
             i.iqs_score, c.closed_at,
@@ -121,7 +123,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             c.tags->>'sub_disposition' AS sub_disposition,
             c.csat_score, i.parameters,
             ct.phone AS mobile_number,
-            i.reviewed_by, i.reviewed_at
+            i.reviewed_by, i.reviewed_at, c.conversation_type
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -157,6 +159,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       failedParams,
       reviewedBy:     r.reviewed_by ?? null,
       reviewedAt:     r.reviewed_at ?? null,
+      conversationType: r.conversation_type as any,
     };
   });
 

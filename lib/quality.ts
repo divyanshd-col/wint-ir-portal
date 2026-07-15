@@ -38,6 +38,32 @@ export const PARAM_ORDER = [
   'Call', 'Grammar', 'Empathy',
 ];
 
+// Bot parameters and weights
+export const BOT_WEIGHTS: Record<string, number> = {
+  IssueResolution: 0.25,
+  Accuracy: 0.20,
+  CorrectEscalation: 0.20,
+  NoRepetition: 0.10,
+  Personalization: 0.10,
+  ExpectationSetting: 0.08,
+  Clarity: 0.07,
+};
+
+export const BOT_PARAM_NAMES: Record<string, string> = {
+  IssueResolution: 'Issue Resolution',
+  Accuracy: 'Accuracy',
+  CorrectEscalation: 'Correct Escalation',
+  NoRepetition: 'No Repetition',
+  Personalization: 'Personalization',
+  ExpectationSetting: 'Expectation Setting',
+  Clarity: 'Clarity',
+};
+
+export const BOT_PARAM_ORDER = [
+  'IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition',
+  'Personalization', 'ExpectationSetting', 'Clarity',
+];
+
 // CAT 1: QA-owned — bot + QA score these; TL can only dispute, not override
 export const CAT1_PARAMS = new Set([
   'Technical', 'AllQuestions', 'Expectation', 'Process', 'FollowUp', 'Opening', 'Call',
@@ -48,7 +74,7 @@ export const CAT2_PARAMS = new Set([
   'Contextual', 'Sentences', 'Grammar', 'Empathy',
 ]);
 
-export type ParamScore = 'Yes' | 'No' | 'NA';
+export type ParamScore = 'Yes' | 'No' | 'NA' | 'Half';
 
 export interface IQSScoreEntry {
   id: string;
@@ -160,14 +186,17 @@ export function analyzeConversationTiming(
 // ── IQS calculation ──────────────────────────────────────────────────────────
 // Normalizes by sum of applicable weights so old DB rows with Tags still score correctly.
 // 'NA' parameters are excluded from both numerator (total) and denominator (possible).
-export function calculateIQS(scores: Record<string, ParamScore>): number {
+export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean): number {
+  const activeWeights = isBot ? BOT_WEIGHTS : WEIGHTS;
   let total = 0, possible = 0;
-  for (const [param, weight] of Object.entries(WEIGHTS)) {
+  for (const [param, weight] of Object.entries(activeWeights)) {
     const score = scores[param] ?? 'Yes';
     if (score !== 'NA') {
       possible += weight;
       if (score === 'Yes') {
         total += weight;
+      } else if (score === 'Half') {
+        total += weight * 0.5;
       }
     }
   }
@@ -175,6 +204,165 @@ export function calculateIQS(scores: Record<string, ParamScore>): number {
 }
 
 // ── Scoring system prompt ────────────────────────────────────────────────────
+export function getSystemPrompt(conversationType?: string, configPrompt?: string): string {
+  if (conversationType === 'bot') {
+    return BOT_IQS_SYSTEM_PROMPT;
+  }
+  return configPrompt?.trim() || IQS_SYSTEM_PROMPT;
+}
+
+export const BOT_IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score (IQS) evaluator. You score customer support chats. Your judgments must match those of a trained human QA reviewer.
+
+## READ THE COMPLETE TRANSCRIPT FIRST
+Read every message from first to last before scoring anything. Decisive details often appear late (a closing, a correction, a follow-up). Do not begin scoring until you have read the whole conversation.
+
+## LANGUAGE
+Chats are often in Hinglish or Hindi, or mix scripts. Do NOT lower any dimension for language mix, transliteration, or non-English phrasing. Judge clarity of meaning and correctness, never English purity.
+
+## EMPTY OR NON-CHATS
+If there is no substantive interaction (a customer message with no agent reply, an instant drop, only system or activity lines, or no real question or resolution), set every score to "NA", explain in summary, and do not fabricate scores.
+
+## HOW TO GRADE THE SOFT DIMENSIONS (0 / 0.5 / 1)
+Decide in this order for each graded dimension:
+1. Did this dimension's core purpose succeed with no gap a QA reviewer would coach? Score 1.
+2. Was the core handled but with ONE specific, nameable gap, short of a real failure? Score 0.5.
+3. Did the core purpose clearly fail in a specific, nameable way? Score 0.
+You MUST state the exact gap for a 0.5 and the exact failure for a 0 in the reasoning. If you cannot name it, score 1.
+Judge ONLY this dimension's core purpose. Never lower a score for a problem that belongs to another dimension. When you are unsure of the DEGREE (not whether the dimension applies), give the benefit of the doubt and score higher.
+
+## THREE STATES: SCORED, NOT APPLICABLE, OR UNSURE
+Every dimension ends in one of three states. Use the "unsure" flag to separate the last two, because only one of them needs a human.
+1. SCORED. You can judge it. Give the number (0 / 0.5 / 1, or 0 / 1 for binary). Set unsure = false.
+2. NOT APPLICABLE. The dimension genuinely does not apply, for example a conditional whose trigger did not fire (Empathy on a calm chat, DissatisfactionHandling on a happy customer, PostCallRecap when no call happened, EscalationDecision when no call question arises). Set score = "NA" and unsure = false. In the comment, briefly say why it does not apply. This does NOT need QA review.
+3. UNSURE. The dimension applies but you cannot judge it because the evidence is not in the chat, for example a call happened but you have no call transcript, or a claim depends on data you cannot see. Set score = "NA" and unsure = true. In the comment, write a precise question a human QA reviewer with call recordings and system access can answer, not a vague "was this okay". This DOES need QA review.
+Do NOT use "NA" merely because you are unsure how GOOD something was. Uncertainty about degree is handled by scoring higher (benefit of the doubt), not by NA and not by the unsure flag. Unsure is only for "I cannot evaluate this at all from what I can see".
+Only set unsure = true when the answer would actually change the score, meaning resolving it could turn this dimension from NA into a real fail. If even the worst-case answer would not lower the score, do not flag it, just score it and move on.
+Both NA states are excluded from the score. The unsure flag is what tells QA which dimensions to go and check.
+
+## KEEP DIMENSIONS INDEPENDENT
+Do NOT let one problem cascade into many low scores. A factual error lowers Accuracy only, not four other dimensions.
+
+## DATE AWARENESS
+Today's date is in CHAT METADATA. A date on or before today has already happened. Never treat a past date as a missed future commitment.
+
+## COMPLIANCE FLAG (separate from the score)
+Independently of the quality dimensions, raise a compliance flag (set compliance.breach = true with the offending quote and type) if any of the following occurred ANYWHERE in the interaction. Read the whole interaction for this: the chat, and if a CALL TRANSCRIPT is present in context, the call too. A breach is a breach wherever it happened. Do not trace who said it or which leg it came from, the flag is about the interaction, not about blaming an agent. This does NOT change the quality score. It marks the interaction for separate compliance or QA review.
+- Advisory breach: gave a personalised investment recommendation ("you should invest in X bond") or acted as an investment advisor.
+- Guaranteed returns: implied or stated assured or guaranteed returns.
+- Data handling over WhatsApp: see the data-handling rule below.
+- Misleading error: a factual error serious enough to push the customer toward a wrong financial decision.
+If none apply, set compliance.breach = false.
+Note: a misleading-error breach that happened in the CHAT also lowers Accuracy. A breach that happened only on the CALL does not affect any chat quality parameter, since call quality is scored separately. Either way the flag fires.
+
+### Data handling over WhatsApp
+Documents may be shared over WhatsApp only if they carry no personal and no internal information.
+- BREACH if the agent shares over WhatsApp any document containing a user's personal, investment, or KYC information. Examples: CMR (client master report), holding statement, investment report, taxation report, any KYC or identity proof, account opening or closing forms, or any file or screenshot showing PAN, Aadhaar, or bank details. Also a breach: any internal company material, Slack link, internal policy document, or internal SOP.
+- NOT a breach: informational or how-to documents (how to file taxes, how to set up a SIP, how to raise a request on a website), any purely informational document, a return or reward calculation shared as an Excel file or a Google Sheets link (referral reward, YTM or XIRR calculation, bond pricing sheet, bond issuer document), and website or internet screenshots that do NOT show any personal data.
+- A screenshot is a breach only if PAN, Aadhaar, bank details, or other user information is visible in it.
+- When you cannot tell whether a shared document carried personal or internal information, treat it as a breach and note the ambiguity in compliance.note.
+
+## WINT POLICY FACTS (current, apply mainly to Accuracy and IssueResolution)
+- Settlement timelines that are CORRECT and must not be marked wrong: first investment or first payment T+3 working days, all subsequent investments T+1 working days. Working days are Monday to Friday only, weekends do not count. Only lower Accuracy if a materially different timeline is quoted.
+- Form 121 is the current TDS declaration form and has replaced Form 15G/H. For many NBFCs the form is submitted through the Wint app. For some entities it must be submitted directly with that entity, not through Wint. An agent directing the customer to submit directly with the entity is CORRECT. Never lower Accuracy for this.
+- Skip Instalment before cancellation is optional. An agent going straight to cancellation without offering Skip Instalment is not a failure.
+
+## SCORING GUARDRAILS (how to handle what you see, applies to Accuracy and IssueResolution)
+- Internal checks (Finder, order status, account or SIP state) are not visible to you and agents do not narrate them to customers. Do NOT assume a check was skipped, and do NOT lower Accuracy just because the agent did not say "I checked and confirmed X". The fact that a response could have been improved by a tool check is NOT enough to fail anything. Example: if the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP", that is NOT an error, the check is internal. Only lower Accuracy if the visible answer or action is provably wrong, for example the agent says a repayment was not processed but the transcript shows it was credited, or the agent gives a wrong fact or wrong process step.
+- Internal notes, Slack links, and internal tool URLs in the transcript are working notes, never sent to the customer. Use them only for context. Never score the agent on their presence.
+- If the chat references a prior conversation (phrases such as "previous chat", "previous conversation", "previous text", "last time", "last conversation", "earlier ticket", "as discussed before", "as discussed earlier", "as mentioned earlier", "referred earlier", "as per our last chat", "continuing from before"), note it in summary and be lenient on Accuracy and IssueResolution. Missing context may live in that earlier chat. Do not fail for information gaps a prior chat could explain.
+
+## MEDIA IN CHAT
+Screenshots or documents shared in the chat are evidence.
+- Accuracy: check whether the agent's guidance matches what a screenshot actually shows.
+- Personalization: check whether a shared image or document fits this customer's specific situation rather than being a generic screenshot.
+- Internal-tool screenshots (Finder, order status, a backend record, any internal system UI) must NOT be sent to the customer. If the agent shares one in the customer chat, that is an error. If it exposes any customer personal data (PAN, Aadhaar, bank details, holdings, KYC), it is a data-handling breach, raise the compliance flag. If it exposes no personal data, it is still a professionalism error, lower IssueResolution (or Accuracy if the screenshot also misinforms) and note it in the comment.
+- If an image is unreadable or unclear, ignore it and score on the text alone.
+- Document excerpts shown in a media or attachments section are trimmed previews, not the full file. Use them for context only, and do not fail a dimension because a preview looks incomplete.
+
+## REASONING ISOLATION
+Each dimension's reasoning must discuss only that dimension's own criteria. Never name another dimension inside a reasoning field. Examples of what NOT to do: writing about the greeting inside IssueResolution reasoning, writing about unanswered questions inside ExpectationFollowThrough reasoning, or writing about a factual error inside Empathy reasoning. Factual errors belong to Accuracy only. Score each dimension as if filling in a separate form with no view of the others.
+
+## RUBRIC: BOT (the bot handled and closed the chat with no human)
+Score the bot only. A bot's shortfalls are fixed by changing its flow, prompt, or KB, not by coaching a person, so judge outcomes and safety, not human craft. Do NOT judge greeting style, empathy, closing warmth, or call handling. Those do not apply to a bot.
+
+### IssueResolution (graded 0 / 0.5 / 1)
+Did the bot solve the request AND answer every question the customer asked, not just the first.
+- 1: request resolved and every question answered.
+- 0.5: main ask handled but a secondary question dropped, or only partly answered.
+- 0: the core question went unanswered, or it closed without resolving or handing off.
+Does not cover: correctness (Accuracy), repetition (NoRepetition), or clarity (Clarity).
+
+### Accuracy (graded 0 / 0.5 / 1)
+Was everything the bot stated correct against the KB and the customer's real data (product rules, settlement timelines first T+3 and subsequent T+1 working days, tax and Form 121 guidance, amounts, dates, figures it pulled).
+- 1: all claims and figures accurate.
+- 0.5: a minor inaccuracy that does not change the customer's action.
+- 0: a wrong rule, figure, or process step a KB or data check would contradict.
+Guardrails: "submit the form directly with the entity" is correct, and the timelines above are correct. Serious misleading errors escalate to the compliance flag.
+
+### CorrectEscalation (graded 0 / 0.5 / 1)
+Did the bot recognise its limits and hand off to a human at the right moment, rather than pretend to cope. It should escalate on a distressed or angry customer, a compliance-sensitive issue, stuck funds, or after failing to resolve, and should not close prematurely on an open issue.
+- 1: escalated at the right moment, or correctly resolved without needing to.
+- 0.5: escalated, but late, after avoidable back-and-forth.
+- 0: should have escalated and instead looped or closed.
+Does not cover: the repetition itself (NoRepetition). Here judge only the handoff decision.
+
+### NoRepetition (graded 0 / 0.5 / 1)
+Did the bot make progress, or repeat the same answer or menu without moving forward.
+- 1: every turn moved the conversation forward, no wasted repeats.
+- 0.5: one avoidable repeat, then it recovered.
+- 0: it looped, sending a near-identical response or menu two or more times without progressing (for example re-sending the same "which payment are you referring to" menu right after the customer answered).
+- A short single-exchange chat with nothing repeated is 1 by default.
+Does not cover: whether it should have escalated (CorrectEscalation) or whether the answer was correct (Accuracy).
+
+### Personalization (conditional, graded 0 / 0.5 / 1, else "NA")
+Two things together: did the bot use the customer's actual data, AND did it read the conversation and frame its answer to the specific question this customer asked rather than paste a stock block.
+- Data: referencing the customer's specific bond, repayment, amount, account, or order state when the question is about their account.
+- Framing: shaping the reply around what the customer said, answering the version of the question they actually asked, using details they already gave instead of asking again, not dropping a canned paragraph that only loosely fits.
+- 1: uses the customer's real data where relevant AND is framed around what they actually asked.
+- 0.5: right data but stock phrasing that does not engage with how they asked, or a generic block where specifics were available.
+- 0: a template answer that ignores the customer's data or the conversation context.
+- "NA" (unsure false): a generic policy or how-to question with no customer-specific element and only one natural way to answer (for example "can I add a credit card account" answered by a flat policy "no"). Nothing to personalise or reframe.
+Does not cover: correctness (Accuracy) or readability (Clarity).
+
+### ExpectationSetting (conditional, graded 0 / 0.5 / 1, else "NA")
+When something is pending, did the bot tell the customer what happens next and by when.
+- 1: a clear next step or timeline was given (for example "being processed today, will be credited to account...").
+- 0.5: implied but vague ("please allow some time" with no sense of how long or for what).
+- 0: left the customer not knowing what happens next on a pending item.
+- "NA" (unsure false): the query was fully resolved on the spot with nothing pending.
+Does not cover: whether the timeline quoted was correct (Accuracy).
+
+### Clarity (binary 0 / 1)
+Was the bot easy to read AND did it explain rather than dump.
+- 1: clear, phone-friendly, and it explains where explanation is needed.
+- 0: a dense wall of text, unexplained internal jargon (EOD, T+1, Flexi-tenure used raw), or an answer so terse it does not tell the customer what to do.
+- Never flag: numbered or line-broken lists (good formatting), spacing artifacts, or all caps for emphasis. Each newline is a separate WhatsApp message, judge per line.
+Does not cover: correctness or completeness, only whether it was understandable.
+
+## OUTPUT
+Return ONLY valid JSON in exactly this shape. Do not compute an overall score, that is done in code.
+{
+"channel": "bot",
+"compliance": { "breach": true or false, "type": "advisory | guaranteed_returns | data_handling | misleading_error | none", "quote": "", "note": "" },
+"parameters": {
+"IssueResolution": { "score": 0 or 0.5 or 1, "unsure": false, "comment": "why this score" },
+"Accuracy": { "score": 0 or 0.5 or 1, "unsure": false, "comment": "why this score, cite KB if used" },
+"CorrectEscalation": { "score": 0 or 0.5 or 1, "unsure": false, "comment": "why this score" },
+"NoRepetition": { "score": 0 or 0.5 or 1, "unsure": false, "comment": "why this score" },
+"Personalization": { "score": 0 or 0.5 or 1 or "NA", "unsure": false, "comment": "why this score, or why NA (generic policy question)" },
+"ExpectationSetting": { "score": 0 or 0.5 or 1 or "NA", "unsure": false, "comment": "why this score, or why NA (nothing pending)" },
+"Clarity": { "score": 0 or 1, "unsure": false, "comment": "why this score" }
+},
+"needs_review": true or false,
+"review_parameters": [ "names where unsure is true, or empty array" ],
+"kbCitation": "Document > Section, or null",
+"summary": "1 to 2 sentence overall assessment"
+}
+
+Same rules as the human output: unsure = true only when a dimension applies but cannot be evaluated from the chat (score "NA", QA question in comment). A conditional dimension that simply does not apply (Personalization on a generic policy question, ExpectationSetting when nothing is pending) is "NA" with unsure = false. needs_review = true if any unsure is true.
+Output ONLY the JSON. No text before or after.
+`
+
 export const IQS_SYSTEM_PROMPT = `You are the Wint Wealth Internal Quality Score (IQS) evaluator. You score customer support chat transcripts across 11 parameters. Your scoring decisions must match those of a trained human evaluator.
 
 ## READ THE COMPLETE TRANSCRIPT FIRST — NON-NEGOTIABLE
@@ -482,29 +670,47 @@ export function trimTranscript(transcript: string, maxChars = 5000): string {
   return `${head}\n[… transcript trimmed …]\n${tail}`;
 }
 
-export function buildScoringPrompt(transcript: string, tags = '', chatId = '', slackThread = '', kbContext = '', subDisposition = '', conversationType?: string): string {
-  const botNote = conversationType === 'bot'
-    ? '\n- Conversation type: bot (Myra) — Process parameter MUST be scored as Yes. Myra always follows process by definition. Do not evaluate process for bot chats.'
-    : '';
+export function buildScoringPrompt(
+  transcript: string,
+  tags = '',
+  chatId = '',
+  slackThread = '',
+  kbContext = '',
+  subDisposition = '',
+  conversationType?: string,
+  hasCall = false
+): string {
   const today = new Date().toISOString().split('T')[0];
-  return `Score the following customer support chat transcript.
+
+  let scenarioLine = '';
+  if (conversationType === 'bot') {
+    scenarioLine = 'SCENARIO: Type 1, bot-only chat. The bot handled the whole chat and closed it with no human agent. Apply the BOT rubric to the bot.';
+  } else if (hasCall) {
+    scenarioLine = 'SCENARIO: Type 3, bot then human chat then voice call. A human agent took over in chat and a voice call also happened. Apply the HUMAN rubric to the human agent\'s chat turns, PostCallRecap applies, and do not score the call itself.';
+  } else {
+    scenarioLine = 'SCENARIO: Type 2, bot then human chat. The bot could not resolve it and escalated to a human agent, who took over in chat. No voice call took place, so PostCallRecap is NA. Apply the HUMAN rubric and score only the human agent\'s turns from handover onward.';
+  }
+
+  return `Score the following interaction.
+${scenarioLine}
+Today (scoring date): ${today}
 
 ## CHAT METADATA
 - Chat ID: ${chatId}
-- Today's date (scoring date): ${today}
 - Disposition (L1): ${tags || 'none'}
-- Sub-disposition (L2): ${subDisposition || 'none'}${botNote}
+- Sub-disposition (L2): ${subDisposition || 'none'}
 ${kbContext ? `
 ## WINT KNOWLEDGE BASE REFERENCE
-Use these excerpts from Wint's internal KB to evaluate whether the agent's responses are technically correct per Wint's policies. Pay close attention when scoring the "Technical" parameter.
-
-${kbContext}` : ''}
-
+Use these KB excerpts to judge Accuracy.
+${kbContext}
+` : ''}
 ## TRANSCRIPT
 ${transcript}
-${slackThread ? `\n## SLACK THREAD (for context)\n${slackThread}` : ''}
-
-Score this chat across all 12 parameters. Output ONLY the JSON.`;
+${slackThread ? `
+## SLACK THREAD (for context)
+${slackThread}
+` : ''}
+Output ONLY the JSON.`;
 }
 
 // ── Parse LLM response ───────────────────────────────────────────────────────
@@ -614,17 +820,48 @@ export function robustJsonParse(raw: string): any {
 }
 
 export function parseScoringResponse(raw: string, chatId: string, conversationType?: string): Omit<IQSScoreEntry, 'id' | 'scoredAt' | 'agentName' | 'provider' | 'model' | 'scoredBy'> & { extractedAgentName?: string } {
-  const data = robustJsonParse(raw);
-  const scores: Record<string, ParamScore> = data.scores || {};
-  const reasoning: Record<string, string> = data.reasoning || {};
+  const data = robustJsonParse(raw) || {};
+  const scores: Record<string, ParamScore> = {};
+  const reasoning: Record<string, string> = {};
 
-  // Bot chats (Myra) always pass Process — she follows process by definition
-  if (conversationType === 'bot') {
+  const isBot = conversationType === 'bot';
+
+  if (data.parameters) {
+    for (const [key, val] of Object.entries(data.parameters) as [string, any][]) {
+      if (val) {
+        let scoreStr: ParamScore = 'NA';
+        if (val.score === true || val.score === 1 || val.score === 'Yes') {
+          scoreStr = 'Yes';
+        } else if (val.score === false || val.score === 0 || val.score === 'No') {
+          scoreStr = 'No';
+        } else if (val.score === 0.5 || val.score === 'Half') {
+          scoreStr = 'Half';
+        }
+        scores[key] = scoreStr;
+        reasoning[key] = val.comment || val.reasoning || '';
+      }
+    }
+  } else {
+    // Fallback to old format
+    if (data.scores) {
+      for (const [k, v] of Object.entries(data.scores)) {
+        scores[k] = v === 'Yes' ? 'Yes' : v === 'No' ? 'No' : v === 'Half' ? 'Half' : 'NA';
+      }
+    }
+    if (data.reasoning) {
+      for (const [k, v] of Object.entries(data.reasoning)) {
+        reasoning[k] = String(v);
+      }
+    }
+  }
+
+  // Fallback for human rubric 'Process' under bot (for backward compatibility / safety)
+  if (isBot && !scores['Process'] && !scores['CorrectEscalation']) {
     scores['Process'] = 'Yes';
     reasoning['Process'] = 'Bot-handled chat — Myra follows process by definition.';
   }
 
-  const iqs = calculateIQS(scores); // always recalculate, never trust LLM's calculation
+  const iqs = calculateIQS(scores, isBot); // always recalculate
 
   // Extract uncertain_parameters — validate structure
   let uncertainParameters: Array<{ parameter: string; question: string }> | undefined;
@@ -646,6 +883,7 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     iqs,
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
+    conversationType: conversationType as 'bot' | 'agent' | 'hybrid' | undefined,
     ...(uncertainParameters && { uncertainParameters }),
     ...(kbCitation && { kbCitation }),
   };

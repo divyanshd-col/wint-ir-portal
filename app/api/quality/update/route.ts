@@ -5,7 +5,10 @@ import { query } from '@/lib/cx/db';
 import { calculateIQS } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 
-const PARAM_KEYS = ['Technical','AllQuestions','Expectation','Contextual','FollowUp','Sentences','Process','Opening','Call','Grammar','Empathy'];
+const PARAM_KEYS = [
+  'Technical','AllQuestions','Expectation','Contextual','FollowUp','Sentences','Process','Opening','Call','Grammar','Empathy',
+  'IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'
+];
 
 export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
@@ -18,7 +21,7 @@ export async function PATCH(req: NextRequest) {
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
   // Validate scores if provided
-  const validScoreValues: ParamScore[] = ['Yes', 'No', 'NA'];
+  const validScoreValues: ParamScore[] = ['Yes', 'No', 'NA', 'Half'];
   if (scores) {
     for (const [k, v] of Object.entries(scores)) {
       if (PARAM_KEYS.includes(k) && !validScoreValues.includes(v as ParamScore)) {
@@ -55,7 +58,7 @@ export async function PATCH(req: NextRequest) {
         for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
           const dbKey = PASCAL_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
           if (!params[dbKey]) params[dbKey] = {};
-          params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : null;
+          params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : val === 'Half' ? 0.5 : null;
           if (reasoning?.[legacyKey] !== undefined) params[dbKey].reasoning = reasoning[legacyKey];
         }
       }
@@ -70,7 +73,14 @@ export async function PATCH(req: NextRequest) {
 
       if (note) params['__review_note'] = note;
 
-      const newIqs = scores ? calculateIQS(scores) : (rowExists ? existing[0].iqs_score : 0);
+      const convRow = await query<{ conversation_type: string }>(`SELECT conversation_type FROM conversations WHERE id = $1`, [chatId]);
+      const hasBotParams = scores
+        ? Object.keys(scores).some(k => ['IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'].includes(k))
+        : (rowExists && existing[0].parameters
+          ? Object.keys(existing[0].parameters).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k))
+          : false);
+      const isBot = convRow[0]?.conversation_type === 'bot' && hasBotParams;
+      const newIqs = scores ? calculateIQS(scores, isBot) : (rowExists ? existing[0].iqs_score : 0);
 
       if (rowExists) {
         await query(
@@ -131,7 +141,14 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    const finalIqs = scores ? calculateIQS(scores) : (rowExists ? existing[0].iqs_score : 0);
+    const convRow = await query<{ conversation_type: string }>(`SELECT conversation_type FROM conversations WHERE id = $1`, [chatId]);
+    const hasBotParams = scores
+      ? Object.keys(scores).some(k => ['IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'].includes(k))
+      : (rowExists && existing[0].parameters
+        ? Object.keys(existing[0].parameters).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k))
+        : false);
+    const isBot = convRow[0]?.conversation_type === 'bot' && hasBotParams;
+    const finalIqs = scores ? calculateIQS(scores, isBot) : (rowExists ? existing[0].iqs_score : 0);
 
     return NextResponse.json({
       ok: true,
