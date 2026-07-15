@@ -34,7 +34,7 @@ async function main() {
 
   // Fetch bot-only chats closed from 15th June onwards
   let sql = `
-    SELECT id, agent_id, tags, closed_at 
+    SELECT id, agent_id, tags, closed_at, transcript 
     FROM conversations 
     WHERE conversation_type = 'bot' 
       AND closed_at >= '2026-06-15 00:00:00'
@@ -51,6 +51,16 @@ async function main() {
   if (total === 0) {
     console.log('No chats found matching criteria. Exiting.');
     process.exit(0);
+  }
+
+  // Pre-fetch knowledge chunks once to warm up the in-memory cache and avoid concurrent cache stampedes
+  console.log('- Pre-fetching Knowledge Base context to warm up cache...');
+  try {
+    const { fetchKnowledgeChunks } = await import('../lib/drive');
+    await fetchKnowledgeChunks();
+    console.log('- Cache warmed up successfully!\n');
+  } catch (err: any) {
+    console.warn('- Cache warm up warning (will fetch on demand):', err.message);
   }
 
   let completed = 0;
