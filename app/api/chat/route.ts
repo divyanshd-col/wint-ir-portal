@@ -58,6 +58,9 @@ Output: closure delete deactivate demat account terminate
 Query: "joint account holder"
 Output: joint family co-applicant co-holder member
 
+Query: "where can the user see their AOF"
+Output: AOF account opening form reports documents download statement
+
 Query: ${query}
 Output:`,
         }],
@@ -254,6 +257,7 @@ The KB uses internal operational terminology. Always map the agent's question to
 - "joint account" → family account, co-applicant, co-holder
 - "SIP" → mandate, autopay, UPI AutoPay, eNACH, instalment
 - "interest payment" → coupon, repayment, record date, payout
+- "AOF" / "account opening form" / "statements" / "documents" → Reports and Documents, download
 - Look for the concept, not the exact words. If it exists under different terminology, extract and explain it.
 
 PLATFORM FACTS (use directly without needing KB chunks):
@@ -265,6 +269,7 @@ PLATFORM FACTS (use directly without needing KB chunks):
 - TDS: 10% on bond interest; TDS not deducted if annual interest < Rs.10,000 (only Wint Capital and Muthoot Fincorp follow this threshold)
 - LTCG: bonds held > 12 months = 12.5% tax on capital gains; STCG: held ≤ 12 months = slab rate
 - FD/RD: available only on mobile app (not desktop); Bajaj Finance and Shriram Finance NOT covered by DICGC; penalty up to 1% on interest for premature withdrawal
+- Documents: users can access their AOF (Account Opening Form) and other account documents from the Reports and Documents section; if the KB chunks include the exact navigation path, relay it step by step
 
 OUTPUT RULES:
 1. No markdown, no bold, no headers. Use numbered steps only for sequential processes.
