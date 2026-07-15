@@ -27,6 +27,7 @@ interface SafeConfig {
   conversationHistoryEnabled?: boolean;
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
+  hasPyannoteKey?: boolean;
 }
 
 interface User {
@@ -165,6 +166,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [slackToken, setSlackToken] = useState('');
   const [savingSlack, setSavingSlack] = useState(false);
   const [slackSaved, setSlackSaved] = useState(false);
+
+  const [hasPyannoteKey, setHasPyannoteKey] = useState(!!config.hasPyannoteKey);
+  const [pyannoteKey, setPyannoteKey] = useState('');
+  const [savingPyannote, setSavingPyannote] = useState(false);
+  const [pyannoteSaved, setPyannoteSaved] = useState(false);
 
   const [qualitySheetUrl, setQualitySheetUrl] = useState(config.qualityAlertSheetUrl || '');
   const [savingSheet, setSavingSheet] = useState(false);
@@ -610,6 +616,22 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       showToast('Sheet webhook saved');
       setTimeout(() => setSheetSaved(false), 2000);
     } finally { setSavingSheet(false); }
+  };
+
+  const savePyannoteKey = async () => {
+    if (!pyannoteKey.trim()) return;
+    setSavingPyannote(true);
+    setPyannoteSaved(false);
+    try {
+      await patchConfig({ pyannoteApiKey: pyannoteKey.trim() });
+      setHasPyannoteKey(true);
+      setPyannoteKey('');
+      setPyannoteSaved(true);
+      showToast('Pyannote API key saved');
+      setTimeout(() => setPyannoteSaved(false), 2000);
+    } catch {
+      showToast('Failed to save Pyannote key');
+    } finally { setSavingPyannote(false); }
   };
 
   const changePassword = async () => {
@@ -1561,6 +1583,31 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   <button onClick={saveSlackToken} disabled={savingSlack || !slackToken.trim()}
                     className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
                     {savingSlack ? 'Saving…' : slackSaved ? '✓' : 'Save'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ── Pyannote Diarization ── */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Pyannote Diarization</h3>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Used for high-precision speaker diarization (Phase 1) in call transcript analysis.
+                </p>
+              </div>
+              {hasPyannoteKey ? (
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-emerald-600 font-semibold">✓ Pyannote API key configured</span>
+                  <button onClick={() => setHasPyannoteKey(false)} className="text-xs text-gray-400 hover:text-gray-600 underline">Replace</button>
+                </div>
+              ) : (
+                <div className="flex gap-2 max-w-sm">
+                  <input type="password" value={pyannoteKey} onChange={e => setPyannoteKey(e.target.value)} placeholder="API key"
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                  <button onClick={savePyannoteKey} disabled={savingPyannote || !pyannoteKey.trim()}
+                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    {savingPyannote ? 'Saving…' : pyannoteSaved ? '✓' : 'Save'}
                   </button>
                 </div>
               )}

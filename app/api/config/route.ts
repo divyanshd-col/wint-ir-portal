@@ -30,6 +30,7 @@ export async function GET() {
     systemPrompt: config.systemPrompt || '',
     conversationHistoryEnabled: config.conversationHistoryEnabled ?? false,
     slackUserToken: config.slackUserToken ? '••••••••' : '',
+    pyannoteApiKey: config.pyannoteApiKey ? '••••' + config.pyannoteApiKey.slice(-4) : '',
     users: session?.user?.isAdmin ? config.users.map(u => ({ username: u.username, password: '••••••••', isAdmin: u.isAdmin })) : [],
     isConfigured: config.isConfigured,
   });
@@ -59,6 +60,7 @@ export async function PATCH(req: NextRequest) {
     ...(body.conversationHistoryEnabled !== undefined && { conversationHistoryEnabled: body.conversationHistoryEnabled }),
     ...(body.slackUserToken !== undefined && !body.slackUserToken.startsWith('••••') && { slackUserToken: body.slackUserToken }),
     ...(body.qualityAlertSheetUrl !== undefined && { qualityAlertSheetUrl: body.qualityAlertSheetUrl }),
+    ...(body.pyannoteApiKey !== undefined && !body.pyannoteApiKey.startsWith('••••') && { pyannoteApiKey: body.pyannoteApiKey }),
   };
 
   await writeConfig(updated);
@@ -97,6 +99,7 @@ export async function POST(req: NextRequest) {
     knowledgeBaseUrls: body.knowledgeBaseUrls || [],
     users,
     isConfigured: true,
+    pyannoteApiKey: body.pyannoteApiKey?.startsWith('••••') ? config.pyannoteApiKey : (body.pyannoteApiKey || config.pyannoteApiKey || ''),
   };
 
   await writeConfig(newConfig);

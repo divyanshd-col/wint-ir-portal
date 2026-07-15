@@ -268,7 +268,7 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
 /**
  * Full implementation of the 5-stage Call Evaluation Pipeline.
  */
-export async function runCallPipeline(callId: string): Promise<any> {
+export async function runCallPipeline(callId: string, options?: { forceTranscript?: boolean }): Promise<any> {
   log.info('call-pipeline', `Starting pipeline for call ${callId}`);
 
   // Fetch the call recording row
@@ -298,7 +298,8 @@ export async function runCallPipeline(callId: string): Promise<any> {
   let speakerIdConfidence = 'low';
 
   // ── Stage 1 & 2: Structural Analysis & Transcription ──────────────────────
-  if (!segments || segments.length === 0 || status === 'received' || status === 'stored') {
+  const forceTranscript = options?.forceTranscript ?? false;
+  if (forceTranscript || !segments || segments.length === 0 || status === 'received' || status === 'stored') {
     if (!call.recording_url) {
       throw new Error(`No recording URL or transcript for call ${callId}`);
     }
@@ -308,6 +309,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
       const { fileUri, mimeType } = await downloadAndUploadAudio(call.recording_url, apiKey);
       const analysis = await analyzeCallFromUri({
         fileUri,
+        recordingUrl: call.recording_url,
         fileName: `call_${callId}.mp3`,
         mimeType,
         apiKey

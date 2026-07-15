@@ -40,6 +40,7 @@ export default async function SettingsPage() {
     conversationHistoryEnabled: !!config.conversationHistoryEnabled,
     hasSlackToken: !!config.slackUserToken,
     qualityAlertSheetUrl: config.qualityAlertSheetUrl || '',
+    hasPyannoteKey: !!config.pyannoteApiKey,
   };
 
   return <SettingsClient config={safeConfig} isAdmin={isAdmin} />;

@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const { fileUri, fileName, mimeType } = await req.json();
+  const { fileUri, pyannoteUri, fileName, mimeType } = await req.json();
   if (!fileUri || !fileName || !mimeType) {
     return new Response(JSON.stringify({ error: 'fileUri, fileName and mimeType are required' }), { status: 400 });
   }
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       try {
         const result = await analyzeCallFromUri({
           fileUri,
+          pyannoteUri,
           fileName,
           mimeType,
           apiKey,

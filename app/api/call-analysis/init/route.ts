@@ -67,7 +67,25 @@ export async function POST(req: NextRequest) {
     const uploadUrl = res.headers.get('x-goog-upload-url');
     if (!uploadUrl) return NextResponse.json({ error: 'No upload URL from Gemini' }, { status: 502 });
 
-    return NextResponse.json({ uploadUrl, mimeType });
+    let pyannoteUploadUrl = '';
+    let pyannoteUri = '';
+    const pyKey = config.pyannoteApiKey || process.env.PYANNOTE_API_KEY || process.env.PYANNOTEAI_API_KEY;
+    if (pyKey) {
+      try {
+        const { getPyannoteUploadUrl } = await import('@/lib/pyannote');
+        const pyUpload = await getPyannoteUploadUrl(pyKey);
+        pyannoteUploadUrl = pyUpload.uploadUrl;
+        pyannoteUri = pyUpload.pyannoteUri;
+      } catch (err: any) {
+        console.warn(`[init] Failed to get Pyannote upload URL: ${err.message}`);
+      }
+    }
+
+    return NextResponse.json({
+      uploadUrl,
+      mimeType,
+      ...(pyannoteUploadUrl && { pyannoteUploadUrl, pyannoteUri }),
+    });
   } catch (err: any) {
     return NextResponse.json({ error: `Init network error: ${err.message}` }, { status: 502 });
   }
