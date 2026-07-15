@@ -40,6 +40,7 @@ export interface PortalConfig {
   qaDispositionMap?: QADispositionEntry[];
   // ── KB document display names (Drive ID → human-readable name) ──────────────
   knowledgeBaseDocNames?: Record<string, string>;
+  pyannoteApiKey?: string;
 }
 
 export interface QADispositionEntry {
@@ -62,6 +63,7 @@ const DEFAULT_CONFIG: PortalConfig = {
   systemPrompt: '',
   conversationHistoryEnabled: false,
   isConfigured: false,
+  pyannoteApiKey: '',
 };
 
 export async function readConfig(): Promise<PortalConfig> {
@@ -98,6 +100,7 @@ function readFromEnv(): PortalConfig {
   const usersRaw        = process.env.IR_USERS_JSON       || '';
   const iqsGeminiApiKey    = process.env.IQS_GEMINI_API_KEY    || '';
   const iqsAnthropicApiKey = process.env.IQS_ANTHROPIC_API_KEY || '';
+  const pyannoteApiKey  = process.env.PYANNOTE_API_KEY || process.env.PYANNOTEAI_API_KEY || '';
 
   if ((!geminiApiKey && !anthropicApiKey) || !usersRaw) return DEFAULT_CONFIG;
 
@@ -108,6 +111,7 @@ function readFromEnv(): PortalConfig {
       geminiApiKey, anthropicApiKey, llmProvider, knowledgeBaseUrls, users, isConfigured: true,
       ...(iqsGeminiApiKey    && { iqsGeminiApiKey }),
       ...(iqsAnthropicApiKey && { iqsAnthropicApiKey }),
+      pyannoteApiKey,
     };
   } catch {
     return DEFAULT_CONFIG;

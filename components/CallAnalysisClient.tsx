@@ -91,26 +91,54 @@ export default function CallAnalysisClient({ username, role, isAdmin }: Props) {
         const { error } = await initRes.json().catch(() => ({ error: 'Init failed' }));
         throw new Error(error ?? 'Could not get upload URL');
       }
-      const { uploadUrl, mimeType } = await initRes.json();
+      const { uploadUrl, mimeType, pyannoteUploadUrl, pyannoteUri } = await initRes.json();
       addLog(`Upload URL obtained — uploading ${(file.size / 1024 / 1024).toFixed(1)} MB directly to Gemini…`);
 
-      // ── Step 2: Browser uploads file bytes directly to Gemini (no Vercel limit) ──
+      // ── Step 2: Browser uploads file bytes directly (no Vercel limit) ──
       const uploadStart = Date.now();
-      const uploadRes = await fetch(uploadUrl, {
-        method: 'POST',
-        headers: {
-          'X-Goog-Upload-Command': 'upload, finalize',
-          'X-Goog-Upload-Offset': '0',
-          'Content-Type': mimeType,
-          'Content-Length': String(file.size),
-        },
-        body: file,
-      });
-      if (!uploadRes.ok) {
-        const text = await uploadRes.text().catch(() => '');
-        throw new Error(`Gemini upload failed (${uploadRes.status}): ${text.slice(0, 200)}`);
+      const uploads = [];
+
+      // 2a. Gemini upload
+      uploads.push(
+        fetch(uploadUrl, {
+          method: 'POST',
+          headers: {
+            'X-Goog-Upload-Command': 'upload, finalize',
+            'X-Goog-Upload-Offset': '0',
+            'Content-Type': mimeType,
+            'Content-Length': String(file.size),
+          },
+          body: file,
+        }).then(async r => {
+          if (!r.ok) {
+            const text = await r.text().catch(() => '');
+            throw new Error(`Gemini upload failed (${r.status}): ${text.slice(0, 200)}`);
+          }
+          return r.json();
+        })
+      );
+
+      // 2b. Pyannote upload (in parallel if upload URL is returned)
+      if (pyannoteUploadUrl) {
+        addLog('Uploading to Pyannote Media Storage in parallel…');
+        uploads.push(
+          fetch(pyannoteUploadUrl, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': mimeType,
+            },
+            body: file,
+          }).then(async r => {
+            if (!r.ok) {
+              const text = await r.text().catch(() => '');
+              throw new Error(`Pyannote media upload failed (${r.status}): ${text.slice(0, 200)}`);
+            }
+            return null;
+          })
+        );
       }
-      const uploadData = await uploadRes.json();
+
+      const [uploadData] = await Promise.all(uploads);
       const fileUri = uploadData?.file?.uri;
       if (!fileUri) throw new Error(`No file URI in Gemini response: ${JSON.stringify(uploadData).slice(0, 200)}`);
       addLog(`Upload complete in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s — starting analysis…`);
@@ -119,7 +147,7 @@ export default function CallAnalysisClient({ username, role, isAdmin }: Props) {
       const runRes = await fetch('/api/call-analysis/run', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileUri, fileName: file.name, mimeType }),
+        body: JSON.stringify({ fileUri, pyannoteUri, fileName: file.name, mimeType }),
       });
       if (!runRes.ok || !runRes.body) {
         const text = await runRes.text().catch(() => '');
@@ -330,7 +358,7 @@ export default function CallAnalysisClient({ username, role, isAdmin }: Props) {
                 </h2>
                 <div className="space-y-1">
                   {result.segments.map((seg, i) => {
-                    if (seg.event_type === 'silence') {
+                    if (seg.type === 'silence') {
                       return (
                         <div key={i} className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-gray-50">
                           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded
@@ -341,7 +369,7 @@ export default function CallAnalysisClient({ username, role, isAdmin }: Props) {
                         </div>
                       );
                     }
-                    if (seg.event_type === 'overlap') {
+                    if (seg.type === 'overlap') {
                       return (
                         <div key={i} className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-amber-50">
                           <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-200 text-amber-700">INTERRUPT</span>

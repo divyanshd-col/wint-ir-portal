@@ -139,7 +139,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const baseWhere = reviewedMode
     ? `cr.call_disposition = ANY($1) AND ce.status = 'reviewed'`
-    : `cr.call_disposition = ANY($1) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND ce.iqs_percent <= 85`;
+    : `cr.call_disposition = ANY($1) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
 
   // Count query
   const countRows = await query<{ total: string }>(

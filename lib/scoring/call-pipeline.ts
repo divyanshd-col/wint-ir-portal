@@ -217,6 +217,51 @@ export function finalVerdict(gateResult: string, iqsPercent: number | null) {
   return 'remediation';
 }
 
+function repairTruncatedJson(cleaned: string): any | null {
+  const start = cleaned.indexOf('{');
+  if (start < 0) return null;
+  const s = cleaned.slice(start);
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let lastComplete = -1;
+  let stackAtLastComplete: string[] = [];
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') { inString = true; continue; }
+    if (c === '{' || c === '[') {
+      stack.push(c);
+    } else if (c === '}' || c === ']') {
+      if (stack.length === 0) return null;
+      stack.pop();
+      if (stack.length > 0 && stack.length <= 3) {
+        lastComplete = i + 1;
+        stackAtLastComplete = stack.slice();
+      }
+    }
+  }
+
+  if (lastComplete < 0) return null;
+  const closers = stackAtLastComplete
+    .slice()
+    .reverse()
+    .map(b => (b === '{' ? '}' : ']'))
+    .join('');
+  try {
+    return JSON.parse(s.slice(0, lastComplete) + closers);
+  } catch {
+    return null;
+  }
+}
+
 function robustJsonParse(raw: string): any {
   if (!raw?.trim()) return null;
   let s = raw.trim();
@@ -229,6 +274,13 @@ function robustJsonParse(raw: string): any {
   if (oa >= 0 && ob > oa) {
     try { return JSON.parse(s.slice(oa, ob + 1)); } catch {}
   }
+
+  const repaired = repairTruncatedJson(s);
+  if (repaired !== null) {
+    console.warn('[Gemini] JSON output was truncated — salvaged the complete portion');
+    return repaired;
+  }
+
   throw new Error(`Failed to parse LLM response as JSON: ${raw.slice(0, 300)}`);
 }
 
@@ -268,7 +320,7 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
 /**
  * Full implementation of the 5-stage Call Evaluation Pipeline.
  */
-export async function runCallPipeline(callId: string): Promise<any> {
+export async function runCallPipeline(callId: string, options?: { forceTranscript?: boolean }): Promise<any> {
   log.info('call-pipeline', `Starting pipeline for call ${callId}`);
 
   // Fetch the call recording row
@@ -298,7 +350,8 @@ export async function runCallPipeline(callId: string): Promise<any> {
   let speakerIdConfidence = 'low';
 
   // ── Stage 1 & 2: Structural Analysis & Transcription ──────────────────────
-  if (!segments || segments.length === 0 || status === 'received' || status === 'stored') {
+  const forceTranscript = options?.forceTranscript ?? false;
+  if (forceTranscript || !segments || segments.length === 0 || status === 'received' || status === 'stored') {
     if (!call.recording_url) {
       throw new Error(`No recording URL or transcript for call ${callId}`);
     }
@@ -308,6 +361,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
       const { fileUri, mimeType } = await downloadAndUploadAudio(call.recording_url, apiKey);
       const analysis = await analyzeCallFromUri({
         fileUri,
+        recordingUrl: call.recording_url,
         fileName: `call_${callId}.mp3`,
         mimeType,
         apiKey
@@ -511,7 +565,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
       geminiKeys,
       [{ role: 'user', parts: [{ text: CALL_GATES_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
       undefined,
-      60_000
+      300_000
     );
     gatesResult = robustJsonParse(rawGates);
   } catch (err: any) {
@@ -527,7 +581,7 @@ export async function runCallPipeline(callId: string): Promise<any> {
       geminiKeys,
       [{ role: 'user', parts: [{ text: CALL_IQS_PASS_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
       undefined,
-      60_000
+      300_000
     );
     scoresResult = robustJsonParse(rawScores);
   } catch (err: any) {
