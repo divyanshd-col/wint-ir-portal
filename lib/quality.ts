@@ -520,6 +520,51 @@ export function sanitizeJson(s: string): string {
 }
 
 /** Try multiple strategies to parse LLM JSON response. */
+function repairTruncatedJson(cleaned: string): any | null {
+  const start = cleaned.indexOf('{');
+  if (start < 0) return null;
+  const s = cleaned.slice(start);
+
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let lastComplete = -1;
+  let stackAtLastComplete: string[] = [];
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') { inString = true; continue; }
+    if (c === '{' || c === '[') {
+      stack.push(c);
+    } else if (c === '}' || c === ']') {
+      if (stack.length === 0) return null;
+      stack.pop();
+      if (stack.length > 0 && stack.length <= 3) {
+        lastComplete = i + 1;
+        stackAtLastComplete = stack.slice();
+      }
+    }
+  }
+
+  if (lastComplete < 0) return null;
+  const closers = stackAtLastComplete
+    .slice()
+    .reverse()
+    .map(b => (b === '{' ? '}' : ']'))
+    .join('');
+  try {
+    return JSON.parse(s.slice(0, lastComplete) + closers);
+  } catch {
+    return null;
+  }
+}
+
 export function robustJsonParse(raw: string): any {
   if (!raw?.trim()) return null;
   let s = raw.trim();
@@ -546,6 +591,13 @@ export function robustJsonParse(raw: string): any {
     const candidate = s.slice(aa, ab + 1);
     try { return JSON.parse(candidate); } catch {}
     try { return JSON.parse(candidate.replace(/,\s*([}\]])/g, '$1')); } catch {}
+  }
+
+  // Try to repair truncated JSON
+  const repaired = repairTruncatedJson(s);
+  if (repaired !== null) {
+    console.warn('[Gemini] JSON output was truncated — salvaged the complete portion');
+    return repaired;
   }
 
   // 5. Last resort: extract scores block with regex so we at least get pass/fail
