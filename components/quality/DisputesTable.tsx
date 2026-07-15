@@ -430,6 +430,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     onDone={() => removeDispute(d.chatId)}
                     onClose={() => setExpandedId(null)}
                     colSpan={8}
+                    conversationType={d.conversationType}
                   />
                 )}
               </React.Fragment>

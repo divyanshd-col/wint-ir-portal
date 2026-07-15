@@ -39,9 +39,10 @@ import {
   type CallSegment,
 } from '@/lib/call-quality';
 import {
-  IQS_SYSTEM_PROMPT,
+  getSystemPrompt,
   buildScoringPrompt,
   parseScoringResponse,
+  robustJsonParse,
   trimTranscript,
 } from '@/lib/quality';
 
@@ -377,7 +378,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const scoringTasks: Promise<any>[] = [
     callGeminiForCall(
       geminiKeys,
-      [{ role: 'user', parts: [{ text: IQS_SYSTEM_PROMPT + '\n\n' + buildScoringPrompt(
+      [{ role: 'user', parts: [{ text: getSystemPrompt(chatConv?.conversation_type, config.iqsScoringPrompt) + '\n\n' + buildScoringPrompt(
         chatTranscriptTrimmed,
         chatDisposition.split(' > ')[0] || '',
         chatId,
@@ -385,6 +386,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         kbContext,
         chatDisposition.split(' > ')[1] || '',
         chatConv?.conversation_type,
+        false,
       )}] }],
       undefined, 60_000,
     ),
@@ -400,8 +402,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       kbContext,
       chatDisposition.split(' > ')[1] || '',
       chatConv?.conversation_type || 'agent',
+      true,
     );
-    const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
+    const iqsSystemPrompt = getSystemPrompt(chatConv?.conversation_type || 'agent', config.iqsScoringPrompt);
     scoringTasks.push(
       geminiGenerate(
         geminiKeys,

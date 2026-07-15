@@ -11,6 +11,15 @@ export const DB_KEY_TO_LEGACY: Record<string, string> = {
   tags:         'Tags',
   grammar:      'Grammar',
   empathy:      'Empathy',
+
+  // Bot-only parameter keys
+  issue_resolution:   'IssueResolution',
+  accuracy:           'Accuracy',
+  correct_escalation: 'CorrectEscalation',
+  no_repetition:      'NoRepetition',
+  personalization:    'Personalization',
+  expectation_setting:'ExpectationSetting',
+  clarity:            'Clarity',
 };
 
 export const PASCAL_TO_DB: Record<string, string> = Object.fromEntries(

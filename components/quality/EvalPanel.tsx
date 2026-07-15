@@ -1,22 +1,19 @@
 'use client';
 import React, { useState, useEffect } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS } from '@/lib/quality';
-import type { ParamScore } from '@/lib/quality';
+import {
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS,
+  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore
+} from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
-// Param weight as display string
-function pctLabel(key: string): string {
-  const w = WEIGHTS[key];
-  return w != null ? `${Math.round(w * 100)}%` : '';
-}
-
-// DB score (true/false/null) → display string
-function scoreToParamScore(s: boolean | null): ParamScore {
-  if (s === true)  return 'Yes';
-  if (s === false) return 'No';
+// DB score (true/false/null/0.5) → display string
+function scoreToParamScore(s: boolean | number | null): ParamScore {
+  if (s === true || s === 1)  return 'Yes';
+  if (s === false || s === 0) return 'No';
+  if (s === 0.5) return 'Half';
   return 'NA';
 }
 
@@ -49,6 +46,7 @@ export interface EvalPanelProps {
   onDone:        () => void;
   onClose:       () => void;
   colSpan:       number;
+  conversationType?: 'bot' | 'agent' | 'hybrid';
 }
 
 // ── Message transcript types ──────────────────────────────────────────────────
@@ -127,13 +125,26 @@ export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
   parameters, mode, dispute, flagId,
   mobileNumber, reviewedBy, reviewNote,
-  onDone, onClose, colSpan,
+  onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
+
+  const hasBotParams = !!(parameters && (parameters['issue_resolution'] || parameters['accuracy'] || parameters['correct_escalation'] || parameters['IssueResolution'] || parameters['Accuracy']));
+  const isBotChat = conversationType === 'bot' && (mode === 'submit' || mode === 'resolve' || hasBotParams);
+  const activeParamOrder = isBotChat ? BOT_PARAM_ORDER : PARAM_ORDER;
+  const activeParamNames = isBotChat ? BOT_PARAM_NAMES : PARAM_NAMES;
+  const activeWeights = isBotChat ? BOT_WEIGHTS : WEIGHTS;
+  const activeCAT2Params = isBotChat ? new Set<string>() : CAT2_PARAMS;
+
+  // Param weight as display string
+  function pctLabel(key: string): string {
+    const w = activeWeights[key];
+    return w != null ? `${Math.round(w * 100)}%` : '';
+  }
 
   // Initialise param state from DB parameters (snake_case keys)
   function initParams(): Record<string, ParamState> {
     const state: Record<string, ParamState> = {};
-    for (const pascal of PARAM_ORDER) {
+    for (const pascal of activeParamOrder) {
       const dbKey = PASCAL_TO_DB[pascal];
       const raw   = parameters[dbKey] ?? parameters[pascal] ?? {};
       state[pascal] = { score: raw.score ?? null, reasoning: raw.reasoning ?? '' };
@@ -179,14 +190,14 @@ export default function EvalPanel({
     for (const [key, s] of Object.entries(paramState)) {
       scores[key] = scoreToParamScore(s.score);
     }
-    return calculateIQS(scores);
+    return calculateIQS(scores, isBotChat);
   })();
 
   const failCount = Object.values(paramState).filter(s => s.score === false).length;
 
   // Check if anything changed from original
   const isModified = (() => {
-    for (const pascal of PARAM_ORDER) {
+    for (const pascal of activeParamOrder) {
       const orig = initParams()[pascal];
       const cur  = paramState[pascal];
       if (cur.score !== orig.score) return true;
@@ -199,12 +210,12 @@ export default function EvalPanel({
     : (isModified ? 'Override' : 'Submit');
 
   // TL-browse: dynamic action button based on which category of params changed
-  const changedParamsInTL = mode === 'tl-browse' ? PARAM_ORDER.filter(p => {
+  const changedParamsInTL = mode === 'tl-browse' ? activeParamOrder.filter(p => {
     const orig = initParams()[p];
     return paramState[p].score !== orig.score;
   }) : [];
   const tlCat1Changed = changedParamsInTL.some(p => CAT1_PARAMS.has(p));
-  const tlCat2Changed = changedParamsInTL.some(p => CAT2_PARAMS.has(p));
+  const tlCat2Changed = changedParamsInTL.some(p => activeCAT2Params.has(p));
   const tlActionLabel = tlCat1Changed ? 'Raise Dispute'
     : tlCat2Changed ? 'Override'
     : 'Submit';
@@ -271,7 +282,7 @@ export default function EvalPanel({
 
       if (isModified) {
         const params: Record<string, { score: boolean | null; reasoning: string }> = {};
-        for (const pascal of PARAM_ORDER) {
+        for (const pascal of activeParamOrder) {
           const dbKey = PASCAL_TO_DB[pascal];
           params[dbKey] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
         }
@@ -475,11 +486,11 @@ export default function EvalPanel({
               Parameter Scores
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              {PARAM_ORDER.map(pascal => {
+              {activeParamOrder.map(pascal => {
                 const st       = paramState[pascal];
                 const disputed = disputeMap.get(pascal);
                 // QA modes: CAT2 params are TL's domain — hide entirely from QA
-                const isTLParam = CAT2_PARAMS.has(pascal);
+                const isTLParam = activeCAT2Params.has(pascal);
                 const qaReadOnly = (mode === 'submit' || mode === 'resolve') && isTLParam;
                 // In tl-browse, CAT1 changed params get a highlight
                 const tlChanged = mode === 'tl-browse' && changedParamsInTL.includes(pascal);
@@ -497,7 +508,7 @@ export default function EvalPanel({
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <span style={{ fontSize: 13, fontWeight: tlChanged ? 600 : 500, flex: 1, minWidth: 0 }}>
-                        {PARAM_NAMES[pascal]}
+                        {activeParamNames[pascal]}
                         {disputed && (
                           <span style={{
                             marginLeft: 8, height: 18, padding: '0 7px', borderRadius: 999,
@@ -520,13 +531,13 @@ export default function EvalPanel({
                           </span>
                         )}
                       </span>
-                      {/* Yes / No / NA buttons */}
+                      {/* Yes / Half / No / NA buttons */}
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        {([true, false, null] as const).map((val, i) => {
-                          const label = val === true ? 'Yes' : val === false ? 'No' : 'NA';
+                        {([true, 0.5, false, null] as const).map((val, i) => {
+                          const label = val === true ? 'Yes' : val === 0.5 ? 'Half' : val === false ? 'No' : 'NA';
                           const isSel = st.score === val;
                           return (
-                            <button key={i} onClick={() => !paramReadOnly && setScore(pascal, val)} style={{
+                            <button key={i} onClick={() => !paramReadOnly && setScore(pascal, val as any)} style={{
                               height: 28, padding: '0 9px', borderRadius: 8,
                               border: '1px solid var(--qa-border)',
                               background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
