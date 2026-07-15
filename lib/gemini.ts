@@ -63,7 +63,7 @@ export async function geminiGenerate(
   model: string,
   contents: any[],
   extra?: Record<string, any>,
-  timeoutMs = 8000
+  timeoutMs = 300_000
 ): Promise<string> {
   const modelsToTry = buildModelChain(model);
   let lastError: any;
@@ -115,7 +115,7 @@ export async function callGeminiForCall(
   keys: string[],
   contents: any[],
   _systemInstruction?: string,
-  timeoutMs = 120_000,
+  timeoutMs = 300_000,
 ): Promise<string> {
   let lastError: any;
 
@@ -303,7 +303,7 @@ RETURN FORMAT: Return ONLY a valid JSON object matching this schema (do NOT wrap
 export async function fetchAndTranscribeAudio(
   recordingUrl: string,
   geminiKeys: string[],
-  timeoutMs = 270_000
+  timeoutMs = 300_000
 ): Promise<{ language: string; segments: any[] }> {
   let mimeType = mimeFromUrl(recordingUrl);
   const audioRes = await fetch(recordingUrl);

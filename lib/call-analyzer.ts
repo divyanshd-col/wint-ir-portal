@@ -195,7 +195,7 @@ async function geminiGenerate(
   prompt: string,
   fileUri: string,
   mimeType: string,
-  timeoutMs = 120_000,
+  timeoutMs = 300_000,
 ): Promise<string> {
   const body = {
     contents: [{
@@ -579,7 +579,7 @@ export async function analyzeCallFromUri(opts: {
     const p2Start = Date.now();
     let pass2Raw: string;
     try {
-      pass2Raw = await geminiGenerate(apiKey, pass2Prompt, fileUri, mimeType, 180_000);
+      pass2Raw = await geminiGenerate(apiKey, pass2Prompt, fileUri, mimeType, 300_000);
       onProgress?.(`Pass 2 — Gemini responded in ${((Date.now() - p2Start) / 1000).toFixed(1)}s, parsing JSON…`);
     } catch (err: any) {
       if (attempt === 2) throw new Error(`Pass 2 LLM error: ${err.message}`);

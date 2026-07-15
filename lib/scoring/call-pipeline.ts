@@ -565,7 +565,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
       geminiKeys,
       [{ role: 'user', parts: [{ text: CALL_GATES_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
       undefined,
-      120_000
+      300_000
     );
     gatesResult = robustJsonParse(rawGates);
   } catch (err: any) {
@@ -581,7 +581,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
       geminiKeys,
       [{ role: 'user', parts: [{ text: CALL_IQS_PASS_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
       undefined,
-      120_000
+      300_000
     );
     scoresResult = robustJsonParse(rawScores);
   } catch (err: any) {
