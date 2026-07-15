@@ -44,9 +44,29 @@ async function main() {
     sql += ` LIMIT ${limit}`;
   }
 
-  const convs = await query<any>(sql);
+  const rawConvs = await query<any>(sql);
+  
+  // Filter only truly bot-only chats (Type 1)
+  const convs = rawConvs.filter((conv: any) => {
+    let transcriptMessages: any[] = [];
+    if (Array.isArray(conv.transcript)) {
+      transcriptMessages = conv.transcript;
+    } else if (conv.transcript && typeof conv.transcript === 'object' && Array.isArray((conv.transcript as any).messages)) {
+      transcriptMessages = (conv.transcript as any).messages;
+    }
+    const hasHuman = transcriptMessages.some((m: any) => {
+      const sender = (m.sender || m.role || m.sender_name || '').trim().toLowerCase();
+      const isCustomer = ['user', 'customer', 'visitor'].includes(sender);
+      const isBot = ['myra', 'bot', 'wint bot', 'wintbot'].includes(sender) || sender === 'robylon ai';
+      const isSystem = m.sender_type === 'activity' || sender === 'system';
+      const isInternal = m.is_private === true || m.is_internal === true || sender === 'internal note';
+      return !isCustomer && !isBot && !isSystem && !isInternal && sender !== '';
+    });
+    return !hasHuman;
+  });
+
   const total = convs.length;
-  console.log(`- Found ${total} chats to re-run.\n`);
+  console.log(`- Found ${total} truly bot-only (Type 1) chats to re-run.\n`);
 
   if (total === 0) {
     console.log('No chats found matching criteria. Exiting.');
