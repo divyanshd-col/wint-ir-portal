@@ -120,7 +120,7 @@ function isCustomer(sender: string) { return CUSTOMER_LABELS.has(sender.toLowerC
 function isBot(sender: string) { return BOT_NAMES.has(sender.toLowerCase()); }
 function isHumanAgent(sender: string) {
   const low = (sender || '').toLowerCase();
-  return !isCustomer(sender) && !isBot(sender) && low !== 'internal note';
+  return !isCustomer(sender) && !isBot(sender) && low !== 'internal note' && low !== 'system';
 }
 
 export interface TimedMessage {
