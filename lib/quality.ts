@@ -113,7 +113,7 @@ export interface IQSScoreEntry {
 }
 
 // ── Bot name used at Wint Wealth ─────────────────────────────────────────────
-const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
+const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot', 'robylon ai']);
 const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
 
 function isCustomer(sender: string) { return CUSTOMER_LABELS.has(sender.toLowerCase()); }
