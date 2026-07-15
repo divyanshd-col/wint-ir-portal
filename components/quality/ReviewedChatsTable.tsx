@@ -325,6 +325,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
                       onDone={() => setExpandedId(null)}
                       onClose={() => setExpandedId(null)}
                       colSpan={10}
+                      conversationType={chat.conversationType}
                     />
                   )}
                 </React.Fragment>

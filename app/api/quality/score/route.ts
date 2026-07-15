@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
-import { IQS_SYSTEM_PROMPT, buildScoringPrompt, parseScoringResponse, trimTranscript, IQSScoreEntry } from '@/lib/quality';
+import { getSystemPrompt, buildScoringPrompt, parseScoringResponse, trimTranscript, IQSScoreEntry } from '@/lib/quality';
 import { storeSetTranscript, storeAppendCallSkipped } from '@/lib/store';
 import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import Anthropic from '@anthropic-ai/sdk';
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   const anthropicKey = config.iqsAnthropicApiKey || config.anthropicApiKey;
 
   const userPrompt = buildScoringPrompt(trimTranscript(transcript), tags, chatId, '', '', '', conversationType || undefined);
-  const iqsSystemPrompt = config.iqsScoringPrompt?.trim() || IQS_SYSTEM_PROMPT;
+  const iqsSystemPrompt = getSystemPrompt(conversationType || undefined, config.iqsScoringPrompt);
 
   let rawResponse: string;
   try {
@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
     for (const [k, val] of Object.entries(entry.scores || {})) {
       const dbKey = PASCAL_TO_DB[k] || k.toLowerCase();
       parameters[dbKey] = {
-        score: val === 'Yes' ? true : val === 'No' ? false : null,
+        score: val === 'Yes' ? true : val === 'No' ? false : val === 'Half' ? 0.5 : null,
         reasoning: (entry.reasoning || {})[k] || '',
       };
     }

@@ -26,6 +26,7 @@ export interface ChatToReviewRow {
   reviewedAt?:   string | null;
   reviewNote?:   string | null;
   status?:       string;
+  conversationType?: 'bot' | 'agent' | 'hybrid';
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -220,6 +221,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     status: string;
     contact_id: number | null;
     started_at: string | null;
+    conversation_type: string | null;
   }>(
     `SELECT c.id AS chat_id, a.name AS agent_name,
             i.iqs_score, i.call_iqs_score, c.closed_at,
@@ -228,7 +230,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             c.csat_score, i.parameters,
             ct.phone AS mobile_number,
             i.reviewed_by, i.reviewed_at, i.review_note, i.status,
-            c.contact_id, c.started_at
+            c.contact_id, c.started_at, c.conversation_type
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -338,6 +340,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       reviewedAt:     r.reviewed_at ?? null,
       reviewNote:     r.review_note ?? null,
       status:         r.status,
+      conversationType: r.conversation_type as any,
     };
   });
 

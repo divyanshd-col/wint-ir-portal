@@ -24,6 +24,15 @@ const DB_TO_PASCAL: Record<string, string> = {
   call:         'Call',
   grammar:      'Grammar',
   empathy:      'Empathy',
+
+  // Bot-only parameters
+  issue_resolution:   'IssueResolution',
+  accuracy:           'Accuracy',
+  correct_escalation: 'CorrectEscalation',
+  no_repetition:      'NoRepetition',
+  personalization:    'Personalization',
+  expectation_setting:'ExpectationSetting',
+  clarity:            'Clarity',
 };
 
 export async function PATCH(
@@ -64,11 +73,20 @@ export async function PATCH(
   }
 
   try {
-    const beforeState = await query<{ iqs_score: number; parameters: any }>(
-      `SELECT iqs_score, parameters FROM iqs_scores WHERE chat_id = $1`, [chatId]
+    const beforeState = await query<{ conversation_type: string; iqs_score: number; parameters: any }>(
+      `SELECT c.conversation_type, i.iqs_score, i.parameters
+       FROM iqs_scores i
+       LEFT JOIN conversations c ON c.id = i.chat_id
+       WHERE i.chat_id = $1`, [chatId]
     );
     const oldScore = beforeState[0]?.iqs_score ?? null;
     const oldParams = beforeState[0]?.parameters ?? null;
+    const isBot = beforeState[0]?.conversation_type === 'bot' && (() => {
+      if (!oldParams) return false;
+      return Object.keys(oldParams).some(k => [
+        'issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'
+      ].includes(k));
+    })();
 
     if (action === 'tl-submit') {
       // TL accepts bot scoring — mark as TL-reviewed in parameters JSON
@@ -109,9 +127,17 @@ export async function PATCH(
       for (const [dbKey, val] of Object.entries(merged) as [string, any][]) {
         if (dbKey.startsWith('__')) continue;
         const pascal = DB_TO_PASCAL[dbKey];
-        if (pascal) pascalScores[pascal] = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
+        if (pascal) {
+          pascalScores[pascal] = val.score === true || val.score === 1
+            ? 'Yes'
+            : val.score === false || val.score === 0
+            ? 'No'
+            : val.score === 0.5
+            ? 'Half'
+            : 'NA';
+        }
       }
-      const newIqs = calculateIQS(pascalScores);
+      const newIqs = calculateIQS(pascalScores, isBot);
       await query(
         `UPDATE iqs_scores SET parameters = $1, iqs_score = $2 WHERE chat_id = $3`,
         [JSON.stringify(merged), newIqs, chatId]
@@ -163,10 +189,16 @@ export async function PATCH(
           if (dbKey.startsWith('__')) continue;
           const pascal = DB_TO_PASCAL[dbKey];
           if (pascal) {
-            pascalScores[pascal] = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
+            pascalScores[pascal] = val.score === true || val.score === 1
+              ? 'Yes'
+              : val.score === false || val.score === 0
+              ? 'No'
+              : val.score === 0.5
+              ? 'Half'
+              : 'NA';
           }
         }
-        const newIqs = calculateIQS(pascalScores);
+        const newIqs = calculateIQS(pascalScores, isBot);
 
         await query(
           `UPDATE iqs_scores

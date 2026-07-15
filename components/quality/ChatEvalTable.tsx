@@ -620,6 +620,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       onDone={() => removeChat(chat.chatId)}
                       onClose={() => setExpandedId(null)}
                       colSpan={7}
+                      conversationType={chat.conversationType}
                     />
                   )}
                 </React.Fragment>
