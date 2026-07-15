@@ -113,14 +113,14 @@ export interface IQSScoreEntry {
 }
 
 // ── Bot name used at Wint Wealth ─────────────────────────────────────────────
-const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
+const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot', 'robylon ai']);
 const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
 
 function isCustomer(sender: string) { return CUSTOMER_LABELS.has(sender.toLowerCase()); }
 function isBot(sender: string) { return BOT_NAMES.has(sender.toLowerCase()); }
 function isHumanAgent(sender: string) {
   const low = (sender || '').toLowerCase();
-  return !isCustomer(sender) && !isBot(sender) && low !== 'internal note';
+  return !isCustomer(sender) && !isBot(sender) && low !== 'internal note' && low !== 'system';
 }
 
 export interface TimedMessage {

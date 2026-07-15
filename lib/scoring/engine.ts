@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
+import { PASCAL_TO_DB } from '@/lib/param-keys';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
 import { fireQualityAlert } from '@/lib/quality-alert';
@@ -145,8 +146,9 @@ export async function scoreLinkedCallsForChat(
 
       const parsed = parseScoringResponse(raw, chatId, 'agent');
       const parameters: Record<string, IQSParameterResult> = {};
-      for (const [key, val] of Object.entries(parsed.scores || {})) {
-        parameters[key] = toParamResult(val as ParamScore, (parsed.reasoning || {})[key] || '');
+      for (const [k, val] of Object.entries(parsed.scores || {})) {
+        const key = PASCAL_TO_DB[k] || k.toLowerCase();
+        parameters[key] = toParamResult(val as ParamScore, (parsed.reasoning || {})[k] || (parsed.reasoning || {})[key] || '');
       }
 
       // Persist transcript
@@ -267,8 +269,9 @@ export async function executeScoring(
 
   // Convert ParamScore → IQSParameterResult for PostgreSQL storage
   const parameters: Record<string, IQSParameterResult> = {};
-  for (const [key, val] of Object.entries(parsed.scores || {})) {
-    parameters[key] = toParamResult(val as ParamScore, (parsed.reasoning || {})[key] || '');
+  for (const [k, val] of Object.entries(parsed.scores || {})) {
+    const key = PASCAL_TO_DB[k] || k.toLowerCase();
+    parameters[key] = toParamResult(val as ParamScore, (parsed.reasoning || {})[k] || (parsed.reasoning || {})[key] || '');
   }
 
   await insertIQSScore({
