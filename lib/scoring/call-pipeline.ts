@@ -407,7 +407,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
           await fetch(pyUpload.uploadUrl, {
             method: 'PUT',
             headers: { 'Content-Type': mimeType },
-            body: buffer
+            body: new Uint8Array(buffer)
           });
           pyannoteUri = pyUpload.pyannoteUri;
           log.info('call-pipeline', `Successfully uploaded to Pyannote: ${pyannoteUri}`);
