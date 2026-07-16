@@ -22,6 +22,7 @@ if (existsSync(envFile)) {
 // ── Parse CLI Arguments ──────────────────────────────────────────────────────
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
+const forceTranscript = args.includes('--force-transcript');
 
 let limit: number | null = null;
 const limitIdx = args.indexOf('--limit');
@@ -41,9 +42,24 @@ if (statusIdx !== -1 && args[statusIdx + 1]) {
   statusFilter = args[statusIdx + 1];
 }
 
+let fromDate: string | null = null;
+const fromDateIdx = args.indexOf('--from-date');
+if (fromDateIdx !== -1 && args[fromDateIdx + 1]) {
+  fromDate = args[fromDateIdx + 1];
+}
+
+let callIdFilter: string | null = null;
+const callIdIdx = args.indexOf('--call-id');
+if (callIdIdx !== -1 && args[callIdIdx + 1]) {
+  callIdFilter = args[callIdIdx + 1];
+}
+
 async function main() {
   console.log('🚀 Starting Call Analysis Rerun Script');
   console.log(`- Status Filter: ${statusFilter}`);
+  console.log(`- Call ID Filter: ${callIdFilter !== null ? callIdFilter : 'No Call ID Filter'}`);
+  console.log(`- From Date: ${fromDate !== null ? fromDate : 'No Date Cutoff'}`);
+  console.log(`- Force Transcript: ${forceTranscript ? 'YES' : 'NO'}`);
   console.log(`- Limit: ${limit !== null ? limit : 'No Limit'}`);
   console.log(`- Delay: ${delayMs}ms between runs`);
   console.log(`- Dry Run: ${dryRun ? 'YES (No changes will be executed)' : 'NO'}`);
@@ -54,10 +70,25 @@ async function main() {
     FROM call_recordings 
   `;
   const params: any[] = [];
+  const clauses: string[] = [];
 
-  if (statusFilter !== 'all') {
-    sql += ` WHERE status = $1 `;
+  if (statusFilter !== 'all' && !callIdFilter) {
+    clauses.push(`status = $${params.length + 1}`);
     params.push(statusFilter);
+  }
+
+  if (fromDate) {
+    clauses.push(`called_at >= $${params.length + 1}`);
+    params.push(fromDate);
+  }
+
+  if (callIdFilter) {
+    clauses.push(`id = $${params.length + 1}`);
+    params.push(callIdFilter);
+  }
+
+  if (clauses.length > 0) {
+    sql += ` WHERE ` + clauses.join(' AND ');
   }
 
   sql += ` ORDER BY called_at DESC `;
@@ -94,7 +125,7 @@ async function main() {
     
     const startTime = Date.now();
     try {
-      const result = await runCallPipeline(call.id);
+      const result = await runCallPipeline(call.id, { forceTranscript });
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       console.log(`✅ Success | IQS: ${result.iqs}% | Verdict: ${result.verdict} | Time: ${elapsed}s`);
       successCount++;
