@@ -94,9 +94,11 @@ export async function diarizeAudioWithPyannote(
 /**
  * Converts Pyannote diarization segments to the generic Pass1Result format.
  */
-export function pyannoteToPass1(pyannoteSegments: PyannoteSegment[]): Pass1Result {
-  const segments = Array.isArray(pyannoteSegments) ? pyannoteSegments : [];
-  const sorted = [...segments].sort((a, b) => a.start - b.start);
+export function pyannoteToPass1(pyannoteSegments: any): Pass1Result {
+  const segments = Array.isArray(pyannoteSegments)
+    ? pyannoteSegments
+    : (Array.isArray(pyannoteSegments?.diarization) ? pyannoteSegments.diarization : []);
+  const sorted = [...segments].sort((a: any, b: any) => a.start - b.start);
   const events: StructureEvent[] = [];
   const speakerMap: Record<string, SpeakerLabel> = {};
   let nextLabelCode = 65; // 'A'

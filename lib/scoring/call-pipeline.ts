@@ -281,6 +281,7 @@ function robustJsonParse(raw: string): any {
     return repaired;
   }
 
+  console.error('❌ JSON parsing failed. Full raw response was:', raw);
   throw new Error(`Failed to parse LLM response as JSON: ${raw.slice(0, 300)}`);
 }
 
@@ -288,19 +289,55 @@ function robustJsonParse(raw: string): any {
  * Downloads audio from the given URL and uploads it to the Gemini File API.
  * Returns the Gemini file URI.
  */
-async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Promise<{ fileUri: string; mimeType: string }> {
-  const mimeType = getMimeType(recordingUrl);
+function detectMimeType(buffer: Buffer, fallbackUrl: string): { mimeType: string; extension: string } {
+  if (buffer.length >= 3 && buffer[0] === 0x49 && buffer[1] === 0x44 && buffer[2] === 0x33) {
+    return { mimeType: 'audio/mpeg', extension: '.mp3' };
+  }
+  if (buffer.length >= 2 && buffer[0] === 0xFF && (buffer[1] & 0xE0) === 0xE0) {
+    return { mimeType: 'audio/mpeg', extension: '.mp3' };
+  }
+  if (buffer.length >= 12 &&
+      buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 && // RIFF
+      buffer[8] === 0x57 && buffer[9] === 0x41 && buffer[10] === 0x56 && buffer[11] === 0x45) { // WAVE
+    return { mimeType: 'audio/wav', extension: '.wav' };
+  }
+  if (buffer.length >= 4 && buffer[0] === 0x66 && buffer[1] === 0x4c && buffer[2] === 0x61 && buffer[3] === 0x43) { // fLaC
+    return { mimeType: 'audio/flac', extension: '.flac' };
+  }
+  if (buffer.length >= 4 && buffer[0] === 0x4f && buffer[1] === 0x67 && buffer[2] === 0x67 && buffer[3] === 0x53) { // OggS
+    return { mimeType: 'audio/ogg', extension: '.ogg' };
+  }
+  
+  const ext = fallbackUrl.split('.').pop()?.toLowerCase() ?? '';
+  const MIME_MAP: Record<string, string> = {
+    mp3:  'audio/mpeg',
+    wav:  'audio/wav',
+    m4a:  'audio/mp4',
+    ogg:  'audio/ogg',
+    flac: 'audio/flac',
+  };
+  return { mimeType: MIME_MAP[ext] ?? 'audio/mpeg', extension: ext ? `.${ext}` : '.mp3' };
+}
+
+/**
+ * Downloads audio from the given URL and uploads it to the Gemini File API.
+ * Returns the Gemini file URI.
+ */
+async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Promise<{ fileUri: string; mimeType: string; buffer: Buffer }> {
   const audioRes = await fetch(recordingUrl);
   if (!audioRes.ok) {
     throw new Error(`Failed to download audio from ${recordingUrl}: HTTP ${audioRes.status}`);
   }
 
+  const arrayBuffer = await audioRes.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const { mimeType, extension } = detectMimeType(buffer, recordingUrl);
+
   const tempDir = os.tmpdir();
-  const tempFileName = `pipeline-audio-${randomUUID()}${path.extname(recordingUrl) || '.mp3'}`;
+  const tempFileName = `pipeline-audio-${randomUUID()}${extension}`;
   const tempFilePath = path.join(tempDir, tempFileName);
 
-  const arrayBuffer = await audioRes.arrayBuffer();
-  await fs.writeFile(tempFilePath, Buffer.from(arrayBuffer));
+  await fs.writeFile(tempFilePath, buffer);
 
   const ai = new GoogleGenAI({ apiKey });
   try {
@@ -311,7 +348,7 @@ async function downloadAndUploadAudio(recordingUrl: string, apiKey: string): Pro
     if (!uploadResult.uri) {
       throw new Error('Gemini File upload did not return a URI');
     }
-    return { fileUri: uploadResult.uri, mimeType };
+    return { fileUri: uploadResult.uri, mimeType, buffer };
   } finally {
     try { await fs.unlink(tempFilePath); } catch {}
   }
@@ -325,7 +362,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
 
   // Fetch the call recording row
   const rows = await query(`
-    SELECT cr.*, conv.id as linked_chat_id, conv.closed_at as chat_closed_at, conv.tags as chat_tags
+    SELECT cr.*, conv.id as linked_chat_id, conv.closed_at as chat_closed_at, conv.tags as chat_tags, conv.agent_id as conv_agent_id
     FROM call_recordings cr
     LEFT JOIN conversations conv ON conv.id = cr.chat_id
     WHERE cr.id = $1
@@ -358,11 +395,32 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
 
     log.info('call-pipeline', `Running Pass 1 & 2 analysis on audio for call ${callId}`);
     try {
-      const { fileUri, mimeType } = await downloadAndUploadAudio(call.recording_url, apiKey);
+      const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(call.recording_url, apiKey);
+      
+      let pyannoteUri: string | undefined = undefined;
+      const pyKey = config.pyannoteApiKey || process.env.PYANNOTE_API_KEY || '';
+      if (pyKey) {
+        log.info('call-pipeline', `Uploading audio bytes to Pyannote storage for diarization...`);
+        try {
+          const { getPyannoteUploadUrl } = await import('@/lib/pyannote');
+          const pyUpload = await getPyannoteUploadUrl(pyKey);
+          await fetch(pyUpload.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': mimeType },
+            body: buffer
+          });
+          pyannoteUri = pyUpload.pyannoteUri;
+          log.info('call-pipeline', `Successfully uploaded to Pyannote: ${pyannoteUri}`);
+        } catch (err: any) {
+          log.warn('call-pipeline', `Failed to upload to Pyannote storage, falling back to direct URL: ${err.message}`);
+        }
+      }
+
       const analysis = await analyzeCallFromUri({
         fileUri,
         recordingUrl: call.recording_url,
-        fileName: `call_${callId}.mp3`,
+        pyannoteUri,
+        fileName: `call_${callId}${mimeType === 'audio/mpeg' ? '.mp3' : '.wav'}`,
         mimeType,
         apiKey
       });
@@ -381,7 +439,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         SET transcript = $1, duration_seconds = $2, language = $3,
             interruption_count = $4, dead_air_count = $5, status = 'transcribed', updated_at = NOW()
         WHERE id = $6
-      `, [JSON.stringify(segments), duration, language, intCount, daCount, callId]);
+      `, [JSON.stringify(segments), Math.round(duration), language, intCount, daCount, callId]);
       
       status = 'transcribed';
     } catch (err: any) {
@@ -560,33 +618,53 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   // ── Stage 4a: Prompt 1 (Critical gates pass) ───────────────────────────────
   log.info('call-pipeline', `Running Prompt 1 compliance gates for call ${callId}`);
   let gatesResult: any;
-  try {
-    const rawGates = await callGeminiForCall(
-      geminiKeys,
-      [{ role: 'user', parts: [{ text: CALL_GATES_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
-      undefined,
-      300_000
-    );
-    gatesResult = robustJsonParse(rawGates);
-  } catch (err: any) {
+  let gatesError: any;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const rawGates = await callGeminiForCall(
+        geminiKeys,
+        [{ role: 'user', parts: [{ text: CALL_GATES_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
+        undefined,
+        300_000
+      );
+      gatesResult = robustJsonParse(rawGates);
+      gatesError = null;
+      break;
+    } catch (err: any) {
+      gatesError = err;
+      log.warn('call-pipeline', `Prompt 1 attempt ${attempt} failed: ${err.message}`);
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  if (gatesError) {
     await query(`UPDATE call_recordings SET status = 'failed_gates', updated_at = NOW() WHERE id = $1`, [callId]);
-    throw new Error(`Compliance gates Prompt 1 failed: ${err.message}`);
+    throw new Error(`Compliance gates Prompt 1 failed after 3 attempts: ${gatesError.message}`);
   }
 
   // ── Stage 4b: Prompt 2 (IQS scoring pass) ───────────────────────────────────
   log.info('call-pipeline', `Running Prompt 2 parameters scoring for call ${callId}`);
   let scoresResult: any;
-  try {
-    const rawScores = await callGeminiForCall(
-      geminiKeys,
-      [{ role: 'user', parts: [{ text: CALL_IQS_PASS_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
-      undefined,
-      300_000
-    );
-    scoresResult = robustJsonParse(rawScores);
-  } catch (err: any) {
+  let scoresError: any;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const rawScores = await callGeminiForCall(
+        geminiKeys,
+        [{ role: 'user', parts: [{ text: CALL_IQS_PASS_SYSTEM_PROMPT + '\n\n## SCORER INPUT PAYLOAD\n' + JSON.stringify(payload, null, 2) }] }],
+        undefined,
+        300_000
+      );
+      scoresResult = robustJsonParse(rawScores);
+      scoresError = null;
+      break;
+    } catch (err: any) {
+      scoresError = err;
+      log.warn('call-pipeline', `Prompt 2 attempt ${attempt} failed: ${err.message}`);
+      if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+    }
+  }
+  if (scoresError) {
     await query(`UPDATE call_recordings SET status = 'failed_scoring', updated_at = NOW() WHERE id = $1`, [callId]);
-    throw new Error(`Scoring Prompt 2 failed: ${err.message}`);
+    throw new Error(`Scoring Prompt 2 failed after 3 attempts: ${scoresError.message}`);
   }
 
   // ── Stage 5: Compute + Persist ─────────────────────────────────────────────
@@ -624,7 +702,7 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   `, [
     callId,
     call.chat_id,
-    call.agent_id,
+    call.agent_id ?? call.conv_agent_id ?? null,
     1, // call_sequence_in_thread
     speakerIdConfidence,
     contextTruncated,
@@ -639,8 +717,14 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     JSON.stringify(gatesResult.borderline || [])
   ]);
 
-  // Update call recording status to scored
-  await query(`UPDATE call_recordings SET status = 'scored', updated_at = NOW() WHERE id = $1`, [callId]);
+  // Update call recording status to scored and populate agent_id if missing
+  await query(`
+    UPDATE call_recordings
+    SET status = 'scored',
+        agent_id = COALESCE(agent_id, $2),
+        updated_at = NOW()
+    WHERE id = $1
+  `, [callId, call.conv_agent_id ?? null]);
 
   log.info('call-pipeline', `Pipeline complete for call ${callId} — IQS ${iqs_percent}% — Verdict: ${finalVer}`);
   return {
