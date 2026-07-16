@@ -73,8 +73,12 @@ async function main() {
   const clauses: string[] = [];
 
   if (statusFilter !== 'all' && !callIdFilter) {
-    clauses.push(`status = $${params.length + 1}`);
-    params.push(statusFilter);
+    if (statusFilter === 'failed') {
+      clauses.push(`status LIKE 'failed_%'`);
+    } else {
+      clauses.push(`status = $${params.length + 1}`);
+      params.push(statusFilter);
+    }
   }
 
   if (fromDate) {
