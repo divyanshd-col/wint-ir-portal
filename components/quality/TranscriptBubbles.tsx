@@ -2,7 +2,7 @@
 
 import React from 'react';
 
-const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot']);
+const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot', 'robylon ai', 'robylon']);
 const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
 
 export function renderContentWithLinks(text: string, isOutgoing?: boolean) {
