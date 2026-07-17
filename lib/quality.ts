@@ -158,9 +158,13 @@ export function analyzeConversationTiming(
   const hasBot = !!firstBot;
   const hasHuman = !!firstHuman;
   let conversationType: 'bot' | 'agent' | 'hybrid';
-  if (hasBot && !hasHuman) conversationType = 'bot';
-  else if (!hasBot && hasHuman) conversationType = 'agent';
-  else conversationType = 'hybrid';
+  if (!hasHuman) {
+    conversationType = 'bot';
+  } else if (!hasBot) {
+    conversationType = 'agent';
+  } else {
+    conversationType = 'hybrid';
+  }
 
   // Helper: diff in seconds between two ISO timestamps
   const diffSecs = (a?: string, b?: string) => {
