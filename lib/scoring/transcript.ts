@@ -33,6 +33,8 @@ export function parseRobyTimestamp(ts: string, year: number, fallbackVal: string
   } catch { return fallbackVal; }
 }
 
+const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot', 'robylon ai']);
+
 export function normalizeRobylonMessages(messages: any[], year?: number): {
   transcriptText: string;
   timedMessages: Array<{ sender: string; content: string; timestamp?: string }>;
@@ -106,7 +108,7 @@ export function normalizeRobylonMessages(messages: any[], year?: number): {
 
     const senderLow = sender.toLowerCase();
     const isCustomer = senderLow === 'user' || senderLow === 'customer' || m.sender_type === 'customer';
-    const isBot = senderLow === 'bot' || senderLow === 'myra' || m.sender_type === 'bot';
+    const isBot = BOT_NAMES.has(senderLow) || m.sender_type === 'bot';
 
     const role = isCustomer ? 'Customer' : isBot ? 'Bot' : 'Agent';
     const senderType = isCustomer ? 'customer' : isBot ? 'bot' : 'agent';

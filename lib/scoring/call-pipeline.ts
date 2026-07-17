@@ -394,57 +394,71 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     }
 
     log.info('call-pipeline', `Running Pass 1 & 2 analysis on audio for call ${callId}`);
-    try {
-      const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(call.recording_url, apiKey);
-      
-      let pyannoteUri: string | undefined = undefined;
-      const pyKey = config.pyannoteApiKey || process.env.PYANNOTE_API_KEY || '';
-      if (pyKey) {
-        log.info('call-pipeline', `Uploading audio bytes to Pyannote storage for diarization...`);
-        try {
-          const { getPyannoteUploadUrl } = await import('@/lib/pyannote');
-          const pyUpload = await getPyannoteUploadUrl(pyKey);
-          await fetch(pyUpload.uploadUrl, {
-            method: 'PUT',
-            headers: { 'Content-Type': mimeType },
-            body: new Uint8Array(buffer)
-          });
-          pyannoteUri = pyUpload.pyannoteUri;
-          log.info('call-pipeline', `Successfully uploaded to Pyannote: ${pyannoteUri}`);
-        } catch (err: any) {
-          log.warn('call-pipeline', `Failed to upload to Pyannote storage, falling back to direct URL: ${err.message}`);
+    let transcriptionSuccess = false;
+    let transcriptionError: any;
+    
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const { fileUri, mimeType, buffer } = await downloadAndUploadAudio(call.recording_url, apiKey);
+        
+        let pyannoteUri: string | undefined = undefined;
+        const pyKey = config.pyannoteApiKey || process.env.PYANNOTE_API_KEY || '';
+        if (pyKey) {
+          log.info('call-pipeline', `Uploading audio bytes to Pyannote storage for diarization...`);
+          try {
+            const { getPyannoteUploadUrl } = await import('@/lib/pyannote');
+            const pyUpload = await getPyannoteUploadUrl(pyKey);
+            await fetch(pyUpload.uploadUrl, {
+              method: 'PUT',
+              headers: { 'Content-Type': mimeType },
+              body: new Uint8Array(buffer)
+            });
+            pyannoteUri = pyUpload.pyannoteUri;
+            log.info('call-pipeline', `Successfully uploaded to Pyannote: ${pyannoteUri}`);
+          } catch (err: any) {
+            log.warn('call-pipeline', `Failed to upload to Pyannote storage, falling back to direct URL: ${err.message}`);
+          }
         }
+
+        const analysis = await analyzeCallFromUri({
+          fileUri,
+          recordingUrl: call.recording_url,
+          pyannoteUri,
+          fileName: `call_${callId}${mimeType === 'audio/mpeg' ? '.mp3' : '.wav'}`,
+          mimeType,
+          apiKey
+        });
+
+        segments = analysis.segments || [];
+        duration = analysis.duration_seconds;
+        language = analysis.detected_language;
+        speakerIdConfidence = analysis.speaker_identification_confidence || 'low';
+        
+        const intCount = segments.filter((s: any) => s.type === 'interruption').length;
+        const daCount = segments.filter((s: any) => s.type === 'dead_air').length;
+
+        // Update call recordings table
+        await query(`
+          UPDATE call_recordings
+          SET transcript = $1, duration_seconds = $2, language = $3,
+              interruption_count = $4, dead_air_count = $5, status = 'transcribed', updated_at = NOW()
+          WHERE id = $6
+        `, [JSON.stringify(segments), Math.round(duration), language, intCount, daCount, callId]);
+        
+        status = 'transcribed';
+        transcriptionSuccess = true;
+        transcriptionError = null;
+        break;
+      } catch (err: any) {
+        transcriptionError = err;
+        log.warn('call-pipeline', `Transcription attempt ${attempt} failed: ${err.message}`);
+        if (attempt < 3) await new Promise(r => setTimeout(r, 5000));
       }
+    }
 
-      const analysis = await analyzeCallFromUri({
-        fileUri,
-        recordingUrl: call.recording_url,
-        pyannoteUri,
-        fileName: `call_${callId}${mimeType === 'audio/mpeg' ? '.mp3' : '.wav'}`,
-        mimeType,
-        apiKey
-      });
-
-      segments = analysis.segments || [];
-      duration = analysis.duration_seconds;
-      language = analysis.detected_language;
-      speakerIdConfidence = analysis.speaker_identification_confidence || 'low';
-      
-      const intCount = segments.filter((s: any) => s.type === 'interruption').length;
-      const daCount = segments.filter((s: any) => s.type === 'dead_air').length;
-
-      // Update call recordings table
-      await query(`
-        UPDATE call_recordings
-        SET transcript = $1, duration_seconds = $2, language = $3,
-            interruption_count = $4, dead_air_count = $5, status = 'transcribed', updated_at = NOW()
-        WHERE id = $6
-      `, [JSON.stringify(segments), Math.round(duration), language, intCount, daCount, callId]);
-      
-      status = 'transcribed';
-    } catch (err: any) {
+    if (!transcriptionSuccess) {
       await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
-      throw new Error(`Transcription stage failed: ${err.message}`);
+      throw new Error(`Transcription stage failed after 3 attempts: ${transcriptionError.message}`);
     }
   }
 
