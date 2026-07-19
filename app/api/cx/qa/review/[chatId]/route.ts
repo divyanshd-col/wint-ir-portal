@@ -180,7 +180,18 @@ export async function PATCH(
         // Merge incoming parameters (snake_case) into existing
         const merged: Record<string, any> = { ...existingParams };
         let paramChanges = 0;
-        for (const [key, val] of Object.entries(parameters)) {
+        
+        // Merge nested bot parameters if provided
+        if (parameters.__bot_parameters) {
+          merged.__bot_parameters = { ...(existingParams.__bot_parameters || {}) };
+          for (const [key, val] of Object.entries(parameters.__bot_parameters) as [string, any][]) {
+            const prev = merged.__bot_parameters[key];
+            if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
+            merged.__bot_parameters[key] = { score: val.score, reasoning: val.reasoning };
+          }
+        }
+
+        for (const [key, val] of Object.entries(parameters) as [string, any][]) {
           if (!key.startsWith('__')) {
             const prev = existingParams[key];
             if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
@@ -193,7 +204,7 @@ export async function PATCH(
         const pascalScores: Record<string, ParamScore> = {};
         for (const [dbKey, val] of Object.entries(merged) as [string, any][]) {
           if (dbKey.startsWith('__')) continue;
-          const pascal = DB_TO_PASCAL[dbKey];
+          const pascal = DB_TO_PASCAL[dbKey] || dbKey;
           if (pascal) {
             pascalScores[pascal] = val.score === true || val.score === 1
               ? 'Yes'
@@ -205,12 +216,28 @@ export async function PATCH(
           }
         }
         
+        const botPascalScores: Record<string, ParamScore> = {};
+        const srcBotParams = merged.__bot_parameters || (isBot ? merged : {});
+        for (const [dbKey, val] of Object.entries(srcBotParams) as [string, any][]) {
+          if (dbKey.startsWith('__')) continue;
+          const pascal = DB_TO_PASCAL[dbKey] || dbKey;
+          if (pascal) {
+            botPascalScores[pascal] = val.score === true || val.score === 1
+              ? 'Yes'
+              : val.score === false || val.score === 0
+              ? 'No'
+              : val.score === 0.5
+              ? 'Half'
+              : 'NA';
+          }
+        }
+        
         // Always calculate both if the params exist
-        const newIqs = calculateIQS(pascalScores, isBot);
         merged['__scores'] = {
           agent_iqs: calculateIQS(pascalScores, false),
-          bot_iqs: calculateIQS(pascalScores, true),
+          bot_iqs: calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true),
         };
+        const newIqs = isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs;
 
         await query(
           `UPDATE iqs_scores

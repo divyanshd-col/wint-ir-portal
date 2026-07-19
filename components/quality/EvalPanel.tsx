@@ -125,36 +125,69 @@ export default function EvalPanel({
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
 
-  const hasBotParams = !!(parameters && (parameters['issue_resolution'] || parameters['accuracy'] || parameters['correct_escalation'] || parameters['IssueResolution'] || parameters['Accuracy']));
+  const hasBotParams = !!(parameters && (parameters['issue_resolution'] || parameters['accuracy'] || parameters['correct_escalation'] || parameters['IssueResolution'] || parameters['Accuracy'] || parameters.__bot_parameters));
   const isBotChat = conversationType === 'bot' && (mode === 'submit' || mode === 'resolve' || hasBotParams);
-  const activeParamOrder = isBotChat ? BOT_PARAM_ORDER : PARAM_ORDER;
-  const activeParamNames = isBotChat ? BOT_PARAM_NAMES : PARAM_NAMES;
-  const activeWeights = isBotChat ? BOT_WEIGHTS : WEIGHTS;
-  const activeCAT2Params = isBotChat ? new Set<string>() : CAT2_PARAMS;
+  const isHybrid = conversationType === 'hybrid';
+  const showTabs = isHybrid;
 
-  // Param weight as display string
+  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(isBotChat ? 'bot' : 'agent');
+
+  const V4_TO_V3_MAP: Record<string, string> = {
+    'Technical': 'accuracy',
+    'AllQuestions': 'issue_resolution',
+    'Expectation': 'expectationfollowthrough',
+    'Contextual': 'personalization',
+    'Sentences': 'readability',
+    'Opening': 'greetinghandover',
+    'Call': 'escalationdecision',
+    'Empathy': 'empathy',
+    'FollowUp': 'postcallrecap',
+  };
+
+  function initAgentParams(): Record<string, ParamState> {
+    const safeParams = parameters || {};
+    const state: Record<string, ParamState> = {};
+    for (const pascal of PARAM_ORDER) {
+      const dbKey = PASCAL_TO_DB[pascal] || pascal;
+      const v4Key = V4_TO_V3_MAP[pascal];
+      const raw   = (safeParams as any)[dbKey] 
+                 ?? (safeParams as any)[pascal]
+                 ?? (v4Key ? (safeParams as any)[v4Key] : undefined)
+                 ?? {};
+      state[pascal] = { score: normalizeScore(raw.score).value, reasoning: raw.comment ?? raw.reasoning ?? '' };
+    }
+    return state;
+  }
+
+  function initBotParams(): Record<string, ParamState> {
+    const botRawParams = parameters?.__bot_parameters || {};
+    const safeParams = Object.keys(botRawParams).length ? botRawParams : (parameters || {});
+    const state: Record<string, ParamState> = {};
+    for (const pascal of BOT_PARAM_ORDER) {
+      const dbKey = PASCAL_TO_DB[pascal] || pascal;
+      const raw   = (safeParams as any)[dbKey] ?? (safeParams as any)[pascal] ?? {};
+      state[pascal] = { score: normalizeScore(raw.score).value, reasoning: raw.comment ?? raw.reasoning ?? '' };
+    }
+    return state;
+  }
+
+  const [agentParamState, setAgentParamState] = useState<Record<string, ParamState>>(initAgentParams);
+  const [botParamState, setBotParamState] = useState<Record<string, ParamState>>(initBotParams);
+
+  const activeParamOrder = activeTab === 'bot' ? BOT_PARAM_ORDER : PARAM_ORDER;
+  const activeParamNames = activeTab === 'bot' ? BOT_PARAM_NAMES : PARAM_NAMES;
+  const activeWeights = activeTab === 'bot' ? BOT_WEIGHTS : WEIGHTS;
+  const activeCAT2Params = activeTab === 'bot' ? new Set<string>() : CAT2_PARAMS;
+  
+  const currentParamState = activeTab === 'bot' ? botParamState : agentParamState;
+
   function pctLabel(key: string): string {
     const w = activeWeights[key];
     return w != null ? `${Math.round(w * 100)}%` : '';
   }
 
-  // Initialise param state from DB parameters (snake_case keys)
-  function initParams(): Record<string, ParamState> {
-    const safeParams = parameters || {};
-    const state: Record<string, ParamState> = {};
-    for (const pascal of activeParamOrder) {
-      const dbKey = PASCAL_TO_DB[pascal];
-      const raw   = safeParams[dbKey] ?? safeParams[pascal] ?? {};
-      state[pascal] = { score: normalizeScore(raw.score).value, reasoning: raw.reasoning ?? '' };
-    }
-    return state;
-  }
-
-  // tl-browse: TL can edit params to trigger Submit/Override/Raise Dispute
-  // view: purely read-only
   const isReadOnly = mode === 'view';
 
-  const [paramState, setParamState] = useState<Record<string, ParamState>>(initParams);
   const [transcript, setTranscript]  = useState<TMessage[] | null>(null);
   const [callRecordings, setCallRecordings] = useState<any[]>([]);
   const [txLoading,  setTxLoading]   = useState(true);
@@ -162,61 +195,60 @@ export default function EvalPanel({
   const [submitErr,  setSubmitErr]   = useState('');
   const [noteText,   setNoteText]    = useState(reviewNote ?? '');
 
-  // History (previous conversations for this contact)
   const [history,        setHistory]        = useState<HistoryEntry[] | null>(null);
   const [historyOpen,    setHistoryOpen]    = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // TL-browse: submit / override / raise-dispute
-  const [tlGeneralNote,  setTlGeneralNote]  = useState('');  // for Submit / Override
-  const [tlParamNotes,   setTlParamNotes]   = useState<Record<string, string>>({});  // per-param notes for Raise Dispute
+  const [tlGeneralNote,  setTlGeneralNote]  = useState('');
+  const [tlParamNotes,   setTlParamNotes]   = useState<Record<string, string>>({});
   const [tlSubmitting,   setTlSubmitting]   = useState(false);
   const [tlErr,          setTlErr]          = useState('');
   const [tlDone,         setTlDone]         = useState<'submit' | 'override' | 'dispute' | null>(null);
 
-  // QA submit/override: Prompt/KB update flag
   const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
 
-  // Build challenged params map (keyed by PascalCase)
   const disputeMap = new Map<string, { note: string }>(
     (dispute?.challengedParams ?? []).map(d => [d.param, { note: d.note }])
   );
 
-  // Live IQS: recompute when params change
   const liveIqs = (() => {
     const scores: Record<string, ParamScore> = {};
-    for (const [key, s] of Object.entries(paramState)) {
+    for (const [key, s] of Object.entries(currentParamState)) {
       scores[key] = scoreToParamScore(s.score);
     }
-    return calculateIQS(scores, isBotChat);
+    return calculateIQS(scores, activeTab === 'bot');
   })();
 
-  const failCount = Object.values(paramState).filter(s => s.score === 0.0).length;
+  const failCount = Object.values(currentParamState).filter(s => s.score === 0.0).length;
 
-  // Check if anything changed from original
   const isModified = (() => {
-    for (const pascal of activeParamOrder) {
-      const orig = initParams()[pascal];
-      const cur  = paramState[pascal];
-      if (cur.score !== orig.score) return true;
-      if ((cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim()) return true;
+    let mod = false;
+    if (!isBotChat) {
+      for (const pascal of PARAM_ORDER) {
+        const orig = initAgentParams()[pascal];
+        const cur  = agentParamState[pascal];
+        if (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim()) mod = true;
+      }
     }
-    return false;
+    if (isHybrid || isBotChat) {
+      for (const pascal of BOT_PARAM_ORDER) {
+        const orig = initBotParams()[pascal];
+        const cur  = botParamState[pascal];
+        if (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim()) mod = true;
+      }
+    }
+    return mod;
   })();
 
-  const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve')
-    : (isModified ? 'Override' : 'Submit');
+  const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve') : (isModified ? 'Override' : 'Submit');
 
-  // TL-browse: dynamic action button based on which category of params changed
   const changedParamsInTL = mode === 'tl-browse' ? activeParamOrder.filter(p => {
-    const orig = initParams()[p];
-    return paramState[p].score !== orig.score;
+    const orig = activeTab === 'bot' ? initBotParams()[p] : initAgentParams()[p];
+    return currentParamState[p].score !== orig.score;
   }) : [];
   const tlCat1Changed = changedParamsInTL.some(p => CAT1_PARAMS.has(p));
   const tlCat2Changed = changedParamsInTL.some(p => activeCAT2Params.has(p));
-  const tlActionLabel = tlCat1Changed ? 'Raise Dispute'
-    : tlCat2Changed ? 'Override'
-    : 'Submit';
+  const tlActionLabel = tlCat1Changed ? 'Raise Dispute' : tlCat2Changed ? 'Override' : 'Submit';
 
   // Fetch transcript on mount
   useEffect(() => {
@@ -255,15 +287,18 @@ export default function EvalPanel({
 
   // Update a single param
   function setScore(pascal: string, score: number | null) {
-    setParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], score } }));
+    if (activeTab === 'bot') setBotParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], score } }));
+    else setAgentParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], score } }));
   }
   function setReasoning(pascal: string, reasoning: string) {
-    setParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], reasoning } }));
+    if (activeTab === 'bot') setBotParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], reasoning } }));
+    else setAgentParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], reasoning } }));
   }
 
   // Reset to original
   function reset() {
-    setParamState(initParams());
+    setAgentParamState(initAgentParams());
+    setBotParamState(initBotParams());
     setSubmitErr('');
   }
 
@@ -280,10 +315,27 @@ export default function EvalPanel({
 
       if (isModified) {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
-        for (const pascal of activeParamOrder) {
-          const dbKey = PASCAL_TO_DB[pascal];
-          params[dbKey] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
+        
+        if (!isBotChat) {
+          for (const pascal of PARAM_ORDER) {
+            const dbKey = PASCAL_TO_DB[pascal] || pascal;
+            params[dbKey] = { score: agentParamState[pascal].score, reasoning: agentParamState[pascal].reasoning };
+          }
         }
+        
+        if (isHybrid || isBotChat) {
+          const botParams: Record<string, { score: number | null; reasoning: string }> = {};
+          for (const pascal of BOT_PARAM_ORDER) {
+            const dbKey = PASCAL_TO_DB[pascal] || pascal;
+            botParams[dbKey] = { score: botParamState[pascal].score, reasoning: botParamState[pascal].reasoning };
+          }
+          if (isBotChat) {
+            Object.assign(params, botParams);
+          } else {
+            params['__bot_parameters'] = botParams as any;
+          }
+        }
+        
         if (needsKbUpdate) params['__needs_kb_update'] = { score: true, reasoning: '' } as any;
         body.parameters = params;
       }
@@ -322,7 +374,8 @@ export default function EvalPanel({
       } else if (tlActionLabel === 'Override') {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
         for (const pascal of changedParamsInTL) {
-          params[PASCAL_TO_DB[pascal]] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
+          const st = activeTab === 'bot' ? botParamState[pascal] : agentParamState[pascal];
+          params[PASCAL_TO_DB[pascal] || pascal] = { score: st.score, reasoning: st.reasoning };
         }
         const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
           method: 'PATCH',
@@ -477,15 +530,42 @@ export default function EvalPanel({
             </div>
 
             {/* Param list */}
-            <div style={{
-              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
-              color: 'var(--qa-text-3)', padding: '16px 16px 4px',
-            }}>
-              Parameter Scores
-            </div>
+            {showTabs ? (
+              <div style={{ display: 'flex', padding: '16px 16px 0', borderBottom: '1px solid var(--qa-border)', gap: 16 }}>
+                <button
+                  onClick={() => setActiveTab('agent')}
+                  style={{
+                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
+                    color: activeTab === 'agent' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderBottom: activeTab === 'agent' ? '2px solid var(--qa-primary)' : '2px solid transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Agent Parameters
+                </button>
+                <button
+                  onClick={() => setActiveTab('bot')}
+                  style={{
+                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
+                    color: activeTab === 'bot' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderBottom: activeTab === 'bot' ? '2px solid var(--qa-primary)' : '2px solid transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Bot Parameters
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+                color: 'var(--qa-text-3)', padding: '16px 16px 4px',
+              }}>
+                Parameter Scores
+              </div>
+            )}
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {activeParamOrder.map(pascal => {
-                const st       = paramState[pascal];
+                const st       = currentParamState[pascal];
                 const disputed = disputeMap.get(pascal);
                 // QA modes: CAT2 params are TL's domain — hide entirely from QA
                 const isTLParam = activeCAT2Params.has(pascal);

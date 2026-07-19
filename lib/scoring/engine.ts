@@ -184,7 +184,7 @@ export async function executeScoring(
   disposition: string,
   subDisposition: string,
   contactPhone?: string,
-): Promise<{ chatId: string; iqs: number } | null> {
+): Promise<{ chatId: string; iqs: number; botIqs?: number } | null> {
   const chatId = conv.id;
 
   // Atomic lock — prevents concurrent duplicate scorings when Robylon fires
@@ -364,5 +364,9 @@ export async function executeScoring(
     uncertainParameters,
   }).catch(() => {});
 
-  return { chatId, iqs: primaryPass.iqs_score || 0 };
+  return { 
+    chatId, 
+    iqs: primaryPass.iqs_score || 0,
+    botIqs: botPass && humanPass ? (botPass.iqs_score || 0) : undefined
+  };
 }

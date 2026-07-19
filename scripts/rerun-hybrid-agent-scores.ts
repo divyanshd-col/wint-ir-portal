@@ -108,7 +108,8 @@ async function main() {
         completed++;
         succeeded++;
         const iqsVal = result ? result.iqs : 'N/A';
-        console.log(`[${completed}/${total}] Chat ${chatId.padEnd(8)}: Succeeded! (IQS: ${iqsVal})`);
+        const botIqsVal = result && result.botIqs !== undefined ? result.botIqs : 'N/A';
+        console.log(`[${completed}/${total}] Chat ${chatId.padEnd(8)}: Succeeded! (Agent IQS: ${iqsVal} | Bot IQS: ${botIqsVal})`);
       } catch (err: any) {
         completed++;
         failed++;
