@@ -146,11 +146,11 @@ Investor message arrives (WhatsApp → Robylon → webhook)
 
 | Stage | Model | Purpose |
 |---|---|---|
-| Stage 0 – Router | `gemini-2.5-flash` | Classify category + query type |
-| Stage 1A – Repayment | `gemini-2.5-flash` | Category-specific decision tree |
-| Stage 1B – General Triage | `gemini-2.5-flash` | Structured fact collection (all categories) |
-| Stage 2 – Answer | `gemini-2.5-pro` | KB-grounded resolution in 3 blocks |
-| Draft | `gemini-2.5-flash` | Customer-ready message |
+| Stage 0 – Router | `gemini-3.5-flash` | Classify category + query type |
+| Stage 1A – Repayment | `gemini-3.5-flash` | Category-specific decision tree |
+| Stage 1B – General Triage | `gemini-3.5-flash` | Structured fact collection (all categories) |
+| Stage 2 – Answer | `gemini-3.5-pro` | KB-grounded resolution in 3 blocks |
+| Draft | `gemini-3.5-flash` | Customer-ready message |
 
 **Supported categories:** Repayment, KYC, Payment, SIP, Sell/DDPI, Referral, Taxation, Dashboard, FD, HUF, Out-of-domain
 
@@ -336,7 +336,7 @@ Audio file uploaded to /call-analysis
 ### Stage 0 – Intent Router
 
 **File:** `PROMPT_router.txt` → `app/api/chat/analyze/route.ts`
-**Model:** `gemini-2.5-flash`
+**Model:** `gemini-3.5-flash`
 **When:** Runs on the first message of every conversation.
 
 Classifies the investor's issue into a product category and determines whether the query is educational, process-based, or needs clarification.
@@ -363,7 +363,7 @@ Classifies the investor's issue into a product category and determines whether t
 ### Stage 1A – Repayment Extractor
 
 **File:** `PROMPT_extract_repayment.txt` → `app/api/chat/analyze/route.ts`
-**Model:** `gemini-2.5-flash`
+**Model:** `gemini-3.5-flash`
 **When:** Only when `category = "repayment"`.
 
 Walks a strict 3-step decision tree:
@@ -394,7 +394,7 @@ Walks a strict 3-step decision tree:
 ### Stage 1B – Triage & Question Generator
 
 **File:** `PROMPT_analyze.txt` → `app/api/chat/analyze/route.ts`
-**Model:** `gemini-2.5-flash`
+**Model:** `gemini-3.5-flash`
 **When:** All categories except repayment (or as fallback).
 
 Surfaces one structured question at a time and auto-extracts facts from attached screenshots.
@@ -423,7 +423,7 @@ Surfaces one structured question at a time and auto-extracts facts from attached
 ### Stage 2 – Answer Generator
 
 **File:** `PROMPT_chat.txt` → `app/api/chat/route.ts`
-**Model:** `gemini-2.5-pro` (fallback: `gemini-2.5-flash`)
+**Model:** `gemini-3.5-pro` (fallback: `gemini-3.5-flash`)
 **When:** Once all facts are collected.
 
 Retrieves the top 15 KB chunks and generates a structured 3-block internal briefing.
@@ -450,7 +450,7 @@ Include: Investor email, bond ISIN, record date, bank change date
 ### Chat Draft Generator
 
 **File:** `app/api/chat/draft/route.ts`
-**Model:** `gemini-2.5-flash`
+**Model:** `gemini-3.5-flash`
 **When:** Agent clicks "Generate Draft".
 
 Converts the internal briefing into a customer-facing message. Strips internal references (Slack, Finder, jargon). 3–5 sentences, empathetic and professional.
@@ -467,7 +467,7 @@ Converts the internal briefing into a customer-facing message. Strips internal r
 ### Chat IQS Scorer
 
 **File:** `lib/quality.ts` → `IQS_SYSTEM_PROMPT`
-**Model:** `gemini-2.5-flash`
+**Model:** `gemini-3.5-flash`
 **When:** QA triggers evaluation on a chat transcript.
 
 Scores all 11 parameters as `Yes`, `No`, or `NA` with reasoning and KB citation.
@@ -514,7 +514,7 @@ Scores all 11 parameters as `Yes`, `No`, or `NA` with reasoning and KB citation.
 ### Call IQS Scorer
 
 **File:** `lib/call-quality.ts` → `CALL_IQS_SYSTEM_PROMPT`
-**Model:** `gemini-2.5-flash`
+**Model:** `gemini-3.5-flash`
 **When:** QA triggers evaluation on a call transcript.
 
 **Key differences from chat IQS:**
@@ -605,7 +605,7 @@ Evaluates the IR Executive's energy, enthusiasm, and tone modulation from audio 
 ### Analytics Planner & Synthesizer
 
 **Files:** `lib/analytics/agent.ts` → `PLANNER_PROMPT` + `SYNTHESIZER_PROMPT`
-**Model:** `gemini-2.5-flash`
+**Model:** `gemini-3.5-flash`
 
 **Planner (Pass 1):** Translates a natural language question into a SQL plan.
 
@@ -644,7 +644,7 @@ Example input: *"Show me CSAT trend by week for the last 2 months"*
 
 ### Agent Coaching Feedback
 
-**TL view:** `app/api/cx/tl/member-analytics/ai/route.ts` — `gemini-2.5-flash`
+**TL view:** `app/api/cx/tl/member-analytics/ai/route.ts` — `gemini-3.5-flash`
 **Agent self-view:** `app/api/quality/my-analytics/ai/route.ts` — `claude-haiku-4-5-20251001`
 
 Given an agent's stats (CSAT, IQS, volume, weakest parameters, top dispositions), generates a coaching brief.
@@ -670,7 +670,7 @@ Given an agent's stats (CSAT, IQS, volume, weakest parameters, top dispositions)
 | Framework | Next.js 15 (App Router) |
 | Language | TypeScript |
 | Styling | Tailwind CSS |
-| AI – Primary | Google Gemini 2.5 Flash / Pro |
+| AI – Primary | Google Gemini 3.5 Flash / Pro |
 | AI – Secondary | Anthropic Claude (Haiku 4.5, Opus 4.5) |
 | Database | PostgreSQL (via `pg` client) |
 | Auth | NextAuth.js (credentials provider) |
@@ -842,7 +842,7 @@ All prompt files live at the project root and are read from disk at runtime (exc
 ```
 ========================================================
 PROMPT — ROUTER (Stage 0: Classification)
-Model: gemini-2.5-flash
+Model: gemini-3.5-flash
 Role: Runs on the very first user message. Determines the intent category.
 Output: JSON { category, queryType, confidence }
 ========================================================
@@ -882,7 +882,7 @@ RULES:
 ```
 ========================================================
 PROMPT — EXTRACT REPAYMENT (Category-Specific Micro-Prompt)
-Model: gemini-2.5-flash
+Model: gemini-3.5-flash
 Role: Runs only when category="repayment". Extracts fields or asks the next logical question.
 Output: JSON { queryType, category, questions[], stepTitle, reasoning, extractedFacts }
 ========================================================
@@ -936,7 +936,7 @@ Step 4b (ONLY if recent_bank_change=No): bank_ifsc_check
 ```
 ========================================================
 PROMPT 1 — ANALYZE (Stage 1: Triage / Question Generator)
-Model: gemini-2.5-flash
+Model: gemini-3.5-flash
 Role: Runs on every user message. Decides what to ask next.
 Output: JSON { queryType, category, questions[], stepTitle }
 ========================================================
@@ -1227,7 +1227,7 @@ HUF (category: "huf"): huf_in_tracking_sheet: [Yes, No] → STOP
 ```
 ========================================================
 PROMPT 2 — CHAT (Stage 2: Answer Generator)
-Model: gemini-2.5-pro (falls back to flash if quota exceeded)
+Model: gemini-3.5-pro (falls back to flash if quota exceeded)
 Role: Runs once after all questions are answered. Generates final briefing.
 Input: confirmed evidence (field IDs + values) + KB chunks + conversation history
 ========================================================
@@ -1464,7 +1464,7 @@ in real time while they are on live chat with users.
 The system has two prompts that work as a pipeline:
 
 STAGE 1 — ANALYZE PROMPT (triage layer):
-- Model: Gemini 2.5 Flash
+- Model: Gemini 3.5 Flash
 - Runs on every message the agent sends
 - Decides what type of query it is (direct/process/clarify)
 - If it's a process issue (user-specific), it asks the agent diagnostic questions one step at a time
@@ -1476,7 +1476,7 @@ STAGE 1 — ANALYZE PROMPT (triage layer):
 - Output is JSON: { queryType, category, questions[], stepTitle }
 
 STAGE 2 — CHAT PROMPT (answer generator):
-- Model: Gemini 2.5 Pro
+- Model: Gemini 3.5 Pro
 - Runs once at the end, after all diagnostic questions are answered
 - Receives: confirmed evidence (field ID = value pairs from Stage 1) + top 15 KB chunks
   (retrieved by keyword search from 7 Google Docs) + conversation history

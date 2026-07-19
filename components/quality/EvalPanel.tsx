@@ -2,25 +2,22 @@
 import React, { useState, useEffect } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS,
-  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore
+  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
-// DB score (true/false/null/0.5) → display string
-function scoreToParamScore(s: boolean | number | null): ParamScore {
-  if (s === true || s === 1)  return 'Yes';
-  if (s === false || s === 0) return 'No';
-  if (s === 0.5) return 'Half';
-  return 'NA';
+// DB score (true/false/null/0.5 or 1.0/0.0/0.5) → display string
+function scoreToParamScore(s: any): ParamScore {
+  return normalizeScore(s).label;
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface ParamState {
-  score:     boolean | null;
+  score:     number | null;
   reasoning: string;
 }
 
@@ -30,7 +27,7 @@ export interface EvalPanelProps {
   iqsScore:      number;
   closedAt:      string;
   disposition:   string;
-  parameters:    Record<string, { score: boolean | null; reasoning: string }>;
+  parameters:    Record<string, { score: any; reasoning: string }>;
   mode:          'submit' | 'resolve' | 'view' | 'tl-browse';
   dispute?: {
     raisedBy:       string;
@@ -143,11 +140,12 @@ export default function EvalPanel({
 
   // Initialise param state from DB parameters (snake_case keys)
   function initParams(): Record<string, ParamState> {
+    const safeParams = parameters || {};
     const state: Record<string, ParamState> = {};
     for (const pascal of activeParamOrder) {
       const dbKey = PASCAL_TO_DB[pascal];
-      const raw   = parameters[dbKey] ?? parameters[pascal] ?? {};
-      state[pascal] = { score: raw.score ?? null, reasoning: raw.reasoning ?? '' };
+      const raw   = safeParams[dbKey] ?? safeParams[pascal] ?? {};
+      state[pascal] = { score: normalizeScore(raw.score).value, reasoning: raw.reasoning ?? '' };
     }
     return state;
   }
@@ -193,7 +191,7 @@ export default function EvalPanel({
     return calculateIQS(scores, isBotChat);
   })();
 
-  const failCount = Object.values(paramState).filter(s => s.score === false).length;
+  const failCount = Object.values(paramState).filter(s => s.score === 0.0).length;
 
   // Check if anything changed from original
   const isModified = (() => {
@@ -256,7 +254,7 @@ export default function EvalPanel({
   }
 
   // Update a single param
-  function setScore(pascal: string, score: boolean | null) {
+  function setScore(pascal: string, score: number | null) {
     setParamState(prev => ({ ...prev, [pascal]: { ...prev[pascal], score } }));
   }
   function setReasoning(pascal: string, reasoning: string) {
@@ -281,7 +279,7 @@ export default function EvalPanel({
       if (noteText.trim()) body.note = noteText.trim();
 
       if (isModified) {
-        const params: Record<string, { score: boolean | null; reasoning: string }> = {};
+        const params: Record<string, { score: number | null; reasoning: string }> = {};
         for (const pascal of activeParamOrder) {
           const dbKey = PASCAL_TO_DB[pascal];
           params[dbKey] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
@@ -322,7 +320,7 @@ export default function EvalPanel({
         if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
         setTlDone('submit');
       } else if (tlActionLabel === 'Override') {
-        const params: Record<string, { score: boolean | null; reasoning: string }> = {};
+        const params: Record<string, { score: number | null; reasoning: string }> = {};
         for (const pascal of changedParamsInTL) {
           params[PASCAL_TO_DB[pascal]] = { score: paramState[pascal].score, reasoning: paramState[pascal].reasoning };
         }
@@ -533,11 +531,11 @@ export default function EvalPanel({
                       </span>
                       {/* Yes / Half / No / NA buttons */}
                       <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        {([true, 0.5, false, null] as const).map((val, i) => {
-                          const label = val === true ? 'Yes' : val === 0.5 ? 'Half' : val === false ? 'No' : 'NA';
+                        {([1.0, 0.5, 0.0, null] as const).map((val, i) => {
+                          const label = val === 1.0 ? 'Yes' : val === 0.5 ? 'Half' : val === 0.0 ? 'No' : 'NA';
                           const isSel = st.score === val;
                           return (
-                            <button key={i} onClick={() => !paramReadOnly && setScore(pascal, val as any)} style={{
+                            <button key={i} onClick={() => !paramReadOnly && setScore(pascal, val)} style={{
                               height: 28, padding: '0 9px', borderRadius: 8,
                               border: '1px solid var(--qa-border)',
                               background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',

@@ -137,7 +137,13 @@ export async function PATCH(
             : 'NA';
         }
       }
+      
       const newIqs = calculateIQS(pascalScores, isBot);
+      merged['__scores'] = {
+        agent_iqs: calculateIQS(pascalScores, false),
+        bot_iqs: calculateIQS(pascalScores, true),
+      };
+      
       await query(
         `UPDATE iqs_scores SET parameters = $1, iqs_score = $2 WHERE chat_id = $3`,
         [JSON.stringify(merged), newIqs, chatId]
@@ -198,7 +204,13 @@ export async function PATCH(
               : 'NA';
           }
         }
+        
+        // Always calculate both if the params exist
         const newIqs = calculateIQS(pascalScores, isBot);
+        merged['__scores'] = {
+          agent_iqs: calculateIQS(pascalScores, false),
+          bot_iqs: calculateIQS(pascalScores, true),
+        };
 
         await query(
           `UPDATE iqs_scores

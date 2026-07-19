@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import EvalPanel from './EvalPanel';
+import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 
 interface Props {
@@ -177,8 +178,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
             <th style={th}>Chat ID</th>
             <th style={th}>Agent</th>
             <th style={th}>Disputed By</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS (Chat)</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS (Call)</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
             <th style={th}>Call Transcript</th>
             <th style={th}>CSAT</th>
             <th style={{ ...th, textAlign: 'right' }}>Actions</th>
@@ -246,26 +247,30 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     )}
                   </td>
                   <td style={tdNum}>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
-                      fontFamily: 'ui-monospace, monospace',
-                      background: d.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                      color:      d.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                    }}>
-                      {d.iqsScore}
-                    </span>
-                  </td>
-                  <td style={tdNum}>
-                    {d.callIqsScore !== null ? (
+                    {d.botIqsScore !== null ? (
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                         minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
                         fontFamily: 'ui-monospace, monospace',
-                        background: d.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                        color:      d.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                        background: d.botIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                        color:      d.botIqsScore < 60 ? '#b91c1c' : '#713f12',
                       }}>
-                        {d.callIqsScore}
+                        {d.botIqsScore}
+                      </span>
+                    ) : (
+                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                    )}
+                  </td>
+                  <td style={tdNum}>
+                    {d.iqsScore !== null ? (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
+                        fontFamily: 'ui-monospace, monospace',
+                        background: d.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                        color:      d.iqsScore < 60 ? '#b91c1c' : '#713f12',
+                      }}>
+                        {d.iqsScore}
                       </span>
                     ) : (
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
@@ -411,10 +416,10 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 )}
 
                 {expandedId === d.chatId && (
-                  <EvalPanel
+                  <ErrorBoundary><EvalPanel
                     chatId={d.chatId}
                     agentName={d.agentName}
-                    iqsScore={d.iqsScore}
+                    iqsScore={d.iqsScore ?? 0}
                     closedAt={d.closedAt}
                     disposition={d.disposition}
                     parameters={d.parameters}
@@ -432,6 +437,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     colSpan={8}
                     conversationType={d.conversationType}
                   />
+                  </ErrorBoundary>
                 )}
               </React.Fragment>
             ))

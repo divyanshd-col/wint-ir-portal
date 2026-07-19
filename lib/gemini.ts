@@ -36,11 +36,10 @@ function isRetryable(err: any): boolean {
 }
 
 // Fallback chain: follow links until no next entry or a cycle is detected.
-// gemini-2.5-flash → gemini-3-flash-preview → gemini-3.5-flash → gemini-2.5-pro
+// gemini-3.5-flash → gemini-3-flash-preview → gemini-3.5-flash → gemini-3.5-pro
 const FALLBACK_MODEL: Record<string, string> = {
-  'gemini-2.5-flash':              'gemini-3-flash-preview',
-  'gemini-3-flash-preview':        'gemini-3.5-flash',
-  'gemini-3.5-flash':              'gemini-2.5-pro',
+  'gemini-3.5-flash':              'gemini-3.5-pro',
+  'gemini-3.5-pro':                'gemini-1.5-pro',
 };
 
 function buildModelChain(model: string): string[] {
@@ -106,8 +105,8 @@ export async function geminiGenerate(
 // reverse-part iteration to skip thought entries, 5 retries with 10s gaps, model fallback.
 const CALL_MODEL_CHAIN = [
   'gemini-3.5-flash',
-  'gemini-2.5-flash',
-  'gemini-2.5-pro',
+  'gemini-3.5-flash',
+  'gemini-3.5-pro',
   'gemini-1.5-pro',
   'gemini-1.5-flash',
 ];
@@ -162,7 +161,7 @@ export async function callGeminiForCall(
           if (isCapacity)   { lastError = new Error(errMsg || `HTTP ${res.status}`); break; }
           if (!res.ok)      throw new Error(errMsg || `API error ${res.status}`);
 
-          // Reverse-iterate parts to skip thought:true entries (Gemini 2.5 Pro)
+          // Reverse-iterate parts to skip thought:true entries (Gemini 3.5 Pro)
           const parts: any[] = data.candidates?.[0]?.content?.parts ?? [];
           for (let i = parts.length - 1; i >= 0; i--) {
             if (!parts[i].thought && parts[i].text) return (parts[i].text as string).trim();

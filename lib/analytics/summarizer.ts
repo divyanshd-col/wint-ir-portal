@@ -31,7 +31,7 @@ export async function miniSummarizeTranscripts(
   try {
     const result = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      'gemini-3.5-flash',
       [{ role: 'user', parts: [{ text: formatted }] }],
       {
         systemInstruction: { parts: [{ text: PROMPT.replace('{INTENT}', intent) }] },

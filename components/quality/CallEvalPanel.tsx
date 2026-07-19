@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect } from 'react';
+import { normalizeScore } from '@/lib/quality';
 // Parameter weights for call IQS (v3.1 Spec)
 const CALL_IQS_WEIGHTS: Record<string, number> = {
   P1: 20, // Factual correctness
@@ -42,12 +43,9 @@ const PARAM_NAMES: Record<string, string> = {
   P11: 'Energy, Warmth, & Pace (P11)'
 };
 
-function ScoreBadge({ score }: { score?: string | number }) {
-  const s = String(score);
-  if (s === 'Yes' || s === '2') return <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#dcfce7', color: '#15803d' }}>Yes</span>;
-  if (s === 'No' || s === '0')  return <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#fee2e2', color: '#b91c1c' }}>No</span>;
-  if (s === '1') return <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#fef3c7', color: '#b45309' }}>Partial</span>;
-  return <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: '#f1f5f9', color: '#64748b' }}>NA</span>;
+function ScoreBadge({ score }: { score?: string | number | null | boolean }) {
+  const norm = normalizeScore(score ?? null);
+  return <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: norm.badgeBg, color: norm.badgeText }}>{norm.label}</span>;
 }
 
 export default function CallEvalPanel({

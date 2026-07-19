@@ -29,7 +29,7 @@ These prompts work in sequence to power the real-time helper chat for Investor R
 |---|---|
 | **Variable / File** | `PROMPT_router.txt` (read from disk at runtime) |
 | **Runtime usage** | `app/api/chat/analyze/route.ts` L393 |
-| **Model** | `gemini-2.5-flash` |
+| **Model** | `gemini-3.5-flash` |
 | **Trigger** | Runs on the very first user message only |
 
 **Purpose:** Determines product category and query type before Stage 1. Returns a classification so the correct category-specific prompt schema can be loaded.
@@ -57,7 +57,7 @@ These prompts work in sequence to power the real-time helper chat for Investor R
 |---|---|
 | **Variable / File** | `PROMPT_extract_repayment.txt` (read from disk at runtime) |
 | **Runtime usage** | `app/api/chat/analyze/route.ts` L469 |
-| **Model** | `gemini-2.5-flash` |
+| **Model** | `gemini-3.5-flash` |
 | **Trigger** | Only when `category = "repayment"` |
 
 **Purpose:** Category-specific micro-prompt that walks a strict decision tree for repayment issues. Determines what information the agent still needs from Finder before resolving. Returns either the next question to ask OR a resolved facts payload if all steps are complete.
@@ -96,7 +96,7 @@ These prompts work in sequence to power the real-time helper chat for Investor R
 | **Variable** | `analyzePrompt` |
 | **Source template** | `PROMPT_analyze.txt` |
 | **Runtime route** | `app/api/chat/analyze/route.ts` L35 |
-| **Model** | `gemini-2.5-flash` |
+| **Model** | `gemini-3.5-flash` |
 
 **Purpose:** Runs for all non-repayment categories (or as fallback). Determines query type and, for `process` queries, walks a canonical field schema across **10 categories** (Repayment, KYC, Payment, SIP, Sell/DDPI, Referral, Taxation, Dashboard, FD, HUF). Generates structured JSON to collect facts one at a time. Also automatically extracts facts from attached screenshots.
 
@@ -123,7 +123,7 @@ These prompts work in sequence to power the real-time helper chat for Investor R
 | **Variable** | `DEFAULT_CHAT_PROCESS_PROMPT` |
 | **Source template** | `PROMPT_chat.txt` |
 | **Runtime route** | `app/api/chat/route.ts` L11 |
-| **Model** | `gemini-2.5-pro` (falls back to `gemini-2.5-flash`) |
+| **Model** | `gemini-3.5-pro` (falls back to `gemini-3.5-flash`) |
 
 **Purpose:** Executes once Stage 1 has collected all necessary facts. Takes confirmed facts, conversation history, and the top 15 retrieved Knowledge Base (KB) chunks. Maps facts to precise scenarios in the KB and generates an internal agent briefing.
 
@@ -142,7 +142,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 |---|---|
 | **Variable** | `draftPrompt` |
 | **File** | `app/api/chat/draft/route.ts` L28 |
-| **Model** | `gemini-2.5-flash` |
+| **Model** | `gemini-3.5-flash` |
 
 **Purpose:** Takes the internal agent briefing (from Stage 2) and case details to generate a customer-ready draft message. Enforces rules to omit internal terminology (Slack channels like `#cx-ops`, CRM name `Finder`). Output must be empathetic, professional, and limited to 3–5 sentences.
 
@@ -161,7 +161,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 |---|---|
 | **Variable** | `IQS_SYSTEM_PROMPT` |
 | **File** | `lib/quality.ts` L178 |
-| **Model** | `gemini-2.5-flash` |
+| **Model** | `gemini-3.5-flash` |
 
 **Purpose:** Evaluates complete chat transcripts against trained human evaluator standards. Rates across **11 parameters** with weights summing to 100%.
 
@@ -217,7 +217,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 |---|---|
 | **Variable** | `CALL_IQS_SYSTEM_PROMPT` |
 | **File** | `lib/call-quality.ts` L455 |
-| **Model** | `gemini-2.5-flash` |
+| **Model** | `gemini-3.5-flash` |
 
 **Purpose:** Evaluates voice call transcripts (with optional WhatsApp chat context) across **11 voice-specific parameters**. The call transcript is the primary scoring source; the chat is context only.
 
@@ -316,7 +316,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 
 ### F. Two-Pass Analyzer — Pass 1 (Structure)
 
-| Variable | `PASS1_PROMPT` | File | `lib/call-analyzer.ts` L250 | Model | `gemini-2.5-flash` |
+| Variable | `PASS1_PROMPT` | File | `lib/call-analyzer.ts` L250 | Model | `gemini-3.5-flash` |
 |---|---|---|---|---|---|
 
 **Purpose:** First pass over raw audio. Detects timing structures, speaker turns (labeled A/B — no identity), overlap sections, and dead air without transcribing words.
@@ -327,7 +327,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 
 ### G. Two-Pass Analyzer — Pass 2 (Content)
 
-| Variable | `buildPass2Prompt(pass1)` | File | `lib/call-analyzer.ts` L294 | Model | `gemini-2.5-flash` |
+| Variable | `buildPass2Prompt(pass1)` | File | `lib/call-analyzer.ts` L294 | Model | `gemini-3.5-flash` |
 |---|---|---|---|---|---|
 
 **Purpose:** Second pass using Pass 1 timestamps. Transcribes, translates, identifies roles (`IR_EXECUTIVE` / `INVESTOR`), computes per-turn sentiment, aggression, confidence, empathy, and speech speed.
@@ -432,7 +432,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 |---|---|
 | **Variable** | `prompt` |
 | **File** | `app/api/cx/tl/member-analytics/ai/route.ts` L168 |
-| **Model** | `gemini-2.5-flash` |
+| **Model** | `gemini-3.5-flash` |
 
 **Purpose:** Evaluates agent stats (CSAT, IQS, volume, weakest parameters, top dispositions) and compiles strengths, watch areas, and actionable coaching tips for Team Leads.
 
@@ -479,20 +479,20 @@ Block 3 — Escalation: exact channel + POC + what to include
 
 | Prompt | Variable / File | Model | Runtime? |
 |---|---|---|---|
-| Stage 0 Router | `PROMPT_router.txt` | gemini-2.5-flash | Yes |
-| Stage 1A Repayment Extractor | `PROMPT_extract_repayment.txt` | gemini-2.5-flash | Yes |
-| Stage 1B Triage & Questions | `PROMPT_analyze.txt` (analyzePrompt) | gemini-2.5-flash | Yes |
-| Stage 2 Answer Generator | `PROMPT_chat.txt` (DEFAULT_CHAT_PROCESS_PROMPT) | gemini-2.5-pro | Yes |
-| Chat Draft Generator | draftPrompt in chat/draft/route.ts | gemini-2.5-flash | Yes |
-| Chat IQS Scorer | IQS_SYSTEM_PROMPT in lib/quality.ts | gemini-2.5-flash | Yes |
-| Call IQS Scorer | CALL_IQS_SYSTEM_PROMPT in lib/call-quality.ts | gemini-2.5-flash | Yes |
+| Stage 0 Router | `PROMPT_router.txt` | gemini-3.5-flash | Yes |
+| Stage 1A Repayment Extractor | `PROMPT_extract_repayment.txt` | gemini-3.5-flash | Yes |
+| Stage 1B Triage & Questions | `PROMPT_analyze.txt` (analyzePrompt) | gemini-3.5-flash | Yes |
+| Stage 2 Answer Generator | `PROMPT_chat.txt` (DEFAULT_CHAT_PROCESS_PROMPT) | gemini-3.5-pro | Yes |
+| Chat Draft Generator | draftPrompt in chat/draft/route.ts | gemini-3.5-flash | Yes |
+| Chat IQS Scorer | IQS_SYSTEM_PROMPT in lib/quality.ts | gemini-3.5-flash | Yes |
+| Call IQS Scorer | CALL_IQS_SYSTEM_PROMPT in lib/call-quality.ts | gemini-3.5-flash | Yes |
 | Call Transcription | CALL_TRANSCRIPTION_PROMPT in lib/call-quality.ts | Gemini multimodal | Yes |
 | Energy / Tone Scorer | ENERGY_TONE_PROMPT in lib/call-quality.ts | Gemini audio | Yes |
 | Call Disposition Extractor | CALL_DISPOSITION_PROMPT in lib/call-quality.ts | gemini | Yes |
 | Call Taxonomy Classifier | CALL_DISPOSITION_CLASSIFY_PROMPT in lib/call-quality.ts | gemini | Yes |
 | Call Chunk Splitter | CALL_CHUNK_PROMPT in lib/call-quality.ts | gemini | Yes |
-| Audio Analyzer Pass 1 | PASS1_PROMPT in lib/call-analyzer.ts | gemini-2.5-flash | Yes |
-| Audio Analyzer Pass 2 | buildPass2Prompt() in lib/call-analyzer.ts | gemini-2.5-flash | Yes |
+| Audio Analyzer Pass 1 | PASS1_PROMPT in lib/call-analyzer.ts | gemini-3.5-flash | Yes |
+| Audio Analyzer Pass 2 | buildPass2Prompt() in lib/call-analyzer.ts | gemini-3.5-flash | Yes |
 | Analytics Planner | PLANNER_PROMPT in lib/analytics/agent.ts | gemini | Yes |
 | Analytics Synthesizer | SYNTHESIZER_PROMPT in lib/analytics/agent.ts | gemini | Yes |
 | Intent Classifier | buildSystemPrompt() in lib/analytics/classifier.ts | gemini | Yes |
@@ -500,6 +500,6 @@ Block 3 — Escalation: exact channel + POC + what to include
 | Theme Clusterer | clusterThemes() in lib/analytics/themes.ts | gemini | Yes |
 | Batch Summarizer | PROMPT in lib/analytics/summarizer.ts | gemini | Yes |
 | Text-to-SQL Generator | buildPrompt() in lib/analytics/text-to-sql.ts | gemini | Yes |
-| TL Analytics Feedback | prompt in cx/tl/member-analytics/ai/route.ts | gemini-2.5-flash | Yes |
+| TL Analytics Feedback | prompt in cx/tl/member-analytics/ai/route.ts | gemini-3.5-flash | Yes |
 | Agent Self-Analytics | systemPrompt in quality/my-analytics/ai/route.ts | claude-haiku-4-5 | Yes |
 | Pipeline Meta-Review | PROMPT_analysis_meta.txt | (external, manual) | No |

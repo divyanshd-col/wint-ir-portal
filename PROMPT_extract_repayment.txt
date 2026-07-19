@@ -1,6 +1,6 @@
 ========================================================
 PROMPT — EXTRACT REPAYMENT (Category-Specific Micro-Prompt)
-Model: gemini-2.5-flash
+Model: gemini-3.5-flash
 Role: Runs only when category="repayment". Extracts fields or asks the next logical question.
 Output: JSON { queryType, category, questions[], stepTitle, reasoning, extractedFacts }
 ========================================================

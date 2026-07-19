@@ -236,20 +236,50 @@ export async function insertIQSScore(data: {
   parameters: Record<string, IQSParameterResult>;
   modelVersion: string;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
+  
+  // Optional bot metrics for hybrid chats
+  botIqsScore?: number;
+  botParameters?: Record<string, IQSParameterResult>;
+  botModelVersion?: string;
+  
+  // Additional v4 metadata
+  breaches?: string[];
+  answerChanges?: string[];
+  unrelatedCallFlag?: boolean;
 }): Promise<void> {
   const stored: Record<string, any> = { ...data.parameters };
   if (data.uncertainParameters && data.uncertainParameters.length > 0) {
     stored.__uncertain = data.uncertainParameters;
   }
+  if (data.breaches) stored.__breaches = data.breaches;
+  if (data.answerChanges) stored.__answerChanges = data.answerChanges;
+  if (data.unrelatedCallFlag) stored.__unrelatedCallFlag = data.unrelatedCallFlag;
+
+  if (data.botIqsScore !== undefined) {
+    stored.__scores = {
+      agent_iqs: data.iqsScore,
+      bot_iqs: data.botIqsScore,
+    };
+  }
+  if (data.botParameters) stored.__bot_parameters = data.botParameters;
+  if (data.botModelVersion) stored.__bot_model_version = data.botModelVersion;
+
   await query(`
-    INSERT INTO iqs_scores (chat_id, iqs_score, parameters, model_version, scored_at, status)
+    INSERT INTO iqs_scores (
+      chat_id, iqs_score, parameters, model_version, scored_at, status
+    )
     VALUES ($1, $2, $3, $4, NOW(), 'pending')
     ON CONFLICT (chat_id) DO UPDATE SET
-      iqs_score     = EXCLUDED.iqs_score,
-      parameters    = EXCLUDED.parameters,
-      model_version = EXCLUDED.model_version,
-      scored_at     = NOW()
-  `, [data.chatId, data.iqsScore, JSON.stringify(stored), data.modelVersion]);
+      iqs_score         = EXCLUDED.iqs_score,
+      parameters        = EXCLUDED.parameters,
+      model_version     = EXCLUDED.model_version,
+      scored_at         = NOW()
+  `, [
+    data.chatId, 
+    data.iqsScore, 
+    JSON.stringify(stored), 
+    data.modelVersion
+  ]);
 }
 
 /** Update CSAT on conversations table — called from CSAT_SUBMITTED */

@@ -76,6 +76,35 @@ export const CAT2_PARAMS = new Set([
 
 export type ParamScore = 'Yes' | 'No' | 'NA' | 'Half';
 
+/**
+ * Normalizes any score input (legacy or new) to standard v4 floats:
+ * Yes/Pass -> 1.0, Half/Partial -> 0.5, No/Fail -> 0.0, NA -> null
+ */
+export function normalizeScore(val: number | boolean | string | null): {
+  label: 'Yes' | 'No' | 'Half' | 'NA';
+  value: number | null;
+  badgeBg: string;
+  badgeText: string;
+} {
+  // 1. Match 'Yes' / true / 1.0 / 2 (legacy Yes)
+  if (val === true || val === 1 || val === '1' || val === 2 || val === '2' || val === 'Yes') {
+    return { label: 'Yes', value: 1.0, badgeBg: '#dcfce7', badgeText: '#15803d' };
+  }
+  
+  // 2. Match 'No' / false / 0.0 / 0
+  if (val === false || val === 0 || val === '0' || val === 'No') {
+    return { label: 'No', value: 0.0, badgeBg: '#fee2e2', badgeText: '#b91c1c' };
+  }
+  
+  // 3. Match 'Half' / 0.5 / 1 (legacy Half) / 'Partial'
+  if (val === 0.5 || val === '0.5' || val === 'Half' || val === 'Partial') {
+    return { label: 'Half', value: 0.5, badgeBg: '#fef3c7', badgeText: '#b45309' };
+  }
+  
+  // 4. Default to NA
+  return { label: 'NA', value: null, badgeBg: '#f1f5f9', badgeText: '#64748b' };
+}
+
 export interface IQSScoreEntry {
   id: string;
   chatId: string;

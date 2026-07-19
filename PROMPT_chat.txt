@@ -1,6 +1,6 @@
 ========================================================
 PROMPT 2 — CHAT (Stage 2: Answer Generator)
-Model: gemini-2.5-pro (falls back to flash if quota exceeded)
+Model: gemini-3.5-pro (falls back to flash if quota exceeded)
 Role: Runs once after all questions are answered. Generates final briefing.
 Input: confirmed evidence (field IDs + values) + KB chunks + conversation history
 ========================================================
