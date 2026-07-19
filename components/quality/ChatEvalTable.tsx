@@ -1,6 +1,8 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { PARAM_NAMES, PARAM_ORDER } from '@/lib/quality';
+
+import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import EvalPanel from './EvalPanel';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
@@ -50,7 +52,7 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
   return m;
 }
 
-type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'callIqsScore';
+type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'botIqsScore';
 type SortDir = 'asc' | 'desc';
 
 export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
@@ -158,8 +160,8 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     let cmp = 0;
     if (sortCol === 'chatId')    cmp = a.chatId.localeCompare(b.chatId);
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
-    if (sortCol === 'iqsScore')  cmp = a.iqsScore - b.iqsScore;
-    if (sortCol === 'callIqsScore')  cmp = (a.callIqsScore ?? 0) - (b.callIqsScore ?? 0);
+    if (sortCol === 'iqsScore')  cmp = (a.iqsScore ?? 0) - (b.iqsScore ?? 0);
+    if (sortCol === 'botIqsScore')  cmp = (a.botIqsScore ?? 0) - (b.botIqsScore ?? 0);
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
@@ -452,13 +454,13 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                 </button>
               </th>
               <th style={{ ...th, textAlign: 'right' }}>
-                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('iqsScore')}>
-                  <SortIcon col="iqsScore" /> IQS (Chat)
+                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('botIqsScore')}>
+                  <SortIcon col="botIqsScore" /> IQS (Bot)
                 </button>
               </th>
               <th style={{ ...th, textAlign: 'right' }}>
-                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('callIqsScore')}>
-                  <SortIcon col="callIqsScore" /> IQS (Call)
+                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('iqsScore')}>
+                  <SortIcon col="iqsScore" /> IQS (Agent)
                 </button>
               </th>
               <th style={th}>Call Transcript</th>
@@ -513,26 +515,30 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       {chat.agentName}
                     </td>
                     <td style={tdNum}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
-                        fontFamily: 'ui-monospace, monospace',
-                        background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                        color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                      }}>
-                        {chat.iqsScore}
-                      </span>
-                    </td>
-                    <td style={tdNum}>
-                      {chat.callIqsScore !== null ? (
+                      {chat.botIqsScore !== null ? (
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
                           fontFamily: 'ui-monospace, monospace',
-                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                          background: chat.botIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.botIqsScore < 60 ? '#b91c1c' : '#713f12',
                         }}>
-                          {chat.callIqsScore}
+                          {chat.botIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
+                      )}
+                    </td>
+                    <td style={tdNum}>
+                      {chat.iqsScore !== null ? (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
+                          fontFamily: 'ui-monospace, monospace',
+                          background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
+                        }}>
+                          {chat.iqsScore}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
@@ -608,20 +614,22 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                   </tr>
 
                   {expandedId === chat.chatId && (
-                    <EvalPanel
-                      chatId={chat.chatId}
-                      agentName={chat.agentName}
-                      iqsScore={chat.iqsScore}
-                      closedAt={chat.closedAt}
-                      disposition={chat.disposition}
-                      parameters={chat.parameters}
-                      mobileNumber={chat.mobileNumber}
-                      mode="submit"
-                      onDone={() => removeChat(chat.chatId)}
-                      onClose={() => setExpandedId(null)}
-                      colSpan={7}
-                      conversationType={chat.conversationType}
-                    />
+                    <ErrorBoundary>
+                      <EvalPanel
+                        chatId={chat.chatId}
+                        agentName={chat.agentName}
+                        iqsScore={chat.iqsScore ?? 0}
+                        closedAt={chat.closedAt}
+                        disposition={chat.disposition}
+                        parameters={chat.parameters}
+                        mobileNumber={chat.mobileNumber}
+                        mode="submit"
+                        onDone={() => removeChat(chat.chatId)}
+                        onClose={() => setExpandedId(null)}
+                        colSpan={7}
+                        conversationType={chat.conversationType}
+                      />
+                    </ErrorBoundary>
                   )}
                 </React.Fragment>
               ))

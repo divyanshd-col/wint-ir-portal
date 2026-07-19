@@ -1,6 +1,6 @@
 ========================================================
 PROMPT — ROUTER (Stage 0: Classification)
-Model: gemini-2.5-flash
+Model: gemini-3.5-flash
 Role: Runs on the very first user message. Determines the intent category.
 Output: JSON { category, queryType, confidence }
 ========================================================

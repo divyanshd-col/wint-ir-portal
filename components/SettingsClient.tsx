@@ -78,7 +78,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
 
   // ── General state ──────────────────────────────────────────────────────────
   const [llmProvider, setLlmProvider] = useState<'gemini' | 'claude'>((config.llmProvider as any) || 'gemini');
-  const [geminiModel, setGeminiModel] = useState(config.geminiModel || 'gemini-2.5-flash');
+  const [geminiModel, setGeminiModel] = useState(config.geminiModel || 'gemini-3.5-flash');
   const [activeGeminiKey, setActiveGeminiKey] = useState<1 | 2 | 3 | 4 | 5>((config.activeGeminiKey as any) || 1);
   const [geminiKeysSet, setGeminiKeysSet] = useState<Record<number, boolean>>({
     1: !!config.hasGeminiKey,
@@ -733,10 +733,10 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                       <optgroup label="Gemini 3">
                         <option value="gemini-3-flash-preview">3 Flash (default)</option>
                       </optgroup>
-                      <optgroup label="Gemini 2.5">
-                        <option value="gemini-2.5-pro">2.5 Pro</option>
-                        <option value="gemini-2.5-flash">2.5 Flash</option>
-                        <option value="gemini-2.5-flash-lite">2.5 Flash Lite</option>
+                      <optgroup label="Gemini 3.5">
+                        <option value="gemini-3.5-pro">2.5 Pro</option>
+                        <option value="gemini-3.5-flash">2.5 Flash</option>
+                        <option value="gemini-3.5-flash-lite">2.5 Flash Lite</option>
                       </optgroup>
                       <optgroup label="Gemini 2.0">
                         <option value="gemini-2.0-flash">2.0 Flash</option>

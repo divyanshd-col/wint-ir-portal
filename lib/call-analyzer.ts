@@ -207,7 +207,7 @@ async function geminiGenerate(
     }],
     generationConfig: {
       temperature: 0.1,
-      // Gemini 2.5 counts thinking tokens against maxOutputTokens, so this must
+      // Gemini 3.5 counts thinking tokens against maxOutputTokens, so this must
       // be large enough for thinking budget + a full long-call transcript.
       maxOutputTokens: 65536,
       thinkingConfig: {

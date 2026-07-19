@@ -425,7 +425,7 @@ RETURN FORMAT — return ONLY valid JSON:
     } else {
       routerRaw = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        'gemini-3.5-flash',
         [{ role: 'user', parts: routerParts }],
         { config: { responseMimeType: 'application/json' } },
         15000
@@ -533,7 +533,7 @@ ${schema}`;
     } else {
       extractRaw = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        'gemini-3.5-flash',
         [{ role: 'user', parts: extractParts }],
         { config: { responseMimeType: 'application/json' } },
         40000

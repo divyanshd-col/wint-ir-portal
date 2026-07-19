@@ -119,7 +119,7 @@ ${convBlocks.join('\n\n')}`;
 
   const raw = await geminiGenerate(
     keys,
-    'gemini-2.5-flash',
+    'gemini-3.5-flash',
     [{ role: 'user', parts: [{ text: prompt }] }],
     {},
     18_000,
@@ -154,7 +154,7 @@ ${numbered}`;
 
   const raw = await geminiGenerate(
     keys,
-    'gemini-2.5-flash',
+    'gemini-3.5-flash',
     [{ role: 'user', parts: [{ text: prompt }] }],
     {},
     20_000,

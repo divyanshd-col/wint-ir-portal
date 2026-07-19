@@ -408,7 +408,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     scoringTasks.push(
       geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        'gemini-3.5-flash',
         [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + combinedPrompt }] }],
         {},
         60_000,

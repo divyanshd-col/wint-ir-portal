@@ -255,7 +255,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       chatId: chat_id,
       callIqsScore: iqs,
       callParameters: parameters,
-      callModelVersion: 'gemini-2.5-flash-preview-05-20',
+      callModelVersion: 'gemini-3.5-flash-preview-05-20',
     });
     await updateCallRecordingStatus(call_id, 'scored');
   } catch (err: any) {

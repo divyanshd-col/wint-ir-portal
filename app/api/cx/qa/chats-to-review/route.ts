@@ -10,7 +10,8 @@ const ROUTE = 'cx/qa/chats-to-review';
 export interface ChatToReviewRow {
   chatId:        string;
   agentName:     string;
-  iqsScore:      number;
+  iqsScore:      number | null;
+  botIqsScore:   number | null;
   callIqsScore:  number | null;
   callTranscriptStatus: 'no_call' | 'pending' | 'transcribed';
   callTranscriptLabel: string;
@@ -207,7 +208,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const rows = await query<{
     chat_id: string;
     agent_name: string | null;
-    iqs_score: string;
+    iqs_score: string | null;
     call_iqs_score: string | null;
     closed_at: string;
     disposition: string;
@@ -322,11 +323,27 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     const callInfo = getCallInfo(r.chat_id, r.contact_id, r.started_at, r.closed_at);
 
+    let botIqsScore: number | null = null;
+    let iqsScore: number | null = null;
+    let callIqsScore: number | null = null;
+
+    if (params.__scores) {
+      botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
+      iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
+    } else {
+      // Pre-June 15 legacy logic: map legacy iqs_score to Bot column
+      botIqsScore = r.iqs_score !== null ? parseFloat(r.iqs_score) : null;
+      iqsScore = null; // Agent wasn't separately scored then
+      callIqsScore = r.call_iqs_score !== null ? parseFloat(r.call_iqs_score) : null;
+    }
+
     return {
       chatId:         r.chat_id,
       agentName:      r.agent_name ?? 'Unknown',
-      iqsScore:       parseInt(r.iqs_score),
-      callIqsScore:   r.call_iqs_score ? parseInt(r.call_iqs_score) : null,
+      iqsScore,
+      botIqsScore,
+      callIqsScore,
       callTranscriptStatus: callInfo.status,
       callTranscriptLabel: callInfo.label,
       closedAt:       r.closed_at,

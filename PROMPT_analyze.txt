@@ -1,6 +1,6 @@
 ========================================================
 PROMPT 1 — ANALYZE (Stage 1: Triage / Question Generator)
-Model: gemini-2.5-flash
+Model: gemini-3.5-flash
 Role: Runs on every user message. Decides what to ask next.
 Output: JSON { queryType, category, questions[], stepTitle }
 ========================================================
