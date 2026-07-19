@@ -22,7 +22,7 @@ async function expandQuery(keys: string[], query: string): Promise<string> {
   try {
     const result = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      'gemini-3.5-flash',
       [{
         role: 'user',
         parts: [{
@@ -386,7 +386,7 @@ Return ONLY valid JSON with no markdown fencing:
 
           const raw = await geminiGenerate(
             geminiKeys,
-            'gemini-2.5-flash',
+            'gemini-3.5-flash',
             [{ role: 'user', parts: [{ text: educationPrompt }] }],
             undefined,
             20000

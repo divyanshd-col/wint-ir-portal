@@ -20,7 +20,7 @@ export async function GET() {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
         await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.5-flash',
           contents: [{ role: 'user', parts: [{ text: 'say ok' }] }],
         });
         return { index: i + 1, key: masked, status: 'ok' };

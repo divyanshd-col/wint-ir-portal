@@ -102,7 +102,7 @@ async function processCallWebhook(body: any): Promise<void> {
   try {
     transcriptionRaw = await geminiGenerate(
       geminiKeys,
-      'gemini-2.5-flash',
+      'gemini-3.5-flash',
       [{
         role: 'user',
         parts: [

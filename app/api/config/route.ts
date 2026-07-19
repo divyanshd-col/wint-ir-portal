@@ -24,7 +24,7 @@ export async function GET() {
     activeGeminiKey: config.activeGeminiKey || 1,
     anthropicApiKey: config.anthropicApiKey ? '••••' + config.anthropicApiKey.slice(-4) : '',
     llmProvider: config.llmProvider || 'gemini',
-    geminiModel: config.geminiModel || 'gemini-2.5-flash',
+    geminiModel: config.geminiModel || 'gemini-3.5-flash',
     knowledgeBaseUrls: config.knowledgeBaseUrls,
     knowledgeBaseDocNames: config.knowledgeBaseDocNames || {},
     systemPrompt: config.systemPrompt || '',

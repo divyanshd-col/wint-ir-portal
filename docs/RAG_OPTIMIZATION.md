@@ -24,7 +24,7 @@ This document covers the current architecture, known weaknesses, and recommended
 Agent types query
       │
       ▼
-[Stage 0] PROMPT_router.txt → gemini-2.5-flash
+[Stage 0] PROMPT_router.txt → gemini-3.5-flash
       │  Classifies: category + queryType (direct/process/clarify)
       │
       ├── queryType = "direct" ──────────────────────────────────────────────────►
@@ -32,14 +32,14 @@ Agent types query
       ├── category = "repayment" + queryType = "process"                         │
       │         │                                                                 │
       │         ▼                                                                 │
-      │  [Stage 1A] PROMPT_extract_repayment.txt → gemini-2.5-flash              │
+      │  [Stage 1A] PROMPT_extract_repayment.txt → gemini-3.5-flash              │
       │         │   Walks decision tree: 4-step fact-gathering                   │
       │         │   Returns next question OR resolved extractedFacts              │
       │         │                                                                 │
       └── all other categories + queryType = "process"                           │
                 │                                                                 │
                 ▼                                                                 │
-       [Stage 1B] PROMPT_analyze.txt → gemini-2.5-flash                          │
+       [Stage 1B] PROMPT_analyze.txt → gemini-3.5-flash                          │
                 │  General triage: walks field schema for 10 categories          │
                 │  Returns next question OR extractedFacts                        │
                 │                                                                 │
@@ -49,7 +49,7 @@ Agent types query
                                                      │
                                                      ▼
                               [KB Retrieval] fetchKnowledgeChunks() → cache
-                              [Query Expansion] expandQuery() → gemini-2.5-flash
+                              [Query Expansion] expandQuery() → gemini-3.5-flash
                                      │  Distills query to 6-10 focused keywords
                                      │  + category boost keywords appended
                                      │  + form answer keys/values appended
@@ -60,7 +60,7 @@ Agent types query
                                      │  Always returns top 20 regardless of score
                                      │
                                      ▼
-                              [Stage 2] PROMPT_chat.txt → gemini-2.5-pro
+                              [Stage 2] PROMPT_chat.txt → gemini-3.5-pro
                                      │  Receives: confirmed facts + top-20 KB chunks
                                      │  Outputs: 3-block structured briefing
                                      │     Block 1 — Tell the user (1-2 sentences)
@@ -68,7 +68,7 @@ Agent types query
                                      │     Block 3 — Escalation path
                                      │
                                      ▼
-                              [Draft] draftPrompt → gemini-2.5-flash
+                              [Draft] draftPrompt → gemini-3.5-flash
                                      Converts internal briefing → customer-ready message
                                      Strips internal terms (Finder, #cx-ops, etc.)
 ```
@@ -112,7 +112,7 @@ fetchKnowledgeChunks() → retrieveRelevantChunks(topK=5)  ← ⚠️ ONLY 5 CHU
       │
       ▼
 IQS_SYSTEM_PROMPT + buildScoringPrompt(transcript, KB context)
-→ gemini-2.5-flash
+→ gemini-3.5-flash
       │
       │  Scores 11 parameters:
       │  Technical (20%) | AllQuestions (10%) | Expectation (10%)
@@ -212,14 +212,14 @@ Call ends → recording URL available in Robylon
 
 --- SEPARATE PATH: Two-Pass Deep Analyzer (lib/call-analyzer.ts) ---
 
-[Pass 1] PASS1_PROMPT → gemini-2.5-flash (audio)
+[Pass 1] PASS1_PROMPT → gemini-3.5-flash (audio)
       │  Detects: timing structures, speaker turns (A/B labels)
       │  Overlap sections, dead air duration
       │  Does NOT transcribe words — structure only
       │  Output: JSON { duration_seconds, events[] }
       │
       ▼
-[Pass 2] buildPass2Prompt(pass1) → gemini-2.5-flash (audio)
+[Pass 2] buildPass2Prompt(pass1) → gemini-3.5-flash (audio)
       │  Uses Pass 1 timestamps as anchors
       │  Transcribes content within each timed turn
       │  Identifies roles: IR_EXECUTIVE vs INVESTOR
@@ -282,7 +282,7 @@ CALL_IQS_SYSTEM_PROMPT + buildCallScoringPrompt(
     chatTranscript,       ← context only
     callId, date, kbContext
 )
-→ gemini-2.5-flash
+→ gemini-3.5-flash
       │
       │  Scores 11 voice-specific parameters:
       │

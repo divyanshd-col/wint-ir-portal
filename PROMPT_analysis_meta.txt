@@ -8,7 +8,7 @@ I'm building an AI-powered internal support tool for Wint Wealth, a fintech comp
 The system has two prompts that work as a pipeline:
 
 STAGE 1 — ANALYZE PROMPT (triage layer):
-- Model: Gemini 2.5 Flash
+- Model: Gemini 3.5 Flash
 - Runs on every message the agent sends
 - Decides what type of query it is (direct/process/clarify)
 - If it's a process issue (user-specific), it asks the agent diagnostic questions one step at a time
@@ -18,7 +18,7 @@ STAGE 1 — ANALYZE PROMPT (triage layer):
 - Output is JSON: { queryType, category, questions[], stepTitle }
 
 STAGE 2 — CHAT PROMPT (answer generator):
-- Model: Gemini 2.5 Pro
+- Model: Gemini 3.5 Pro
 - Runs once at the end, after all diagnostic questions are answered
 - Receives: confirmed evidence (field ID = value pairs from Stage 1) + top 15 KB chunks (retrieved by keyword search from 7 Google Docs) + conversation history
 - Maps confirmed field values to exact KB scenarios

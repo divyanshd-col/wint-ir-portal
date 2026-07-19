@@ -57,7 +57,7 @@ const DEFAULT_CONFIG: PortalConfig = {
   activeGeminiKey: 1,
   anthropicApiKey: '',
   llmProvider: 'gemini',
-  geminiModel: 'gemini-2.5-flash',
+  geminiModel: 'gemini-3.5-flash',
   knowledgeBaseUrls: [],
   users: [],
   systemPrompt: '',

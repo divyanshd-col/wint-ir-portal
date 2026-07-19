@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     } else if (geminiKeys.length > 0) {
       rawResponse = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        'gemini-3.5-flash',
         [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
         {},
         60000,
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
       scoredAt: now,
       updatedAt: now,
       provider,
-      model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash',
+      model: provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-3.5-flash',
       scoredBy: session.user?.email || session.user?.name || 'unknown',
       agentName: agentName || (parsed as any).extractedAgentName || '',
       date,

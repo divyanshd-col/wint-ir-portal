@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import EvalPanel from './EvalPanel';
+import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 
@@ -142,8 +143,8 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
             <tr>
               <th style={th}>Chat ID</th>
               <th style={th}>Agent</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS (Chat)</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS (Call)</th>
+              <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
+              <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
               <th style={th}>Call Transcript</th>
               <th style={th}>CSAT</th>
               <th style={th}>Disposition</th>
@@ -192,24 +193,28 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
                     </td>
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                     <td style={tdNum}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-                        background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                        color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                      }}>
-                        {chat.iqsScore}
-                      </span>
-                    </td>
-                    <td style={tdNum}>
-                      {chat.callIqsScore !== null ? (
+                      {chat.botIqsScore !== null ? (
                         <span style={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                           minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-                          background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                          color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                          background: chat.botIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.botIqsScore < 60 ? '#b91c1c' : '#713f12',
                         }}>
-                          {chat.callIqsScore}
+                          {chat.botIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      )}
+                    </td>
+                    <td style={tdNum}>
+                      {chat.iqsScore !== null ? (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
+                          background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
+                        }}>
+                          {chat.iqsScore}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
@@ -310,10 +315,10 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
                   </tr>
 
                   {expandedId === chat.chatId && (
-                    <EvalPanel
+                    <ErrorBoundary><EvalPanel
                       chatId={chat.chatId}
                       agentName={chat.agentName}
-                      iqsScore={chat.iqsScore}
+                      iqsScore={chat.iqsScore ?? 0}
                       closedAt={chat.closedAt}
                       disposition={chat.disposition}
                       parameters={chat.parameters}
@@ -327,6 +332,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
                       colSpan={10}
                       conversationType={chat.conversationType}
                     />
+                    </ErrorBoundary>
                   )}
                 </React.Fragment>
               ))

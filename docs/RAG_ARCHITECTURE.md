@@ -14,7 +14,7 @@ graph TD
     C -->|chunkText| CH[Knowledge Chunks]
     CH -->|In-memory / Vercel KV| Cache[Multi-Level Cache]
     
-    UQ[User Agent Query] -->|gemini-2.5-flash| QE[Query Expansion: 6-10 Synonyms]
+    UQ[User Agent Query] -->|gemini-3.5-flash| QE[Query Expansion: 6-10 Synonyms]
     Form[Form Answers & Category Boosts] -->|Combine| SQ[Combined Search Query]
     QE --> SQ
     
@@ -41,7 +41,7 @@ To prevent hitting Google Drive API rate limits and to optimize latency:
 3.  **Google Docs Sync**: If both caches expire or miss, a fresh pull triggers and refreshes the caches.
 
 ### C. Query Distillment & Expansion ([app/api/chat/route.ts](file:///Users/admin/Documents/WintWealth/wint-ir-portal/app/api/chat/route.ts))
-*   **Synonym Generation (`expandQuery`)**: Uses `gemini-2.5-flash` to extract core search intent from the user query, strip conversational noise, preserve named entities, handle negations, and map terms to 4-6 focused synonyms. It returns a space-separated string of 6-10 keywords.
+*   **Synonym Generation (`expandQuery`)**: Uses `gemini-3.5-flash` to extract core search intent from the user query, strip conversational noise, preserve named entities, handle negations, and map terms to 4-6 focused synonyms. It returns a space-separated string of 6-10 keywords.
 *   **Form Answers & Category Boosting**:
     *   **Form Answers**: Incorporates keys and values from the user interface form to filter content.
     *   **Category Boosts**: Appends static, category-specific keywords (e.g., for `repayment`, `kyc`, `taxation`) directly targeting relevant document sections.

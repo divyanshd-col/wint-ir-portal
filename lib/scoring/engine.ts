@@ -9,6 +9,7 @@ import {
   getSystemPrompt, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
 } from '@/lib/quality';
+import { buildScoringPrompt as buildScoringPromptV4, parseAndScore } from '@/lib/scoring/prompt_v4';
 import type { TimedMessage, ParamScore } from '@/lib/quality';
 import {
   CALL_TRANSCRIPTION_PROMPT,
@@ -138,7 +139,7 @@ export async function scoreLinkedCallsForChat(
       const iqsSystemPrompt = getSystemPrompt('agent', config.iqsScoringPrompt);
       const raw = await geminiGenerate(
         geminiKeys,
-        'gemini-2.5-flash',
+        'gemini-3.5-flash',
         [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + scoringPrompt }] }],
         {},
         60_000,
@@ -157,7 +158,7 @@ export async function scoreLinkedCallsForChat(
         transcript: segments,
       });
 
-      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-2.5-flash' });
+      await updateCallIQSScore({ chatId, callIqsScore: parsed.iqs, callParameters: parameters, callModelVersion: 'gemini-3.5-flash' });
       await updateCallRecordingStatus(call.id, 'scored');
       console.log(`[scoring-engine] Scored combined chat+call for ${chatId} → IQS ${parsed.iqs}`);
 
@@ -183,7 +184,7 @@ export async function executeScoring(
   disposition: string,
   subDisposition: string,
   contactPhone?: string,
-): Promise<{ chatId: string; iqs: number } | null> {
+): Promise<{ chatId: string; iqs: number; botIqs?: number } | null> {
   const chatId = conv.id;
 
   // Atomic lock — prevents concurrent duplicate scorings when Robylon fires
@@ -234,52 +235,97 @@ export async function executeScoring(
   // ── Fetch relevant KB chunks to ground the Technical scoring parameter ──────
   const kbContext = await getKbContextForScoring(disposition, subDisposition, transcriptText, config, false);
 
-  let hasCall = false;
+  let callTranscripts: string[] = [];
   try {
-    const calls = await query<any>('SELECT id FROM call_recordings WHERE chat_id = $1', [chatId]);
-    hasCall = calls.length > 0;
+    const calls = await query<any>('SELECT transcript FROM call_recordings WHERE chat_id = $1 ORDER BY called_at ASC', [chatId]);
+    callTranscripts = calls.map(c => typeof c.transcript === 'string' ? c.transcript : transcriptFromJsonb(c.transcript)).filter(Boolean);
   } catch (err) {
     console.error(`[scoring-engine] executeScoring error checking calls:`, err);
   }
 
-  const userPrompt = buildScoringPrompt(effectiveTranscript, disposition, chatId, '', kbContext, subDisposition, timing.conversationType, hasCall);
-  const iqsSystemPrompt = getSystemPrompt(timing.conversationType, config.iqsScoringPrompt);
-
-  let rawResponse: string;
-  if (provider === 'claude' && anthropicKey) {
-    const client = new Anthropic({ apiKey: anthropicKey });
-    const resp = await client.messages.create({
-      model: 'claude-sonnet-4-6', max_tokens: 2000,
-      system: iqsSystemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+  const runLeg = async (legType: 'bot' | 'human') => {
+    const { system, user } = buildScoringPromptV4(effectiveTranscript, {
+      kbContext,
+      callTranscripts,
+      leg: legType,
+      channel: timing.conversationType === 'bot' ? 'bot' : 'human'
     });
-    rawResponse = resp.content[0].type === 'text' ? resp.content[0].text : '';
-  } else if (geminiKeys.length) {
-    rawResponse = await geminiGenerate(
-      geminiKeys, 'gemini-2.5-flash',
-      [{ role: 'user', parts: [{ text: iqsSystemPrompt + '\n\n' + userPrompt }] }],
-      {}, 60000,
-    );
-  } else {
-    throw new Error('No LLM API key configured');
+    let raw = '';
+    if (provider === 'claude' && anthropicKey) {
+      const client = new Anthropic({ apiKey: anthropicKey });
+      const resp = await client.messages.create({
+        model: 'claude-sonnet-4-6', max_tokens: 2000,
+        system, messages: [{ role: 'user', content: user }],
+      });
+      raw = resp.content[0].type === 'text' ? resp.content[0].text : '';
+    } else if (geminiKeys.length) {
+      raw = await geminiGenerate(
+        geminiKeys, 'gemini-3.5-flash',
+        [{ role: 'user', parts: [{ text: system + '\\n\\n' + user }] }],
+        {}, 60000,
+      );
+    } else {
+      throw new Error('No LLM API key configured');
+    }
+    return parseAndScore(raw);
+  };
+
+  let botPass: any = null;
+  let humanPass: any = null;
+
+  try {
+    if (timing.conversationType === 'bot') {
+      botPass = await runLeg('bot');
+    } else if (timing.conversationType === 'agent') {
+      humanPass = await runLeg('human');
+    } else {
+      botPass = await runLeg('bot');
+      humanPass = await runLeg('human');
+    }
+  } catch (e: any) {
+    console.error(`[scoring-engine] LLM generation failed for ${chatId}:`, e);
+    return null;
   }
 
-  const parsed = parseScoringResponse(rawResponse, chatId, timing.conversationType);
-  const modelVersion = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-2.5-flash';
+  const modelVersion = provider === 'claude' ? 'claude-sonnet-4-6' : 'gemini-3.5-flash';
 
-  // Convert ParamScore → IQSParameterResult for PostgreSQL storage
-  const parameters: Record<string, IQSParameterResult> = {};
-  for (const [k, val] of Object.entries(parsed.scores || {})) {
-    const key = PASCAL_TO_DB[k] || k.toLowerCase();
-    parameters[key] = toParamResult(val as ParamScore, (parsed.reasoning || {})[k] || (parsed.reasoning || {})[key] || '');
-  }
+  const convertParameters = (parsed: any): Record<string, IQSParameterResult> => {
+    if (!parsed || !parsed.parameters) return {};
+    const out: Record<string, IQSParameterResult> = {};
+    for (const [k, cell] of Object.entries(parsed.parameters)) {
+      const typedCell = cell as any;
+      const key = PASCAL_TO_DB[k] || k.toLowerCase();
+      out[key] = {
+        score: typedCell.score === 1 ? true : typedCell.score === 0 ? false : typedCell.score === 0.5 ? 0.5 : null,
+        reasoning: typedCell.comment || ''
+      };
+    }
+    return out;
+  };
+
+  const primaryPass = humanPass || botPass;
+  if (!primaryPass) return null;
+
+  const parameters = convertParameters(primaryPass);
+  const botParameters = humanPass && botPass ? convertParameters(botPass) : undefined;
+  
+  const uncertainParameters = primaryPass.review_parameters.map((p: string) => ({ 
+    parameter: p, 
+    question: primaryPass.parameters[p]?.comment || '' 
+  }));
 
   await insertIQSScore({
     chatId,
-    iqsScore: parsed.iqs,
+    iqsScore: primaryPass.iqs_score || 0,
     parameters,
     modelVersion,
-    uncertainParameters: parsed.uncertainParameters,
+    uncertainParameters,
+    botIqsScore: botPass && humanPass ? (botPass.iqs_score || 0) : undefined,
+    botParameters,
+    botModelVersion: botPass && humanPass ? modelVersion : undefined,
+    breaches: primaryPass.breaches?.map((b: any) => `${b.type}: ${b.quote}`),
+    answerChanges: primaryPass.answer_changes?.map((b: any) => `${b.type}: ${b.quote}`),
+    unrelatedCallFlag: primaryPass.unrelated_call_flag
   });
 
   // Update timing on conversation row
@@ -291,8 +337,8 @@ export async function executeScoring(
     resolutionSeconds: timing.resolutionTime ?? null,
   });
 
-  const finalAgentName = effectiveAgentName || (parsed as any).extractedAgentName || '';
-  console.log(`[scoring-engine] Scored chat ${chatId} → IQS ${parsed.iqs}% (${finalAgentName || 'unknown'}) type=${timing.conversationType}${timing.conversationType === 'bot' ? ' [bot-handled]' : ''}`);
+  const finalAgentName = effectiveAgentName;
+  console.log(`[scoring-engine] Scored chat ${chatId} → IQS ${primaryPass.iqs_score}% type=${timing.conversationType}`);
 
   // Audit: log every scoring event for full traceability
   storeAppendAuditEntry({
@@ -302,7 +348,7 @@ export async function executeScoring(
     actorEmail: 'bot',
     actorRole: 'system',
     ts: new Date().toISOString(),
-    meta: { iqs: parsed.iqs, agentName: finalAgentName, model: modelVersion },
+    meta: { iqs: primaryPass.iqs_score, agentName: finalAgentName, model: modelVersion },
   }).catch(() => {});
 
   // ── Slack + Sheet alert — deduplicated via KV ─────────────────────────────────────────
@@ -310,13 +356,17 @@ export async function executeScoring(
     chatId,
     agentName:           finalAgentName,
     contactPhone,
-    scores:              parsed.scores    as Record<string, string>,
-    reasoning:           parsed.reasoning as Record<string, string>,
-    iqs:                 parsed.iqs,
+    scores:              Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, String(v.score)])),
+    reasoning:           Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, v.reasoning])),
+    iqs:                 primaryPass.iqs_score || 0,
     disposition,
     subDisposition,
-    uncertainParameters: parsed.uncertainParameters,
+    uncertainParameters,
   }).catch(() => {});
 
-  return { chatId, iqs: parsed.iqs };
+  return { 
+    chatId, 
+    iqs: primaryPass.iqs_score || 0,
+    botIqs: botPass && humanPass ? (botPass.iqs_score || 0) : undefined
+  };
 }

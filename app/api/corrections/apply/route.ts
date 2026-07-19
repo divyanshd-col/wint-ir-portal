@@ -80,7 +80,7 @@ QUESTION: Is there a specific one-sentence addition or correction to the system 
       } else if (geminiKeys.length) {
         const text = await geminiGenerate(
           geminiKeys,
-          'gemini-2.5-flash',
+          'gemini-3.5-flash',
           [{ role: 'user', parts: [{ text: suggestionPrompt }] }],
           undefined,
           15000

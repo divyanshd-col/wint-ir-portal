@@ -226,7 +226,7 @@ export async function classifyQuery(
   try {
     raw = await geminiGenerate(
       keys,
-      'gemini-2.5-flash',
+      'gemini-3.5-flash',
       [{ role: 'user', parts: [{ text: userPrompt }] }],
       { systemInstruction: { parts: [{ text: systemPrompt }] } },
       12_000,

@@ -263,7 +263,7 @@ for (const e of unique) {
   // ── iqs_scores ─────────────────────────────────────────────────────────────
   if (e.scores && typeof e.iqs === 'number') {
     const parameters = buildParametersJsonb(e.scores, e.reasoning);
-    const modelVersion = `${e.provider || 'gemini'}/${e.model || 'gemini-2.5-flash'}`;
+    const modelVersion = `${e.provider || 'gemini'}/${e.model || 'gemini-3.5-flash'}`;
     try {
       await db(`
         INSERT INTO iqs_scores (chat_id, iqs_score, parameters, model_version, scored_at)

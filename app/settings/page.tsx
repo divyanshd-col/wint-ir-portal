@@ -17,7 +17,7 @@ export default async function SettingsPage() {
   // Strip actual key values — only pass presence flags to client
   const safeConfig = {
     llmProvider: config.llmProvider,
-    geminiModel: config.geminiModel || 'gemini-2.5-flash',
+    geminiModel: config.geminiModel || 'gemini-3.5-flash',
     hasGeminiKey: !!config.geminiApiKey,
     hasGeminiKey2: !!config.geminiApiKey2,
     hasGeminiKey3: !!config.geminiApiKey3,

@@ -50,7 +50,7 @@ Return ONLY valid JSON with no markdown fencing:
   try {
     const raw = await geminiGenerate(
       geminiKeys,
-      'gemini-2.5-flash',
+      'gemini-3.5-flash',
       [{ role: 'user', parts: [{ text: draftPrompt }] }],
       undefined,
       20000
