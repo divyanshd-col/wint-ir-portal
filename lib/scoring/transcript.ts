@@ -66,8 +66,9 @@ export function normalizeRobylonMessages(messages: any[], year?: number): {
     const isInternalNote =
       m.is_private === true ||
       m.is_internal === true ||
-      ((sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
-       (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent'));
+      (sender || '').toLowerCase().includes('robylon') ||
+      (m.sender_name || '').toLowerCase().includes('robylon') ||
+      (m.agent_name || '').toLowerCase().includes('robylon');
 
     if (isInternalNote) {
       lines.push(`Internal Note: ${content}`);

@@ -34,8 +34,9 @@ function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: 
     const isInternalNote =
       m.is_private === true ||
       m.is_internal === true ||
-      ((m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI' || m.sender === 'Robylon AI') &&
-       (m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent' || m.role === 'agent' || m.role === 'Agent'));
+      (m.sender_name || '').toLowerCase().includes('robylon') ||
+      (m.sender || '').toLowerCase().includes('robylon') ||
+      (m.agent_name || '').toLowerCase().includes('robylon');
 
     return {
       sender: isInternalNote ? 'Internal Note'
@@ -141,8 +142,11 @@ export async function GET(req: NextRequest) {
               if (!content) return null;
 
               const isInternalNote =
-                (sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
-                (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
+                m.is_private === true ||
+                m.is_internal === true ||
+                sender.toLowerCase().includes('robylon') ||
+                (m.sender_name || '').toLowerCase().includes('robylon') ||
+                (m.agent_name || '').toLowerCase().includes('robylon');
 
               if (isInternalNote) {
                 const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
@@ -239,8 +243,11 @@ export async function GET(req: NextRequest) {
               if (!content) return null;
 
               const isInternalNote =
-                (sender === 'Robylon AI' || m.sender_name === 'Robylon AI' || m.agent_name === 'Robylon AI') &&
-                (m.role === 'agent' || m.role === 'Agent' || m.sender_type === 'agent' || m.sender_type === 'Agent' || m.agent_type === 'agent' || m.agent_type === 'Agent');
+                m.is_private === true ||
+                m.is_internal === true ||
+                sender.toLowerCase().includes('robylon') ||
+                (m.sender_name || '').toLowerCase().includes('robylon') ||
+                (m.agent_name || '').toLowerCase().includes('robylon');
 
               if (isInternalNote) {
                 const isoTs = m.timestamp ? parseRobyTimestamp(m.timestamp, year, m.timestamp) : undefined;
