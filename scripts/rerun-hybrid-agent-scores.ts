@@ -34,18 +34,22 @@ async function main() {
 
   // Fetch bot-only chats closed from 15th June onwards
   let sql = `
-    SELECT id, agent_id, tags, closed_at, transcript, conversation_type 
-    FROM conversations 
-    WHERE conversation_type IN ('hybrid', 'agent') 
-      AND closed_at >= '2026-06-15 00:00:00'
-    ORDER BY closed_at DESC
+    SELECT c.id, c.agent_id, c.tags, c.closed_at, c.transcript, c.conversation_type 
+    FROM conversations c
+    JOIN iqs_scores i ON i.chat_id = c.id
+    WHERE c.conversation_type IN ('hybrid', 'agent') 
+      AND c.closed_at >= '2026-06-15 00:00:00'
+      AND i.status IN ('pending', 'reopened')
+      AND i.iqs_score IS NOT NULL
+      AND i.iqs_score <= 85
+    ORDER BY c.closed_at DESC
   `;
   if (limit) {
     sql += ` LIMIT ${limit}`;
   }
 
   const rawConvs = await query<any>(sql);
-  
+
   // Only keep hybrid and agent chats
   const convs = rawConvs.filter((conv: any) => {
     let transcriptMessages: any[] = [];
@@ -104,12 +108,11 @@ async function main() {
       try {
         const agentName = conv.agent_id ? await getAgentName(conv.agent_id) : '';
         const result = await executeScoring(conv, agentName, disposition, subDisposition);
-        
+
         completed++;
         succeeded++;
         const iqsVal = result ? result.iqs : 'N/A';
-        const botIqsVal = result && result.botIqs !== undefined ? result.botIqs : 'N/A';
-        console.log(`[${completed}/${total}] Chat ${chatId.padEnd(8)}: Succeeded! (Agent IQS: ${iqsVal} | Bot IQS: ${botIqsVal})`);
+        console.log(`[${completed}/${total}] Chat ${chatId.padEnd(8)}: Succeeded! (IQS: ${iqsVal})`);
       } catch (err: any) {
         completed++;
         failed++;
@@ -126,7 +129,7 @@ async function main() {
   console.log(`- Succeeded       : ${succeeded}`);
   console.log(`- Failed          : ${failed}`);
   console.log(`- Elapsed time    : ${elapsedMins} minutes`);
-  
+
   process.exit(0);
 }
 
