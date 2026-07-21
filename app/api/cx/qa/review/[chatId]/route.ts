@@ -24,6 +24,7 @@ const DB_TO_PASCAL: Record<string, string> = {
   call:         'Call',
   grammar:      'Grammar',
   empathy:      'Empathy',
+  dissatisfactionhandling: 'DissatisfactionHandling',
 
   // Bot-only parameters
   issue_resolution:   'IssueResolution',

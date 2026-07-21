@@ -39,6 +39,7 @@ const DB_KEY_TO_PASCAL: Record<string, string> = {
   technical: 'Technical', all_questions: 'AllQuestions', expectation: 'Expectation',
   contextual: 'Contextual', follow_up: 'FollowUp', sentences: 'Sentences',
   process: 'Process', opening: 'Opening', call: 'Call', grammar: 'Grammar', empathy: 'Empathy',
+  dissatisfactionhandling: 'DissatisfactionHandling',
 };
 
 function normalizeParams(raw: Record<string, any> | null) {

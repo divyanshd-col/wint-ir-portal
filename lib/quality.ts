@@ -6,22 +6,24 @@
 // ── Parameter weights (20% Technical is highest) ────────────────────────────
 export const WEIGHTS: Record<string, number> = {
   Technical:    0.20,
-  AllQuestions: 0.10,
-  Expectation:  0.10,
+  AllQuestions: 0.25,
+  Expectation:  0.20,
+  DissatisfactionHandling: 0.10,
   Contextual:   0.10,
-  FollowUp:     0.10,
-  Sentences:    0.10,
-  Process:      0.05,
-  Opening:      0.05,
+  FollowUp:     0.05,
+  Sentences:    0.03,
+  Process:      0.00,
+  Opening:      0.02,
   Call:         0.05,
-  Grammar:      0.05,
-  Empathy:      0.10,
+  Grammar:      0.00,
+  Empathy:      0.05,
 };
 
 export const PARAM_NAMES: Record<string, string> = {
   Technical:    'Technically / Legally Correct',
   AllQuestions: 'All Questions Answered',
   Expectation:  'Expectation Setting',
+  DissatisfactionHandling: 'Dissatisfaction Handling',
   Contextual:   'Contextual & Personal',
   FollowUp:     'Follow-up & Closing',
   Sentences:    'Sentences / Tone',
@@ -33,7 +35,7 @@ export const PARAM_NAMES: Record<string, string> = {
 };
 
 export const PARAM_ORDER = [
-  'Technical', 'AllQuestions', 'Expectation', 'Contextual',
+  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Contextual',
   'FollowUp', 'Sentences', 'Process', 'Opening',
   'Call', 'Grammar', 'Empathy',
 ];
@@ -66,7 +68,7 @@ export const BOT_PARAM_ORDER = [
 
 // CAT 1: QA-owned — bot + QA score these; TL can only dispute, not override
 export const CAT1_PARAMS = new Set([
-  'Technical', 'AllQuestions', 'Expectation', 'Process', 'FollowUp', 'Opening', 'Call',
+  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Process', 'FollowUp', 'Opening', 'Call',
 ]);
 
 // CAT 2: TL-owned — TL can override these directly

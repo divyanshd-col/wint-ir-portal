@@ -142,6 +142,7 @@ export default function EvalPanel({
     'Call': 'escalationdecision',
     'Empathy': 'empathy',
     'FollowUp': 'postcallrecap',
+    'DissatisfactionHandling': 'dissatisfactionhandling',
   };
 
   function initAgentParams(): Record<string, ParamState> {
