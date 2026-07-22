@@ -20,8 +20,8 @@ export const WEIGHTS: Record<string, number> = {
 };
 
 export const PARAM_NAMES: Record<string, string> = {
-  Technical:                'Accuracy (Technically / Legally Correct)',
-  AllQuestions:             'Issue Resolution (All Questions Answered)',
+  Technical:                'Accuracy',
+  AllQuestions:             'Issue Resolution',
   Expectation:              'Expectation Setting & Follow-Through',
   DissatisfactionHandling: 'Dissatisfaction Handling',
   Contextual:               'Contextual & Personalization',
