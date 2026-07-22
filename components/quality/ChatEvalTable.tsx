@@ -622,6 +622,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                         closedAt={chat.closedAt}
                         disposition={chat.disposition}
                         parameters={chat.parameters}
+                        gates={(chat as any).gates}
                         mobileNumber={chat.mobileNumber}
                         mode="submit"
                         onDone={() => removeChat(chat.chatId)}
