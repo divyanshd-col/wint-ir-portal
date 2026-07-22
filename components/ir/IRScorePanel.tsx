@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isPostJune15 } from '@/lib/quality';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -44,14 +44,16 @@ const DB_KEY_TO_PASCAL: Record<string, string> = {
 
 function normalizeParams(raw: Record<string, any> | null) {
   if (!raw) return {} as Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }>;
+  const agentRaw = raw.__agent_parameters || raw;
   const out: Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }> = {};
-  for (const [k, v] of Object.entries(raw)) {
+  for (const [k, v] of Object.entries(agentRaw)) {
     if (k.startsWith('__')) continue;
     const key = DB_KEY_TO_PASCAL[k] ?? k;
-    const sc = typeof v === 'object' && v !== null
-      ? (v.score === true ? 'Yes' : v.score === false ? 'No' : 'NA')
-      : (v === true ? 'Yes' : v === false ? 'No' : 'NA');
-    out[key] = { score: sc as 'Yes' | 'No' | 'NA', reasoning: (typeof v === 'object' && v?.reasoning) || '' };
+    const item = v as any;
+    const sc = typeof item === 'object' && item !== null
+      ? (item.score === true ? 'Yes' : item.score === false ? 'No' : 'NA')
+      : (item === true ? 'Yes' : item === false ? 'No' : 'NA');
+    out[key] = { score: sc as 'Yes' | 'No' | 'NA', reasoning: (typeof item === 'object' && item?.reasoning) || (typeof item === 'object' && item?.comment) || '' };
   }
   return out;
 }
@@ -199,36 +201,42 @@ export default function IRScorePanel({
 
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              {PARAM_ORDER.map((param, idx) => {
-                const entry = params[param];
-                const score = entry?.score || 'NA';
-                const reasoning = entry?.reasoning || '';
-                const dispChallenge = challengedParams.find(c => c.param === param);
-                const isPicked = picks.has(param);
-                const weight = WEIGHTS?.[param] != null ? `${Math.round((WEIGHTS[param] ?? 0) * 100)}%` : '';
-                const isLast = idx === PARAM_ORDER.length - 1;
+              {(() => {
+                const isPost = isPostJune15(closedAt);
+                const activeOrder = isPost ? PARAM_ORDER : V3_PARAM_ORDER;
+                const activeNames = isPost ? PARAM_NAMES : V3_PARAM_NAMES;
+                const activeWts   = isPost ? WEIGHTS : V3_WEIGHTS;
 
-                const rowStyle: CSSProperties = {
-                  padding: '14px 16px',
-                  borderBottom: isLast ? 'none' : '1px solid #F0F0F2',
-                  cursor: disputing ? 'pointer' : 'default',
-                  background: isPicked ? '#FAFAFB' : 'transparent',
-                  boxShadow: isPicked ? 'inset 3px 0 0 #2D2D31' : 'none',
-                  transition: 'background 0.1s',
-                };
+                return activeOrder.map((param, idx) => {
+                  const entry = params[param];
+                  const score = entry?.score || 'NA';
+                  const reasoning = entry?.reasoning || '';
+                  const dispChallenge = challengedParams.find(c => c.param === param);
+                  const isPicked = picks.has(param);
+                  const weight = activeWts?.[param] != null ? `${Math.round((activeWts[param] ?? 0) * 100)}%` : '';
+                  const isLast = idx === activeOrder.length - 1;
 
-                return (
-                  <div
-                    key={param}
-                    style={rowStyle}
-                    onClick={disputing ? () => togglePick(param) : undefined}
-                    onMouseEnter={disputing ? e => { if (!isPicked) (e.currentTarget as HTMLElement).style.background = '#F4F4F5'; } : undefined}
-                    onMouseLeave={disputing ? e => { (e.currentTarget as HTMLElement).style.background = isPicked ? '#FAFAFB' : 'transparent'; } : undefined}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 13, fontWeight: 500, color: '#111111', flex: '0 1 auto' }}>
-                        {PARAM_NAMES[param] || param}
-                      </span>
+                  const rowStyle: CSSProperties = {
+                    padding: '14px 16px',
+                    borderBottom: isLast ? 'none' : '1px solid #F0F0F2',
+                    cursor: disputing ? 'pointer' : 'default',
+                    background: isPicked ? '#FAFAFB' : 'transparent',
+                    boxShadow: isPicked ? 'inset 3px 0 0 #2D2D31' : 'none',
+                    transition: 'background 0.1s',
+                  };
+
+                  return (
+                    <div
+                      key={param}
+                      style={rowStyle}
+                      onClick={disputing ? () => togglePick(param) : undefined}
+                      onMouseEnter={disputing ? e => { if (!isPicked) (e.currentTarget as HTMLElement).style.background = '#F4F4F5'; } : undefined}
+                      onMouseLeave={disputing ? e => { (e.currentTarget as HTMLElement).style.background = isPicked ? '#FAFAFB' : 'transparent'; } : undefined}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: '#111111', flex: '0 1 auto' }}>
+                          {activeNames[param] || param}
+                        </span>
                       {dispChallenge && (mode === 'pending' || mode === 'reviewed') && (
                         <span style={{
                           height: 18, padding: '0 7px', borderRadius: 999,
@@ -292,7 +300,8 @@ export default function IRScorePanel({
                     )}
                   </div>
                 );
-              })}
+              });
+              })()}
             </div>
           </div>
 

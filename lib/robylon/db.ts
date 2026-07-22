@@ -247,21 +247,32 @@ export async function insertIQSScore(data: {
   answerChanges?: string[];
   unrelatedCallFlag?: boolean;
 }): Promise<void> {
-  const stored: Record<string, any> = { ...data.parameters };
+  const agentParams: Record<string, any> = {};
+  if (data.parameters) {
+    for (const [k, v] of Object.entries(data.parameters)) {
+      if (!k.startsWith('__')) {
+        agentParams[k] = v;
+      }
+    }
+  }
+
+  const stored: Record<string, any> = {
+    __scores: {
+      agent_iqs: data.iqsScore,
+      bot_iqs: data.botIqsScore ?? null,
+    },
+    __agent_parameters: agentParams,
+  };
+
+  if (data.botParameters) {
+    stored.__bot_parameters = data.botParameters;
+  }
   if (data.uncertainParameters && data.uncertainParameters.length > 0) {
     stored.__uncertain = data.uncertainParameters;
   }
   if (data.breaches) stored.__breaches = data.breaches;
   if (data.answerChanges) stored.__answerChanges = data.answerChanges;
   if (data.unrelatedCallFlag) stored.__unrelatedCallFlag = data.unrelatedCallFlag;
-
-  if (data.botIqsScore !== undefined) {
-    stored.__scores = {
-      agent_iqs: data.iqsScore,
-      bot_iqs: data.botIqsScore,
-    };
-  }
-  if (data.botParameters) stored.__bot_parameters = data.botParameters;
   if (data.botModelVersion) stored.__bot_model_version = data.botModelVersion;
 
   await query(`
