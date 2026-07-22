@@ -314,7 +314,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
     const failedParams: string[] = [];
-    for (const [dbKey, val] of Object.entries(params) as [string, any][]) {
+    const safeAgentParams = params.__agent_parameters || params;
+    for (const [dbKey, val] of Object.entries(safeAgentParams) as [string, any][]) {
       if (dbKey.startsWith('__')) continue;
       if (val?.score === false) {
         const pascal = DB_KEY_TO_LEGACY[dbKey];

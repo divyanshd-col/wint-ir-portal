@@ -247,17 +247,16 @@ export async function insertIQSScore(data: {
   answerChanges?: string[];
   unrelatedCallFlag?: boolean;
 }): Promise<void> {
-  const stored: Record<string, any> = { ...data.parameters };
+  const stored: Record<string, any> = {};
+  if (data.parameters) {
+    stored.__agent_parameters = { ...data.parameters };
+  }
   if (data.uncertainParameters && data.uncertainParameters.length > 0) {
     stored.__uncertain = data.uncertainParameters;
   }
   if (data.breaches) stored.__breaches = data.breaches;
   if (data.answerChanges) stored.__answerChanges = data.answerChanges;
   if (data.unrelatedCallFlag) stored.__unrelatedCallFlag = data.unrelatedCallFlag;
-
-  if (data.parameters) {
-    stored.__agent_parameters = { ...data.parameters };
-  }
 
   if (data.botIqsScore !== undefined) {
     stored.__scores = {
