@@ -78,9 +78,9 @@ export const V3_WEIGHTS: Record<string, number> = {
 // Helper function to detect if a chat evaluation is v4 vs legacy v3
 export function isV4Evaluation(parameters: any, modelVersion?: string): boolean {
   if (!parameters) return false;
-  if (parameters.__agent_parameters) return true;
+  if (parameters.__scores || parameters.__agent_parameters) return true;
   const mv = (modelVersion || parameters.__bot_model_version || parameters.model_version || '').toLowerCase();
-  if (mv.includes('v4') || mv.includes('gemini-3.5') || mv.includes('gemini-3.6') || mv.includes('flash')) return true;
+  if (mv.includes('v4') || mv.includes('gemini-3.5') || mv.includes('gemini-3.6')) return true;
   if (parameters.dissatisfactionhandling || parameters.expectationfollowthrough || parameters.greetinghandover) return true;
   return false;
 }

@@ -47,7 +47,7 @@ async function main() {
   const querySql = `
     SELECT chat_id, parameters, model_version, iqs_score 
     FROM iqs_scores 
-    WHERE (model_version LIKE '%flash%' OR model_version LIKE '%v4%' OR parameters::text LIKE '%dissatisfactionhandling%' OR parameters::text LIKE '%__agent_parameters%')
+    WHERE (parameters::text LIKE '%__scores%' OR parameters::text LIKE '%__agent_parameters%' OR model_version LIKE '%3.5-flash%' OR model_version LIKE '%v4%' OR parameters::text LIKE '%dissatisfactionhandling%')
     ORDER BY scored_at DESC
   `;
 
@@ -77,20 +77,19 @@ async function main() {
       continue;
     }
 
-    // Extract agent parameters
+    // Extract agent parameters and strip un-prefixed keys from top-level
     const agentParams = params.__agent_parameters ? { ...params.__agent_parameters } : {};
+    const newParams = {};
 
     for (const [key, val] of Object.entries(params)) {
-      if (!key.startsWith('__')) {
+      if (key.startsWith('__')) {
+        newParams[key] = val;
+      } else {
         agentParams[key] = val;
       }
     }
 
-    // Attach __agent_parameters
-    const newParams = {
-      ...params,
-      __agent_parameters: agentParams,
-    };
+    newParams.__agent_parameters = agentParams;
 
     // Determine scores object if missing
     if (!newParams.__scores && row.iqs_score != null) {
