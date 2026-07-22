@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isPostJune15 } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation } from '@/lib/quality';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -44,16 +44,15 @@ const DB_KEY_TO_PASCAL: Record<string, string> = {
 
 function normalizeParams(raw: Record<string, any> | null) {
   if (!raw) return {} as Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }>;
-  const agentRaw = raw.__agent_parameters || raw;
+  const safe = raw.__agent_parameters || raw;
   const out: Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }> = {};
-  for (const [k, v] of Object.entries(agentRaw)) {
+  for (const [k, v] of Object.entries(safe)) {
     if (k.startsWith('__')) continue;
     const key = DB_KEY_TO_PASCAL[k] ?? k;
-    const item = v as any;
-    const sc = typeof item === 'object' && item !== null
-      ? (item.score === true ? 'Yes' : item.score === false ? 'No' : 'NA')
-      : (item === true ? 'Yes' : item === false ? 'No' : 'NA');
-    out[key] = { score: sc as 'Yes' | 'No' | 'NA', reasoning: (typeof item === 'object' && item?.reasoning) || (typeof item === 'object' && item?.comment) || '' };
+    const sc = typeof v === 'object' && v !== null
+      ? ((v as any).score === true ? 'Yes' : (v as any).score === false ? 'No' : 'NA')
+      : (v === true ? 'Yes' : v === false ? 'No' : 'NA');
+    out[key] = { score: sc as 'Yes' | 'No' | 'NA', reasoning: (typeof v === 'object' && (v as any)?.reasoning) || '' };
   }
   return out;
 }
@@ -202,19 +201,19 @@ export default function IRScorePanel({
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {(() => {
-                const isPost = isPostJune15(closedAt);
-                const activeOrder = isPost ? PARAM_ORDER : V3_PARAM_ORDER;
-                const activeNames = isPost ? PARAM_NAMES : V3_PARAM_NAMES;
-                const activeWts   = isPost ? WEIGHTS : V3_WEIGHTS;
+                const isV4 = isV4Evaluation(parameters);
+                const activeParamOrder = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+                const activeParamNames = isV4 ? PARAM_NAMES : V3_PARAM_NAMES;
+                const activeWeights    = isV4 ? WEIGHTS : V3_WEIGHTS;
 
-                return activeOrder.map((param, idx) => {
+                return activeParamOrder.map((param, idx) => {
                   const entry = params[param];
                   const score = entry?.score || 'NA';
                   const reasoning = entry?.reasoning || '';
                   const dispChallenge = challengedParams.find(c => c.param === param);
                   const isPicked = picks.has(param);
-                  const weight = activeWts?.[param] != null ? `${Math.round((activeWts[param] ?? 0) * 100)}%` : '';
-                  const isLast = idx === activeOrder.length - 1;
+                  const weight = activeWeights?.[param] != null ? `${Math.round((activeWeights[param] ?? 0) * 100)}%` : '';
+                  const isLast = idx === activeParamOrder.length - 1;
 
                   const rowStyle: CSSProperties = {
                     padding: '14px 16px',
@@ -235,7 +234,7 @@ export default function IRScorePanel({
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontSize: 13, fontWeight: 500, color: '#111111', flex: '0 1 auto' }}>
-                          {activeNames[param] || param}
+                          {activeParamNames[param] || param}
                         </span>
                       {dispChallenge && (mode === 'pending' || mode === 'reviewed') && (
                         <span style={{
@@ -301,7 +300,7 @@ export default function IRScorePanel({
                   </div>
                 );
               });
-              })()}
+            })()}
             </div>
           </div>
 

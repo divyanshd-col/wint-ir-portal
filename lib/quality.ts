@@ -3,29 +3,49 @@
  * Ported from the standalone Python iqs_scorer tool.
  */
 
-// ── Date cutoff for prompt v4 & new JSON structure (June 15, 2026) ──────────────
-export function isPostJune15(dateStr?: string | null): boolean {
-  if (!dateStr) return true; // Default to new v4 behavior if no date
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return true;
-  const cutoff = new Date('2026-06-15T23:59:59Z');
-  return d > cutoff;
-}
-
-// ── Legacy V3 Agent Parameters (for chats on or before June 15, 2026) ─────────
-export const V3_WEIGHTS: Record<string, number> = {
+// ── Parameter weights (20% Technical is highest) ────────────────────────────
+export const WEIGHTS: Record<string, number> = {
   Technical:    0.20,
-  AllQuestions: 0.10,
-  Expectation:  0.10,
+  AllQuestions: 0.25,
+  Expectation:  0.20,
+  DissatisfactionHandling: 0.10,
   Contextual:   0.10,
-  FollowUp:     0.10,
-  Sentences:    0.10,
-  Process:      0.05,
-  Opening:      0.05,
+  FollowUp:     0.05,
+  Sentences:    0.03,
+  Process:      0.00,
+  Opening:      0.02,
   Call:         0.05,
-  Grammar:      0.05,
-  Empathy:      0.10,
+  Grammar:      0.00,
+  Empathy:      0.05,
 };
+
+export const PARAM_NAMES: Record<string, string> = {
+  Technical:    'Technically / Legally Correct',
+  AllQuestions: 'All Questions Answered',
+  Expectation:  'Expectation Setting',
+  DissatisfactionHandling: 'Dissatisfaction Handling',
+  Contextual:   'Contextual & Personal',
+  FollowUp:     'Follow-up & Closing',
+  Sentences:    'Sentences / Tone',
+  Process:      'Process-wise',
+  Opening:      'First Response & Opening',
+  Call:         'Call (when required)',
+  Grammar:      'Grammar / Structure',
+  Empathy:      'Empathy',
+};
+
+export const PARAM_ORDER = [
+  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Contextual',
+  'FollowUp', 'Sentences', 'Process', 'Opening',
+  'Call', 'Grammar', 'Empathy',
+];
+
+// V3 Legacy parameter order, names, and weights for old chats
+export const V3_PARAM_ORDER = [
+  'Technical', 'AllQuestions', 'Expectation', 'Contextual',
+  'FollowUp', 'Sentences', 'Process', 'Opening',
+  'Call', 'Grammar', 'Empathy',
+];
 
 export const V3_PARAM_NAMES: Record<string, string> = {
   Technical:    'Technically / Legally Correct',
@@ -41,75 +61,28 @@ export const V3_PARAM_NAMES: Record<string, string> = {
   Empathy:      'Empathy',
 };
 
-export const V3_PARAM_ORDER = [
-  'Technical', 'AllQuestions', 'Expectation', 'Contextual',
-  'FollowUp', 'Sentences', 'Process', 'Opening',
-  'Call', 'Grammar', 'Empathy',
-];
-
-// ── V4 Agent Parameters (for chats after June 15, 2026) ───────────────────────
-export const WEIGHTS: Record<string, number> = {
-  IssueResolution:         0.25,
-  Accuracy:                0.20,
-  ExpectationFollowThrough:0.20,
-  DissatisfactionHandling: 0.10,
-  Personalization:         0.10,
-  Empathy:                 0.05,
-  EscalationDecision:      0.05,
-  Readability:             0.03,
-  GreetingHandover:        0.02,
-  PostCallRecap:           0.05,
-
-  // Fallbacks for legacy DB mappings
+export const V3_WEIGHTS: Record<string, number> = {
   Technical:    0.20,
-  AllQuestions: 0.25,
-  Expectation:  0.20,
+  AllQuestions: 0.10,
+  Expectation:  0.10,
   Contextual:   0.10,
-  FollowUp:     0.05,
-  Sentences:    0.03,
-  Opening:      0.02,
+  FollowUp:     0.10,
+  Sentences:    0.10,
+  Process:      0.05,
+  Opening:      0.05,
   Call:         0.05,
+  Grammar:      0.05,
+  Empathy:      0.10,
 };
 
-export const PARAM_NAMES: Record<string, string> = {
-  IssueResolution:         'Issue Resolution',
-  Accuracy:                'Accuracy',
-  ExpectationFollowThrough:'Expectation Follow-through',
-  DissatisfactionHandling: 'Dissatisfaction Handling',
-  Personalization:         'Personalization',
-  Empathy:                 'Empathy',
-  EscalationDecision:      'Escalation Decision',
-  Readability:             'Readability',
-  GreetingHandover:        'Greeting & Handover',
-  PostCallRecap:           'Post-Call Recap',
-
-  // Fallbacks for DB mappings on post-June 15 chats
-  Technical:    'Accuracy',
-  AllQuestions: 'Issue Resolution',
-  Expectation:  'Expectation Follow-through',
-  Contextual:   'Personalization',
-  FollowUp:     'Post-Call Recap',
-  Sentences:    'Readability',
-  Opening:      'Greeting & Handover',
-  Call:         'Escalation Decision',
-};
-
-export const PARAM_ORDER = [
-  'IssueResolution', 'Accuracy', 'ExpectationFollowThrough',
-  'DissatisfactionHandling', 'Personalization', 'Empathy',
-  'EscalationDecision', 'Readability', 'GreetingHandover', 'PostCallRecap'
-];
-
-export function getParamOrder(dateStr?: string | null): string[] {
-  return isPostJune15(dateStr) ? PARAM_ORDER : V3_PARAM_ORDER;
-}
-
-export function getParamNames(dateStr?: string | null): Record<string, string> {
-  return isPostJune15(dateStr) ? PARAM_NAMES : V3_PARAM_NAMES;
-}
-
-export function getWeights(dateStr?: string | null): Record<string, number> {
-  return isPostJune15(dateStr) ? WEIGHTS : V3_WEIGHTS;
+// Helper function to detect if a chat evaluation is v4 vs legacy v3
+export function isV4Evaluation(parameters: any, modelVersion?: string): boolean {
+  if (!parameters) return false;
+  if (parameters.__agent_parameters) return true;
+  const mv = (modelVersion || parameters.__bot_model_version || parameters.model_version || '').toLowerCase();
+  if (mv.includes('v4') || mv.includes('gemini-3.5') || mv.includes('gemini-3.6') || mv.includes('flash')) return true;
+  if (parameters.dissatisfactionhandling || parameters.expectationfollowthrough || parameters.greetinghandover) return true;
+  return false;
 }
 
 // Bot parameters and weights
@@ -140,17 +113,12 @@ export const BOT_PARAM_ORDER = [
 
 // CAT 1: QA-owned — bot + QA score these; TL can only dispute, not override
 export const CAT1_PARAMS = new Set([
-  'IssueResolution', 'Accuracy', 'ExpectationFollowThrough', 'DissatisfactionHandling',
-  'EscalationDecision', 'PostCallRecap', 'GreetingHandover',
-  // Legacy
-  'Technical', 'AllQuestions', 'Expectation', 'Process', 'FollowUp', 'Opening', 'Call',
+  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Process', 'FollowUp', 'Opening', 'Call',
 ]);
 
 // CAT 2: TL-owned — TL can override these directly
 export const CAT2_PARAMS = new Set([
-  'Personalization', 'Empathy', 'Readability',
-  // Legacy
-  'Contextual', 'Sentences', 'Grammar',
+  'Contextual', 'Sentences', 'Grammar', 'Empathy',
 ]);
 
 export type ParamScore = 'Yes' | 'No' | 'NA' | 'Half';
@@ -296,13 +264,12 @@ export function analyzeConversationTiming(
 }
 
 // ── IQS calculation ──────────────────────────────────────────────────────────
-// Normalizes by sum of applicable weights.
+// Normalizes by sum of applicable weights so old DB rows with Tags still score correctly.
 // 'NA' parameters are excluded from both numerator (total) and denominator (possible).
-export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, dateStr?: string | null): number {
-  const activeWeights = isBot ? BOT_WEIGHTS : getWeights(dateStr);
+export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number {
+  const activeWeights = isBot ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(activeWeights)) {
-    if (weight === 0) continue;
     const score = scores[param] ?? 'Yes';
     if (score !== 'NA') {
       possible += weight;

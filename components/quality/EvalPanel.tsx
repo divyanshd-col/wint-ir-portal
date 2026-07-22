@@ -1,8 +1,9 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import {
-  PARAM_ORDER, PARAM_NAMES, WEIGHTS, V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isPostJune15, calculateIQS, CAT1_PARAMS, CAT2_PARAMS,
-  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS,
+  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
@@ -135,15 +136,14 @@ export default function EvalPanel({
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
 
-  const dateForCutoff = closedAt || (parameters as any)?.scored_at || (parameters as any)?.date;
-  const isPostJune15Chat = isPostJune15(dateForCutoff);
-
   const hasBotParams = !!(parameters && (parameters['issue_resolution'] || parameters['accuracy'] || parameters['correct_escalation'] || parameters['IssueResolution'] || parameters['Accuracy'] || parameters.__bot_parameters));
   const isBotChat = conversationType === 'bot' && (mode === 'submit' || mode === 'resolve' || hasBotParams);
   const isHybrid = conversationType === 'hybrid';
   const showTabs = isHybrid;
 
   const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(isBotChat ? 'bot' : 'agent');
+
+  const isV4 = isV4Evaluation(parameters);
 
   const V4_TO_V3_MAP: Record<string, string> = {
     'Technical': 'accuracy',
@@ -156,27 +156,18 @@ export default function EvalPanel({
     'Empathy': 'empathy',
     'FollowUp': 'postcallrecap',
     'DissatisfactionHandling': 'dissatisfactionhandling',
-    // v4 Direct
-    'IssueResolution': 'issue_resolution',
-    'Accuracy': 'accuracy',
-    'ExpectationFollowThrough': 'expectationfollowthrough',
-    'Personalization': 'personalization',
-    'Readability': 'readability',
-    'GreetingHandover': 'greetinghandover',
-    'EscalationDecision': 'escalationdecision',
-    'PostCallRecap': 'postcallrecap',
   };
 
   function initAgentParams(): Record<string, ParamState> {
-    const agentRawParams = parameters?.__agent_parameters || parameters || {};
+    const safeParams = parameters?.__agent_parameters || parameters || {};
     const state: Record<string, ParamState> = {};
-    const activeOrder = isPostJune15Chat ? PARAM_ORDER : V3_PARAM_ORDER;
-    for (const pascal of activeOrder) {
+    const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+    for (const pascal of paramOrderToUse) {
       const dbKey = PASCAL_TO_DB[pascal] || pascal;
       const v4Key = V4_TO_V3_MAP[pascal];
-      const raw   = (agentRawParams as any)[dbKey] 
-                 ?? (agentRawParams as any)[pascal]
-                 ?? (v4Key ? (agentRawParams as any)[v4Key] : undefined)
+      const raw   = (safeParams as any)[dbKey] 
+                 ?? (safeParams as any)[pascal]
+                 ?? (v4Key ? (safeParams as any)[v4Key] : undefined)
                  ?? {};
       state[pascal] = { score: normalizeScore(raw.score).value, reasoning: raw.comment ?? raw.reasoning ?? '' };
     }
@@ -198,18 +189,9 @@ export default function EvalPanel({
   const [agentParamState, setAgentParamState] = useState<Record<string, ParamState>>(initAgentParams);
   const [botParamState, setBotParamState] = useState<Record<string, ParamState>>(initBotParams);
 
-  const activeParamOrder = activeTab === 'bot' 
-    ? BOT_PARAM_ORDER 
-    : (isPostJune15Chat ? PARAM_ORDER : V3_PARAM_ORDER);
-
-  const activeParamNames = activeTab === 'bot' 
-    ? BOT_PARAM_NAMES 
-    : (isPostJune15Chat ? PARAM_NAMES : V3_PARAM_NAMES);
-
-  const activeWeights = activeTab === 'bot' 
-    ? BOT_WEIGHTS 
-    : (isPostJune15Chat ? WEIGHTS : V3_WEIGHTS);
-
+  const activeParamOrder = activeTab === 'bot' ? BOT_PARAM_ORDER : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
+  const activeParamNames = activeTab === 'bot' ? BOT_PARAM_NAMES : (isV4 ? PARAM_NAMES : V3_PARAM_NAMES);
+  const activeWeights = activeTab === 'bot' ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   const activeCAT2Params = activeTab === 'bot' ? new Set<string>() : CAT2_PARAMS;
   
   const currentParamState = activeTab === 'bot' ? botParamState : agentParamState;
@@ -289,10 +271,13 @@ export default function EvalPanel({
   const isModified = (() => {
     let mod = false;
     if (!isBotChat) {
-      for (const pascal of PARAM_ORDER) {
+      const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+      for (const pascal of paramOrderToUse) {
         const orig = initAgentParams()[pascal];
-        const cur  = agentParamState[pascal];
-        if (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim()) mod = true;
+        if (orig) {
+          const cur  = agentParamState[pascal];
+          if (cur && (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim())) mod = true;
+        }
       }
     }
     if (isHybrid || isBotChat) {
@@ -382,9 +367,12 @@ export default function EvalPanel({
         const params: Record<string, { score: number | null; reasoning: string }> = {};
         
         if (!isBotChat) {
-          for (const pascal of PARAM_ORDER) {
+          const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+          for (const pascal of paramOrderToUse) {
             const dbKey = PASCAL_TO_DB[pascal] || pascal;
-            params[dbKey] = { score: agentParamState[pascal].score, reasoning: agentParamState[pascal].reasoning };
+            if (agentParamState[pascal]) {
+              params[dbKey] = { score: agentParamState[pascal].score, reasoning: agentParamState[pascal].reasoning };
+            }
           }
         }
         
