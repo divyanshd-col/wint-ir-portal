@@ -83,15 +83,15 @@ export const PARAM_NAMES: Record<string, string> = {
   GreetingHandover:        'Greeting & Handover',
   PostCallRecap:           'Post-Call Recap',
 
-  // Fallbacks for legacy DB mappings
-  Technical:    'Technically / Legally Correct',
-  AllQuestions: 'All Questions Answered',
-  Expectation:  'Expectation Setting',
-  Contextual:   'Contextual & Personal',
-  FollowUp:     'Follow-up & Closing',
-  Sentences:    'Sentences / Tone',
-  Opening:      'First Response & Opening',
-  Call:         'Call (when required)',
+  // Fallbacks for DB mappings on post-June 15 chats
+  Technical:    'Accuracy',
+  AllQuestions: 'Issue Resolution',
+  Expectation:  'Expectation Follow-through',
+  Contextual:   'Personalization',
+  FollowUp:     'Post-Call Recap',
+  Sentences:    'Readability',
+  Opening:      'Greeting & Handover',
+  Call:         'Escalation Decision',
 };
 
 export const PARAM_ORDER = [
