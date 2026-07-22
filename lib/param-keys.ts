@@ -11,6 +11,7 @@ export const DB_KEY_TO_LEGACY: Record<string, string> = {
   tags:         'Tags',
   grammar:      'Grammar',
   empathy:      'Empathy',
+  dissatisfactionhandling: 'DissatisfactionHandling',
 
   // Bot-only parameter keys
   issue_resolution:   'IssueResolution',

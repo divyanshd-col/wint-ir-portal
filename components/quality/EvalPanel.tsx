@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS,
-  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore
+  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
@@ -28,6 +29,7 @@ export interface EvalPanelProps {
   closedAt:      string;
   disposition:   string;
   parameters:    Record<string, { score: any; reasoning: string }>;
+  gates?:        any;
   mode:          'submit' | 'resolve' | 'view' | 'tl-browse';
   dispute?: {
     raisedBy:       string;
@@ -72,6 +74,15 @@ function ScoreRing({ score }: { score: number }) {
         {score}
       </text>
     </svg>
+  );
+}
+
+function ScoreBadge({ score }: { score?: string | number | null | boolean }) {
+  const norm = normalizeScore(score ?? null);
+  return (
+    <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: norm.badgeBg, color: norm.badgeText }}>
+      {norm.label}
+    </span>
   );
 }
 
@@ -120,7 +131,7 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 
 export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
-  parameters, mode, dispute, flagId,
+  parameters, gates, mode, dispute, flagId,
   mobileNumber, reviewedBy, reviewNote,
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
@@ -132,6 +143,8 @@ export default function EvalPanel({
 
   const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(isBotChat ? 'bot' : 'agent');
 
+  const isV4 = isV4Evaluation(parameters);
+
   const V4_TO_V3_MAP: Record<string, string> = {
     'Technical': 'accuracy',
     'AllQuestions': 'issue_resolution',
@@ -142,12 +155,14 @@ export default function EvalPanel({
     'Call': 'escalationdecision',
     'Empathy': 'empathy',
     'FollowUp': 'postcallrecap',
+    'DissatisfactionHandling': 'dissatisfactionhandling',
   };
 
   function initAgentParams(): Record<string, ParamState> {
-    const safeParams = parameters || {};
+    const safeParams = parameters?.__agent_parameters || parameters || {};
     const state: Record<string, ParamState> = {};
-    for (const pascal of PARAM_ORDER) {
+    const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+    for (const pascal of paramOrderToUse) {
       const dbKey = PASCAL_TO_DB[pascal] || pascal;
       const v4Key = V4_TO_V3_MAP[pascal];
       const raw   = (safeParams as any)[dbKey] 
@@ -174,9 +189,9 @@ export default function EvalPanel({
   const [agentParamState, setAgentParamState] = useState<Record<string, ParamState>>(initAgentParams);
   const [botParamState, setBotParamState] = useState<Record<string, ParamState>>(initBotParams);
 
-  const activeParamOrder = activeTab === 'bot' ? BOT_PARAM_ORDER : PARAM_ORDER;
-  const activeParamNames = activeTab === 'bot' ? BOT_PARAM_NAMES : PARAM_NAMES;
-  const activeWeights = activeTab === 'bot' ? BOT_WEIGHTS : WEIGHTS;
+  const activeParamOrder = activeTab === 'bot' ? BOT_PARAM_ORDER : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
+  const activeParamNames = activeTab === 'bot' ? BOT_PARAM_NAMES : (isV4 ? PARAM_NAMES : V3_PARAM_NAMES);
+  const activeWeights = activeTab === 'bot' ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   const activeCAT2Params = activeTab === 'bot' ? new Set<string>() : CAT2_PARAMS;
   
   const currentParamState = activeTab === 'bot' ? botParamState : agentParamState;
@@ -221,13 +236,48 @@ export default function EvalPanel({
 
   const failCount = Object.values(currentParamState).filter(s => s.score === 0.0).length;
 
+  const gatesData = gates || (parameters as any)?.__gates || (parameters as any)?.gates;
+
+  function resolveGateScore(gateItem: any, defaultVal: 'Yes' | 'No' | 'NA'): 'Yes' | 'No' | 'NA' {
+    if (gateItem === undefined || gateItem === null) return defaultVal;
+    if (typeof gateItem === 'object') {
+      if (gateItem.status === 'pass') return 'Yes';
+      if (gateItem.status === 'fail') return 'No';
+      if (gateItem.status === 'not_applicable') return 'NA';
+      if (gateItem.score !== undefined) return resolveGateScore(gateItem.score, defaultVal);
+    }
+    if (typeof gateItem === 'string') {
+      const s = gateItem.toLowerCase();
+      if (s === 'yes' || s === 'pass') return 'Yes';
+      if (s === 'no' || s === 'fail') return 'No';
+      if (s === 'na' || s === 'not_applicable') return 'NA';
+    }
+    if (typeof gateItem === 'boolean') {
+      return gateItem ? 'Yes' : 'No';
+    }
+    return defaultVal;
+  }
+
+  const g1Badge = resolveGateScore(gatesData?.G1_no_advice || gatesData?.G1, 'Yes');
+  const g2Badge = resolveGateScore(gatesData?.G2_no_fabrication || gatesData?.G2, 'No');
+  const g3Badge = resolveGateScore(gatesData?.G3_identity_first || gatesData?.G3, 'NA');
+
+  const overallGateResult =
+    gatesData?.chat_gate_result ||
+    gatesData?.call_gate_result ||
+    gatesData?.gate_result ||
+    (g1Badge === 'No' || g2Badge === 'Yes' ? 'FAIL' : 'PASS');
+
   const isModified = (() => {
     let mod = false;
     if (!isBotChat) {
-      for (const pascal of PARAM_ORDER) {
+      const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+      for (const pascal of paramOrderToUse) {
         const orig = initAgentParams()[pascal];
-        const cur  = agentParamState[pascal];
-        if (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim()) mod = true;
+        if (orig) {
+          const cur  = agentParamState[pascal];
+          if (cur && (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim())) mod = true;
+        }
       }
     }
     if (isHybrid || isBotChat) {
@@ -317,9 +367,12 @@ export default function EvalPanel({
         const params: Record<string, { score: number | null; reasoning: string }> = {};
         
         if (!isBotChat) {
-          for (const pascal of PARAM_ORDER) {
+          const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+          for (const pascal of paramOrderToUse) {
             const dbKey = PASCAL_TO_DB[pascal] || pascal;
-            params[dbKey] = { score: agentParamState[pascal].score, reasoning: agentParamState[pascal].reasoning };
+            if (agentParamState[pascal]) {
+              params[dbKey] = { score: agentParamState[pascal].score, reasoning: agentParamState[pascal].reasoning };
+            }
           }
         }
         
@@ -527,6 +580,18 @@ export default function EvalPanel({
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Compliance Gates Card */}
+            <div style={{ margin: '12px 16px 0 16px', background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12, flexShrink: 0 }}>
+              <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                Compliance Gates: <span style={{ color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d' }}>{overallGateResult}</span>
+              </h5>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                <div>G1 Advice: <ScoreBadge score={g1Badge} /></div>
+                <div>G2 Fabrication: <ScoreBadge score={g2Badge} /></div>
+                <div>G3 Identity: <ScoreBadge score={g3Badge} /></div>
+              </div>
             </div>
 
             {/* Param list */}

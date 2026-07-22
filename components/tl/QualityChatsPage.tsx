@@ -290,6 +290,7 @@ function EvaluatedChatsSection() {
                     closedAt={chat.closedAt}
                     disposition={chat.disposition}
                     parameters={chat.parameters}
+                    gates={(chat as any).gates}
                     mobileNumber={chat.mobileNumber}
                     mode="tl-browse"
                     onDone={() => removeChat(chat.chatId)}

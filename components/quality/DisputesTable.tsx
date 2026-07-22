@@ -423,6 +423,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     closedAt={d.closedAt}
                     disposition={d.disposition}
                     parameters={d.parameters}
+                    gates={(d as any).gates}
                     mobileNumber={d.mobileNumber}
                     mode="resolve"
                     flagId={d.flagId}

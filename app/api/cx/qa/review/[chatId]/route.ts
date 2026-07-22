@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
-import { calculateIQS } from '@/lib/quality';
+import { calculateIQS, isV4Evaluation } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
@@ -24,6 +24,7 @@ const DB_TO_PASCAL: Record<string, string> = {
   call:         'Call',
   grammar:      'Grammar',
   empathy:      'Empathy',
+  dissatisfactionhandling: 'DissatisfactionHandling',
 
   // Bot-only parameters
   issue_resolution:   'IssueResolution',
@@ -112,12 +113,19 @@ export async function PATCH(
       let existingParams = existing[0].parameters ?? {};
       if (typeof existingParams === 'string') { try { existingParams = JSON.parse(existingParams); } catch { existingParams = {}; } }
       const merged: Record<string, any> = { ...existingParams };
+      const isV4 = isV4Evaluation(existingParams);
+      if (!merged.__agent_parameters && isV4) {
+        merged.__agent_parameters = {};
+      }
       let paramChanges = 0;
       for (const [key, val] of Object.entries(parameters)) {
         if (!key.startsWith('__')) {
           const prev = existingParams[key];
           if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
           merged[key] = { score: val.score, reasoning: val.reasoning };
+          if (merged.__agent_parameters) {
+            merged.__agent_parameters[key] = { score: val.score, reasoning: val.reasoning };
+          }
         }
       }
       merged['__tl_reviewed_by'] = email;
@@ -138,10 +146,10 @@ export async function PATCH(
         }
       }
       
-      const newIqs = calculateIQS(pascalScores, isBot);
+      const newIqs = calculateIQS(pascalScores, isBot, isV4);
       merged['__scores'] = {
-        agent_iqs: calculateIQS(pascalScores, false),
-        bot_iqs: calculateIQS(pascalScores, true),
+        agent_iqs: calculateIQS(pascalScores, false, isV4),
+        bot_iqs: calculateIQS(pascalScores, true, isV4),
       };
       
       await query(
