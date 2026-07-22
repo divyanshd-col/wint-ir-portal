@@ -289,6 +289,7 @@ export default function TLChatTable() {
                       closedAt={chat.closedAt}
                       disposition={chat.disposition}
                       parameters={chat.parameters}
+                      gates={(chat as any).gates}
                       mobileNumber={chat.mobileNumber}
                       reviewedBy={chat.reviewedBy}
                       reviewedAt={chat.reviewedAt}

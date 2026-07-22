@@ -28,6 +28,7 @@ export interface ChatToReviewRow {
   reviewNote?:   string | null;
   status?:       string;
   conversationType?: 'bot' | 'agent' | 'hybrid';
+  gates?:        any;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -358,6 +359,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       reviewNote:     r.review_note ?? null,
       status:         r.status,
       conversationType: r.conversation_type as any,
+      gates:          params.__gates || params.gates || null,
     };
   });
 

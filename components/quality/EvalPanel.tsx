@@ -28,6 +28,7 @@ export interface EvalPanelProps {
   closedAt:      string;
   disposition:   string;
   parameters:    Record<string, { score: any; reasoning: string }>;
+  gates?:        any;
   mode:          'submit' | 'resolve' | 'view' | 'tl-browse';
   dispute?: {
     raisedBy:       string;
@@ -72,6 +73,15 @@ function ScoreRing({ score }: { score: number }) {
         {score}
       </text>
     </svg>
+  );
+}
+
+function ScoreBadge({ score }: { score?: string | number | null | boolean }) {
+  const norm = normalizeScore(score ?? null);
+  return (
+    <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: norm.badgeBg, color: norm.badgeText }}>
+      {norm.label}
+    </span>
   );
 }
 
@@ -120,7 +130,7 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 
 export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
-  parameters, mode, dispute, flagId,
+  parameters, gates, mode, dispute, flagId,
   mobileNumber, reviewedBy, reviewNote,
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
@@ -221,6 +231,38 @@ export default function EvalPanel({
   })();
 
   const failCount = Object.values(currentParamState).filter(s => s.score === 0.0).length;
+
+  const gatesData = gates || (parameters as any)?.__gates || (parameters as any)?.gates;
+
+  function resolveGateScore(gateItem: any, defaultVal: 'Yes' | 'No' | 'NA'): 'Yes' | 'No' | 'NA' {
+    if (gateItem === undefined || gateItem === null) return defaultVal;
+    if (typeof gateItem === 'object') {
+      if (gateItem.status === 'pass') return 'Yes';
+      if (gateItem.status === 'fail') return 'No';
+      if (gateItem.status === 'not_applicable') return 'NA';
+      if (gateItem.score !== undefined) return resolveGateScore(gateItem.score, defaultVal);
+    }
+    if (typeof gateItem === 'string') {
+      const s = gateItem.toLowerCase();
+      if (s === 'yes' || s === 'pass') return 'Yes';
+      if (s === 'no' || s === 'fail') return 'No';
+      if (s === 'na' || s === 'not_applicable') return 'NA';
+    }
+    if (typeof gateItem === 'boolean') {
+      return gateItem ? 'Yes' : 'No';
+    }
+    return defaultVal;
+  }
+
+  const g1Badge = resolveGateScore(gatesData?.G1_no_advice || gatesData?.G1, 'Yes');
+  const g2Badge = resolveGateScore(gatesData?.G2_no_fabrication || gatesData?.G2, 'No');
+  const g3Badge = resolveGateScore(gatesData?.G3_identity_first || gatesData?.G3, 'NA');
+
+  const overallGateResult =
+    gatesData?.chat_gate_result ||
+    gatesData?.call_gate_result ||
+    gatesData?.gate_result ||
+    (g1Badge === 'No' || g2Badge === 'Yes' ? 'FAIL' : 'PASS');
 
   const isModified = (() => {
     let mod = false;
@@ -528,6 +570,18 @@ export default function EvalPanel({
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Compliance Gates Card */}
+            <div style={{ margin: '12px 16px 0 16px', background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12, flexShrink: 0 }}>
+              <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                Compliance Gates: <span style={{ color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d' }}>{overallGateResult}</span>
+              </h5>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                <div>G1 Advice: <ScoreBadge score={g1Badge} /></div>
+                <div>G2 Fabrication: <ScoreBadge score={g2Badge} /></div>
+                <div>G3 Identity: <ScoreBadge score={g3Badge} /></div>
+              </div>
             </div>
 
             {/* Param list */}
