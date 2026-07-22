@@ -20,18 +20,18 @@ export const WEIGHTS: Record<string, number> = {
 };
 
 export const PARAM_NAMES: Record<string, string> = {
-  Technical:    'Technically / Legally Correct',
-  AllQuestions: 'All Questions Answered',
-  Expectation:  'Expectation Setting',
+  Technical:                'Accuracy (Technically / Legally Correct)',
+  AllQuestions:             'Issue Resolution (All Questions Answered)',
+  Expectation:              'Expectation Setting & Follow-Through',
   DissatisfactionHandling: 'Dissatisfaction Handling',
-  Contextual:   'Contextual & Personal',
-  FollowUp:     'Follow-up & Closing',
-  Sentences:    'Sentences / Tone',
-  Process:      'Process-wise',
-  Opening:      'First Response & Opening',
-  Call:         'Call (when required)',
-  Grammar:      'Grammar / Structure',
-  Empathy:      'Empathy',
+  Contextual:               'Contextual & Personalization',
+  FollowUp:                 'Post-Call Recap / Follow-up',
+  Sentences:                'Readability & Tone',
+  Process:                  'Process-wise',
+  Opening:                  'Greeting & Handover',
+  Call:                     'Call Escalation Decision',
+  Grammar:                  'Grammar / Structure',
+  Empathy:                  'Empathy',
 };
 
 export const PARAM_ORDER = [
