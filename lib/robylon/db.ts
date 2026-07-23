@@ -870,20 +870,20 @@ export async function getCallRecordingsByConversationContact(
   return query<CallRecordingRow>(`
     SELECT cr.*
     FROM call_recordings cr
+    JOIN conversations target_conv ON target_conv.id::text = $1
     JOIN conversations conv_call ON conv_call.id::text = cr.chat_id
     WHERE conv_call.contact_id IS NOT NULL
-      AND conv_call.contact_id = (
-        SELECT contact_id FROM conversations WHERE id = $1
-      )
+      AND conv_call.contact_id = target_conv.contact_id
       AND cr.chat_id != $1
+      AND cr.called_at >= target_conv.started_at
+      AND cr.called_at <= COALESCE(target_conv.closed_at, NOW())
     ORDER BY cr.called_at ASC NULLS LAST, cr.created_at ASC
   `, [chatId]);
 }
 
 /**
- * Find all call recordings for a contact within a time window.
+ * Find all call recordings for a contact within a chat's exact started_at to closed_at timeframe.
  * Fallback when call_recordings.chat_id is NULL or not linked to any conversation row.
- * Window is expanded by 1 hour on each side to handle clock skew.
  */
 export async function getCallRecordingsByContactWindow(
   contactId: number,
@@ -893,15 +893,14 @@ export async function getCallRecordingsByContactWindow(
   return query<CallRecordingRow>(`
     SELECT * FROM call_recordings
     WHERE contact_id = $1
-      AND called_at >= $2::timestamptz - INTERVAL '1 hour'
-      AND called_at <= $3::timestamptz + INTERVAL '1 hour'
+      AND called_at >= $2::timestamptz
+      AND called_at <= $3::timestamptz
     ORDER BY called_at ASC
   `, [contactId, windowStart, windowEnd]);
 }
 
 /** Find call recordings for a contact that have not yet been linked to a chat.
- *  Lower bound (startedAt - 15 min) prevents orphaned calls from older conversations
- *  being incorrectly linked to a newer chat when a backlog of NULL chat_ids exists. */
+ *  Requires call to be initiated strictly between startedAt and closedAt. */
 export async function getUnlinkedCallsForContact(
   contactId: number,
   startedAt: string,
@@ -911,14 +910,14 @@ export async function getUnlinkedCallsForContact(
     SELECT * FROM call_recordings
     WHERE contact_id = $1
       AND chat_id IS NULL
-      AND called_at >= $2::timestamptz - INTERVAL '15 minutes'
+      AND called_at >= $2::timestamptz
       AND called_at <= $3::timestamptz
     ORDER BY called_at ASC
   `, [contactId, startedAt, closedAt]);
 }
 
 /** Find the closed conversation that a call belongs to, for self-linking after late transcription.
- *  Matches a conversation whose window (started_at - 15 min → closed_at) contains the call. */
+ *  Matches a conversation whose exact window (started_at → closed_at) contains the call. */
 export async function findClosedConversationForCall(
   contactId: number,
   calledAt: string,
@@ -926,7 +925,7 @@ export async function findClosedConversationForCall(
   const rows = await query<{ id: string }>(`
     SELECT id FROM conversations
     WHERE contact_id = $1
-      AND started_at - INTERVAL '15 minutes' <= $2::timestamptz
+      AND started_at <= $2::timestamptz
       AND closed_at >= $2::timestamptz
       AND closed_at IS NOT NULL
     ORDER BY started_at DESC

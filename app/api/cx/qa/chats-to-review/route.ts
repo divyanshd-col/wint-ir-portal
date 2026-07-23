@@ -159,7 +159,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filters.status = statusParam;
   }
 
-  // Agent filter: bot_only | all | human_only (default: human_only)
+  // Agent / Interaction filter: bot_only | all | human_only | has_calls (default: human_only)
   const agentFilter = searchParams.get('agent_filter') || 'human_only';
   if (agentFilter === 'human_only') {
     extraWhere += ` AND (a.name IS NULL OR a.name != 'Robylon AI') AND (c.agent_id IS NULL OR c.agent_id NOT IN (15, 447, 784))`;
@@ -167,9 +167,53 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   } else if (agentFilter === 'bot_only') {
     extraWhere += ` AND (a.name = 'Robylon AI' OR c.agent_id IN (15, 447, 784))`;
     filters.agentFilter = 'bot_only';
+  } else if (agentFilter === 'has_calls') {
+    extraWhere += ` AND EXISTS (
+      SELECT 1 FROM call_recordings cr
+      WHERE cr.chat_id = c.id
+         OR (
+           c.contact_id IS NOT NULL 
+           AND cr.contact_id = c.contact_id 
+           AND cr.called_at IS NOT NULL
+           AND (c.started_at IS NULL OR cr.called_at >= c.started_at)
+           AND (c.closed_at IS NULL OR cr.called_at <= c.closed_at)
+         )
+    )`;
+    filters.agentFilter = 'has_calls';
   } else {
     filters.agentFilter = 'all';
   }
+
+  // Has calls explicit filter: has_calls | no_calls | all
+  const hasCallsParam = searchParams.get('has_calls') || searchParams.get('call_filter');
+  if (hasCallsParam === 'has_calls' || hasCallsParam === 'true' || hasCallsParam === 'yes') {
+    extraWhere += ` AND EXISTS (
+      SELECT 1 FROM call_recordings cr
+      WHERE cr.chat_id = c.id
+         OR (
+           c.contact_id IS NOT NULL 
+           AND cr.contact_id = c.contact_id 
+           AND cr.called_at IS NOT NULL
+           AND (c.started_at IS NULL OR cr.called_at >= c.started_at)
+           AND (c.closed_at IS NULL OR cr.called_at <= c.closed_at)
+         )
+    )`;
+    filters.hasCalls = 'has_calls';
+  } else if (hasCallsParam === 'no_calls' || hasCallsParam === 'false' || hasCallsParam === 'no') {
+    extraWhere += ` AND NOT EXISTS (
+      SELECT 1 FROM call_recordings cr
+      WHERE cr.chat_id = c.id
+         OR (
+           c.contact_id IS NOT NULL 
+           AND cr.contact_id = c.contact_id 
+           AND cr.called_at IS NOT NULL
+           AND (c.started_at IS NULL OR cr.called_at >= c.started_at)
+           AND (c.closed_at IS NULL OR cr.called_at <= c.closed_at)
+         )
+    )`;
+    filters.hasCalls = 'no_calls';
+  }
+
 
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
@@ -272,16 +316,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // 3-stage lookup mapper to check call transcript status
   const getCallInfo = (chatId: string, contactId: number | null, startedAtStr: string | null, closedAtStr: string | null) => {
     const matched = callRecordings.filter(rec => {
+      const calledAt = rec.called_at ? new Date(rec.called_at).getTime() : null;
+      if (!calledAt) return false;
+      const startedAt = startedAtStr ? new Date(startedAtStr).getTime() : 0;
+      const closedAt = closedAtStr ? new Date(closedAtStr).getTime() : Date.now();
+      
+      // Strict timeframe: call must be initiated between chat startedAt and closedAt
+      if (calledAt < startedAt || calledAt > closedAt) return false;
+
       if (rec.chat_id === chatId) return true;
-      if (contactId && rec.contact_id === contactId) {
-        const calledAt = rec.called_at ? new Date(rec.called_at).getTime() : null;
-        if (calledAt) {
-          const startedAt = startedAtStr ? new Date(startedAtStr).getTime() : 0;
-          const closedAt = closedAtStr ? new Date(closedAtStr).getTime() : Date.now();
-          const oneHour = 60 * 60 * 1000;
-          return calledAt >= (startedAt - oneHour) && calledAt <= (closedAt + oneHour);
-        }
-      }
+      if (contactId && rec.contact_id === contactId) return true;
       return false;
     });
 

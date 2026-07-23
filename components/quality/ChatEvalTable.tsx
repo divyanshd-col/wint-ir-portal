@@ -10,7 +10,8 @@ import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 interface Props {
   dispositions:   string[];
   onCountChange?: (count: number) => void;
-  agentFilter?:   'bot_only' | 'all' | 'human_only';
+  agentFilter?:   'bot_only' | 'all' | 'human_only' | 'has_calls';
+  hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
 }
 
 // ── Chip / filter styles ──────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
 type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'botIqsScore';
 type SortDir = 'asc' | 'desc';
 
-export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only' }: Props) {
+export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all' }: Props) {
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -78,9 +79,14 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
   const [csatFilter,    setCsatFilter]    = useState<number[]>([]);
   const [paramFail,     setParamFail]     = useState('');
   const [statusFilter,  setStatusFilter]  = useState('');
+  const [callsFilter,   setCallsFilter]   = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [customFrom,    setCustomFrom]    = useState('');
   const [customTo,      setCustomTo]      = useState('');
   const [showPicker,    setShowPicker]    = useState(false);
+
+  useEffect(() => {
+    setCallsFilter(hasCallsFilter);
+  }, [hasCallsFilter]);
 
   // ── Dropdown open state ───────────────────────────────────────────────────
   const [openDrop, setOpenDrop] = useState<string | null>(null);
@@ -110,6 +116,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
       if (iqsMax)        params.set('iqs_max',            iqsMax);
       if (paramFail)     params.set('param_fail',         paramFail);
       if (statusFilter)  params.set('status',             statusFilter);
+      if (callsFilter !== 'all') params.set('has_calls',  callsFilter);
       csatFilter.forEach(v => params.append('csat', String(v)));
       if (customFrom)    params.set('from', customFrom);
       if (customTo)      params.set('to',   customTo);
@@ -131,7 +138,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     } finally {
       setLoading(false);
     }
-  }, [chatIdSearch, dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, statusFilter, customFrom, customTo, onCountChange, pageSize, agentFilter]);
+  }, [chatIdSearch, dispFilter, subDispFilter, iqsMin, iqsMax, csatFilter, paramFail, statusFilter, callsFilter, customFrom, customTo, onCountChange, pageSize, agentFilter]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -198,6 +205,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     csatFilter.length ||
     paramFail ||
     statusFilter ||
+    callsFilter !== 'all' ||
     customFrom ||
     customTo
   );
@@ -358,6 +366,29 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
           )}
         </div>
 
+        {/* Has Calls filter */}
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button style={callsFilter !== 'all' ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'calls' ? null : 'calls')}>
+            {callsFilter === 'has_calls' ? 'Has Calls' : callsFilter === 'no_calls' ? 'No Calls' : 'Calls'} <span style={{ fontSize: 9 }}>▾</span>
+          </button>
+          {openDrop === 'calls' && (
+            <div style={dropdown} onClick={e => e.stopPropagation()}>
+              <div style={{ ...dropItem, fontWeight: callsFilter === 'all' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('all'); setOpenDrop(null); }}>
+                All
+              </div>
+              <div style={{ ...dropItem, fontWeight: callsFilter === 'has_calls' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('has_calls'); setOpenDrop(null); }}>
+                Has Calls
+              </div>
+              <div style={{ ...dropItem, fontWeight: callsFilter === 'no_calls' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('no_calls'); setOpenDrop(null); }}>
+                No Calls
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Date range */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button style={customFrom ? chipActive : chip} onClick={() => { setShowPicker(v => !v); setOpenDrop(null); }}>
@@ -384,7 +415,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
           }}
           onClick={() => {
             setChatIdSearch(''); setDispFilter([]); setSubDispFilter([]); setIqsMin(''); setIqsMax('');
-            setCsatFilter([]); setParamFail(''); setStatusFilter(''); setCustomFrom(''); setCustomTo('');
+            setCsatFilter([]); setParamFail(''); setStatusFilter(''); setCallsFilter('all'); setCustomFrom(''); setCustomTo('');
           }}
         >
           Reset Filters

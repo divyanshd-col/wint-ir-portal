@@ -267,7 +267,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         } catch {}
       }
       if (r.chat_id !== chatId) {
-        await linkCallToChat(r.id, chatId);
+        if (!r.chat_id) {
+          await linkCallToChat(r.id, chatId);
+        }
         if (!isTranscribed && r.recording_url) {
           needsScoring = true;
         }

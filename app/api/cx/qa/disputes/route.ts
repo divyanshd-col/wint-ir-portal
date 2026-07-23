@@ -246,15 +246,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     });
   }
 
+  // Filter by agent_filter or has_calls if provided
+  const hasCallsParam = searchParams.get('has_calls') || searchParams.get('call_filter');
+  let finalDisputes = disputes;
+  if (agentFilter === 'has_calls' || hasCallsParam === 'has_calls' || hasCallsParam === 'true' || hasCallsParam === 'yes') {
+    finalDisputes = disputes.filter(d => d.callTranscriptStatus !== 'no_call');
+  } else if (hasCallsParam === 'no_calls' || hasCallsParam === 'false' || hasCallsParam === 'no') {
+    finalDisputes = disputes.filter(d => d.callTranscriptStatus === 'no_call');
+  }
+
   // Sort by closedAt desc
-  disputes.sort((a, b) => b.closedAt.localeCompare(a.closedAt));
+  finalDisputes.sort((a, b) => b.closedAt.localeCompare(a.closedAt));
 
   log.info(ROUTE, 'result', {
     flagCount: pendingFlags.length,
-    filteredCount: disputes.length,
+    filteredCount: finalDisputes.length,
     dispositionCount: dispositions.length,
     durationMs: Date.now() - t0,
   });
 
-  return NextResponse.json({ disputes });
+  return NextResponse.json({ disputes: finalDisputes });
 });
