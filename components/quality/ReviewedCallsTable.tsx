@@ -7,6 +7,7 @@ import type { CallToReviewRow } from '@/app/api/cx/qa/calls-to-review/route';
 interface Props {
   dispositions:   string[];
   agentFilter?:   'all' | 'human_only';
+  initialCallId?: string;
 }
 
 const chip: React.CSSProperties = {
@@ -126,11 +127,11 @@ const CallEvalRow = React.memo(function CallEvalRow({
   );
 });
 
-export default function ReviewedCallsTable({ dispositions, agentFilter = 'all' }: Props) {
+export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', initialCallId }: Props) {
   const [sortCol, setSortCol] = useState<'callId' | 'agentName' | 'iqsScore'>('callId');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  const [callIdSearch, setCallIdSearch] = useState('');
+  const [callIdSearch, setCallIdSearch] = useState(initialCallId || '');
   const [dispFilter, setDispFilter] = useState<string[]>([]);
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
@@ -145,6 +146,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all' }
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const autoExpandedRef = React.useRef(false);
 
   const fetchData = useCallback(async (pg = 1, ps = pageSize) => {
     setLoading(true);
@@ -161,13 +163,22 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all' }
       const res = await fetch(`/api/cx/qa/calls-to-review?${params}`);
       if (!res.ok) return;
       const data = await res.json();
-      setCalls(data.calls ?? []);
+      const fetchedCalls: CallToReviewRow[] = data.calls ?? [];
+      setCalls(fetchedCalls);
       setTotal(data.total ?? 0);
       setPage(pg);
+
+      if (!autoExpandedRef.current && initialCallId) {
+        autoExpandedRef.current = true;
+        const match = fetchedCalls.find(c => c.callId === initialCallId) || fetchedCalls[0];
+        if (match) {
+          setExpandedId(match.callId);
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [callIdSearch, dispFilter, iqsMin, iqsMax, customFrom, customTo, pageSize, agentFilter]);
+  }, [callIdSearch, dispFilter, iqsMin, iqsMax, customFrom, customTo, pageSize, agentFilter, initialCallId]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 

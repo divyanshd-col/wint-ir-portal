@@ -48,11 +48,27 @@ export function CallTranscriptCard({
       >
         <span className="text-amber-600 font-bold text-sm">📞 {rec.label}</span>
         {callDate && <span className="text-xs text-slate-500">{callDate}</span>}
-        {rec.durationSeconds && <span className="text-xs text-slate-400">{Math.round(rec.durationSeconds / 60)}m {rec.durationSeconds % 60}s</span>}
-        <div className="flex gap-2 ml-auto text-[10px] text-slate-500">
-          {rec.interruptionCount > 0 && <span>⚡ {rec.interruptionCount}</span>}
-          {rec.deadAirCount > 0 && <span>⏸ {rec.deadAirCount}</span>}
-          <span className="text-slate-400">{speechSegs.length} turns</span>
+        {Boolean(rec.durationSeconds) && (
+          <span className="text-xs text-slate-400">{Math.round(rec.durationSeconds! / 60)}m {rec.durationSeconds! % 60}s</span>
+        )}
+        <div className="flex items-center gap-2.5 ml-auto text-[10px] text-slate-500">
+          {rec.id && (
+            <a
+              href={`/quality/call-evaluation?callId=${encodeURIComponent(rec.id)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300/80 transition-colors shrink-0 ml-1 shadow-2xs cursor-pointer"
+              title="Open call evaluation in new tab"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+              Show Evaluation
+            </a>
+          )}
         </div>
         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" className={`shrink-0 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}><path d="M1 3l4 4 4-4"/></svg>
       </button>
