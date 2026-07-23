@@ -74,12 +74,13 @@ export async function PATCH(req: NextRequest) {
       if (note) params['__review_note'] = note;
 
       const convRow = await query<{ conversation_type: string }>(`SELECT conversation_type FROM conversations WHERE id = $1`, [chatId]);
+      const existingParamsObj = rowExists && existing[0]?.parameters
+        ? (existing[0].parameters.__agent_parameters || existing[0].parameters.__bot_parameters || existing[0].parameters)
+        : {};
       const hasBotParams = scores
         ? Object.keys(scores).some(k => ['IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'].includes(k))
-        : (rowExists && existing[0].parameters
-          ? Object.keys(existing[0].parameters).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k))
-          : false);
-      const isBot = convRow[0]?.conversation_type === 'bot' && hasBotParams;
+        : Object.keys(existingParamsObj).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k));
+      const isBot = convRow[0]?.conversation_type === 'bot' || hasBotParams;
       const newIqs = scores ? calculateIQS(scores, isBot) : (rowExists ? existing[0].iqs_score : 0);
 
       if (rowExists) {
@@ -142,12 +143,13 @@ export async function PATCH(req: NextRequest) {
     }
 
     const convRow = await query<{ conversation_type: string }>(`SELECT conversation_type FROM conversations WHERE id = $1`, [chatId]);
-    const hasBotParams = scores
+    const existingParamsObj2 = rowExists && existing[0]?.parameters
+      ? (existing[0].parameters.__agent_parameters || existing[0].parameters.__bot_parameters || existing[0].parameters)
+      : {};
+    const hasBotParams2 = scores
       ? Object.keys(scores).some(k => ['IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'].includes(k))
-      : (rowExists && existing[0].parameters
-        ? Object.keys(existing[0].parameters).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k))
-        : false);
-    const isBot = convRow[0]?.conversation_type === 'bot' && hasBotParams;
+      : Object.keys(existingParamsObj2).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k));
+    const isBot = convRow[0]?.conversation_type === 'bot' || hasBotParams2;
     const finalIqs = scores ? calculateIQS(scores, isBot) : (rowExists ? existing[0].iqs_score : 0);
 
     return NextResponse.json({
