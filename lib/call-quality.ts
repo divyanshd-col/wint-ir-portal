@@ -112,7 +112,7 @@ export function calculateCallIQS(scores: Record<string, CallParamScore>): number
       }
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : 100;
+  return possible > 0 ? Math.round((total / possible) * 100) : 0;
 }
 
 // ── Build readable text from segments (for LLM scoring input) ─────────────────
