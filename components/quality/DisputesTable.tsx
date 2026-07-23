@@ -7,7 +7,8 @@ import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 interface Props {
   dispositions: string[];
   onCountChange?: (count: number) => void;
-  agentFilter?: 'bot_only' | 'all' | 'human_only';
+  agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
+  hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
 }
 
 interface FlagComment {
@@ -27,7 +28,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ onCountChange, agentFilter = 'human_only' }: Props) {
+export default function DisputesTable({ onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all' }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
@@ -38,12 +39,20 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   const [posting,     setPosting]     = useState(false);
   const [raiserFilter, setRaiserFilter] = useState<'all' | 'tl_endorsed' | 'TL' | 'IR'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
+  const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
+  const [openDrop,     setOpenDrop]     = useState<string | null>(null);
+
+  useEffect(() => {
+    setCallsFilter(hasCallsFilter);
+  }, [hasCallsFilter]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/cx/qa/disputes?agent_filter=${agentFilter}`);
+        const params = new URLSearchParams({ agent_filter: agentFilter });
+        if (callsFilter !== 'all') params.set('has_calls', callsFilter);
+        const res = await fetch(`/api/cx/qa/disputes?${params}`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
@@ -55,7 +64,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
       }
     })();
     return () => { cancelled = true; };
-  }, [agentFilter, onCountChange]);
+  }, [agentFilter, callsFilter, onCountChange]);
 
   function toggleExpand(chatId: string) {
     setExpandedId(prev => prev === chatId ? null : chatId);
@@ -103,7 +112,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     }
   }
 
-  const hasFilters = !!(chatIdSearch || raiserFilter !== 'all');
+  const hasFilters = !!(chatIdSearch || raiserFilter !== 'all' || callsFilter !== 'all');
 
   let visibleDisputes = raiserFilter === 'all' ? disputes
     : raiserFilter === 'tl_endorsed' ? disputes.filter(d => d.tlForwarded)
@@ -158,9 +167,30 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
           </button>
         ))}
 
+        {/* Calls filter */}
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button style={callsFilter !== 'all' ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'calls' ? null : 'calls')}>
+            {callsFilter === 'has_calls' ? 'Has Calls' : callsFilter === 'no_calls' ? 'No Calls' : 'Calls'} <span style={{ fontSize: 9 }}>▾</span>
+          </button>
+          {openDrop === 'calls' && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 40, marginTop: 4,
+              background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 140, padding: '6px 0',
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'all' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('all'); setOpenDrop(null); }}>All</div>
+              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'has_calls' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('has_calls'); setOpenDrop(null); }}>Has Calls</div>
+              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'no_calls' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('no_calls'); setOpenDrop(null); }}>No Calls</div>
+            </div>
+          )}
+        </div>
+
         <button
           disabled={!hasFilters}
-          onClick={() => { setChatIdSearch(''); setRaiserFilter('all'); }}
+          onClick={() => { setChatIdSearch(''); setRaiserFilter('all'); setCallsFilter('all'); }}
           style={{
             ...chip,
             color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
