@@ -105,7 +105,9 @@ export async function GET(req: NextRequest) {
           } catch {}
         }
         if (r.chat_id !== chatId) {
-          await linkCallToChat(r.id, chatId);
+          if (!r.chat_id) {
+            await linkCallToChat(r.id, chatId);
+          }
           if (!isTranscribed && r.recording_url) {
             needsScoring = true;
           }

@@ -272,16 +272,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // 3-stage lookup mapper to check call transcript status
   const getCallInfo = (chatId: string, contactId: number | null, startedAtStr: string | null, closedAtStr: string | null) => {
     const matched = callRecordings.filter(rec => {
+      const calledAt = rec.called_at ? new Date(rec.called_at).getTime() : null;
+      if (!calledAt) return false;
+      const startedAt = startedAtStr ? new Date(startedAtStr).getTime() : 0;
+      const closedAt = closedAtStr ? new Date(closedAtStr).getTime() : Date.now();
+      
+      // Strict timeframe: call must be initiated between chat startedAt and closedAt
+      if (calledAt < startedAt || calledAt > closedAt) return false;
+
       if (rec.chat_id === chatId) return true;
-      if (contactId && rec.contact_id === contactId) {
-        const calledAt = rec.called_at ? new Date(rec.called_at).getTime() : null;
-        if (calledAt) {
-          const startedAt = startedAtStr ? new Date(startedAtStr).getTime() : 0;
-          const closedAt = closedAtStr ? new Date(closedAtStr).getTime() : Date.now();
-          const oneHour = 60 * 60 * 1000;
-          return calledAt >= (startedAt - oneHour) && calledAt <= (closedAt + oneHour);
-        }
-      }
+      if (contactId && rec.contact_id === contactId) return true;
       return false;
     });
 
