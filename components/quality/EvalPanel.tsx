@@ -136,8 +136,9 @@ export default function EvalPanel({
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
 
-  const hasBotParams = !!(parameters && (parameters['issue_resolution'] || parameters['accuracy'] || parameters['correct_escalation'] || parameters['IssueResolution'] || parameters['Accuracy'] || parameters.__bot_parameters));
-  const isBotChat = conversationType === 'bot' && (mode === 'submit' || mode === 'resolve' || hasBotParams);
+  const safeParamsForBotCheck: Record<string, any> = parameters?.__agent_parameters || parameters?.__bot_parameters || parameters || {};
+  const hasBotParams = !!(safeParamsForBotCheck && (safeParamsForBotCheck['issue_resolution'] || safeParamsForBotCheck['accuracy'] || safeParamsForBotCheck['correct_escalation'] || safeParamsForBotCheck['IssueResolution'] || safeParamsForBotCheck['Accuracy'] || safeParamsForBotCheck['clarity'] || safeParamsForBotCheck['Clarity']));
+  const isBotChat = conversationType === 'bot' || hasBotParams;
   const isHybrid = conversationType === 'hybrid';
   const showTabs = isHybrid;
 
@@ -176,7 +177,7 @@ export default function EvalPanel({
 
   function initBotParams(): Record<string, ParamState> {
     const botRawParams = parameters?.__bot_parameters || {};
-    const safeParams = Object.keys(botRawParams).length ? botRawParams : (parameters || {});
+    const safeParams = Object.keys(botRawParams).length ? botRawParams : (parameters?.__agent_parameters || parameters || {});
     const state: Record<string, ParamState> = {};
     for (const pascal of BOT_PARAM_ORDER) {
       const dbKey = PASCAL_TO_DB[pascal] || pascal;

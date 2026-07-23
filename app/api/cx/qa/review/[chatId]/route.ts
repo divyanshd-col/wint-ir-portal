@@ -82,9 +82,10 @@ export async function PATCH(
     );
     const oldScore = beforeState[0]?.iqs_score ?? null;
     const oldParams = beforeState[0]?.parameters ?? null;
-    const isBot = beforeState[0]?.conversation_type === 'bot' && (() => {
+    const isBot = beforeState[0]?.conversation_type === 'bot' || (() => {
       if (!oldParams) return false;
-      return Object.keys(oldParams).some(k => [
+      const safeParams = oldParams.__agent_parameters || oldParams.__bot_parameters || oldParams;
+      return Object.keys(safeParams).some(k => [
         'issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'
       ].includes(k));
     })();
@@ -225,7 +226,7 @@ export async function PATCH(
         }
         
         const botPascalScores: Record<string, ParamScore> = {};
-        const srcBotParams = merged.__bot_parameters || (isBot ? merged : {});
+        const srcBotParams = merged.__bot_parameters || (isBot ? (merged.__agent_parameters || merged) : {});
         for (const [dbKey, val] of Object.entries(srcBotParams) as [string, any][]) {
           if (dbKey.startsWith('__')) continue;
           const pascal = DB_TO_PASCAL[dbKey] || dbKey;
