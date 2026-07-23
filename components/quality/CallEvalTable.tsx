@@ -8,6 +8,8 @@ interface Props {
   dispositions:   string[];
   onCountChange?: (count: number) => void;
   agentFilter?:   'all' | 'human_only';
+  initialCallId?: string;
+  onCallNotFound?: () => void;
 }
 
 const chip: React.CSSProperties = {
@@ -149,11 +151,11 @@ const CallEvalRow = React.memo(function CallEvalRow({
   );
 });
 
-export default function CallEvalTable({ dispositions, onCountChange, agentFilter = 'all' }: Props) {
+export default function CallEvalTable({ dispositions, onCountChange, agentFilter = 'all', initialCallId, onCallNotFound }: Props) {
   const [sortCol, setSortCol] = useState<'callId' | 'agentName' | 'iqsScore'>('callId');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
-  const [callIdSearch, setCallIdSearch] = useState('');
+  const [callIdSearch, setCallIdSearch] = useState(initialCallId || '');
   const [dispFilter, setDispFilter] = useState<string[]>([]);
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
@@ -169,6 +171,7 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
   const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const autoExpandedRef = React.useRef(false);
 
   const fetchData = useCallback(async (pg = 1, ps = pageSize) => {
     setLoading(true);
@@ -186,14 +189,25 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
       const res = await fetch(`/api/cx/qa/calls-to-review?${params}`);
       if (!res.ok) return;
       const data = await res.json();
-      setCalls(data.calls ?? []);
+      const fetchedCalls: CallToReviewRow[] = data.calls ?? [];
+      setCalls(fetchedCalls);
       setTotal(data.total ?? 0);
       setPage(pg);
       onCountChange?.(data.total ?? 0);
+
+      if (!autoExpandedRef.current && initialCallId) {
+        autoExpandedRef.current = true;
+        const match = fetchedCalls.find(c => c.callId === initialCallId) || fetchedCalls[0];
+        if (match) {
+          setExpandedId(match.callId);
+        } else if (onCallNotFound) {
+          onCallNotFound();
+        }
+      }
     } finally {
       setLoading(false);
     }
-  }, [callIdSearch, dispFilter, iqsMin, iqsMax, statusFilter, customFrom, customTo, onCountChange, pageSize, agentFilter]);
+  }, [callIdSearch, dispFilter, iqsMin, iqsMax, statusFilter, customFrom, customTo, onCountChange, pageSize, agentFilter, initialCallId, onCallNotFound]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 

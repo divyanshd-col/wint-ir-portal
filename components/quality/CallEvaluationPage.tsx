@@ -1,11 +1,15 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import CallEvalTable from './CallEvalTable';
 import ReviewedCallsTable from './ReviewedCallsTable';
 
 type Tab = 'pending' | 'reviewed';
 
-export default function CallEvaluationPage() {
+function CallEvaluationContent() {
+  const searchParams = useSearchParams();
+  const targetCallId = searchParams.get('callId') || searchParams.get('call_id') || '';
+
   const [dispositions, setDispositions] = useState<string[]>([]);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [loadingDisp, setLoadingDisp] = useState(true);
@@ -114,6 +118,8 @@ export default function CallEvaluationPage() {
           dispositions={loadingDisp ? [] : dispositions}
           onCountChange={setPendingCount}
           agentFilter={agentFilter}
+          initialCallId={targetCallId}
+          onCallNotFound={() => setTab('reviewed')}
         />
       </div>
 
@@ -121,6 +127,7 @@ export default function CallEvaluationPage() {
         <ReviewedCallsTable
           dispositions={loadingDisp ? [] : dispositions}
           agentFilter={agentFilter}
+          initialCallId={targetCallId}
         />
       </div>
 
@@ -128,5 +135,13 @@ export default function CallEvaluationPage() {
         Data from live DB · scoped to your assigned dispositions
       </p>
     </div>
+  );
+}
+
+export default function CallEvaluationPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading call evaluation…</div>}>
+      <CallEvaluationContent />
+    </Suspense>
   );
 }

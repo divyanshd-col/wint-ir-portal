@@ -280,7 +280,7 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
       }
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : 100;
+  return possible > 0 ? Math.round((total / possible) * 100) : 0;
 }
 
 // ── Scoring system prompt ────────────────────────────────────────────────────

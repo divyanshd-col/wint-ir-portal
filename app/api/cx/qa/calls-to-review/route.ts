@@ -67,15 +67,30 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const dispositionFilters = searchParams.getAll('disposition_filter').filter(d => dispositions.includes(d));
   const effectiveDispositions = dispositionFilters.length ? dispositionFilters : dispositions;
 
-  // Build dynamic WHERE clauses
-  const sqlParams: unknown[] = [effectiveDispositions];
-  let paramIdx = 2;
-  let extraWhere = '';
+  const callId = searchParams.get('call_id');
+  const hasCallId = Boolean(callId && callId.trim());
 
+  // Build dynamic WHERE clauses
+  const sqlParams: unknown[] = [];
+  let paramIdx = 1;
+  let baseWhere = '';
+
+  if (!hasCallId) {
+    sqlParams.push(effectiveDispositions);
+    const dispParam = paramIdx++;
+    baseWhere = reviewedMode
+      ? `cr.call_disposition = ANY($${dispParam}) AND ce.status = 'reviewed'`
+      : `cr.call_disposition = ANY($${dispParam}) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
+  } else {
+    baseWhere = reviewedMode
+      ? `ce.status = 'reviewed'`
+      : `ce.status IN ('pending', 'reopened')`;
+  }
+
+  let extraWhere = '';
   const filters: Record<string, unknown> = {};
 
-  const callId = searchParams.get('call_id');
-  if (callId) {
+  if (hasCallId && callId) {
     extraWhere += ` AND ce.call_id LIKE $${paramIdx++}`;
     sqlParams.push(`${callId.trim()}%`);
     filters.callId = callId.trim();
@@ -137,10 +152,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
 
-  const baseWhere = reviewedMode
-    ? `cr.call_disposition = ANY($1) AND ce.status = 'reviewed'`
-    : `cr.call_disposition = ANY($1) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
-
   // Count query
   const countRows = await query<{ total: string }>(
     `SELECT COUNT(*) AS total
@@ -152,7 +163,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const total = parseInt(countRows[0]?.total ?? '0');
 
   // Data query
-  sqlParams.push(limit, offset);
+  const dataSqlParams = [...sqlParams, limit, offset];
+  const limitParamIdx = paramIdx++;
+  const offsetParamIdx = paramIdx++;
+
   const rows = await query<any>(
     `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, 'Unknown') as agent_name,
             ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
@@ -163,8 +177,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      LEFT JOIN agents a ON a.id = ce.agent_id
      WHERE ${baseWhere}${extraWhere}
      ORDER BY ${reviewedMode ? 'ce.reviewed_at DESC' : 'ce.scored_at DESC'}
-     LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
-    sqlParams
+     LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
+    dataSqlParams
   );
 
   const calls: CallToReviewRow[] = rows.map(r => ({
