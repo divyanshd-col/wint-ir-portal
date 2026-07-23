@@ -112,7 +112,18 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
             }
           />
         )}
-        {isAdmin && (
+        {(isAdmin || role === 'tl') && (
+          <NavLink
+            href="/tl"
+            label="Team Analytics"
+            icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M2 13l4-5 3 3 5-7" />
+              </svg>
+            }
+          />
+        )}
+        {(isAdmin || role === 'tl') && (
           <NavLink
             href="/tl/member-analytics"
             label="Member Analytics"
@@ -122,6 +133,17 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
                 <path d="M1 14c0-2.8 2.2-5 5-5" />
                 <circle cx="11.5" cy="9" r="2" />
                 <path d="M8.5 14c0-1.7 1.3-3 3-3s3 1.3 3 3" />
+              </svg>
+            }
+          />
+        )}
+        {(isAdmin || role === 'tl') && (
+          <NavLink
+            href="/tl/quality-chats"
+            label="Quality Chats"
+            icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M14 10a2 2 0 01-2 2H5l-3 3V4a2 2 0 012-2h8a2 2 0 012 2v6z" />
               </svg>
             }
           />
