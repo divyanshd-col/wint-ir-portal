@@ -53,7 +53,7 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
   return m;
 }
 
-type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'botIqsScore';
+type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'botIqsScore' | 'callIqsScore';
 type SortDir = 'asc' | 'desc';
 
 export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all' }: Props) {
@@ -169,6 +169,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
     if (sortCol === 'iqsScore')  cmp = (a.iqsScore ?? 0) - (b.iqsScore ?? 0);
     if (sortCol === 'botIqsScore')  cmp = (a.botIqsScore ?? 0) - (b.botIqsScore ?? 0);
+    if (sortCol === 'callIqsScore') cmp = (a.callIqsScore ?? -1) - (b.callIqsScore ?? -1);
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
@@ -494,7 +495,11 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                   <SortIcon col="iqsScore" /> IQS (Agent)
                 </button>
               </th>
-              <th style={th}>Call Transcript</th>
+              <th style={{ ...th, textAlign: 'right' }}>
+                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('callIqsScore')}>
+                  <SortIcon col="callIqsScore" /> Call IQS
+                </button>
+              </th>
               <th style={th}>Status</th>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
@@ -575,8 +580,21 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
                       )}
                     </td>
-                    <td style={td}>
-                      {chat.callTranscriptStatus === 'transcribed' ? (
+                    <td style={tdNum}>
+                      {chat.callIqsScore !== null ? (
+                        <span
+                          title={`Avg Call IQS: ${chat.callIqsScore}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
+                            fontFamily: 'ui-monospace, monospace', fontWeight: 500,
+                            background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                            color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                          }}
+                        >
+                          {chat.callIqsScore}
+                        </span>
+                      ) : chat.callTranscriptStatus === 'transcribed' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
                           <span style={{ fontSize: 10 }}>✓</span> Transcribed
                         </span>

@@ -21,12 +21,14 @@ async function _GET(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  // Fetch all call recordings that have a transcript and chat linked, but no evaluation record yet
+  // Fetch all call recordings that have a transcript, but no evaluation record yet
   const pendingCalls = await query<{ id: string }>(`
     SELECT cr.id
     FROM call_recordings cr
     LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
-    WHERE cr.status = 'linked' AND cr.transcript IS NOT NULL AND ce.call_id IS NULL
+    WHERE cr.transcript IS NOT NULL
+      AND ce.call_id IS NULL
+      AND cr.status NOT IN ('failed_transcription', 'failed_pipeline')
     ORDER BY cr.called_at DESC
   `);
 

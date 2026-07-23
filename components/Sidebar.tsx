@@ -129,6 +129,33 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
             } label="Analytics" active={pathname === '/analytics'} expanded={isExpanded}
               onClick={() => setAndPersistCollapsed(true)} />
           )}
+          {canSeeAnalytics && (
+            <NavLink href="/tl" icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M2 13l4-5 3 3 5-7" />
+              </svg>
+            } label="Team Analytics" active={pathname === '/tl'} expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)} />
+          )}
+          {canSeeAnalytics && (
+            <NavLink href="/tl/member-analytics" icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="6" cy="5" r="2.5" />
+                <path d="M1 14c0-2.8 2.2-5 5-5" />
+                <circle cx="11.5" cy="9" r="2" />
+                <path d="M8.5 14c0-1.7 1.3-3 3-3s3 1.3 3 3" />
+              </svg>
+            } label="Member Analytics" active={pathname === '/tl/member-analytics'} expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)} />
+          )}
+          {canSeeAnalytics && (
+            <NavLink href="/tl/quality-chats" icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M14 10a2 2 0 01-2 2H5l-3 3V4a2 2 0 012-2h8a2 2 0 012 2v6z" />
+              </svg>
+            } label="Quality Chats" active={pathname === '/tl/quality-chats'} expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)} />
+          )}
 
           {canSeeQuality && (
             <NavLink href="/quality" icon={
