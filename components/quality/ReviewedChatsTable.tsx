@@ -7,7 +7,8 @@ import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 
 interface Props {
   dispositions: string[];
-  agentFilter?: 'bot_only' | 'all' | 'human_only';
+  agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
+  hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
 }
 
 function fmtDate(iso: string) {
@@ -17,7 +18,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props) {
+export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCallsFilter = 'all' }: Props) {
   const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
   const [total,         setTotal]         = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
@@ -30,9 +31,15 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
   // Filters
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [agentSearch,  setAgentSearch]  = useState('');
+  const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [customFrom,   setCustomFrom]   = useState('');
   const [customTo,     setCustomTo]     = useState('');
   const [showPicker,   setShowPicker]   = useState(false);
+  const [openDrop,     setOpenDrop]     = useState<string | null>(null);
+
+  useEffect(() => {
+    setCallsFilter(hasCallsFilter);
+  }, [hasCallsFilter]);
 
   const fetchData = useCallback(async (pg = 1) => {
     setLoading(true);
@@ -40,6 +47,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
       const params = new URLSearchParams({ reviewed: 'true', page: String(pg), limit: String(pageSize) });
       params.set('agent_filter', agentFilter);
       if (chatIdSearch) params.set('chat_id', chatIdSearch);
+      if (callsFilter !== 'all') params.set('has_calls', callsFilter);
       if (customFrom)   params.set('from', customFrom);
       if (customTo)     params.set('to',   customTo);
 
@@ -58,7 +66,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
     } finally {
       setLoading(false);
     }
-  }, [chatIdSearch, agentSearch, customFrom, customTo, pageSize, agentFilter]);
+  }, [chatIdSearch, agentSearch, callsFilter, customFrom, customTo, pageSize, agentFilter]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -80,7 +88,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
     outline: 'none',
   };
 
-  const hasFilters = !!(chatIdSearch || agentSearch || customFrom || customTo);
+  const hasFilters = !!(chatIdSearch || agentSearch || callsFilter !== 'all' || customFrom || customTo);
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
@@ -103,6 +111,31 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
           value={agentSearch}
           onChange={e => setAgentSearch(e.target.value)}
         />
+        {/* Calls filter */}
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => setOpenDrop(openDrop === 'calls' ? null : 'calls')}
+            style={{ ...inputStyle, cursor: 'pointer', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+          >
+            {callsFilter === 'has_calls' ? 'Has Calls' : callsFilter === 'no_calls' ? 'No Calls' : 'Calls'}
+            <span style={{ fontSize: 9, color: 'var(--qa-text-3)' }}>▾</span>
+          </button>
+          {openDrop === 'calls' && (
+            <div style={{
+              position: 'absolute', top: '100%', left: 0, zIndex: 40, marginTop: 4,
+              background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 140, padding: '6px 0',
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'all' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('all'); setOpenDrop(null); }}>All</div>
+              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'has_calls' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('has_calls'); setOpenDrop(null); }}>Has Calls</div>
+              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'no_calls' ? 600 : 400 }}
+                onClick={() => { setCallsFilter('no_calls'); setOpenDrop(null); }}>No Calls</div>
+            </div>
+          )}
+        </div>
+
         {/* Date range picker */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button
@@ -121,7 +154,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only' }: Props
         </div>
         <button
           disabled={!hasFilters}
-          onClick={() => { setChatIdSearch(''); setAgentSearch(''); setCustomFrom(''); setCustomTo(''); setShowPicker(false); }}
+          onClick={() => { setChatIdSearch(''); setAgentSearch(''); setCallsFilter('all'); setCustomFrom(''); setCustomTo(''); setShowPicker(false); }}
           style={{
             ...inputStyle,
             color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',

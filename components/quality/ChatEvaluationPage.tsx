@@ -12,7 +12,7 @@ export default function ChatEvaluationPage() {
   const [disputeCount, setDisputeCount]  = useState<number | null>(null);
   const [loadingDisp,   setLoadingDisp]   = useState(true);
   const [tab,           setTab]           = useState<Tab>('pending');
-  const [agentFilter,   setAgentFilter]   = useState<'bot_only' | 'all' | 'human_only'>('human_only');
+  const [agentFilter,   setAgentFilter]   = useState<'bot_only' | 'all' | 'human_only' | 'has_calls'>('human_only');
 
   useEffect(() => {
     (async () => {
@@ -84,7 +84,7 @@ export default function ChatEvaluationPage() {
           <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>Reviewed Chats</button>
         </div>
 
-        {/* Agent Filter Dropdown */}
+        {/* Agent / Interaction Filter Dropdown */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
           <select
             value={agentFilter}
@@ -111,6 +111,7 @@ export default function ChatEvaluationPage() {
             <option value="all" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>All</option>
             <option value="human_only" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>Human Only</option>
             <option value="bot_only" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>Bot Only</option>
+            <option value="has_calls" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>Has Calls</option>
           </select>
         </div>
       </div>
