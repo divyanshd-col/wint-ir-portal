@@ -14,15 +14,15 @@ async function _GET(req: NextRequest) {
     }
   }
 
-  // 1. Fetch unprocessed calls (either received/stored OR linked/transcribed without evaluation)
-  const pendingCalls = await query(`
+  // 1. Fetch unprocessed calls (any call recording without evaluation or needing processing)
+  const pendingCalls = await query<{ id: string; status: string }>(`
     SELECT cr.id, cr.status
     FROM call_recordings cr
     LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
-    WHERE cr.status IN ('received', 'stored', 'linked', 'transcribed')
-      AND (ce.call_id IS NULL OR cr.status IN ('received', 'stored'))
-    ORDER BY cr.called_at ASC
-    LIMIT 10
+    WHERE (ce.call_id IS NULL OR cr.status IN ('received', 'stored'))
+      AND cr.status NOT IN ('failed_transcription', 'failed_pipeline')
+    ORDER BY cr.called_at DESC
+    LIMIT 30
   `);
 
   log.info(ROUTE, `[cron] Found ${pendingCalls.length} calls pending evaluation processing`);

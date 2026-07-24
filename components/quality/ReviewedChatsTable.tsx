@@ -178,7 +178,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
               <th style={th}>Agent</th>
               <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
               <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
-              <th style={th}>Call Transcript</th>
+              <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
               <th style={th}>CSAT</th>
               <th style={th}>Disposition</th>
               <th style={th}>Reviewed By</th>
@@ -253,8 +253,20 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                       )}
                     </td>
-                    <td style={td}>
-                      {chat.callTranscriptStatus === 'transcribed' ? (
+                    <td style={tdNum}>
+                      {chat.callIqsScore !== null ? (
+                        <span
+                          title={`Avg Call IQS: ${chat.callIqsScore}`}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
+                            background: chat.callIqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                            color:      chat.callIqsScore < 60 ? '#b91c1c' : '#713f12',
+                          }}
+                        >
+                          {chat.callIqsScore}
+                        </span>
+                      ) : chat.callTranscriptStatus === 'transcribed' ? (
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
                           <span style={{ fontSize: 11 }}>✓</span> Transcribed
                         </span>
