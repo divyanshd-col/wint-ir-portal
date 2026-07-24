@@ -149,7 +149,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     });
 
     if (matched.length === 0) {
-      return { status: 'no_call' as const, label: 'No Call', matchedCallIds: [] as string[] };
+      return { status: 'no_call' as const, label: 'No Call' };
     }
 
     const hasUntranscribed = matched.some(rec => {
@@ -163,60 +163,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       return !isTranscribed && rec.recording_url;
     });
 
-    const matchedCallIds = matched.map((r: any) => r.id);
-
     if (hasUntranscribed) {
-      return { status: 'pending' as const, label: 'Pending Transcription', matchedCallIds };
+      return { status: 'pending' as const, label: 'Pending Transcription' };
     } else {
-      return { status: 'transcribed' as const, label: 'Transcribed', matchedCallIds };
+      return { status: 'transcribed' as const, label: 'Transcribed' };
     }
   };
 
   // Index DB rows by chatId
   const dbMap = new Map(dbRows.map(r => [r.chat_id, r]));
-
-  // Batch fetch average call IQS from call_evaluations for these chat IDs
-  const callIqsAvgMap = new Map<string, number>();
-  const callIdIqsMap = new Map<string, number>();
-
-  if (chatIds.length > 0) {
-    try {
-      const evalRows = await query<{ chat_id: string; avg_iqs: string }>(
-        `SELECT COALESCE(ce.chat_id, cr.chat_id) AS chat_id,
-                ROUND(AVG(ce.iqs_percent))::int AS avg_iqs
-         FROM call_evaluations ce
-         LEFT JOIN call_recordings cr ON cr.id = ce.call_id
-         WHERE (ce.chat_id = ANY($1) OR cr.chat_id = ANY($1))
-           AND ce.iqs_percent IS NOT NULL
-         GROUP BY COALESCE(ce.chat_id, cr.chat_id)`,
-        [chatIds]
-      );
-      for (const er of evalRows) {
-        if (er.chat_id && er.avg_iqs !== null && er.avg_iqs !== undefined) {
-          callIqsAvgMap.set(er.chat_id, parseInt(er.avg_iqs, 10));
-        }
-      }
-    } catch (e) {
-      console.error('[disputes] Failed to fetch call_evaluations avg_iqs', e);
-    }
-  }
-
-  if (callRecordings.length > 0) {
-    const recIds = callRecordings.map((cr: any) => cr.id);
-    try {
-      const callEvalRows = await query<{ call_id: string; iqs_percent: string }>(
-        `SELECT call_id, iqs_percent FROM call_evaluations WHERE call_id = ANY($1) AND iqs_percent IS NOT NULL`,
-        [recIds]
-      );
-      for (const cer of callEvalRows) {
-        if (cer.call_id && cer.iqs_percent !== null && cer.iqs_percent !== undefined) {
-          callIdIqsMap.set(cer.call_id, parseFloat(cer.iqs_percent));
-        }
-      }
-    } catch (e) {
-      console.error('[disputes] Failed to fetch call_evaluations by call_id', e);
-    }
-  }
 
   // Build email → role map from config users for IR/TL labelling
   const roleMap: Record<string, string> = {};
@@ -259,41 +214,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (params.__scores) {
       botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
       iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     } else {
-      if (isBot) {
-        botIqsScore = db.iqs_score !== null ? parseFloat(db.iqs_score) : null;
-        iqsScore = null;
-      } else {
-        iqsScore = db.iqs_score !== null ? parseFloat(db.iqs_score) : null;
-        botIqsScore = null;
-      }
-    }
-
-    // Safety fallback for bot-only vs agent-only chats
-    if (isBot) {
-      if (botIqsScore === null && iqsScore !== null) {
-        botIqsScore = iqsScore;
-      }
+      botIqsScore = db.iqs_score !== null ? parseFloat(db.iqs_score) : null;
       iqsScore = null;
-    } else if (db.conversation_type === 'agent') {
-      if (iqsScore === null && botIqsScore !== null) {
-        iqsScore = botIqsScore;
-      }
-      botIqsScore = null;
-    }
-
-    const matchedScores = callInfo.matchedCallIds
-      .map(id => callIdIqsMap.get(id))
-      .filter((s): s is number => s !== undefined && s !== null);
-
-    if (matchedScores.length > 0) {
-      callIqsScore = Math.round(matchedScores.reduce((a, b) => a + b, 0) / matchedScores.length);
-    } else if (callIqsAvgMap.has(db.chat_id)) {
-      callIqsScore = callIqsAvgMap.get(db.chat_id)!;
-    } else if (params.__scores && params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null) {
-      callIqsScore = parseFloat(params.__scores.call_iqs);
-    } else if (db.call_iqs_score) {
-      callIqsScore = parseFloat(db.call_iqs_score);
+      callIqsScore = db.call_iqs_score ? parseFloat(db.call_iqs_score) : null;
     }
 
     disputes.push({
