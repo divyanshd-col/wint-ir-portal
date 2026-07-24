@@ -14,17 +14,9 @@ envContent.split('\n').forEach(line => {
   }
 });
 
-const connectionString = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
-const isSsl = connectionString && (
-  connectionString.includes('sslmode=') ||
-  connectionString.includes('neon.tech') ||
-  connectionString.includes('vercel-storage.com') ||
-  connectionString.includes('rds.amazonaws.com')
-);
-
 const pool = new Pool({
-  connectionString,
-  ssl: isSsl ? { rejectUnauthorized: false } : false
+  connectionString: process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL,
+  ssl: false
 });
 
 async function main() {
