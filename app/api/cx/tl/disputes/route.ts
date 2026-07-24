@@ -7,6 +7,7 @@ import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
+import { computeIqsFromRawParams } from '@/lib/quality';
 
 const ROUTE = 'cx/tl/disputes';
 
@@ -14,7 +15,9 @@ export interface TLDisputeRow {
   flagId:           string;
   chatId:           string;
   agentName:        string;
-  iqsScore:         number;
+  iqsScore:         number | null;
+  botIqsScore?:     number | null;
+  callIqsScore?:    number | null;
   closedAt:         string;
   csatScore:        number | null;
   disposition:      string;
@@ -63,14 +66,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const t0 = Date.now();
   const rawFlags = await storeGetIQSFlags();
 
-  // Filter by requested status — TL only sees IR-raised flags (ir_pending_tl)
-  // TL-raised flags (status: 'pending') go directly to QA, TL doesn't manage them here
+  // Filter by requested status
   const flags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .filter((f): f is IQSFlag => {
       if (!f) return false;
-      if (statusFilter === 'pending') return f.status === 'ir_pending_tl';
-      if (statusFilter === 'resolved') return f.status === 'tl_resolved' || f.status === 'reviewed';
+      if (statusFilter === 'pending') return f.status === 'ir_pending_tl' || f.status === 'pending' || f.status === 'tl_forwarded';
+      if (statusFilter === 'resolved') return f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
       return false;
     });
 
@@ -106,8 +108,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const key = (u.email || u.username || '').toLowerCase();
     if (key) roleMap[key] = u.role ?? 'agent';
   }
-  function raisedByLabel(flagEmail: string): string {
-    const r = roleMap[flagEmail.toLowerCase()] ?? 'agent';
+  function raisedByLabel(flag: IQSFlag): string {
+    if (flag.raisedByRole === 'tl') return 'TL';
+    if (flag.raisedByRole === 'ir' || flag.raisedByRole === 'agent') return 'IR';
+    const r = roleMap[(flag.agentEmail || '').toLowerCase()] ?? 'agent';
     return r === 'tl' ? 'TL' : 'IR';
   }
 
@@ -121,16 +125,38 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     let params = db.parameters ?? {};
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
+    let botIqsScore: number | null = null;
+    let iqsScore: number | null = null;
+    let callIqsScore: number | null = null;
+
+    if (params.__scores) {
+      botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
+      iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
+    }
+
+    if (iqsScore === null) {
+      iqsScore = computeIqsFromRawParams(params, false);
+    }
+    if (botIqsScore === null) {
+      botIqsScore = computeIqsFromRawParams(params, true);
+    }
+    if (botIqsScore === null && db.iqs_score !== null && db.iqs_score !== undefined) {
+      botIqsScore = parseFloat(db.iqs_score);
+    }
+
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
       agentName:        db.agent_name ?? flag.agentName,
-      iqsScore:         parseInt(db.iqs_score),
+      iqsScore,
+      botIqsScore,
+      callIqsScore,
       closedAt:         db.closed_at,
       csatScore:        db.csat_score ? parseInt(db.csat_score) : null,
       disposition:      db.disposition,
       subDisposition:   db.sub_disposition,
-      raisedBy:         raisedByLabel(flag.agentEmail),
+      raisedBy:         raisedByLabel(flag),
       raisedByName:     flag.agentName,
       raisedAt:         flag.flaggedAt,
       status:           flag.status,

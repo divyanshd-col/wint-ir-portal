@@ -2,7 +2,7 @@ import type { AnalyticsFilters, TemplateExtras } from './types';
 
 // ── IQS parameter keys (PascalCase — must match DB storage) ──────────────────
 const IQS_PARAMS = [
-  'Technical', 'AllQuestions', 'Expectation', 'Contextual',
+  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Contextual',
   'FollowUp', 'Sentences', 'Process', 'Opening',
   'Call', 'Tags', 'Grammar', 'Empathy',
 ] as const;

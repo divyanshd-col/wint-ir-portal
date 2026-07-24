@@ -223,9 +223,10 @@ function EvaluatedChatsSection() {
           <tr>
             <th style={th}>Chat ID</th>
             <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
+            <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
             <th style={th}>CSAT</th>
-            <th style={th}>Closed</th>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
@@ -233,7 +234,7 @@ function EvaluatedChatsSection() {
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <tr key={i}>
-                {Array.from({ length: 6 }).map((_, j) => (
+                {Array.from({ length: 7 }).map((_, j) => (
                   <td key={j} style={td}>
                     <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '30%' : '60%' }} />
                   </td>
@@ -242,7 +243,7 @@ function EvaluatedChatsSection() {
             ))
           ) : chats.length === 0 ? (
             <tr>
-              <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+              <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                 No chats pending TL review
               </td>
             </tr>
@@ -256,13 +257,24 @@ function EvaluatedChatsSection() {
                 >
                   <td style={tdMono}><ChatIdCell chatId={chat.chatId} /></td>
                   <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
-                  <td style={tdNum}><IQSBadge score={chat.iqsScore} /></td>
-                  <td style={td}><CSATBadge score={chat.csatScore} /></td>
-                  <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)' }}>
-                    {fmtDate(chat.closedAt)}
-                    <br />
-                    <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(chat.closedAt)}</span>
+                  <td style={tdNum}>
+                    {chat.botIqsScore != null ? <IQSBadge score={chat.botIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                   </td>
+                  <td style={tdNum}>
+                    {chat.iqsScore != null ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                  </td>
+                  <td style={tdNum}>
+                    {chat.callIqsScore != null ? (
+                      <IQSBadge score={chat.callIqsScore} />
+                    ) : chat.callTranscriptStatus === 'transcribed' ? (
+                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
+                    ) : chat.callTranscriptStatus === 'pending' ? (
+                      <span style={{ fontSize: 12, color: '#ca8a04', fontWeight: 500 }}>Pending</span>
+                    ) : (
+                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                    )}
+                  </td>
+                  <td style={td}><CSATBadge score={chat.csatScore} /></td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     <button
                       onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
@@ -273,7 +285,7 @@ function EvaluatedChatsSection() {
                         display: 'inline-flex', alignItems: 'center', gap: 5,
                       }}
                     >
-                      Review{' '}
+                      Correct Parameters{' '}
                       <span style={{
                         fontSize: 11, color: 'var(--qa-text-2)',
                         transform: expandedId === chat.chatId ? 'rotate(180deg)' : 'none',
@@ -286,7 +298,7 @@ function EvaluatedChatsSection() {
                   <EvalPanel
                     chatId={chat.chatId}
                     agentName={chat.agentName}
-                    iqsScore={chat.iqsScore}
+                    iqsScore={chat.iqsScore ?? 0}
                     closedAt={chat.closedAt}
                     disposition={chat.disposition}
                     parameters={chat.parameters}
@@ -295,7 +307,7 @@ function EvaluatedChatsSection() {
                     mode="tl-browse"
                     onDone={() => removeChat(chat.chatId)}
                     onClose={() => setExpandedId(null)}
-                    colSpan={6}
+                    colSpan={7}
                   />
                 )}
               </React.Fragment>
@@ -377,7 +389,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
     }
   }
 
-  const colCount = status === 'pending' ? 8 : 7;
+  const colCount = status === 'pending' ? 10 : 9;
 
   return (
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -387,7 +399,9 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
           <th style={th}>Agent</th>
           <th style={th}>Raised By</th>
           <th style={th}>Category</th>
-          <th style={{ ...th, textAlign: 'right' }}>IQS</th>
+          <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
+          <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
+          <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
           <th style={th}>CSAT</th>
           <th style={th}>Raised</th>
           {status === 'pending' && <th style={{ ...th, textAlign: 'right' }}>Action</th>}
@@ -440,7 +454,15 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     {d.paramCategory === 'cat2' ? 'TL — CAT2' : 'QA — CAT1'}
                   </span>
                 </td>
-                <td style={tdNum}><IQSBadge score={d.iqsScore} /></td>
+                <td style={tdNum}>
+                  {d.botIqsScore != null ? <IQSBadge score={d.botIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                </td>
+                <td style={tdNum}>
+                  {d.iqsScore != null ? <IQSBadge score={d.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                </td>
+                <td style={tdNum}>
+                  {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                </td>
                 <td style={td}><CSATBadge score={d.csatScore} /></td>
                 <td style={{ ...td, fontSize: 12, color: 'var(--qa-text-2)' }}>
                   {fmtDate(d.raisedAt)}
@@ -553,7 +575,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                   <EvalPanel
                     chatId={d.chatId}
                     agentName={d.agentName}
-                    iqsScore={d.iqsScore}
+                    iqsScore={d.iqsScore ?? 0}
                     closedAt={d.closedAt}
                     disposition={d.disposition}
                     parameters={d.parameters}

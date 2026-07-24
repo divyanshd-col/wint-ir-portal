@@ -4,6 +4,7 @@ import { PASCAL_TO_DB, DB_KEY_TO_LEGACY } from '@/lib/param-keys';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
+import { computeIqsFromRawParams } from '@/lib/quality';
 
 const ROUTE = 'cx/qa/chats-to-review';
 
@@ -377,11 +378,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
       iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
-    } else {
-      // Pre-June 15 legacy logic: map legacy iqs_score to Bot column
-      botIqsScore = r.iqs_score !== null ? parseFloat(r.iqs_score) : null;
-      iqsScore = null; // Agent wasn't separately scored then
-      callIqsScore = r.call_iqs_score !== null ? parseFloat(r.call_iqs_score) : null;
+    }
+
+    if (iqsScore === null) {
+      iqsScore = computeIqsFromRawParams(params, false);
+    }
+    if (botIqsScore === null) {
+      botIqsScore = computeIqsFromRawParams(params, true);
+    }
+    if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+      if (r.conversation_type !== 'agent' || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+        botIqsScore = parseFloat(r.iqs_score);
+      }
     }
 
     return {

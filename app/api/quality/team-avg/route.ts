@@ -10,6 +10,7 @@ const PARAM_DB_KEYS: Record<string, string> = {
   Sentences: 'sentences',
   Empathy: 'empathy',
   AllQuestions: 'all_questions',
+  DissatisfactionHandling: 'dissatisfactionhandling',
   Contextual: 'contextual',
   Technical: 'technical',
   Expectation: 'expectation',

@@ -6,6 +6,7 @@ import { query } from '@/lib/cx/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import type { IQSFlag } from '@/lib/store';
 import { log, withLogging } from '@/lib/log';
+import { computeIqsFromRawParams } from '@/lib/quality';
 
 const ROUTE = 'cx/qa/disputes';
 
@@ -215,10 +216,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
       iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
-    } else {
-      botIqsScore = db.iqs_score !== null ? parseFloat(db.iqs_score) : null;
-      iqsScore = null;
-      callIqsScore = db.call_iqs_score ? parseFloat(db.call_iqs_score) : null;
+    }
+
+    if (iqsScore === null) {
+      iqsScore = computeIqsFromRawParams(params, false);
+    }
+    if (botIqsScore === null) {
+      botIqsScore = computeIqsFromRawParams(params, true);
+    }
+    if (botIqsScore === null && db.iqs_score !== null && db.iqs_score !== undefined) {
+      botIqsScore = parseFloat(db.iqs_score);
     }
 
     disputes.push({

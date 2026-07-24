@@ -46,17 +46,39 @@ function trailing5Weeks(): string[] {
 }
 
 const DB_KEY_TO_PARAM: Record<string, string> = {
-  technical:    'Technical',
-  all_questions:'AllQuestions',
-  expectation:  'Expectation',
-  contextual:   'Contextual',
-  follow_up:    'FollowUp',
-  sentences:    'Sentences',
-  process:      'Process',
-  opening:      'Opening',
-  call:         'Call',
-  grammar:      'Grammar',
-  empathy:      'Empathy',
+  technical:                'Technical',
+  accuracy:                 'Technical',
+  Technical:                'Technical',
+  all_questions:            'AllQuestions',
+  issue_resolution:         'AllQuestions',
+  AllQuestions:             'AllQuestions',
+  expectation:              'Expectation',
+  expectationfollowthrough: 'Expectation',
+  Expectation:              'Expectation',
+  dissatisfactionhandling:  'DissatisfactionHandling',
+  dissatisfaction_handling: 'DissatisfactionHandling',
+  DissatisfactionHandling:  'DissatisfactionHandling',
+  contextual:               'Contextual',
+  personalization:          'Contextual',
+  Contextual:               'Contextual',
+  follow_up:                'FollowUp',
+  postcallrecap:            'FollowUp',
+  FollowUp:                 'FollowUp',
+  sentences:                'Sentences',
+  readability:              'Sentences',
+  Sentences:                'Sentences',
+  process:                  'Process',
+  Process:                  'Process',
+  opening:                  'Opening',
+  greetinghandover:         'Opening',
+  Opening:                  'Opening',
+  call:                     'Call',
+  escalationdecision:       'Call',
+  Call:                     'Call',
+  grammar:                  'Grammar',
+  Grammar:                  'Grammar',
+  empathy:                  'Empathy',
+  Empathy:                  'Empathy',
 };
 
 function normalizeParamKey(raw: string): string {
@@ -314,8 +336,13 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  const CHAT_ACTIVE_PARAM_ORDER = [
+    'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Contextual',
+    'FollowUp', 'Sentences', 'Opening', 'Call', 'Empathy',
+  ];
+
   const wowParams = {
-    chats: PARAM_ORDER.map(pk => ({
+    chats: CHAT_ACTIVE_PARAM_ORDER.map(pk => ({
       name: PARAM_NAMES[pk] ?? pk,
       vals: wowKeys.map(k => {
         const d = wowParamMap[k]?.[pk];

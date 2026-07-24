@@ -1,3 +1,5 @@
+import { PASCAL_TO_DB } from './param-keys';
+
 /**
  * IQS Quality Scoring — types, config, scoring prompt, and KV storage.
  * Ported from the standalone Python iqs_scorer tool.
@@ -281,6 +283,41 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
     }
   }
   return possible > 0 ? Math.round((total / possible) * 100) : 0;
+}
+
+export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
+  if (!paramsObj || typeof paramsObj !== 'object') return null;
+
+  const targetParams = isBot
+    ? (paramsObj.__bot_parameters || (paramsObj.issue_resolution !== undefined || paramsObj.IssueResolution !== undefined ? paramsObj : null))
+    : (paramsObj.__agent_parameters || paramsObj);
+
+  if (!targetParams || typeof targetParams !== 'object') return null;
+
+  const paramKeys = isBot ? BOT_PARAM_ORDER : PARAM_ORDER;
+  const scores: Record<string, ParamScore> = {};
+  let hasValidParam = false;
+
+  for (const pascal of paramKeys) {
+    const dbKey = PASCAL_TO_DB[pascal] || pascal;
+    const rawVal = targetParams[dbKey] ?? targetParams[pascal];
+    if (rawVal !== undefined && rawVal !== null) {
+      hasValidParam = true;
+      const scoreVal = typeof rawVal === 'object' && rawVal !== null ? rawVal.score : rawVal;
+      if (scoreVal === true || scoreVal === 1 || scoreVal === '1' || String(scoreVal).toLowerCase() === 'yes' || String(scoreVal).toLowerCase() === 'pass') {
+        scores[pascal] = 'Yes';
+      } else if (scoreVal === 'Half' || scoreVal === 0.5 || String(scoreVal).toLowerCase() === 'half') {
+        scores[pascal] = 'Half';
+      } else if (scoreVal === false || scoreVal === 0 || scoreVal === '0' || String(scoreVal).toLowerCase() === 'no' || String(scoreVal).toLowerCase() === 'fail') {
+        scores[pascal] = 'No';
+      } else {
+        scores[pascal] = 'NA';
+      }
+    }
+  }
+
+  if (!hasValidParam) return null;
+  return calculateIQS(scores, isBot);
 }
 
 // ── Scoring system prompt ────────────────────────────────────────────────────
