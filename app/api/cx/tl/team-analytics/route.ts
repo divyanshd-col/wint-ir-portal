@@ -98,21 +98,49 @@ export async function GET(req: NextRequest) {
   const period = searchParams.get('period') ?? 'current';
   const { dateFrom, dateTo } = getDateRange(period, searchParams.get('from'), searchParams.get('to'));
 
+  // ── Resolve list of TLs ──────────────────────────────────────────────────────
+  const config = await readConfig();
+  const configTLs = (config.users as any[])
+    .filter(u => u.role === 'tl')
+    .map(u => u.agentName || u.name || u.email)
+    .filter(Boolean);
+
+  const dbTLsRows = await query<{ tl_name: string }>(`
+    SELECT DISTINCT tl_name
+    FROM agents
+    WHERE tl_name IS NOT NULL AND tl_name != ''
+    ORDER BY tl_name
+  `, []);
+  const dbTLs = dbTLsRows.map(r => r.tl_name);
+
+  const allTLs = Array.from(new Set([...configTLs, ...dbTLs])).sort();
+
   // ── Resolve agent names ──────────────────────────────────────────────────────
   let agentNames: string[];
-  if (role === 'tl') {
-    const config = await readConfig();
+  let selectedTL: string | null = null;
+
+  if (role === 'admin') {
+    const requestedTL = searchParams.get('tl');
+    selectedTL = (requestedTL && allTLs.includes(requestedTL)) ? requestedTL : (allTLs[0] ?? null);
+    if (selectedTL) {
+      agentNames = await getAgentNamesByTL(selectedTL);
+    } else {
+      const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`, []);
+      agentNames = rows.map(r => r.name);
+    }
+  } else {
     const configUser = config.users.find(u => (u.email || u.username) === email);
     const tlAgentName = configUser?.agentName ?? email;
+    selectedTL = tlAgentName;
     agentNames = await getAgentNamesByTL(tlAgentName);
-  } else {
-    const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`, []);
-    agentNames = rows.map(r => r.name);
   }
 
   if (agentNames.length === 0) {
     return NextResponse.json({
-      dateFrom, dateTo, agentCount: 0, agents: [],
+      dateFrom, dateTo, agentCount: 0,
+      tls: role === 'admin' ? allTLs : undefined,
+      selectedTL,
+      agents: [],
       channels: {
         chats: { team: { csat_pct: null, iqs: null, volume: 0 }, cx: { csat_pct: null, iqs: null, volume: 0 }, params: PARAM_DEFS.map(p => ({ ...p, team_score: null, cx_score: null })) },
         calls: { team: { csat_pct: null, iqs: null, volume: 0 }, cx: { csat_pct: null, iqs: null, volume: 0 }, params: PARAM_DEFS.map(p => ({ ...p, team_score: null, cx_score: null })) },
@@ -323,6 +351,8 @@ export async function GET(req: NextRequest) {
     dateFrom,
     dateTo,
     agentCount: agents.length,
+    tls: role === 'admin' ? allTLs : undefined,
+    selectedTL,
     agents,
     channels: {
       chats: {

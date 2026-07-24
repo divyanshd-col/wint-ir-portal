@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ interface ChannelSummary { team: ChannelStats; cx: ChannelStats; params: ParamDa
 
 interface AnalyticsData {
   dateFrom: string; dateTo: string; agentCount: number;
+  tls?: string[]; selectedTL?: string | null;
   agents: AgentData[];
   channels: { chats: ChannelSummary; calls: ChannelSummary; emails: null };
 }
@@ -156,6 +157,9 @@ export default function TLTeamAnalyticsDashboard() {
   const [showPicker, setShowPicker]         = useState(false);
   const [activeTab, setActiveTab]           = useState<'summary' | 'breakdown'>('summary');
   const [breakdownCh, setBreakdownCh]       = useState<Channel>('chats');
+  const [selectedTL, setSelectedTL]         = useState<string>('');
+  const [showTLDrop, setShowTLDrop]         = useState<boolean>(false);
+  const tlDropRef                           = useRef<HTMLDivElement>(null);
 
   const [data,    setData]    = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -170,18 +174,33 @@ export default function TLTeamAnalyticsDashboard() {
     setError('');
     try {
       let url = `/api/cx/tl/team-analytics?period=${period}`;
+      if (selectedTL) url += `&tl=${encodeURIComponent(selectedTL)}`;
       if (period === 'custom' && customFrom && customTo) url += `&from=${customFrom}&to=${customTo}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error(await res.text());
-      setData(await res.json());
+      const json: AnalyticsData = await res.json();
+      setData(json);
+      if (json.tls?.length && !selectedTL && json.selectedTL) {
+        setSelectedTL(json.selectedTL);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to load data');
     } finally {
       setLoading(false);
     }
-  }, [period, customFrom, customTo]);
+  }, [period, selectedTL, customFrom, customTo]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (tlDropRef.current && !tlDropRef.current.contains(e.target as Node)) {
+        setShowTLDrop(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   function applyCustom(from: string, to: string) {
     setCustomFrom(from);
@@ -208,6 +227,54 @@ export default function TLTeamAnalyticsDashboard() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 24, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, whiteSpace: 'nowrap' }}>Team Analytics</h1>
+
+          {/* TL Selector (for Admin) */}
+          {data?.tls && data.tls.length > 0 && (
+            <div ref={tlDropRef} style={{ position: 'relative' }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                <span>Viewing TL:</span>
+                <button
+                  onClick={() => setShowTLDrop(p => !p)}
+                  style={{
+                    height: 32, padding: '0 12px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
+                    borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
+                    fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {selectedTL || data.selectedTL || 'All TLs'}
+                  <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
+                </button>
+              </div>
+              {showTLDrop && (
+                <div style={{
+                  position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40,
+                  background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.1)', minWidth: 180, overflow: 'hidden',
+                }}>
+                  {data.tls.map(tl => (
+                    <button
+                      key={tl}
+                      onClick={() => {
+                        setSelectedTL(tl);
+                        setShowTLDrop(false);
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        width: '100%', padding: '10px 14px',
+                        background: (selectedTL || data.selectedTL) === tl ? 'var(--qa-fill-light)' : 'transparent',
+                        border: 0, borderBottom: '1px solid var(--qa-border-sub)', cursor: 'pointer',
+                        fontSize: 13, color: 'var(--qa-text)', fontFamily: 'inherit', textAlign: 'left',
+                        fontWeight: (selectedTL || data.selectedTL) === tl ? 600 : 400,
+                      }}
+                    >
+                      {tl}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <ChannelSeg value={channel} onChange={ch => { setChannel(ch); }} />
         </div>
 
