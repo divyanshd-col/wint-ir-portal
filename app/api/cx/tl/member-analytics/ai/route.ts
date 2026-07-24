@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const channel = (searchParams.get('channel') ?? 'chats') as 'chats' | 'calls';
-  const period  = searchParams.get('period') ?? '30';
+  const period  = searchParams.get('period') ?? '7';
   const { dateFrom, dateTo } = getDateRange(period, searchParams.get('from'), searchParams.get('to'));
 
   // ── Resolve agent ─────────────────────────────────────────────────────────────

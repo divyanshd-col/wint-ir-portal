@@ -23,7 +23,12 @@ export async function getAgentName(agentId: number): Promise<string> {
 /** Returns agent names whose tl_name matches (case-insensitive). */
 export async function getAgentNamesByTL(tlName: string): Promise<string[]> {
   const rows = await query<{ name: string }>(
-    `SELECT name FROM agents WHERE LOWER(tl_name) = LOWER($1)`, [tlName]
+    `SELECT a.name
+     FROM agents a
+     LEFT JOIN conversations c ON c.agent_id = a.id AND c.closed_at >= NOW() - INTERVAL '60 days'
+     WHERE LOWER(a.tl_name) = LOWER($1)
+     GROUP BY a.name
+     ORDER BY COUNT(c.id) DESC, a.name ASC`, [tlName]
   );
   return rows.map(r => r.name);
 }
