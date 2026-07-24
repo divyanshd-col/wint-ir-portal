@@ -31,18 +31,33 @@ interface AiResult     { summary: string; items: Array<{ type: string; text: str
 // ── Constants ──────────────────────────────────────────────────────────────────
 const PERIOD_LABELS: Record<Period, string> = { '7': '7 days', '30': '30 days', custom: '' };
 
-const PARAM_DEFS = [
-  { key: 'technical',     label: 'Technically / Legally Correct' },
-  { key: 'all_questions', label: 'All Questions Answered' },
-  { key: 'expectation',   label: 'Expectation Setting' },
-  { key: 'contextual',    label: 'Contextual & Personal' },
-  { key: 'follow_up',     label: 'Follow-up & Closing' },
-  { key: 'sentences',     label: 'Sentences / Tone' },
-  { key: 'process',       label: 'Process-wise' },
-  { key: 'opening',       label: 'First Response & Opening' },
-  { key: 'call',          label: 'Call (when required)' },
-  { key: 'grammar',       label: 'Grammar / Structure' },
-  { key: 'empathy',       label: 'Empathy' },
+interface ParamItem { key: string; label: string; altKey?: string; }
+
+const CHAT_PARAM_DEFS: ParamItem[] = [
+  { key: 'technical',               label: 'Accuracy' },
+  { key: 'all_questions',           label: 'Issue Resolution' },
+  { key: 'expectation',             label: 'Expectation Setting & Follow-Through' },
+  { key: 'dissatisfactionhandling', label: 'Dissatisfaction Handling' },
+  { key: 'contextual',              label: 'Contextual & Personalization' },
+  { key: 'follow_up',               label: 'Post-Call Recap / Follow-up' },
+  { key: 'sentences',               label: 'Readability & Tone' },
+  { key: 'opening',                 label: 'Greeting & Handover' },
+  { key: 'call',                    label: 'Call Escalation Decision' },
+  { key: 'empathy',                 label: 'Empathy' },
+];
+
+const CALL_PARAM_DEFS: ParamItem[] = [
+  { key: 'call_opening',     altKey: 'opening',     label: 'Call Opening' },
+  { key: 'call_closing',     altKey: 'follow_up',   label: 'Call Closing' },
+  { key: 'technical',        altKey: 'technical',   label: 'Technically / Legally Correct' },
+  { key: 'all_questions',    altKey: 'all_questions',label: 'All Questions Addressed' },
+  { key: 'expectation',      altKey: 'expectation', label: 'Expectation Setting' },
+  { key: 'process',          altKey: 'process',     label: 'Process' },
+  { key: 'grammar',          altKey: 'grammar',     label: 'Vocabulary & Grammar' },
+  { key: 'fillers',          altKey: 'fillers',     label: 'Fillers & Speech Clarity' },
+  { key: 'energy_tone',      altKey: 'sentences',   label: 'Energy Level & Tone' },
+  { key: 'active_listening', altKey: 'empathy',     label: 'Active Listening & Empathy' },
+  { key: 'simplifying',      altKey: 'simplifying', label: 'Simplifying Answers' },
 ];
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -561,12 +576,12 @@ export default function MemberAnalyticsDashboard() {
                       </tr>
                     ))
                   ) : (
-                    PARAM_DEFS.map(param => (
+                    (wowChannel === 'calls' ? CALL_PARAM_DEFS : CHAT_PARAM_DEFS).map(param => (
                       <tr key={param.key}>
                         <td style={tdStyle(false, false, true)}>{param.label}</td>
                         {wowWeeks.map((w, i) => {
                           const week = wowData.find(wd => wd.week_start === w);
-                          const val = week?.params?.[param.key] ?? null;
+                          const val = week?.params?.[param.key] ?? (param.altKey ? week?.params?.[param.altKey] : null);
                           return (
                             <td key={w} style={{ ...tdStyle(true, i === wowWeeks.length - 1), color: val == null ? 'var(--qa-text-4)' : 'var(--qa-text)' }}>
                               {val == null ? '—' : `${val.toFixed(1)}%`}

@@ -228,12 +228,16 @@ export default function TLChatTable() {
                     </td>
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                     <td style={tdNum}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-                        background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                        color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                      }}>{chat.iqsScore}</span>
+                      {chat.iqsScore != null ? (
+                        <span style={{
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
+                          background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
+                          color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
+                        }}>{chat.iqsScore}</span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      )}
                     </td>
                     <td style={td}>
                       {chat.csatScore == null ? (
@@ -285,7 +289,7 @@ export default function TLChatTable() {
                     <EvalPanel
                       chatId={chat.chatId}
                       agentName={chat.agentName}
-                      iqsScore={chat.iqsScore}
+                      iqsScore={chat.iqsScore ?? 0}
                       closedAt={chat.closedAt}
                       disposition={chat.disposition}
                       parameters={chat.parameters}

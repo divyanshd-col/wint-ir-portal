@@ -8,23 +8,33 @@ import { getWeekStart, getLast8Weeks } from '@/lib/cx/week';
 
 // ── Param definitions (mirrors team-analytics) ─────────────────────────────────
 export const PARAM_DEFS = [
-  { key: 'technical',     label: 'Technically / Legally Correct', weight: 20 },
-  { key: 'all_questions', label: 'All Questions Answered',         weight: 10 },
-  { key: 'expectation',   label: 'Expectation Setting',            weight: 10 },
-  { key: 'contextual',    label: 'Contextual & Personal',          weight: 10 },
-  { key: 'follow_up',     label: 'Follow-up & Closing',            weight: 10 },
-  { key: 'sentences',     label: 'Sentences / Tone',               weight: 10 },
-  { key: 'process',       label: 'Process-wise',                   weight:  5 },
-  { key: 'opening',       label: 'First Response & Opening',       weight:  5 },
-  { key: 'call',          label: 'Call (when required)',            weight:  5 },
-  { key: 'grammar',       label: 'Grammar / Structure',            weight:  5 },
-  { key: 'empathy',       label: 'Empathy',                        weight: 10 },
+  { key: 'technical',               label: 'Accuracy',                             weight: 20 },
+  { key: 'all_questions',           label: 'Issue Resolution',                     weight: 25 },
+  { key: 'expectation',             label: 'Expectation Setting & Follow-Through', weight: 20 },
+  { key: 'dissatisfactionhandling', label: 'Dissatisfaction Handling',             weight: 10 },
+  { key: 'contextual',              label: 'Contextual & Personalization',         weight: 10 },
+  { key: 'follow_up',               label: 'Post-Call Recap / Follow-up',          weight:  5 },
+  { key: 'sentences',               label: 'Readability & Tone',                   weight:  3 },
+  { key: 'process',                 label: 'Process-wise',                         weight:  0 },
+  { key: 'opening',                 label: 'Greeting & Handover',                  weight:  2 },
+  { key: 'call',                    label: 'Call Escalation Decision',             weight:  5 },
+  { key: 'grammar',                 label: 'Grammar / Structure',                  weight:  0 },
+  { key: 'empathy',                 label: 'Empathy',                              weight:  5 },
 ];
 
 const PASCAL_TO_SNAKE: Record<string, string> = {
-  Technical: 'technical', AllQuestions: 'all_questions', Expectation: 'expectation',
-  Contextual: 'contextual', FollowUp: 'follow_up', Sentences: 'sentences',
-  Process: 'process', Opening: 'opening', Call: 'call', Grammar: 'grammar', Empathy: 'empathy',
+  Technical: 'technical', Accuracy: 'technical', technical: 'technical', accuracy: 'technical',
+  AllQuestions: 'all_questions', IssueResolution: 'all_questions', all_questions: 'all_questions', issue_resolution: 'all_questions',
+  Expectation: 'expectation', ExpectationFollowThrough: 'expectation', expectation: 'expectation', expectationfollowthrough: 'expectation',
+  DissatisfactionHandling: 'dissatisfactionhandling', dissatisfactionhandling: 'dissatisfactionhandling', dissatisfaction_handling: 'dissatisfactionhandling',
+  Contextual: 'contextual', Personalization: 'contextual', contextual: 'contextual', personalization: 'contextual',
+  FollowUp: 'follow_up', PostCallRecap: 'follow_up', follow_up: 'follow_up', postcallrecap: 'follow_up',
+  Sentences: 'sentences', Readability: 'sentences', sentences: 'sentences', readability: 'sentences',
+  Process: 'process', process: 'process',
+  Opening: 'opening', GreetingHandover: 'opening', opening: 'opening', greetinghandover: 'opening',
+  Call: 'call', EscalationDecision: 'call', call: 'call', escalationdecision: 'call',
+  Grammar: 'grammar', grammar: 'grammar',
+  Empathy: 'empathy', empathy: 'empathy',
 };
 export const normKey = (k: string) => PASCAL_TO_SNAKE[k] ?? k;
 

@@ -190,18 +190,19 @@ export function computeParamFailureRates(
   conversations: Array<{ parameters: any }>,
 ): ParamFailureRate[] {
   const PARAM_NAMES: Record<string, string> = {
-    Technical:    'Technically / Legally Correct',
-    AllQuestions: 'All Questions Answered',
-    Expectation:  'Expectation Setting',
-    Contextual:   'Contextual & Personal',
-    FollowUp:     'Follow-up & Closing',
-    Sentences:    'Sentences / Tone',
-    Process:      'Process-wise',
-    Opening:      'First Response & Opening',
-    Call:         'Call (when required)',
-    Tags:         'Tags Accuracy',
-    Grammar:      'Grammar / Structure',
-    Empathy:      'Empathy',
+    Technical:                'Accuracy',
+    AllQuestions:             'Issue Resolution',
+    Expectation:              'Expectation Setting & Follow-Through',
+    DissatisfactionHandling: 'Dissatisfaction Handling',
+    Contextual:               'Contextual & Personalization',
+    FollowUp:                 'Post-Call Recap / Follow-up',
+    Sentences:                'Readability & Tone',
+    Process:                  'Process-wise',
+    Opening:                  'Greeting & Handover',
+    Call:                     'Call Escalation Decision',
+    Tags:                     'Tags Accuracy',
+    Grammar:                  'Grammar / Structure',
+    Empathy:                  'Empathy',
   };
 
   const N = conversations.length;

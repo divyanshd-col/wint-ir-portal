@@ -299,7 +299,7 @@ export default function EvalPanel({
   }) : [];
   const tlCat1Changed = changedParamsInTL.some(p => CAT1_PARAMS.has(p));
   const tlCat2Changed = changedParamsInTL.some(p => activeCAT2Params.has(p));
-  const tlActionLabel = tlCat1Changed ? 'Raise Dispute' : tlCat2Changed ? 'Override' : 'Submit';
+  const tlActionLabel = tlCat1Changed ? 'Raise Dispute' : tlCat2Changed ? 'Correct Parameters' : 'Submit';
 
   // Fetch transcript on mount
   useEffect(() => {
@@ -410,7 +410,7 @@ export default function EvalPanel({
 
   // TL: submit / override / raise dispute
   async function submitTLAction() {
-    if (tlActionLabel === 'Override' && !tlGeneralNote.trim()) {
+    if (tlActionLabel === 'Correct Parameters' && !tlGeneralNote.trim()) {
       setTlErr('Please add a note explaining your change.');
       return;
     }
@@ -425,7 +425,7 @@ export default function EvalPanel({
         });
         if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
         setTlDone('submit');
-      } else if (tlActionLabel === 'Override') {
+      } else if (tlActionLabel === 'Correct Parameters') {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
         for (const pascal of changedParamsInTL) {
           const st = activeTab === 'bot' ? botParamState[pascal] : agentParamState[pascal];
@@ -940,7 +940,7 @@ export default function EvalPanel({
                     }}
                   />
                 )}
-                {tlErr && <div style={{ fontSize: 12, color: 'var(--qa-text)', marginTop: 4 }}>{tlErr}</div>}
+                {tlErr && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600, marginTop: 4 }}>{tlErr}</div>}
               </div>
             )}
 
