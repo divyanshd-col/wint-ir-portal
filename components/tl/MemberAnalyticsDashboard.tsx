@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ function Panel({ children, style }: { children: React.ReactNode; style?: React.C
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function MemberAnalyticsDashboard() {
-  const [period, setPeriod]           = useState<Period>('30');
+  const [period, setPeriod]           = useState<Period>('7');
   const [customFrom, setCustomFrom]   = useState('');
   const [customTo, setCustomTo]       = useState('');
   const [showPicker, setShowPicker]   = useState(false);
@@ -106,15 +106,11 @@ export default function MemberAnalyticsDashboard() {
   const [aiResults, setAiResults]     = useState<Record<string, AiResult|null>>({ chats: null, calls: null });
   const [aiChannel, setAiChannel]     = useState<'chats' | 'calls'>('chats');
 
-  const lastFetch = useRef('');
   const agentDropRef = useRef<HTMLDivElement>(null);
 
   // ── Data fetch ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const key = `${selectedAgent}|${period}|${customFrom}|${customTo}`;
-    if (key === lastFetch.current) return;
     if (period === 'custom' && (!customFrom || !customTo)) return;
-    lastFetch.current = key;
 
     let cancelled = false;
     setLoading(true);
@@ -129,7 +125,6 @@ export default function MemberAnalyticsDashboard() {
         setData(json);
         if (json.agents?.length) setAgents(json.agents);
         if (!selectedAgent && json.agentName) {
-          lastFetch.current = `${json.agentName}|${period}|${customFrom}|${customTo}`;
           setSelectedAgent(json.agentName);
         }
         setLoading(false);
@@ -297,7 +292,7 @@ export default function MemberAnalyticsDashboard() {
             <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 50 }}>
               <DateRangePicker
                 onApply={handleCustomApply}
-                onCancel={() => { setShowPicker(false); if (period === 'custom' && !customFrom) setPeriod('30'); }}
+                onCancel={() => { setShowPicker(false); if (period === 'custom' && !customFrom) setPeriod('7'); }}
               />
             </div>
           )}
@@ -395,9 +390,8 @@ export default function MemberAnalyticsDashboard() {
                   categories.map(cat => {
                     const open = expandedCats.has(cat.disposition);
                     return (
-                      <>
+                      <React.Fragment key={cat.disposition}>
                         <tr
-                          key={cat.disposition}
                           onClick={() => cat.subs.length > 0 && toggleCat(cat.disposition)}
                           style={{
                             height: 48, cursor: cat.subs.length > 0 ? 'pointer' : 'default',
@@ -447,7 +441,7 @@ export default function MemberAnalyticsDashboard() {
                             </td>
                           </tr>
                         ))}
-                      </>
+                      </React.Fragment>
                     );
                   })
                 )}
