@@ -46,7 +46,7 @@ export const NAV_ALL = [
   { label: 'Analytics',        href: '/quality',                icon: BarChartIcon,   roles: ['admin', 'quality', 'tl'] },
   { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'] },
   { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'] },
-  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['tl'] },
+  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin', 'tl'] },
   { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'] },
   { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['tl'] },
 ];
