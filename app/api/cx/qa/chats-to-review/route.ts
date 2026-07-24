@@ -252,6 +252,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   sqlParams.push(limit, offset);
   const rows = await query<{
     chat_id: string;
+    agent_id: number | null;
     agent_name: string | null;
     iqs_score: string | null;
     call_iqs_score: string | null;
@@ -269,7 +270,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     started_at: string | null;
     conversation_type: string | null;
   }>(
-    `SELECT c.id AS chat_id, a.name AS agent_name,
+    `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name,
             i.iqs_score, i.call_iqs_score, c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
@@ -414,6 +415,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     const callInfo = getCallInfo(r.chat_id, r.contact_id, r.started_at, r.closed_at);
 
+    const isBot = r.conversation_type === 'bot' || r.agent_name === 'Robylon AI' || (r.agent_id !== null && [15, 447, 784].includes(Number(r.agent_id)));
+
     let botIqsScore: number | null = null;
     let iqsScore: number | null = null;
     let callIqsScore: number | null = null;
@@ -422,9 +425,26 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
       iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
     } else {
-      // Pre-June 15 legacy logic: map legacy iqs_score to Bot column
-      botIqsScore = r.iqs_score !== null ? parseFloat(r.iqs_score) : null;
-      iqsScore = null; // Agent wasn't separately scored then
+      if (isBot) {
+        botIqsScore = r.iqs_score !== null ? parseFloat(r.iqs_score) : null;
+        iqsScore = null;
+      } else {
+        iqsScore = r.iqs_score !== null ? parseFloat(r.iqs_score) : null;
+        botIqsScore = null;
+      }
+    }
+
+    // Safety fallback for bot-only vs agent-only chats
+    if (isBot) {
+      if (botIqsScore === null && iqsScore !== null) {
+        botIqsScore = iqsScore;
+      }
+      iqsScore = null;
+    } else if (r.conversation_type === 'agent') {
+      if (iqsScore === null && botIqsScore !== null) {
+        iqsScore = botIqsScore;
+      }
+      botIqsScore = null;
     }
 
     // Call IQS is the average IQS of all calls under that chat ID

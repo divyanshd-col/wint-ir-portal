@@ -260,8 +260,26 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
       iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
     } else {
-      botIqsScore = db.iqs_score !== null ? parseFloat(db.iqs_score) : null;
+      if (isBot) {
+        botIqsScore = db.iqs_score !== null ? parseFloat(db.iqs_score) : null;
+        iqsScore = null;
+      } else {
+        iqsScore = db.iqs_score !== null ? parseFloat(db.iqs_score) : null;
+        botIqsScore = null;
+      }
+    }
+
+    // Safety fallback for bot-only vs agent-only chats
+    if (isBot) {
+      if (botIqsScore === null && iqsScore !== null) {
+        botIqsScore = iqsScore;
+      }
       iqsScore = null;
+    } else if (db.conversation_type === 'agent') {
+      if (iqsScore === null && botIqsScore !== null) {
+        iqsScore = botIqsScore;
+      }
+      botIqsScore = null;
     }
 
     const matchedScores = callInfo.matchedCallIds
