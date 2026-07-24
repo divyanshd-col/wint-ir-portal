@@ -313,49 +313,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   }
 
-  // Batch fetch average call IQS from call_evaluations for these chats
-  const callIqsAvgMap = new Map<string, number>();
-  const callIdIqsMap = new Map<string, number>();
-
-  if (chatIds.length > 0) {
-    try {
-      const evalRows = await query<{ chat_id: string; avg_iqs: string }>(
-        `SELECT COALESCE(ce.chat_id, cr.chat_id) AS chat_id,
-                ROUND(AVG(ce.iqs_percent))::int AS avg_iqs
-         FROM call_evaluations ce
-         LEFT JOIN call_recordings cr ON cr.id = ce.call_id
-         WHERE (ce.chat_id = ANY($1) OR cr.chat_id = ANY($1))
-           AND ce.iqs_percent IS NOT NULL
-         GROUP BY COALESCE(ce.chat_id, cr.chat_id)`,
-        [chatIds]
-      );
-      for (const er of evalRows) {
-        if (er.chat_id && er.avg_iqs !== null && er.avg_iqs !== undefined) {
-          callIqsAvgMap.set(er.chat_id, parseInt(er.avg_iqs, 10));
-        }
-      }
-    } catch (e) {
-      console.error('[chats-to-review] Failed to fetch call_evaluations avg_iqs', e);
-    }
-  }
-
-  if (callRecordings.length > 0) {
-    const recIds = callRecordings.map((cr: any) => cr.id);
-    try {
-      const callEvalRows = await query<{ call_id: string; iqs_percent: string }>(
-        `SELECT call_id, iqs_percent FROM call_evaluations WHERE call_id = ANY($1) AND iqs_percent IS NOT NULL`,
-        [recIds]
-      );
-      for (const cer of callEvalRows) {
-        if (cer.call_id && cer.iqs_percent !== null && cer.iqs_percent !== undefined) {
-          callIdIqsMap.set(cer.call_id, parseFloat(cer.iqs_percent));
-        }
-      }
-    } catch (e) {
-      console.error('[chats-to-review] Failed to fetch call_evaluations by call_id', e);
-    }
-  }
-
   // 3-stage lookup mapper to check call transcript status
   const getCallInfo = (chatId: string, contactId: number | null, startedAtStr: string | null, closedAtStr: string | null) => {
     const matched = callRecordings.filter(rec => {
@@ -373,7 +330,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     });
 
     if (matched.length === 0) {
-      return { status: 'no_call' as const, label: 'No Call', matchedCallIds: [] as string[] };
+      return { status: 'no_call' as const, label: 'No Call' };
     }
 
     const hasUntranscribed = matched.some(rec => {
@@ -387,12 +344,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       return !isTranscribed && rec.recording_url;
     });
 
-    const matchedCallIds = matched.map((r: any) => r.id);
-
     if (hasUntranscribed) {
-      return { status: 'pending' as const, label: 'Pending Transcription', matchedCallIds };
+      return { status: 'pending' as const, label: 'Pending Transcription' };
     } else {
-      return { status: 'transcribed' as const, label: 'Transcribed', matchedCallIds };
+      return { status: 'transcribed' as const, label: 'Transcribed' };
     }
   };
 
@@ -421,25 +376,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (params.__scores) {
       botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
       iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     } else {
       // Pre-June 15 legacy logic: map legacy iqs_score to Bot column
       botIqsScore = r.iqs_score !== null ? parseFloat(r.iqs_score) : null;
       iqsScore = null; // Agent wasn't separately scored then
-    }
-
-    // Call IQS is the average IQS of all calls under that chat ID
-    const matchedScores = callInfo.matchedCallIds
-      .map(id => callIdIqsMap.get(id))
-      .filter((s): s is number => s !== undefined && s !== null);
-
-    if (matchedScores.length > 0) {
-      callIqsScore = Math.round(matchedScores.reduce((a, b) => a + b, 0) / matchedScores.length);
-    } else if (callIqsAvgMap.has(r.chat_id)) {
-      callIqsScore = callIqsAvgMap.get(r.chat_id)!;
-    } else if (params.__scores && params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null) {
-      callIqsScore = parseFloat(params.__scores.call_iqs);
-    } else if (r.call_iqs_score !== null) {
-      callIqsScore = parseFloat(r.call_iqs_score);
+      callIqsScore = r.call_iqs_score !== null ? parseFloat(r.call_iqs_score) : null;
     }
 
     return {

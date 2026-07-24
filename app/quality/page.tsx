@@ -25,6 +25,9 @@ export default async function QualityPage() {
     return <AgentAnalyticsDashboard userEmail={email} selfAgentName={selfAgentName} />;
   }
 
-  // Admin / QA / TL: Quality Analytics Dashboard
+  // TL: dedicated TL analytics section
+  if (role === 'tl') redirect('/tl');
+
+  // Admin / QA: new QA Analytics Dashboard
   return <QAAnalyticsDashboard />;
 }
