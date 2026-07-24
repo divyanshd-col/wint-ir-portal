@@ -181,7 +181,7 @@ export async function GET(req: NextRequest) {
   if (role !== 'tl' && role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
-  const period = searchParams.get('period') ?? '30';
+  const period = searchParams.get('period') ?? '7';
   const { dateFrom, dateTo } = getDateRange(period, searchParams.get('from'), searchParams.get('to'));
   const { wowFrom, wowTo, weeks: wowWeeks } = getWowWindow();
 
@@ -192,8 +192,20 @@ export async function GET(req: NextRequest) {
     const tlAgentName = configUser?.agentName ?? email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
   } else {
-    const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`, []);
-    tlAgentNames = rows.map(r => r.name).sort();
+    const rows = await query<{ name: string }>(`
+      SELECT a.name
+      FROM agents a
+      LEFT JOIN conversations c ON c.agent_id = a.id AND c.closed_at >= NOW() - INTERVAL '60 days'
+      WHERE a.status = 'active'
+        AND a.name NOT IN ('Robylon', 'Robylon AI', 'Robylon Automation')
+      GROUP BY a.name
+      ORDER BY COUNT(c.id) DESC, a.name ASC
+    `, []);
+    tlAgentNames = rows.map(r => r.name);
+    if (tlAgentNames.length === 0) {
+      const fallback = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active' ORDER BY name ASC`, []);
+      tlAgentNames = fallback.map(r => r.name);
+    }
   }
 
   if (tlAgentNames.length === 0) {
@@ -201,7 +213,9 @@ export async function GET(req: NextRequest) {
   }
 
   const requestedAgent = searchParams.get('agent');
-  const agentName = (requestedAgent && tlAgentNames.includes(requestedAgent)) ? requestedAgent : tlAgentNames[0];
+  const agentName = (requestedAgent && (tlAgentNames.includes(requestedAgent) || requestedAgent.length > 0))
+    ? requestedAgent
+    : tlAgentNames[0];
 
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([

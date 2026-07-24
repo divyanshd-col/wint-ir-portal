@@ -243,7 +243,7 @@ export async function PATCH(
         
         // Always calculate both if the params exist
         merged['__scores'] = {
-          agent_iqs: calculateIQS(pascalScores, false),
+          agent_iqs: isBot ? null : calculateIQS(pascalScores, false),
           bot_iqs: calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true),
         };
         const newIqs = isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs;

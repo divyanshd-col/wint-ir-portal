@@ -58,12 +58,23 @@ export default function CallEvalPanel({
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
+  const [isReevaluating, setIsReevaluating] = useState(false);
   const [liveIqs, setLiveIqs] = useState<number | null>(iqsScore);
+  const [currentGates, setCurrentGates] = useState<any>(gates);
+  const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores);
+
+  useEffect(() => {
+    setCurrentGates(gates);
+  }, [gates]);
+
+  useEffect(() => {
+    setCurrentIqsScores(iqsScores);
+  }, [iqsScores]);
 
   // Initialize parameter state
   useEffect(() => {
-    const scores = iqsScores?.scores || {};
-    const evidence = iqsScores?.evidence || {};
+    const scores = currentIqsScores?.scores || {};
+    const evidence = currentIqsScores?.evidence || {};
     const state: Record<string, { score: string; reasoning: string }> = {};
 
     Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
@@ -73,7 +84,7 @@ export default function CallEvalPanel({
     });
 
     setParamState(state);
-  }, [iqsScores]);
+  }, [currentIqsScores]);
 
   // Recalculate live IQS score
   useEffect(() => {
@@ -115,6 +126,48 @@ export default function CallEvalPanel({
     }));
   };
 
+  const handleReevaluate = async () => {
+    if (isReevaluating || saving) return;
+    const ok = confirm(`Re-evaluate call ID ${callId}?\n\nThis will re-run diarization, transcription, and scoring for this call.`);
+    if (!ok) return;
+
+    setIsReevaluating(true);
+    try {
+      const res = await fetch('/api/call-quality/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callId, forceTranscript: true })
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        // Re-fetch transcript segments & recording URL
+        setLoading(true);
+        try {
+          const trRes = await fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`);
+          const trData = await trRes.json();
+          if (trData.segments) setSegments(trData.segments);
+          if (trData.recordingUrl) setRecordingUrl(trData.recordingUrl);
+        } catch (e) {
+          console.error('Failed to reload transcript:', e);
+        } finally {
+          setLoading(false);
+        }
+
+        if (data.gates) setCurrentGates(data.gates);
+        if (data.iqsScores) setCurrentIqsScores(data.iqsScores);
+        if (data.iqs !== undefined && data.iqs !== null) setLiveIqs(data.iqs);
+
+        alert('Call re-evaluation completed successfully!');
+      } else {
+        alert(`Re-evaluation failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Error re-evaluating call: ${err.message}`);
+    } finally {
+      setIsReevaluating(false);
+    }
+  };
+
   const handleSubmitOverride = async () => {
     setSaving(true);
     const scores: Record<string, string> = {};
@@ -148,11 +201,42 @@ export default function CallEvalPanel({
   return (
     <tr>
       <td colSpan={colSpan} style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid var(--qa-border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--qa-text)' }}>
             Call Evaluation Panel — ID: {callId} ({agentName})
           </h3>
-          <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 18, color: 'var(--qa-text-3)', cursor: 'pointer' }}>✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              onClick={handleReevaluate}
+              disabled={isReevaluating || saving}
+              title="Re-evaluate this call (diarization, transcription, and scoring)"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '6px 12px',
+                fontSize: 12,
+                fontWeight: 600,
+                borderRadius: 6,
+                border: '1px solid var(--qa-border, #cbd5e1)',
+                background: isReevaluating ? '#f1f5f9' : '#ffffff',
+                color: isReevaluating ? '#64748b' : 'var(--qa-text, #0f172a)',
+                cursor: isReevaluating ? 'not-allowed' : 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <span style={{
+                display: 'inline-block',
+                transform: isReevaluating ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.5s ease-in-out'
+              }}>
+                🔄
+              </span>
+              {isReevaluating ? 'Re-evaluating Call…' : 'Re-evaluate Call'}
+            </button>
+            <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 18, color: 'var(--qa-text-3)', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
@@ -200,6 +284,9 @@ export default function CallEvalPanel({
                     );
                   }
                   
+                  const textContent = (seg.text || seg.translation || '').trim();
+                  if (!textContent) return null;
+
                   const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE';
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
@@ -214,7 +301,7 @@ export default function CallEvalPanel({
                         fontSize: 13,
                         lineHeight: '18px'
                       }}>
-                        {seg.text || seg.translation}
+                        {textContent}
                       </div>
                     </div>
                   );
@@ -235,12 +322,12 @@ export default function CallEvalPanel({
             {/* Compliance Gates Card */}
             <div style={{ background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12 }}>
               <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                Compliance Gates: <span style={{ color: gates?.call_gate_result === 'FAIL' ? '#b91c1c' : '#15803d' }}>{gates?.call_gate_result || 'PASS'}</span>
+                Compliance Gates: <span style={{ color: currentGates?.call_gate_result === 'FAIL' ? '#b91c1c' : '#15803d' }}>{currentGates?.call_gate_result || 'PASS'}</span>
               </h5>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                <div>G1 Advice: <ScoreBadge score={gates?.G1_no_advice?.status === 'pass' ? 'Yes' : gates?.G1_no_advice?.status === 'fail' ? 'No' : 'NA'} /></div>
-                <div>G2 Fabrication: <ScoreBadge score={gates?.G2_no_fabrication?.status === 'pass' ? 'Yes' : gates?.G2_no_fabrication?.status === 'fail' ? 'No' : 'NA'} /></div>
-                <div>G3 Identity: <ScoreBadge score={gates?.G3_identity_first?.status === 'pass' ? 'Yes' : gates?.G3_identity_first?.status === 'fail' ? 'No' : 'NA'} /></div>
+                <div>G1 Advice: <ScoreBadge score={currentGates?.G1_no_advice?.status === 'pass' ? 'Yes' : currentGates?.G1_no_advice?.status === 'fail' ? 'No' : 'NA'} /></div>
+                <div>G2 Fabrication: <ScoreBadge score={currentGates?.G2_no_fabrication?.status === 'pass' ? 'Yes' : currentGates?.G2_no_fabrication?.status === 'fail' ? 'No' : 'NA'} /></div>
+                <div>G3 Identity: <ScoreBadge score={currentGates?.G3_identity_first?.status === 'pass' ? 'Yes' : currentGates?.G3_identity_first?.status === 'fail' ? 'No' : 'NA'} /></div>
               </div>
             </div>
 

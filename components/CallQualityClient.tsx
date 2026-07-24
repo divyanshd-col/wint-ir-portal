@@ -135,7 +135,8 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
   }
 
   const isIR = seg.speaker === 'IR EXECUTIVE';
-  const displayText = seg.translation || seg.text;
+  const displayText = (seg.translation || seg.text || '').trim();
+  if (!displayText) return null;
   const wasTranslated = seg.translated || !!seg.translation;
   return (
     <tr className="align-top border-b border-slate-50 hover:bg-slate-50/50">

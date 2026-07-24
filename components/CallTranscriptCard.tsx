@@ -127,6 +127,9 @@ export function CallTranscriptCard({
                 );
               }
 
+              const textContent = (seg.text || seg.translation || '').trim();
+              if (!textContent) return null;
+
               const isIR = seg.speaker === 'IR EXECUTIVE';
               const timeOffset = formatTs(seg.ts);
 

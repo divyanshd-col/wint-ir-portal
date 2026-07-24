@@ -112,7 +112,7 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
             }
           />
         )}
-        {isAdmin && (
+        {canSeeAnalytics && (
           <NavLink
             href="/tl/member-analytics"
             label="Member Analytics"

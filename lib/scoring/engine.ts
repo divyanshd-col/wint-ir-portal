@@ -306,23 +306,25 @@ export async function executeScoring(
   const primaryPass = humanPass || botPass;
   if (!primaryPass) return null;
 
-  const parameters = convertParameters(primaryPass);
-  const botParameters = humanPass && botPass ? convertParameters(botPass) : undefined;
+  const isBotOnly = timing.conversationType === 'bot';
+
+  const parameters = isBotOnly ? {} : convertParameters(humanPass || primaryPass);
+  const botParameters = botPass ? convertParameters(botPass) : undefined;
   
-  const uncertainParameters = primaryPass.review_parameters.map((p: string) => ({ 
+  const uncertainParameters = primaryPass.review_parameters?.map((p: string) => ({ 
     parameter: p, 
     question: primaryPass.parameters[p]?.comment || '' 
-  }));
+  })) || [];
 
   await insertIQSScore({
     chatId,
-    iqsScore: primaryPass.iqs_score || 0,
+    iqsScore: isBotOnly ? null : (humanPass?.iqs_score || primaryPass.iqs_score || 0),
     parameters,
     modelVersion,
     uncertainParameters,
-    botIqsScore: botPass && humanPass ? (botPass.iqs_score || 0) : undefined,
+    botIqsScore: botPass ? (botPass.iqs_score || 0) : undefined,
     botParameters,
-    botModelVersion: botPass && humanPass ? modelVersion : undefined,
+    botModelVersion: botPass ? modelVersion : undefined,
     breaches: primaryPass.breaches?.map((b: any) => `${b.type}: ${b.quote}`),
     answerChanges: primaryPass.answer_changes?.map((b: any) => `${b.type}: ${b.quote}`),
     unrelatedCallFlag: primaryPass.unrelated_call_flag

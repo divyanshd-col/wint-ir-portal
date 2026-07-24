@@ -23,7 +23,12 @@ export async function getAgentName(agentId: number): Promise<string> {
 /** Returns agent names whose tl_name matches (case-insensitive). */
 export async function getAgentNamesByTL(tlName: string): Promise<string[]> {
   const rows = await query<{ name: string }>(
-    `SELECT name FROM agents WHERE LOWER(tl_name) = LOWER($1)`, [tlName]
+    `SELECT a.name
+     FROM agents a
+     LEFT JOIN conversations c ON c.agent_id = a.id AND c.closed_at >= NOW() - INTERVAL '60 days'
+     WHERE LOWER(a.tl_name) = LOWER($1)
+     GROUP BY a.name
+     ORDER BY COUNT(c.id) DESC, a.name ASC`, [tlName]
   );
   return rows.map(r => r.name);
 }
@@ -232,13 +237,13 @@ export interface IQSParameterResult {
 
 export async function insertIQSScore(data: {
   chatId: string;
-  iqsScore: number;
+  iqsScore?: number | null;
   parameters: Record<string, IQSParameterResult>;
   modelVersion: string;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
   
-  // Optional bot metrics for hybrid chats
-  botIqsScore?: number;
+  // Optional bot metrics for hybrid / bot chats
+  botIqsScore?: number | null;
   botParameters?: Record<string, IQSParameterResult>;
   botModelVersion?: string;
   
@@ -248,7 +253,7 @@ export async function insertIQSScore(data: {
   unrelatedCallFlag?: boolean;
 }): Promise<void> {
   const stored: Record<string, any> = {};
-  if (data.parameters) {
+  if (data.parameters && Object.keys(data.parameters).length > 0) {
     stored.__agent_parameters = { ...data.parameters };
   }
   if (data.uncertainParameters && data.uncertainParameters.length > 0) {
@@ -258,14 +263,16 @@ export async function insertIQSScore(data: {
   if (data.answerChanges) stored.__answerChanges = data.answerChanges;
   if (data.unrelatedCallFlag) stored.__unrelatedCallFlag = data.unrelatedCallFlag;
 
-  if (data.botIqsScore !== undefined) {
+  if (data.botIqsScore !== undefined || data.iqsScore !== undefined) {
     stored.__scores = {
-      agent_iqs: data.iqsScore,
-      bot_iqs: data.botIqsScore,
+      agent_iqs: data.iqsScore ?? null,
+      bot_iqs: data.botIqsScore ?? null,
     };
   }
   if (data.botParameters) stored.__bot_parameters = data.botParameters;
   if (data.botModelVersion) stored.__bot_model_version = data.botModelVersion;
+
+  const primaryScore = data.botIqsScore ?? data.iqsScore ?? 0;
 
   await query(`
     INSERT INTO iqs_scores (
@@ -279,7 +286,7 @@ export async function insertIQSScore(data: {
       scored_at         = NOW()
   `, [
     data.chatId, 
-    data.iqsScore, 
+    primaryScore, 
     JSON.stringify(stored), 
     data.modelVersion
   ]);
