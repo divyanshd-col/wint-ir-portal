@@ -5,13 +5,18 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { log, withLogging } from '@/lib/log';
 import { readConfig } from '@/lib/config';
+import { computeIqsFromRawParams } from '@/lib/quality';
 
 const ROUTE = 'cx/tl/chats';
 
 export interface TLChatRow {
   chatId:        string;
   agentName:     string;
-  iqsScore:      number;
+  iqsScore:      number | null;
+  botIqsScore?:  number | null;
+  callIqsScore?: number | null;
+  callTranscriptStatus?: 'transcribed' | 'pending' | 'no_call';
+  callTranscriptLabel?: string;
   closedAt:      string;
   disposition:   string;
   subDisposition: string | null;
@@ -146,10 +151,34 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         if (pascal) failedParams.push(pascal);
       }
     }
+    let botIqsScore: number | null = null;
+    let iqsScore: number | null = null;
+    let callIqsScore: number | null = null;
+
+    if (params.__scores) {
+      botIqsScore = params.__scores.bot_iqs !== undefined && params.__scores.bot_iqs !== null ? parseFloat(params.__scores.bot_iqs) : null;
+      iqsScore = params.__scores.agent_iqs !== undefined && params.__scores.agent_iqs !== null ? parseFloat(params.__scores.agent_iqs) : null;
+      callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
+    }
+
+    if (iqsScore === null) {
+      iqsScore = computeIqsFromRawParams(params, false);
+    }
+    if (botIqsScore === null) {
+      botIqsScore = computeIqsFromRawParams(params, true);
+    }
+    if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+      if (r.conversation_type !== 'agent' || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+        botIqsScore = parseFloat(r.iqs_score);
+      }
+    }
+
     return {
       chatId:         r.chat_id,
       agentName:      r.agent_name ?? 'Unknown',
-      iqsScore:       parseInt(r.iqs_score),
+      iqsScore,
+      botIqsScore,
+      callIqsScore,
       closedAt:       r.closed_at,
       disposition:    r.disposition,
       subDisposition: r.sub_disposition,
