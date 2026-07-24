@@ -44,6 +44,14 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
   }
   const csatStr = row.csat_score ? String(row.csat_score) : '';
   const tags = row.tags || {};
+
+  let botIqsScore: number | null = null;
+  let callIqsScore: number | null = null;
+  if (params?.__scores) {
+    if (params.__scores.bot_iqs != null) botIqsScore = parseFloat(params.__scores.bot_iqs);
+    if (params.__scores.call_iqs != null) callIqsScore = parseFloat(params.__scores.call_iqs);
+  }
+
   return {
     id:              `${row.scoredAt}-${row.chatId}`,
     chatId:          row.chatId,
@@ -51,9 +59,12 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     agentName:       row.agentName || '',
     date:            row.date ? String(row.date).slice(0, 10) : '',
     iqs:             row.iqs,
+    botIqsScore:     botIqsScore ?? undefined,
+    callIqsScore:    callIqsScore ?? undefined,
     csat:            csatStr,
     scores:          scores as Record<string, any>,
     reasoning,
+    parameters:      params,
     summary:         '',
     provider:        row.modelVersion?.includes('gemini') ? 'gemini' : 'claude',
     model:           row.modelVersion || '',
