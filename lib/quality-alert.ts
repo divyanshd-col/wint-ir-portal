@@ -67,11 +67,20 @@ export function hasCallInteraction(transcript: string, tags?: any): boolean {
 
 // ── Critical parameter alert ─────────────────────────────────────────────────
 
-const CRITICAL_PARAMS: { key: string; label: string }[] = [
-  { key: 'Technical',    label: 'Technically / Legally Incorrect' },
-  { key: 'AllQuestions', label: 'All Questions Not Answered' },
-  { key: 'Process',      label: 'Process Incorrect' },
+// Callers pass scores in two dialects:
+//  - lib/scoring/engine.ts (auto-pipeline): v4 snake_case keys with stringified
+//    raw values ('true' | 'false' | '0.5' | 'null')
+//  - app/api/quality/score/route.ts (manual v3 path): PascalCase keys with
+//    'Yes' | 'No' | 'Half' | 'NA'
+// Accept every alias per logical parameter and every "failed" value spelling,
+// otherwise the auto-pipeline never fires an alert at all.
+const CRITICAL_PARAMS: { keys: string[]; label: string }[] = [
+  { keys: ['Accuracy', 'accuracy', 'Technical', 'technical'],                       label: 'Technically / Legally Incorrect' },
+  { keys: ['IssueResolution', 'issue_resolution', 'AllQuestions', 'all_questions'], label: 'Issue Not Resolved / Questions Unanswered' },
+  { keys: ['Process', 'process'],                                                   label: 'Process Incorrect' },
 ];
+
+const FAIL_VALUES = new Set(['No', 'no', 'false', '0']);
 
 export async function fireQualityAlert(opts: {
   chatId: string;
@@ -89,8 +98,11 @@ export async function fireQualityAlert(opts: {
   const channel = process.env.QUALITY_SLACK_CHANNEL || '';
 
   const failedParams = CRITICAL_PARAMS
-    .filter(p => opts.scores?.[p.key] === 'No')
-    .map(p => ({ label: p.label, reasoning: opts.reasoning?.[p.key] || 'No reasoning provided' }));
+    .map(p => {
+      const hitKey = p.keys.find(k => FAIL_VALUES.has(String(opts.scores?.[k])));
+      return hitKey ? { label: p.label, reasoning: opts.reasoning?.[hitKey] || 'No reasoning provided' } : null;
+    })
+    .filter((p): p is { label: string; reasoning: string } => p !== null);
 
   const hasUncertain = !!(opts.uncertainParameters && opts.uncertainParameters.length > 0);
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { csatScore } from '@/lib/stats';
 import {
   getAllScoredConversations,
@@ -13,7 +13,6 @@ import {
   getAgentNamesByQA,
   type GetScoredConversationsOptions
 } from '@/lib/robylon/db';
-import { PARAM_ORDER } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
 const SLA_THRESHOLD_SECS = 180; // 3 minutes handoff SLA
@@ -38,12 +37,20 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
       continue;
     }
     // Map DB snake_case key → legacy PascalCase; fall back to first-letter capitalize
-    const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
+    const k = ALL_DB_KEY_TO_PASCAL[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
     scores[k]    = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
     reasoning[k] = val.reasoning || '';
   }
   const csatStr = row.csat_score ? String(row.csat_score) : '';
   const tags = row.tags || {};
+
+  let botIqsScore: number | null = null;
+  let callIqsScore: number | null = null;
+  if (params?.__scores) {
+    if (params.__scores.bot_iqs != null) botIqsScore = parseFloat(params.__scores.bot_iqs);
+    if (params.__scores.call_iqs != null) callIqsScore = parseFloat(params.__scores.call_iqs);
+  }
+
   return {
     id:              `${row.scoredAt}-${row.chatId}`,
     chatId:          row.chatId,
@@ -51,9 +58,12 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     agentName:       row.agentName || '',
     date:            row.date ? String(row.date).slice(0, 10) : '',
     iqs:             row.iqs,
+    botIqsScore:     botIqsScore ?? undefined,
+    callIqsScore:    callIqsScore ?? undefined,
     csat:            csatStr,
     scores:          scores as Record<string, any>,
     reasoning,
+    parameters:      params,
     summary:         '',
     provider:        row.modelVersion?.includes('gemini') ? 'gemini' : 'claude',
     model:           row.modelVersion || '',

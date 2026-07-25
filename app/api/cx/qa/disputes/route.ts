@@ -69,13 +69,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     return NextResponse.json({ disputes: [] });
   }
 
-  // Fetch all pending flags from KV
-  // QA sees: tl_forwarded (IR-raised, forwarded by TL) + pending (TL-raised, goes directly to QA)
-  // QA does NOT see ir_pending_tl — those are still with TL
+  // QA only sees disputes once TL has forwarded them — 'pending'/'ir_pending_tl'
+  // are still awaiting TL review and stay off QA's queue until forwarded.
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
-    .filter((f): f is IQSFlag => f !== null && (f.status === 'tl_forwarded' || f.status === 'pending'));
+    .filter((f): f is IQSFlag => f !== null && f.status === 'tl_forwarded');
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 

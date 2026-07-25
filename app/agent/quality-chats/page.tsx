@@ -16,5 +16,5 @@ export default async function AgentQualityChatsPage() {
   const configUser = config.users.find((u: any) => (u.email || u.username) === email);
   const agentName = configUser?.agentName || email.split('@')[0];
 
-  return <MyQualityChatsPage userEmail={email} agentName={agentName} />;
+  return <MyQualityChatsPage agentName={agentName} />;
 }

@@ -9,11 +9,11 @@ export default async function TLLayout({ children }: { children: React.ReactNode
 
   const userAny = session.user as Record<string, string | undefined>;
   const rawRole = userAny?.role;
-  const role    = rawRole || (userAny?.isAdmin ? 'admin' : '');
+  const role    = rawRole || (userAny?.isAdmin ? 'admin' : 'agent');
   const email   = userAny?.email || '';
   const name    = userAny?.name  || email;
 
-  if (!['admin', 'tl'].includes(role)) redirect('/');
+  if (!['admin', 'tl', 'agent'].includes(role)) redirect('/');
 
   return (
     <TLShell role={role} email={email} name={name}>

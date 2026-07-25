@@ -73,7 +73,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const role  = (session.user as any).role as string;
   const email = ((session.user as any).email || '') as string;
 
-  if (!['quality', 'admin', 'tl'].includes(role)) {
+  if (!['quality', 'admin', 'tl', 'agent'].includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
@@ -91,7 +91,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const config = await readConfig();
   let dispositions: string[];
 
-  if (role === 'admin' || role === 'tl') {
+  if (role === 'admin' || role === 'tl' || role === 'agent') {
     // Admin can pass explicit dispositions or see everything
     const explicit = searchParams.getAll('disposition');
     if (explicit.length) {

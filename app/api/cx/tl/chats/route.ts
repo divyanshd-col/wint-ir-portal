@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { log, withLogging } from '@/lib/log';
@@ -94,14 +94,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
 
-  // IQS < 85: anything below needs TL verification per the QA flow
-  // Only surface chats with at least one CAT 2 param failure (TL's domain)
-  const CAT2_DB_KEYS = ['contextual', 'sentences', 'grammar', 'empathy'];
-  const cat2Filter = CAT2_DB_KEYS.map(k =>
-    `(i.parameters->>'${k}' IS NOT NULL AND (i.parameters->'${k}'->>'score')::boolean = false)`
-  ).join(' OR ');
-  // tl_reviewed_by stored in parameters JSON as __tl_reviewed_by to avoid DB migration
-  const baseWhere = `a.name = ANY($1) AND i.iqs_score < 85 AND (i.parameters->>'__tl_reviewed_by' IS NULL) AND (${cat2Filter})`;
+  // TL is view-only — this lists all of their team's evaluated chats (not a
+  // CAT2/action queue, which no longer exists now that TL doesn't score chats).
+  const baseWhere = `a.name = ANY($1)`;
   const t0 = Date.now();
 
   const [countRow] = await query<{ total: string }>(
@@ -134,7 +129,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      LEFT JOIN agents a ON a.id = c.agent_id
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}
-     ORDER BY i.iqs_score ASC, c.closed_at DESC
+     ORDER BY c.closed_at DESC
      LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
     sqlParams
   );
@@ -147,7 +142,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const failedParams: string[] = [];
     for (const [dbKey, val] of Object.entries(params) as [string, any][]) {
       if (!dbKey.startsWith('__') && val?.score === false) {
-        const pascal = DB_KEY_TO_LEGACY[dbKey];
+        const pascal = ALL_DB_KEY_TO_PASCAL[dbKey];
         if (pascal) failedParams.push(pascal);
       }
     }

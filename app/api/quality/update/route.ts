@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
-import { calculateIQS } from '@/lib/quality';
+import { calculateIQS, isV4Evaluation } from '@/lib/quality';
 import type { ParamScore } from '@/lib/quality';
 
 const PARAM_KEYS = [
@@ -10,8 +10,14 @@ const PARAM_KEYS = [
   'IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'
 ];
 
+// Bot-distinctive keys — never appear in the human rubric. Shared keys
+// (IssueResolution/Accuracy/Personalization) must NOT be used to detect a bot chat.
+const BOT_ONLY_PASCAL = ['CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity'];
+const BOT_ONLY_SNAKE  = ['correct_escalation', 'no_repetition', 'expectation_setting', 'clarity'];
+
 export async function PATCH(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  // TL is view-only for chat quality — only QA/admin may override scores.
+  const { session, response } = await requireRole(['admin', 'quality']);
   if (response) return response;
 
   let body: any;
@@ -78,10 +84,11 @@ export async function PATCH(req: NextRequest) {
         ? (existing[0].parameters.__agent_parameters || existing[0].parameters.__bot_parameters || existing[0].parameters)
         : {};
       const hasBotParams = scores
-        ? Object.keys(scores).some(k => ['IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'].includes(k))
-        : Object.keys(existingParamsObj).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k));
+        ? Object.keys(scores).some(k => BOT_ONLY_PASCAL.includes(k))
+        : Object.keys(existingParamsObj).some(k => BOT_ONLY_SNAKE.includes(k));
       const isBot = convRow[0]?.conversation_type === 'bot' || hasBotParams;
-      const newIqs = scores ? calculateIQS(scores, isBot) : (rowExists ? existing[0].iqs_score : 0);
+      const isV4 = rowExists ? isV4Evaluation(existing[0].parameters) : true;
+      const newIqs = scores ? calculateIQS(scores, isBot, isV4) : (rowExists ? existing[0].iqs_score : 0);
 
       if (rowExists) {
         await query(
@@ -147,10 +154,11 @@ export async function PATCH(req: NextRequest) {
       ? (existing[0].parameters.__agent_parameters || existing[0].parameters.__bot_parameters || existing[0].parameters)
       : {};
     const hasBotParams2 = scores
-      ? Object.keys(scores).some(k => ['IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition', 'Personalization', 'ExpectationSetting', 'Clarity'].includes(k))
-      : Object.keys(existingParamsObj2).some(k => ['issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'].includes(k));
+      ? Object.keys(scores).some(k => BOT_ONLY_PASCAL.includes(k))
+      : Object.keys(existingParamsObj2).some(k => BOT_ONLY_SNAKE.includes(k));
     const isBot = convRow[0]?.conversation_type === 'bot' || hasBotParams2;
-    const finalIqs = scores ? calculateIQS(scores, isBot) : (rowExists ? existing[0].iqs_score : 0);
+    const isV4b = rowExists ? isV4Evaluation(existing[0].parameters) : true;
+    const finalIqs = scores ? calculateIQS(scores, isBot, isV4b) : (rowExists ? existing[0].iqs_score : 0);
 
     return NextResponse.json({
       ok: true,

@@ -1,5 +1,27 @@
 import { query } from '@/lib/cx/db';
-import { PASCAL_TO_DB } from '@/lib/param-keys';
+import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
+import { PARAM_ORDER } from '@/lib/quality';
+
+// Builds the per-parameter "fail count" SELECT columns for the v4 human rubric.
+// Two correctness points vs the old hardcoded SQL:
+//  1. Compare the score as TEXT (`->>'score' = 'false'`), never `::boolean` — v4
+//     stores 0.5 for half-credit, and `'0.5'::boolean` raises a Postgres error that
+//     500s the whole request.
+//  2. v4 nests parameters under `__agent_parameters`; legacy v3 rows store them at
+//     the top level; the 5 v4-only params may also sit under an old no-underscore
+//     key. COALESCE covers all of those so old and new rows both count.
+function buildParamFailColumns(): { columns: string; pairs: Array<{ db: string; pascal: string }> } {
+  const pairs = PARAM_ORDER.map(pascal => ({ db: PASCAL_TO_DB[pascal] || pascal.toLowerCase(), pascal }));
+  const columns = PARAM_ORDER.map(pascal => {
+    const dbKey = PASCAL_TO_DB[pascal] || pascal.toLowerCase();
+    const fb = LEGACY_V4_FALLBACK_KEY[pascal];
+    const cell = fb
+      ? `COALESCE(s.parameters->'__agent_parameters'->'${dbKey}', s.parameters->'${dbKey}', s.parameters->'__agent_parameters'->'${fb}', s.parameters->'${fb}')`
+      : `COALESCE(s.parameters->'__agent_parameters'->'${dbKey}', s.parameters->'${dbKey}')`;
+    return `COUNT(*) FILTER (WHERE ${cell}->>'score' = 'false')::int AS "${dbKey}"`;
+  }).join(',\n      ');
+  return { columns, pairs };
+}
 
 // ── Agent helpers ─────────────────────────────────────────────────────────────
 
@@ -316,6 +338,7 @@ export interface GetScoredConversationsOptions {
   dispositions?: string[];
   csat?: string;
   conversationType?: string;
+  hasCalls?: boolean;
   minUserMessages?: number;
   chatIdSearch?: string;
 }
@@ -370,7 +393,23 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
     params.push(parseInt(opts.csat, 10));
     conditions.push(`c.csat_score = $${params.length}`);
   }
-  if (opts.conversationType) {
+  if (opts.conversationType === 'has_calls' || opts.hasCalls) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM call_recordings cr
+      WHERE cr.chat_id = c.id
+         OR (
+           c.contact_id IS NOT NULL 
+           AND cr.contact_id = c.contact_id 
+           AND cr.called_at IS NOT NULL
+           AND (c.started_at IS NULL OR cr.called_at >= c.started_at)
+           AND (c.closed_at IS NULL OR cr.called_at <= c.closed_at)
+         )
+    )`);
+  } else if (opts.conversationType === 'human_only') {
+    conditions.push(`(a.name IS NULL OR a.name != 'Robylon AI') AND (c.agent_id IS NULL OR c.agent_id NOT IN (15, 447, 784))`);
+  } else if (opts.conversationType === 'bot_only') {
+    conditions.push(`(a.name = 'Robylon AI' OR c.agent_id IN (15, 447, 784))`);
+  } else if (opts.conversationType && opts.conversationType !== 'all') {
     params.push(opts.conversationType);
     conditions.push(`c.conversation_type = $${params.length}`);
   }
@@ -607,21 +646,11 @@ export async function getScoredConversationsParamFails(opts: GetScoredConversati
   const { conditions, params } = buildFilters(opts);
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
+  const { columns, pairs } = buildParamFailColumns();
   const rows = await query<any>(`
     SELECT
       COUNT(*)::int AS "total",
-      COUNT(*) FILTER (WHERE (s.parameters->'opening'->>'score')::boolean = false)::int AS "opening",
-      COUNT(*) FILTER (WHERE (s.parameters->'grammar'->>'score')::boolean = false)::int AS "grammar",
-      COUNT(*) FILTER (WHERE (s.parameters->'sentences'->>'score')::boolean = false)::int AS "sentences",
-      COUNT(*) FILTER (WHERE (s.parameters->'empathy'->>'score')::boolean = false)::int AS "empathy",
-      COUNT(*) FILTER (WHERE (s.parameters->'all_questions'->>'score')::boolean = false)::int AS "all_questions",
-      COUNT(*) FILTER (WHERE (s.parameters->'contextual'->>'score')::boolean = false)::int AS "contextual",
-      COUNT(*) FILTER (WHERE (s.parameters->'technical'->>'score')::boolean = false)::int AS "technical",
-      COUNT(*) FILTER (WHERE (s.parameters->'expectation'->>'score')::boolean = false)::int AS "expectation",
-      COUNT(*) FILTER (WHERE (s.parameters->'follow_up'->>'score')::boolean = false)::int AS "follow_up",
-      COUNT(*) FILTER (WHERE (s.parameters->'process'->>'score')::boolean = false)::int AS "process",
-      COUNT(*) FILTER (WHERE (s.parameters->'tags'->>'score')::boolean = false)::int AS "tags",
-      COUNT(*) FILTER (WHERE (s.parameters->'call'->>'score')::boolean = false)::int AS "call"
+      ${columns}
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
@@ -633,14 +662,8 @@ export async function getScoredConversationsParamFails(opts: GetScoredConversati
   const paramFails: Record<string, number> = {};
 
   if (total > 0) {
-    const keys = ['opening', 'grammar', 'sentences', 'empathy', 'all_questions', 'contextual', 'technical', 'expectation', 'follow_up', 'process', 'tags', 'call'];
-    for (const k of keys) {
-      const dbVal = r[k] || 0;
-      // Map DB snake_case key to legacy PascalCase
-      const legacyKey = k === 'all_questions' ? 'AllQuestions'
-                      : k === 'follow_up' ? 'FollowUp'
-                      : k.charAt(0).toUpperCase() + k.slice(1);
-      paramFails[legacyKey] = Math.round((dbVal / total) * 100);
+    for (const { db, pascal } of pairs) {
+      paramFails[pascal] = Math.round(((r[db] || 0) / total) * 100);
     }
   }
 
@@ -651,22 +674,12 @@ export async function getScoredConversationsWeeklyParams(opts: GetScoredConversa
   const { conditions, params } = buildFilters(opts);
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
+  const { columns, pairs } = buildParamFailColumns();
   const rows = await query<any>(`
     SELECT
       date_trunc('week', COALESCE(s.scored_at, c.closed_at) AT TIME ZONE 'UTC')::date::text AS "weekStart",
       COUNT(*)::int AS "total",
-      COUNT(*) FILTER (WHERE (s.parameters->'opening'->>'score')::boolean = false)::int AS "opening",
-      COUNT(*) FILTER (WHERE (s.parameters->'grammar'->>'score')::boolean = false)::int AS "grammar",
-      COUNT(*) FILTER (WHERE (s.parameters->'sentences'->>'score')::boolean = false)::int AS "sentences",
-      COUNT(*) FILTER (WHERE (s.parameters->'empathy'->>'score')::boolean = false)::int AS "empathy",
-      COUNT(*) FILTER (WHERE (s.parameters->'all_questions'->>'score')::boolean = false)::int AS "all_questions",
-      COUNT(*) FILTER (WHERE (s.parameters->'contextual'->>'score')::boolean = false)::int AS "contextual",
-      COUNT(*) FILTER (WHERE (s.parameters->'technical'->>'score')::boolean = false)::int AS "technical",
-      COUNT(*) FILTER (WHERE (s.parameters->'expectation'->>'score')::boolean = false)::int AS "expectation",
-      COUNT(*) FILTER (WHERE (s.parameters->'follow_up'->>'score')::boolean = false)::int AS "follow_up",
-      COUNT(*) FILTER (WHERE (s.parameters->'process'->>'score')::boolean = false)::int AS "process",
-      COUNT(*) FILTER (WHERE (s.parameters->'tags'->>'score')::boolean = false)::int AS "tags",
-      COUNT(*) FILTER (WHERE (s.parameters->'call'->>'score')::boolean = false)::int AS "call"
+      ${columns}
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
@@ -682,13 +695,8 @@ export async function getScoredConversationsWeeklyParams(opts: GetScoredConversa
     const total = row.total || 0;
     const paramPercent: Record<string, number> = {};
 
-    const keys = ['opening', 'grammar', 'sentences', 'empathy', 'all_questions', 'contextual', 'technical', 'expectation', 'follow_up', 'process', 'tags', 'call'];
-    for (const k of keys) {
-      const dbVal = row[k] || 0;
-      const legacyKey = k === 'all_questions' ? 'AllQuestions'
-                      : k === 'follow_up' ? 'FollowUp'
-                      : k.charAt(0).toUpperCase() + k.slice(1);
-      paramPercent[legacyKey] = total ? Math.round((dbVal / total) * 100) : 0;
+    for (const { db, pascal } of pairs) {
+      paramPercent[pascal] = total ? Math.round(((row[db] || 0) / total) * 100) : 0;
     }
 
     return {

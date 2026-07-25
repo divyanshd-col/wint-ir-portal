@@ -102,7 +102,9 @@ Both time AND category breakdown?
 \`\`\`sql
 c.tags->>'disposition'
 c.tags->>'sub_disposition'
-i.parameters->'technical'->>'score'        -- returns 'true' | 'false' | 'null' as string
+-- IQS params: v4 rows nest under __agent_parameters, legacy rows are flat.
+-- Score is 'true' | 'false' | '0.5' | 'null' as text. NEVER cast score to boolean.
+COALESCE(i.parameters->'__agent_parameters'->'accuracy', i.parameters->'accuracy')->>'score'
 c.transcript::text ILIKE '%keyword%'       -- full-text search across entire transcript
 (c.raw_payload->'counts'->>'user_message_count')::int
 \`\`\`
@@ -110,7 +112,8 @@ c.transcript::text ILIKE '%keyword%'       -- full-text search across entire tra
 ## IQS PARAMETER BREAKDOWN — use this exact LATERAL pattern
 \`\`\`sql
 WITH base AS (
-  SELECT i.parameters FROM conversations c
+  SELECT COALESCE(i.parameters->'__agent_parameters', i.parameters) AS parameters
+  FROM conversations c
   INNER JOIN iqs_scores i ON i.chat_id = c.id
   WHERE /* your filters */
 ),
@@ -120,18 +123,16 @@ param_stats AS (
     COUNT(*) FILTER (WHERE score_val IS NOT NULL AND score_val != 'null') AS applicable
   FROM base,
   LATERAL (VALUES
-    ('call',base.parameters->'call'->>'score'),
-    ('tags',base.parameters->'tags'->>'score'),
+    ('issue_resolution',base.parameters->'issue_resolution'->>'score'),
+    ('accuracy',base.parameters->'accuracy'->>'score'),
+    ('expectation_follow_through',base.parameters->'expectation_follow_through'->>'score'),
+    ('dissatisfactionhandling',base.parameters->'dissatisfactionhandling'->>'score'),
+    ('personalization',base.parameters->'personalization'->>'score'),
     ('empathy',base.parameters->'empathy'->>'score'),
-    ('grammar',base.parameters->'grammar'->>'score'),
-    ('opening',base.parameters->'opening'->>'score'),
-    ('process',base.parameters->'process'->>'score'),
-    ('follow_up',base.parameters->'follow_up'->>'score'),
-    ('sentences',base.parameters->'sentences'->>'score'),
-    ('technical',base.parameters->'technical'->>'score'),
-    ('contextual',base.parameters->'contextual'->>'score'),
-    ('expectation',base.parameters->'expectation'->>'score'),
-    ('all_questions',base.parameters->'all_questions'->>'score')
+    ('escalation_decision',base.parameters->'escalation_decision'->>'score'),
+    ('readability',base.parameters->'readability'->>'score'),
+    ('greeting_handover',base.parameters->'greeting_handover'->>'score'),
+    ('post_call_recap',base.parameters->'post_call_recap'->>'score')
   ) AS p(param_key, score_val)
   GROUP BY param_key
 )

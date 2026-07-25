@@ -127,7 +127,6 @@ export default function ChatEvaluationPage() {
 
       <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
         <DisputesTable
-          dispositions={loadingDisp ? [] : dispositions}
           onCountChange={setDisputeCount}
           agentFilter={agentFilter}
         />

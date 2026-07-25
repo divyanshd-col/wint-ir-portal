@@ -2,23 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { getScoredConversationsSummary } from '@/lib/robylon/db';
 import { PARAM_ORDER } from '@/lib/quality';
+import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
 
-const PARAM_DB_KEYS: Record<string, string> = {
-  Opening: 'opening',
-  Grammar: 'grammar',
-  Sentences: 'sentences',
-  Empathy: 'empathy',
-  AllQuestions: 'all_questions',
-  DissatisfactionHandling: 'dissatisfactionhandling',
-  Contextual: 'contextual',
-  Technical: 'technical',
-  Expectation: 'expectation',
-  FollowUp: 'follow_up',
-  Process: 'process',
-  Tags: 'tags',
-  Call: 'call'
-};
+// Canonical db-key per PARAM_ORDER entry, sourced from the shared map so this
+// stays in sync with lib/quality.ts's real v4 parameter set.
+const PARAM_DB_KEYS: Record<string, string> = Object.fromEntries(
+  PARAM_ORDER.map(p => [p, PASCAL_TO_DB[p] || p.toLowerCase()])
+);
 
 export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
@@ -44,10 +35,21 @@ export async function GET(req: NextRequest) {
   }
   const where = filterConditions.length ? `WHERE ${filterConditions.join(' AND ')}` : '';
 
+  // v4 nests params under __agent_parameters; legacy v3 rows store them at the top
+  // level; the 5 v4-only params may also sit under an older no-underscore key —
+  // COALESCE picks up whichever exists. (The v3-alias dialect from the retired
+  // CAT1/CAT2 shim is intentionally NOT merged: that key is shared with a
+  // semantically different v3 parameter, so blending it would conflate the two.)
+  // Score is compared as TEXT, never `::boolean` — that cast raises on v4's 0.5
+  // half-scores and 500s the request. A 0.5 counts toward _total but not _yes.
   const selectParts = Object.entries(PARAM_DB_KEYS).map(([pascalKey, dbKey]) => {
+    const fallbackKey = LEGACY_V4_FALLBACK_KEY[pascalKey];
+    const paramExpr = fallbackKey
+      ? `COALESCE(s.parameters->'__agent_parameters'->'${dbKey}', s.parameters->'${dbKey}', s.parameters->'__agent_parameters'->'${fallbackKey}', s.parameters->'${fallbackKey}')`
+      : `COALESCE(s.parameters->'__agent_parameters'->'${dbKey}', s.parameters->'${dbKey}')`;
     return `
-      COUNT(*) FILTER (WHERE (s.parameters->'${dbKey}'->>'score')::boolean = true)::int AS "${dbKey}_yes",
-      COUNT(*) FILTER (WHERE s.parameters->'${dbKey}'->'score' IS NOT NULL AND s.parameters->'${dbKey}'->>'score' != 'null')::int AS "${dbKey}_total"
+      COUNT(*) FILTER (WHERE ${paramExpr}->>'score' = 'true')::int AS "${dbKey}_yes",
+      COUNT(*) FILTER (WHERE ${paramExpr}->'score' IS NOT NULL AND ${paramExpr}->>'score' != 'null')::int AS "${dbKey}_total"
     `;
   }).join(', ');
 

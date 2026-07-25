@@ -228,10 +228,23 @@ export interface IQSFlag {
   updatedAt?: string;          // ISO — last state transition
   /** who created this flag */
   raisedByRole: 'ir' | 'tl';
-  /** category of challenged params after split (ir mixed → two flags) */
-  paramCategory: 'cat1' | 'cat2';
-  /** links the CAT1 and CAT2 sibling flags created from the same mixed IR dispute */
+  /**
+   * Historical: 'cat1'/'cat2' routed a dispute through the old CAT1/CAT2 TL
+   * ownership split (retired). New flags always use 'qa' — every dispute now
+   * follows the same single Agent → TL → QA path regardless of which
+   * parameter was challenged. Kept non-optional — iqs_flags.param_category
+   * is NOT NULL in Postgres.
+   */
+  paramCategory: 'cat1' | 'cat2' | 'qa';
+  /** links sibling flags created from the same mixed IR dispute (historical only) */
   parentFlagId?: string;
+  /**
+   * 'ir_pending_tl' / 'pending' — awaiting TL review.
+   * 'tl_forwarded'             — TL forwarded it on to QA for a final decision.
+   * 'tl_resolved'              — historical only; TL no longer resolves disputes.
+   * 'reviewed'                 — QA has made the final decision.
+   * 'cancelled'                — agent withdrew it while still awaiting TL.
+   */
   status: 'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
   reviewedBy?: string;
   reviewedAt?: string;
@@ -248,7 +261,8 @@ export interface IQSFlagComment {
   createdAt: string;  // ISO
 }
 
-export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
+/** Returns false if the insert failed — callers must not report success on false. */
+export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
   try {
     // Ensure the conversation exists in Postgres before inserting
     const convs = await query('SELECT id FROM conversations WHERE id = $1', [String(entry.chatId)]);
@@ -285,8 +299,10 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
       entry.reviewedAt || null,
       entry.reviewNote || null,
     ]);
+    return true;
   } catch (err: any) {
     log.warn('store', 'Failed to append flag', { err: err.message });
+    return false;
   }
 }
 

@@ -26,7 +26,6 @@ export interface TLDisputeRow {
   raisedByName:     string;
   raisedAt:         string;
   status:           'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
-  paramCategory:    'cat1' | 'cat2';
   reviewNote:       string | null;
   tlForwarded:      boolean;
   agentNote:        string;
@@ -71,8 +70,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
     .filter((f): f is IQSFlag => {
       if (!f) return false;
-      if (statusFilter === 'pending') return f.status === 'ir_pending_tl' || f.status === 'pending' || f.status === 'tl_forwarded';
-      if (statusFilter === 'resolved') return f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
+      // 'pending' = awaiting TL action (the actionable "Disputes Raised" queue).
+      // 'resolved' = already forwarded to QA or given a final decision (history).
+      if (statusFilter === 'pending') return f.status === 'ir_pending_tl' || f.status === 'pending';
+      if (statusFilter === 'resolved') return f.status === 'tl_forwarded' || f.status === 'tl_resolved' || f.status === 'reviewed' || f.status === 'cancelled';
       return false;
     });
 
@@ -160,7 +161,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       raisedByName:     flag.agentName,
       raisedAt:         flag.flaggedAt,
       status:           flag.status,
-      paramCategory:    flag.paramCategory ?? 'cat1',
       reviewNote:       flag.reviewNote ?? null,
       tlForwarded:      flag.status === 'tl_forwarded',
       agentNote:        flag.agentNote,

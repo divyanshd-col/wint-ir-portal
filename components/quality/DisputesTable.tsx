@@ -5,7 +5,6 @@ import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 
 interface Props {
-  dispositions: string[];
   onCountChange?: (count: number) => void;
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
@@ -37,7 +36,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   const [threadLoad,  setThreadLoad]  = useState<string | null>(null);
   const [newComment,  setNewComment]  = useState('');
   const [posting,     setPosting]     = useState(false);
-  const [raiserFilter, setRaiserFilter] = useState<'all' | 'tl_endorsed' | 'TL' | 'IR'>('all');
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [openDrop,     setOpenDrop]     = useState<string | null>(null);
@@ -112,11 +110,12 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     }
   }
 
-  const hasFilters = !!(chatIdSearch || raiserFilter !== 'all' || callsFilter !== 'all');
+  // The old "Raised by" chips (TL / TL Endorsed) are gone: every dispute that
+  // reaches QA has been forwarded by a TL, so the chip marked every row and the
+  // filters could never narrow anything down.
+  const hasFilters = !!(chatIdSearch || callsFilter !== 'all');
 
-  let visibleDisputes = raiserFilter === 'all' ? disputes
-    : raiserFilter === 'tl_endorsed' ? disputes.filter(d => d.tlForwarded)
-    : disputes.filter(d => d.raisedBy === raiserFilter);
+  let visibleDisputes = disputes;
 
   if (chatIdSearch) {
     const term = chatIdSearch.toLowerCase().trim();
@@ -160,13 +159,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
             outline: 'none', width: 140
           }}
         />
-        <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginLeft: 8 }}>Raised by</span>
-        {(['all', 'tl_endorsed', 'TL', 'IR'] as const).map(v => (
-          <button key={v} style={raiserFilter === v ? chipActive : chip} onClick={() => setRaiserFilter(v)}>
-            {v === 'all' ? 'All' : v === 'tl_endorsed' ? 'TL Endorsed ★' : v}
-          </button>
-        ))}
-
         {/* Calls filter */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button style={callsFilter !== 'all' ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'calls' ? null : 'calls')}>
@@ -190,7 +182,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
 
         <button
           disabled={!hasFilters}
-          onClick={() => { setChatIdSearch(''); setRaiserFilter('all'); setCallsFilter('all'); }}
+          onClick={() => { setChatIdSearch(''); setCallsFilter('all'); }}
           style={{
             ...chip,
             color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
@@ -267,14 +259,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       {d.raisedBy}
                     </span>
                     {d.raisedByName}
-                    {d.tlForwarded && (
-                      <span style={{
-                        marginLeft: 8, display: 'inline-block', fontSize: 10, fontWeight: 600,
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                        background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                        borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
-                      }}>TL Endorsed</span>
-                    )}
                   </td>
                   <td style={tdNum}>
                     {d.botIqsScore !== null ? (

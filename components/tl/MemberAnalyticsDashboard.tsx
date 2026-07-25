@@ -33,17 +33,19 @@ const PERIOD_LABELS: Record<Period, string> = { '7': '7 days', '30': '30 days', 
 
 interface ParamItem { key: string; label: string; altKey?: string; }
 
+// Keys are the canonical v4 db keys the member-analytics API now aggregates under
+// (see PASCAL_TO_DB in lib/param-keys.ts) — must stay in lockstep with that route.
 const CHAT_PARAM_DEFS: ParamItem[] = [
-  { key: 'technical',               label: 'Accuracy' },
-  { key: 'all_questions',           label: 'Issue Resolution' },
-  { key: 'expectation',             label: 'Expectation Setting & Follow-Through' },
-  { key: 'dissatisfactionhandling', label: 'Dissatisfaction Handling' },
-  { key: 'contextual',              label: 'Contextual & Personalization' },
-  { key: 'follow_up',               label: 'Post-Call Recap / Follow-up' },
-  { key: 'sentences',               label: 'Readability & Tone' },
-  { key: 'opening',                 label: 'Greeting & Handover' },
-  { key: 'call',                    label: 'Call Escalation Decision' },
-  { key: 'empathy',                 label: 'Empathy' },
+  { key: 'issue_resolution',           label: 'Issue Resolution' },
+  { key: 'accuracy',                   label: 'Accuracy' },
+  { key: 'expectation_follow_through', label: 'Expectation Setting & Follow-Through' },
+  { key: 'dissatisfactionhandling',    label: 'Dissatisfaction Handling' },
+  { key: 'personalization',            label: 'Personalization' },
+  { key: 'empathy',                    label: 'Empathy' },
+  { key: 'escalation_decision',        label: 'Call Escalation Decision' },
+  { key: 'readability',                label: 'Readability & Tone' },
+  { key: 'greeting_handover',          label: 'Greeting & Handover' },
+  { key: 'post_call_recap',            label: 'Post-Call Recap' },
 ];
 
 const CALL_PARAM_DEFS: ParamItem[] = [
@@ -234,25 +236,40 @@ export default function MemberAnalyticsDashboard() {
       {/* ── Page header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>Member Analytics</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>{agents.length <= 1 ? 'My Analytics' : 'Member Analytics'}</h1>
 
           {/* Agent selector */}
           <div ref={agentDropRef} style={{ position: 'relative' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2)' }}>
-              <span>Viewing:</span>
-              <button
-                onClick={() => setShowAgentDrop(p => !p)}
-                style={{
-                  height: 32, padding: '0 12px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
-                  borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
-                  fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                {loading && !selectedAgent ? <Skeleton w={80} h={14} /> : (selectedAgent || '—')}
-                <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
-              </button>
-            </div>
-            {showAgentDrop && agents.length > 0 && (
+            {agents.length <= 1 ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                <span>Viewing:</span>
+                <span
+                  style={{
+                    height: 32, padding: '0 12px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
+                    borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
+                    fontSize: 13, fontWeight: 500, color: 'var(--qa-text)',
+                  }}
+                >
+                  {loading && !selectedAgent ? <Skeleton w={80} h={14} /> : (selectedAgent || '—')}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                <span>Viewing:</span>
+                <button
+                  onClick={() => setShowAgentDrop(p => !p)}
+                  style={{
+                    height: 32, padding: '0 12px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
+                    borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
+                    fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {loading && !selectedAgent ? <Skeleton w={80} h={14} /> : (selectedAgent || '—')}
+                  <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
+                </button>
+              </div>
+            )}
+            {showAgentDrop && agents.length > 1 && (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40,
                 background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,

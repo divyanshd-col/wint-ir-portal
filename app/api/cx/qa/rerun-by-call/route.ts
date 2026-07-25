@@ -28,11 +28,11 @@ export async function POST(req: NextRequest) {
     authorized = true;
   }
 
-  // 2. Fallback to NextAuth session
+  // 2. Fallback to NextAuth session. TL is view-only for chat quality — admin only.
   if (!authorized) {
     const session = await getServerSession(authOptions);
     const user    = session?.user as any;
-    if (user && (user.isAdmin || user.role === 'tl')) {
+    if (user && user.isAdmin) {
       authorized = true;
     }
   }

@@ -1,12 +1,12 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import {
-  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS,
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
   V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
-import { PASCAL_TO_DB } from '@/lib/param-keys';
+import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ export interface EvalPanelProps {
   disposition:   string;
   parameters:    Record<string, { score: any; reasoning: string }>;
   gates?:        any;
-  mode:          'submit' | 'resolve' | 'view' | 'tl-browse';
+  mode:          'submit' | 'resolve' | 'view';
   dispute?: {
     raisedBy:       string;
     raisedByName:   string;
@@ -136,8 +136,17 @@ export default function EvalPanel({
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
 
-  const safeParamsForBotCheck: Record<string, any> = parameters?.__agent_parameters || parameters?.__bot_parameters || parameters || {};
-  const hasBotParams = !!(safeParamsForBotCheck && (safeParamsForBotCheck['issue_resolution'] || safeParamsForBotCheck['accuracy'] || safeParamsForBotCheck['correct_escalation'] || safeParamsForBotCheck['IssueResolution'] || safeParamsForBotCheck['Accuracy'] || safeParamsForBotCheck['clarity'] || safeParamsForBotCheck['Clarity']));
+  // Detect a bot chat by BOT-DISTINCTIVE parameters only. IssueResolution/Accuracy/
+  // Personalization are shared between the v4 human and bot rubrics, so keying off
+  // them forced every v4 human-only chat onto the bot tab. Look at __bot_parameters
+  // when present, otherwise the top level only if there is no __agent_parameters.
+  const BOT_ONLY_PARAM_KEYS = [
+    'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity',
+  ];
+  const botParamsSrc: Record<string, any> = parameters?.__bot_parameters
+    || (parameters?.__agent_parameters ? {} : parameters) || {};
+  const hasBotParams = Object.keys(botParamsSrc).some(k => BOT_ONLY_PARAM_KEYS.includes(k));
   const isBotChat = conversationType === 'bot' || hasBotParams;
   const isHybrid = conversationType === 'hybrid';
   const showTabs = isHybrid;
@@ -146,30 +155,12 @@ export default function EvalPanel({
 
   const isV4 = isV4Evaluation(parameters);
 
-  const V4_TO_V3_MAP: Record<string, string> = {
-    'Technical': 'accuracy',
-    'AllQuestions': 'issue_resolution',
-    'Expectation': 'expectationfollowthrough',
-    'Contextual': 'personalization',
-    'Sentences': 'readability',
-    'Opening': 'greetinghandover',
-    'Call': 'escalationdecision',
-    'Empathy': 'empathy',
-    'FollowUp': 'postcallrecap',
-    'DissatisfactionHandling': 'dissatisfactionhandling',
-  };
-
   function initAgentParams(): Record<string, ParamState> {
     const safeParams = parameters?.__agent_parameters || parameters || {};
     const state: Record<string, ParamState> = {};
     const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
     for (const pascal of paramOrderToUse) {
-      const dbKey = PASCAL_TO_DB[pascal] || pascal;
-      const v4Key = V4_TO_V3_MAP[pascal];
-      const raw   = (safeParams as any)[dbKey] 
-                 ?? (safeParams as any)[pascal]
-                 ?? (v4Key ? (safeParams as any)[v4Key] : undefined)
-                 ?? {};
+      const raw = isV4 ? resolveParamCell(safeParams, pascal) : ((safeParams as any)[PASCAL_TO_DB[pascal] || pascal] ?? (safeParams as any)[pascal] ?? {});
       state[pascal] = { score: normalizeScore(raw.score).value, reasoning: raw.comment ?? raw.reasoning ?? '' };
     }
     return state;
@@ -193,8 +184,6 @@ export default function EvalPanel({
   const activeParamOrder = activeTab === 'bot' ? BOT_PARAM_ORDER : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
   const activeParamNames = activeTab === 'bot' ? BOT_PARAM_NAMES : (isV4 ? PARAM_NAMES : V3_PARAM_NAMES);
   const activeWeights = activeTab === 'bot' ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
-  const activeCAT2Params = activeTab === 'bot' ? new Set<string>() : CAT2_PARAMS;
-  
   const currentParamState = activeTab === 'bot' ? botParamState : agentParamState;
 
   function pctLabel(key: string): string {
@@ -215,12 +204,6 @@ export default function EvalPanel({
   const [historyOpen,    setHistoryOpen]    = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const [tlGeneralNote,  setTlGeneralNote]  = useState('');
-  const [tlParamNotes,   setTlParamNotes]   = useState<Record<string, string>>({});
-  const [tlSubmitting,   setTlSubmitting]   = useState(false);
-  const [tlErr,          setTlErr]          = useState('');
-  const [tlDone,         setTlDone]         = useState<'submit' | 'override' | 'dispute' | null>(null);
-
   const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
 
   const disputeMap = new Map<string, { note: string }>(
@@ -232,10 +215,10 @@ export default function EvalPanel({
     for (const [key, s] of Object.entries(currentParamState)) {
       scores[key] = scoreToParamScore(s.score);
     }
-    return calculateIQS(scores, activeTab === 'bot');
+    // currentParamState is keyed by the active generation's PARAM_ORDER (v4 or V3),
+    // so pass isV4 to select the matching weight set. The bot tab uses BOT_WEIGHTS.
+    return calculateIQS(scores, activeTab === 'bot', isV4);
   })();
-
-  const failCount = Object.values(currentParamState).filter(s => s.score === 0.0).length;
 
   const gatesData = gates || (parameters as any)?.__gates || (parameters as any)?.gates;
 
@@ -292,14 +275,6 @@ export default function EvalPanel({
   })();
 
   const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve') : (isModified ? 'Override' : 'Submit');
-
-  const changedParamsInTL = mode === 'tl-browse' ? activeParamOrder.filter(p => {
-    const orig = activeTab === 'bot' ? initBotParams()[p] : initAgentParams()[p];
-    return currentParamState[p].score !== orig.score;
-  }) : [];
-  const tlCat1Changed = changedParamsInTL.some(p => CAT1_PARAMS.has(p));
-  const tlCat2Changed = changedParamsInTL.some(p => activeCAT2Params.has(p));
-  const tlActionLabel = tlCat1Changed ? 'Raise Dispute' : tlCat2Changed ? 'Correct Parameters' : 'Submit';
 
   // Fetch transcript on mount
   useEffect(() => {
@@ -408,66 +383,6 @@ export default function EvalPanel({
     }
   }
 
-  // TL: submit / override / raise dispute
-  async function submitTLAction() {
-    if (tlActionLabel === 'Correct Parameters' && !tlGeneralNote.trim()) {
-      setTlErr('Please add a note explaining your change.');
-      return;
-    }
-    setTlSubmitting(true);
-    setTlErr('');
-    try {
-      if (tlActionLabel === 'Submit') {
-        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'tl-submit', note: tlGeneralNote.trim() || undefined }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-        setTlDone('submit');
-      } else if (tlActionLabel === 'Correct Parameters') {
-        const params: Record<string, { score: number | null; reasoning: string }> = {};
-        for (const pascal of changedParamsInTL) {
-          const st = activeTab === 'bot' ? botParamState[pascal] : agentParamState[pascal];
-          params[PASCAL_TO_DB[pascal] || pascal] = { score: st.score, reasoning: st.reasoning };
-        }
-        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'tl-override', parameters: params, note: tlGeneralNote.trim() || undefined }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-        setTlDone('override');
-      } else {
-        // Raise Dispute — require a note per CAT1 changed param
-        const cat1Params = changedParamsInTL.filter(p => CAT1_PARAMS.has(p));
-        const missing = cat1Params.filter(p => !(tlParamNotes[p] ?? '').trim());
-        if (missing.length) {
-          setTlErr('Add a note for each challenged parameter.');
-          setTlSubmitting(false);
-          return;
-        }
-        const res = await fetch('/api/quality/flag', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId,
-            agentNote: '',
-            challengedParams: cat1Params.map(p => ({ param: p, note: (tlParamNotes[p] ?? '').trim() })),
-            raisedByRole: 'tl',
-          }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-        setTlDone('dispute');
-      }
-      onDone();
-    } catch (e: any) {
-      setTlErr(e.message ?? 'Action failed');
-    } finally {
-      setTlSubmitting(false);
-    }
-  }
-
   // ── Date formatting ───────────────────────────────────────────────────────
   function fmtDate(iso: string) {
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -497,12 +412,16 @@ export default function EvalPanel({
     margin: 16,
   };
   const leftPanel: React.CSSProperties = {
-    width: 400, flexShrink: 0,
+    // Wider param column, but allowed to shrink back to 400 when space is
+    // tight so the transcript pane stays readable.
+    width: 496, minWidth: 400, flexShrink: 1,
     borderRight: '1px solid var(--qa-border)',
     display: 'flex', flexDirection: 'column',
   };
   const rightPanel: React.CSSProperties = {
-    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+    // minWidth keeps the transcript readable — below it, the left column
+    // shrinks back toward 400 instead.
+    flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column',
   };
 
   return (
@@ -517,17 +436,10 @@ export default function EvalPanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <ScoreRing score={liveIqs} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     {agentName}
-                    <span style={{
-                      height: 20, padding: '0 8px', border: '1px solid var(--qa-border)',
-                      borderRadius: 999, fontSize: 12, color: 'var(--qa-text-2)',
-                      display: 'inline-flex', alignItems: 'center', fontWeight: 400,
-                    }}>
-                      {failCount} fail{failCount !== 1 ? 's' : ''}
-                    </span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                  <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
                     <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{chatId}</span>
                     <span>·</span>
                     <span>{fmtDate(closedAt)}</span>
@@ -557,42 +469,6 @@ export default function EvalPanel({
                 </div>
               </div>
 
-              {/* Dispute banner */}
-              {dispute && dispute.challengedParams.length > 0 && (
-                <div style={{
-                  marginTop: 12, padding: '8px 12px',
-                  border: '1px solid var(--qa-border)', borderRadius: 6,
-                  background: 'var(--qa-gray-50)', fontSize: 12,
-                  color: 'var(--qa-text-2)', lineHeight: 1.6,
-                  display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
-                }}>
-                  <span style={{
-                    height: 18, padding: '0 7px', borderRadius: 999,
-                    background: 'var(--qa-gray-700)', color: '#fff',
-                    fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                    letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
-                  }}>
-                    {dispute.raisedBy} disputed
-                  </span>
-                  {dispute.challengedParams.map(d => (
-                    <strong key={d.param} style={{ color: 'var(--qa-text)' }}>
-                      {PARAM_NAMES[d.param] ?? d.param}
-                    </strong>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Compliance Gates Card */}
-            <div style={{ margin: '12px 16px 0 16px', background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12, flexShrink: 0 }}>
-              <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                Compliance Gates: <span style={{ color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d' }}>{overallGateResult}</span>
-              </h5>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                <div>G1 Advice: <ScoreBadge score={g1Badge} /></div>
-                <div>G2 Fabrication: <ScoreBadge score={g2Badge} /></div>
-                <div>G3 Identity: <ScoreBadge score={g3Badge} /></div>
-              </div>
             </div>
 
             {/* Param list */}
@@ -630,15 +506,23 @@ export default function EvalPanel({
               </div>
             )}
             <div style={{ flex: 1, overflowY: 'auto' }}>
+              {/* Compliance Gates — scrolls away with the params to free space for them */}
+              <div style={{
+                margin: '12px 16px', background: '#f8fafc', border: '1px solid var(--qa-border)',
+                borderRadius: 8, padding: '10px 12px',
+                display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, fontSize: 12,
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                  Compliance Gates: <span style={{ color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d' }}>{overallGateResult}</span>
+                </span>
+                <span>G1 Advice: <ScoreBadge score={g1Badge} /></span>
+                <span>G2 Fabrication: <ScoreBadge score={g2Badge} /></span>
+                <span>G3 Identity: <ScoreBadge score={g3Badge} /></span>
+              </div>
               {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
                 const disputed = disputeMap.get(pascal);
-                // QA modes: CAT2 params are TL's domain — hide entirely from QA
-                const isTLParam = activeCAT2Params.has(pascal);
-                const qaReadOnly = (mode === 'submit' || mode === 'resolve') && isTLParam;
-                // In tl-browse, CAT1 changed params get a highlight
-                const tlChanged = mode === 'tl-browse' && changedParamsInTL.includes(pascal);
-                const paramReadOnly = isReadOnly || qaReadOnly;
+                const paramReadOnly = isReadOnly;
                 return (
                   <div key={pascal} style={{
                     padding: '14px 16px',
@@ -646,12 +530,10 @@ export default function EvalPanel({
                     ...(disputed ? {
                       background: 'var(--qa-gray-50)',
                       boxShadow: 'inset 3px 0 0 var(--qa-gray-700)',
-                    } : tlChanged ? {
-                      background: 'var(--qa-gray-50)',
                     } : {}),
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: tlChanged ? 600 : 500, flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
                         {activeParamNames[pascal]}
                         {disputed && (
                           <span style={{
@@ -662,16 +544,6 @@ export default function EvalPanel({
                             verticalAlign: 'middle',
                           }}>
                             {dispute?.raisedBy} disputes
-                          </span>
-                        )}
-                        {qaReadOnly && (
-                          <span style={{
-                            marginLeft: 8, height: 16, padding: '0 6px', borderRadius: 4,
-                            background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                            fontSize: 10, fontWeight: 500, color: 'var(--qa-text-3)',
-                            display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle',
-                          }}>
-                            TL
                           </span>
                         )}
                       </span>
@@ -810,9 +682,6 @@ export default function EvalPanel({
               padding: '0 16px', borderBottom: '1px solid var(--qa-border)',
               display: 'flex', alignItems: 'center', gap: 8, height: 52, flexShrink: 0,
             }}>
-              <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
-                {transcript == null ? '…' : `${transcript.length} messages`}
-              </span>
               {/* History toggle */}
               <button
                 onClick={() => {
@@ -846,30 +715,30 @@ export default function EvalPanel({
                   </svg>
                 </button>
               )}
-              <div style={{ flex: 1 }} />
-              {/* TL: dynamic action button */}
-              {mode === 'tl-browse' && !tlDone && (
-                <button
-                  onClick={submitTLAction}
-                  disabled={tlSubmitting}
-                  style={{
-                    height: 36, padding: '0 16px', borderRadius: 8,
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                    cursor: tlSubmitting ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex', alignItems: 'center',
-                    border: '1px solid var(--qa-gray-700)',
-                    background: 'var(--qa-gray-700)', color: '#fff',
-                    opacity: tlSubmitting ? 0.7 : 1,
-                  }}
-                >
-                  {tlSubmitting ? 'Saving…' : tlActionLabel}
-                </button>
-              )}
-              {mode === 'tl-browse' && tlDone && (
-                <span style={{ fontSize: 13, color: 'var(--qa-text-2)', fontWeight: 500 }}>
-                  {tlDone === 'dispute' ? 'Dispute raised ✓' : tlDone === 'override' ? 'Override saved ✓' : 'Submitted ✓'}
-                </span>
-              )}
+              {/* Disputed params — truncates so it never pushes the action buttons off */}
+              <div style={{
+                flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8,
+                overflow: 'hidden', whiteSpace: 'nowrap',
+              }}>
+                {dispute && dispute.challengedParams.length > 0 && (
+                  <>
+                    <span style={{
+                      height: 18, padding: '0 7px', borderRadius: 999, flexShrink: 0,
+                      background: 'var(--qa-gray-700)', color: '#fff',
+                      fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+                      letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
+                    }}>
+                      {dispute.raisedBy} disputed
+                    </span>
+                    <span
+                      title={dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    >
+                      {dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                    </span>
+                  </>
+                )}
+              </div>
               {/* Primary action (submit/resolve modes) */}
               {(mode === 'submit' || mode === 'resolve') && (
                 <button
@@ -897,52 +766,6 @@ export default function EvalPanel({
                 fontSize: 16, lineHeight: 1,
               }}>×</button>
             </div>
-
-            {/* TL note area (shown when params are changed) */}
-            {mode === 'tl-browse' && changedParamsInTL.length > 0 && !tlDone && (
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
-                {tlActionLabel === 'Raise Dispute' ? (
-                  // Per-param note for each CAT1 param being disputed
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>
-                      Note required per challenged parameter
-                    </div>
-                    {changedParamsInTL.filter(p => CAT1_PARAMS.has(p)).map(p => (
-                      <div key={p}>
-                        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--qa-text-2)', marginBottom: 3 }}>{p}</div>
-                        <textarea
-                          value={tlParamNotes[p] ?? ''}
-                          onChange={e => setTlParamNotes(prev => ({ ...prev, [p]: e.target.value }))}
-                          placeholder={`Why should ${p} be corrected?`}
-                          rows={2}
-                          style={{
-                            width: '100%', resize: 'vertical',
-                            border: '1px solid var(--qa-border)', borderRadius: 6,
-                            padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                            lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <textarea
-                    value={tlGeneralNote}
-                    onChange={e => setTlGeneralNote(e.target.value)}
-                    placeholder={tlActionLabel === 'Submit' ? 'Optional comment…' : 'Required: explain your change…'}
-                    rows={2}
-                    style={{
-                      width: '100%', resize: 'vertical',
-                      border: '1px solid var(--qa-border)', borderRadius: 6,
-                      padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                      lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
-                    }}
-                  />
-                )}
-                {tlErr && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600, marginTop: 4 }}>{tlErr}</div>}
-              </div>
-            )}
 
             {/* History panel */}
             {historyOpen && (

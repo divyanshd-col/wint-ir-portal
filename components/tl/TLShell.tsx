@@ -17,7 +17,7 @@ export default function TLShell({ role, name, children }: Props) {
       role={role}
       name={name}
       navItems={NAV_ALL}
-      roleLabel={role === 'admin' ? 'Admin' : 'Team Lead'}
+      roleLabel={role === 'admin' ? 'Admin' : role === 'agent' ? 'IR Agent' : 'Team Lead'}
     >
       {children}
     </RoleShell>

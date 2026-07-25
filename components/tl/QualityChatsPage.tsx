@@ -122,11 +122,6 @@ function EvaluatedChatsSection() {
 
   function applyFilters() { setPage(1); setPageSizeDrop(false); fetchChats(1); }
 
-  function removeChat(chatId: string) {
-    setChats(prev => prev.filter(c => c.chatId !== chatId));
-    setExpandedId(null);
-  }
-
   const totalPages = Math.ceil(total / limit);
 
   const inputStyle: React.CSSProperties = {
@@ -244,7 +239,7 @@ function EvaluatedChatsSection() {
           ) : chats.length === 0 ? (
             <tr>
               <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
-                No chats pending TL review
+                No evaluated chats found for your team
               </td>
             </tr>
           ) : (
@@ -285,7 +280,7 @@ function EvaluatedChatsSection() {
                         display: 'inline-flex', alignItems: 'center', gap: 5,
                       }}
                     >
-                      Correct Parameters{' '}
+                      View{' '}
                       <span style={{
                         fontSize: 11, color: 'var(--qa-text-2)',
                         transform: expandedId === chat.chatId ? 'rotate(180deg)' : 'none',
@@ -304,8 +299,8 @@ function EvaluatedChatsSection() {
                     parameters={chat.parameters}
                     gates={(chat as any).gates}
                     mobileNumber={chat.mobileNumber}
-                    mode="tl-browse"
-                    onDone={() => removeChat(chat.chatId)}
+                    mode="view"
+                    onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={7}
                   />
@@ -332,13 +327,17 @@ function EvaluatedChatsSection() {
   );
 }
 
-// ─── Section B/C — Disputes ───────────────────────────────────────────────────
+// ─── Section — Disputes ────────────────────────────────────────────────────────
+// 'pending': TL's actionable queue — the only action available is forwarding the
+// dispute on to QA (TL has no scoring power, so there's no self-resolve option).
+// 'resolved': read-only history of disputes already forwarded or given a final
+// decision by QA.
 function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
   const [disputes,   setDisputes]   = useState<TLDisputeRow[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning,  setActioning]  = useState<string | null>(null);
-  const [actionDone, setActionDone] = useState<Map<string, 'forwarded' | 'resolved'>>(new Map());
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -357,6 +356,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
 
   async function forwardToQA(flagId: string) {
     setActioning(flagId);
+    setActionError(null);
     try {
       const res = await fetch('/api/cx/tl/disputes/forward', {
         method: 'POST',
@@ -364,48 +364,42 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         body: JSON.stringify({ flagId }),
       });
       if (res.ok) {
-        setActionDone(prev => new Map([...prev, [flagId, 'forwarded']]));
+        // Row leaves this queue immediately; it reappears under "Disputes
+        // Reviewed" as tl_forwarded on the next load.
         setDisputes(prev => prev.filter(d => d.flagId !== flagId));
+      } else {
+        // Don't fail silently — the TL would think the dispute moved on to QA.
+        setActionError('Could not forward that dispute — please retry.');
       }
+    } catch {
+      setActionError('Could not forward that dispute — please retry.');
     } finally {
       setActioning(null);
     }
   }
 
-  async function resolveDispute(flagId: string) {
-    setActioning(flagId);
-    try {
-      const res = await fetch('/api/cx/tl/disputes/resolve', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flagId }),
-      });
-      if (res.ok) {
-        setActionDone(prev => new Map([...prev, [flagId, 'resolved']]));
-        setDisputes(prev => prev.filter(d => d.flagId !== flagId));
-      }
-    } finally {
-      setActioning(null);
-    }
-  }
-
-  const colCount = status === 'pending' ? 10 : 9;
+  const colCount = 9;
 
   return (
+    <>
+    {actionError && (
+      <div style={{
+        padding: '10px 16px', fontSize: 13, color: '#b91c1c',
+        background: '#fef2f2', borderBottom: '1px solid var(--qa-border)',
+      }}>{actionError}</div>
+    )}
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
           <th style={th}>Agent</th>
           <th style={th}>Raised By</th>
-          <th style={th}>Category</th>
           <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
           <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
           <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
           <th style={th}>CSAT</th>
           <th style={th}>Raised</th>
-          {status === 'pending' && <th style={{ ...th, textAlign: 'right' }}>Action</th>}
-          {status === 'resolved' && <th style={{ ...th, textAlign: 'right' }}>Outcome</th>}
+          <th style={{ ...th, textAlign: 'right' }}>{status === 'pending' ? 'Action' : 'Outcome'}</th>
         </tr>
       </thead>
       <tbody>
@@ -444,16 +438,6 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                   }}>{d.raisedBy}</span>
                   {d.raisedByName}
                 </td>
-                <td style={{ ...td, fontSize: 12 }}>
-                  <span style={{
-                    display: 'inline-block', fontSize: 10, fontWeight: 600,
-                    textTransform: 'uppercase', letterSpacing: '0.04em',
-                    background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                    borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
-                  }}>
-                    {d.paramCategory === 'cat2' ? 'TL — CAT2' : 'QA — CAT1'}
-                  </span>
-                </td>
                 <td style={tdNum}>
                   {d.botIqsScore != null ? <IQSBadge score={d.botIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                 </td>
@@ -469,81 +453,40 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>
                 </td>
-                {status === 'pending' && (
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <td style={{ ...td, textAlign: 'right' }}>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    {status === 'resolved' && d.reviewNote && (
+                      <span style={{ fontSize: 12, color: 'var(--qa-text-3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={d.reviewNote}>{d.reviewNote}</span>
+                    )}
+                    <button
+                      onClick={() => setExpandedId(prev => prev === d.chatId ? null : d.chatId)}
+                      style={{
+                        border: '1px solid var(--qa-border)', padding: '0 10px',
+                        height: 28, borderRadius: 8, fontFamily: 'inherit', fontSize: 12,
+                        color: 'var(--qa-text-2)', cursor: 'pointer',
+                        background: expandedId === d.chatId ? 'var(--qa-gray-100)' : 'transparent',
+                      }}
+                    >
+                      View
+                    </button>
+                    {status === 'pending' && (
                       <button
-                        onClick={() => setExpandedId(prev => prev === d.chatId ? null : d.chatId)}
+                        onClick={() => forwardToQA(d.flagId)}
+                        disabled={actioning === d.flagId}
                         style={{
-                          border: '1px solid var(--qa-border)', padding: '0 10px',
-                          height: 28, borderRadius: 8, fontFamily: 'inherit', fontSize: 12,
-                          color: 'var(--qa-text-2)', cursor: 'pointer',
-                          background: expandedId === d.chatId ? 'var(--qa-gray-100)' : 'transparent',
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                          height: 28, padding: '0 12px', borderRadius: 8,
+                          fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                          background: 'var(--qa-gray-700)', color: '#fff',
+                          border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
+                          opacity: actioning === d.flagId ? 0.6 : 1,
                         }}
                       >
-                        View
+                        {actioning === d.flagId ? '…' : 'Forward to QA'}
                       </button>
-                      {!actionDone.has(d.flagId) && d.paramCategory === 'cat2' && (
-                        <button
-                          onClick={() => resolveDispute(d.flagId)}
-                          disabled={actioning === d.flagId}
-                          style={{
-                            height: 28, padding: '0 12px', borderRadius: 8,
-                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                            background: 'var(--qa-gray-700)', color: '#fff',
-                            border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1,
-                          }}
-                        >
-                          {actioning === d.flagId ? '…' : 'Resolve'}
-                        </button>
-                      )}
-                      {!actionDone.has(d.flagId) && d.paramCategory === 'cat1' && !d.tlForwarded && (
-                        <button
-                          onClick={() => forwardToQA(d.flagId)}
-                          disabled={actioning === d.flagId}
-                          style={{
-                            height: 28, padding: '0 12px', borderRadius: 8,
-                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                            background: 'var(--qa-gray-700)', color: '#fff',
-                            border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1,
-                          }}
-                        >
-                          {actioning === d.flagId ? '…' : 'Forward to QA'}
-                        </button>
-                      )}
-                      {(actionDone.get(d.flagId) === 'forwarded' || d.tlForwarded) && (
-                        <span style={{ fontSize: 12, color: 'var(--qa-text-2)', fontWeight: 500 }}>✓ Forwarded</span>
-                      )}
-                      {actionDone.get(d.flagId) === 'resolved' && (
-                        <span style={{ fontSize: 12, color: 'var(--qa-text-2)', fontWeight: 500 }}>✓ Resolved</span>
-                      )}
-                    </div>
-                  </td>
-                )}
-                {status === 'resolved' && (
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      {d.reviewNote && (
-                        <span style={{ fontSize: 12, color: 'var(--qa-text-3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                          title={d.reviewNote}>{d.reviewNote}</span>
-                      )}
-                      <button
-                        onClick={() => setExpandedId(prev => prev === d.chatId ? null : d.chatId)}
-                        style={{
-                          border: '1px solid var(--qa-border)', padding: '0 10px',
-                          height: 28, borderRadius: 8, fontFamily: 'inherit', fontSize: 12,
-                          color: 'var(--qa-text-2)', cursor: 'pointer',
-                          background: expandedId === d.chatId ? 'var(--qa-gray-100)' : 'transparent',
-                        }}
-                      >
-                        View
-                      </button>
-                    </div>
-                  </td>
-                )}
+                    )}
+                  </div>
+                </td>
               </tr>
 
               {/* Dispute detail: agent note + challenged params + eval panel */}
@@ -592,6 +535,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         )}
       </tbody>
     </table>
+    </>
   );
 }
 
@@ -617,21 +561,21 @@ export default function QualityChatsPage() {
 
       <Section
         title="Evaluated Chats"
-        subtitle="Chats with IQS < 85 and CAT 2 parameter failures pending your review"
+        subtitle="Your team's recently evaluated chats"
       >
         <EvaluatedChatsSection />
       </Section>
 
       <Section
         title="Disputes Raised"
-        subtitle="IR disputes pending your review — resolve CAT2 params yourself, forward CAT1 params to QA"
+        subtitle="Disputes your team raised — review and forward to QA for a final decision"
       >
         <DisputesSection status="pending" />
       </Section>
 
       <Section
         title="Disputes Reviewed"
-        subtitle="Disputes you resolved (CAT2) or that QA has made a final decision on (CAT1)"
+        subtitle="Disputes you've forwarded, and QA's final decisions"
       >
         <DisputesSection status="resolved" />
       </Section>
