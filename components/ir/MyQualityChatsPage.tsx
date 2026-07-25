@@ -160,7 +160,6 @@ interface DisputeRow {
   subDisposition?: string;
   closedAt: string;
   status: string;
-  paramCategory?: string;
   challengedParams: { param: string; note: string }[];
   agentNote: string;
   reviewNote: string;
@@ -779,7 +778,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <colgroup>
               <col style={{ width: 180 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 100 }} />
               <col style={{ width: 85 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 85 }} />
@@ -792,7 +790,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={TH_BASE}>Category</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Bot)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
@@ -805,13 +802,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingPending ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading raised disputes…
                   </td>
                 </tr>
               ) : pendingDisputes.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No pending disputes raised
                   </td>
                 </tr>
@@ -819,9 +816,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 pendingDisputes.map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
                   const isLast = idx === pendingDisputes.length - 1 && !isOpen;
-                  // 'pending' is where every NEW dispute lands (straight to QA);
-                  // 'ir_pending_tl'/'tl_forwarded' only appear on disputes raised
-                  // before the CAT1/CAT2 TL stage was removed.
+                  // 'pending'/'ir_pending_tl' = awaiting TL review; 'tl_forwarded' =
+                  // TL has forwarded it on to QA for a final decision.
                   const statusText = row.status === 'pending' || row.status === 'ir_pending_tl'
                     ? 'Raised'
                     : row.status === 'tl_forwarded' ? 'Forwarded to QA' : 'Under Review';
@@ -837,21 +833,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {agentName}
-                        </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
-                          <span
-                            style={{
-                              padding: '2px 6px',
-                              borderRadius: 4,
-                              background: '#F4F4F5',
-                              border: '1px solid #E4E4E7',
-                              fontSize: 11,
-                              fontWeight: 600,
-                              textTransform: 'uppercase',
-                            }}
-                          >
-                            {row.paramCategory === 'cat2' ? 'TL - CAT2' : row.paramCategory === 'cat1' ? 'QA - CAT1' : 'QA'}
-                          </span>
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.botIqsScore ?? null} />
@@ -947,7 +928,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           reviewNote={row.reviewNote}
                           flagId={row.flagId}
                           flagStatus={row.status}
-                          colSpan={10}
+                          colSpan={9}
                           onClose={() => setExpandedDisputeId(null)}
                         />
                       )}

@@ -4,12 +4,14 @@ import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAu
 import type { IQSFlag, IQSChallengedParam, IQSAuditEntry } from '@/lib/store';
 import { randomUUID } from 'crypto';
 
-// TL is view-only — only QA/admin can act on a dispute.
+// Only QA/admin can give a dispute its final review decision — TL's only power
+// over a dispute is forwarding it on (see /api/cx/tl/disputes/forward).
 function reviewAccess(session: any) {
   return ['admin', 'quality'].includes(session?.user?.role || '');
 }
 
-// Agent-raised disputes go straight to QA — no CAT1/CAT2 split, no TL stage.
+// Every agent-raised dispute goes to the TL first for review/forwarding — no
+// CAT1/CAT2 split, just a single queue the TL forwards on to QA.
 export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'agent']);
   if (response) return response;
@@ -101,8 +103,8 @@ export async function PATCH(req: NextRequest) {
     const flag = flags.find((f: any) => f.id === id);
     if (!flag) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
     if (role === 'agent' && flag.agentEmail !== email) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    // 'pending' is the steady state for a fresh dispute now that it goes straight to QA;
-    // 'ir_pending_tl' is kept for any dispute raised before the CAT1/CAT2/TL stage was removed.
+    // Agent can only withdraw a dispute while it's still awaiting TL review —
+    // once forwarded to QA, it's out of the agent's hands.
     if (flag.status !== 'ir_pending_tl' && flag.status !== 'pending') {
       return NextResponse.json({ error: 'Can only cancel pending disputes' }, { status: 400 });
     }

@@ -230,12 +230,21 @@ export interface IQSFlag {
   raisedByRole: 'ir' | 'tl';
   /**
    * Historical: 'cat1'/'cat2' routed a dispute through the old CAT1/CAT2 TL
-   * split. Disputes now go straight to QA, so new flags use 'qa'. Kept
-   * non-optional — iqs_flags.param_category is NOT NULL in Postgres.
+   * ownership split (retired). New flags always use 'qa' — every dispute now
+   * follows the same single Agent → TL → QA path regardless of which
+   * parameter was challenged. Kept non-optional — iqs_flags.param_category
+   * is NOT NULL in Postgres.
    */
   paramCategory: 'cat1' | 'cat2' | 'qa';
   /** links sibling flags created from the same mixed IR dispute (historical only) */
   parentFlagId?: string;
+  /**
+   * 'ir_pending_tl' / 'pending' — awaiting TL review.
+   * 'tl_forwarded'             — TL forwarded it on to QA for a final decision.
+   * 'tl_resolved'              — historical only; TL no longer resolves disputes.
+   * 'reviewed'                 — QA has made the final decision.
+   * 'cancelled'                — agent withdrew it while still awaiting TL.
+   */
   status: 'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
   reviewedBy?: string;
   reviewedAt?: string;

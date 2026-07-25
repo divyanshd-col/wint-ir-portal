@@ -22,9 +22,8 @@ export async function GET(req: NextRequest) {
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
 
   if (statusFilter === 'pending') {
-    // 'pending' is where a fresh dispute lands now that it goes straight to QA.
-    // 'ir_pending_tl'/'tl_forwarded' are kept so disputes raised before the
-    // CAT1/CAT2/TL stage was removed still show up as pending.
+    // Still open from the agent's perspective: awaiting TL ('pending'/'ir_pending_tl')
+    // or forwarded on to QA ('tl_forwarded') but not yet given a final decision.
     flags = flags.filter(f => f.status === 'pending' || f.status === 'ir_pending_tl' || f.status === 'tl_forwarded');
   } else if (statusFilter === 'resolved') {
     flags = flags.filter(f => f.status === 'tl_resolved' || f.status === 'reviewed');
@@ -88,7 +87,6 @@ export async function GET(req: NextRequest) {
       subDisposition,
       closedAt: closedAt || f.flaggedAt,
       status: f.status,
-      paramCategory: f.paramCategory,
       challengedParams: f.challengedParams || [],
       agentNote: f.agentNote || '',
       reviewNote: f.reviewNote || '',

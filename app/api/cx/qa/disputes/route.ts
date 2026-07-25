@@ -69,15 +69,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     return NextResponse.json({ disputes: [] });
   }
 
-  // Fetch all open flags. QA is the only dispute resolver now:
-  //  - 'pending'       — every new agent-raised dispute (goes straight to QA)
-  //  - 'tl_forwarded'  — historical, forwarded by TL before the TL stage was removed
-  //  - 'ir_pending_tl' — historical, was waiting on TL; TL can no longer action
-  //    disputes, so surface these to QA too or they stay pending forever.
+  // QA only sees disputes once TL has forwarded them — 'pending'/'ir_pending_tl'
+  // are still awaiting TL review and stay off QA's queue until forwarded.
   const rawFlags = await storeGetIQSFlags();
   const pendingFlags: IQSFlag[] = rawFlags
     .map(r => { try { return JSON.parse(r) as IQSFlag; } catch { return null; } })
-    .filter((f): f is IQSFlag => f !== null && (f.status === 'tl_forwarded' || f.status === 'pending' || f.status === 'ir_pending_tl'));
+    .filter((f): f is IQSFlag => f !== null && f.status === 'tl_forwarded');
 
   log.info(ROUTE, 'flags', { total: rawFlags.length, pending: pendingFlags.length });
 

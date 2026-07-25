@@ -327,14 +327,17 @@ function EvaluatedChatsSection() {
   );
 }
 
-// ─── Section — Disputes (read-only history) ───────────────────────────────────
-// TL no longer actions disputes — agent disputes go straight to QA. This is a
-// historical, read-only view of disputes already resolved for their team.
-function DisputesSection() {
-  const status = 'resolved' as const;
+// ─── Section — Disputes ────────────────────────────────────────────────────────
+// 'pending': TL's actionable queue — the only action available is forwarding the
+// dispute on to QA (TL has no scoring power, so there's no self-resolve option).
+// 'resolved': read-only history of disputes already forwarded or given a final
+// decision by QA.
+function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
   const [disputes,   setDisputes]   = useState<TLDisputeRow[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [actioning,  setActioning]  = useState<string | null>(null);
+  const [forwarded,  setForwarded]  = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -349,7 +352,24 @@ function DisputesSection() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [status]);
+
+  async function forwardToQA(flagId: string) {
+    setActioning(flagId);
+    try {
+      const res = await fetch('/api/cx/tl/disputes/forward', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flagId }),
+      });
+      if (res.ok) {
+        setForwarded(prev => new Set(prev).add(flagId));
+        setDisputes(prev => prev.filter(d => d.flagId !== flagId));
+      }
+    } finally {
+      setActioning(null);
+    }
+  }
 
   const colCount = 9;
 
@@ -365,7 +385,7 @@ function DisputesSection() {
           <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
           <th style={th}>CSAT</th>
           <th style={th}>Raised</th>
-          <th style={{ ...th, textAlign: 'right' }}>Outcome</th>
+          <th style={{ ...th, textAlign: 'right' }}>{status === 'pending' ? 'Action' : 'Outcome'}</th>
         </tr>
       </thead>
       <tbody>
@@ -382,7 +402,7 @@ function DisputesSection() {
         ) : disputes.length === 0 ? (
           <tr>
             <td colSpan={colCount} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
-              No resolved disputes yet
+              {status === 'pending' ? 'No disputes pending' : 'No resolved disputes yet'}
             </td>
           </tr>
         ) : (
@@ -421,7 +441,7 @@ function DisputesSection() {
                 </td>
                 <td style={{ ...td, textAlign: 'right' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    {d.reviewNote && (
+                    {status === 'resolved' && d.reviewNote && (
                       <span style={{ fontSize: 12, color: 'var(--qa-text-3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         title={d.reviewNote}>{d.reviewNote}</span>
                     )}
@@ -436,6 +456,24 @@ function DisputesSection() {
                     >
                       View
                     </button>
+                    {status === 'pending' && !forwarded.has(d.flagId) && (
+                      <button
+                        onClick={() => forwardToQA(d.flagId)}
+                        disabled={actioning === d.flagId}
+                        style={{
+                          height: 28, padding: '0 12px', borderRadius: 8,
+                          fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                          background: 'var(--qa-gray-700)', color: '#fff',
+                          border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
+                          opacity: actioning === d.flagId ? 0.6 : 1,
+                        }}
+                      >
+                        {actioning === d.flagId ? '…' : 'Forward to QA'}
+                      </button>
+                    )}
+                    {status === 'pending' && forwarded.has(d.flagId) && (
+                      <span style={{ fontSize: 12, color: 'var(--qa-text-2)', fontWeight: 500 }}>✓ Forwarded</span>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -517,10 +555,17 @@ export default function QualityChatsPage() {
       </Section>
 
       <Section
-        title="Disputes Reviewed"
-        subtitle="Disputes your team raised that QA has made a final decision on"
+        title="Disputes Raised"
+        subtitle="Disputes your team raised — review and forward to QA for a final decision"
       >
-        <DisputesSection />
+        <DisputesSection status="pending" />
+      </Section>
+
+      <Section
+        title="Disputes Reviewed"
+        subtitle="Disputes you've forwarded, and QA's final decisions"
+      >
+        <DisputesSection status="resolved" />
       </Section>
 
     </div>
