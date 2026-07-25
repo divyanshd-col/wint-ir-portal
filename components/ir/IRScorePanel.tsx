@@ -35,27 +35,82 @@ interface IRScorePanelProps {
   onDisputeRaised?: () => void;
 }
 
-const DB_KEY_TO_PASCAL: Record<string, string> = {
-  technical: 'Technical', all_questions: 'AllQuestions', expectation: 'Expectation',
-  contextual: 'Contextual', follow_up: 'FollowUp', sentences: 'Sentences',
-  process: 'Process', opening: 'Opening', call: 'Call', grammar: 'Grammar', empathy: 'Empathy',
+const KEY_MAP: Record<string, string> = {
+  technical: 'Technical',
+  accuracy: 'Technical',
+  Accuracy: 'Technical',
+
+  all_questions: 'AllQuestions',
+  issue_resolution: 'AllQuestions',
+  IssueResolution: 'AllQuestions',
+
+  expectation: 'Expectation',
+  expectation_setting: 'Expectation',
+  expectationfollowthrough: 'Expectation',
+  ExpectationSetting: 'Expectation',
+
   dissatisfactionhandling: 'DissatisfactionHandling',
-  issue_resolution: 'IssueResolution', accuracy: 'Accuracy', correct_escalation: 'CorrectEscalation',
-  no_repetition: 'NoRepetition', personalization: 'Personalization', expectation_setting: 'ExpectationSetting',
-  clarity: 'Clarity',
+  dissatisfaction_handling: 'DissatisfactionHandling',
+  DissatisfactionHandling: 'DissatisfactionHandling',
+
+  contextual: 'Contextual',
+  personalization: 'Contextual',
+  Personalization: 'Contextual',
+
+  follow_up: 'FollowUp',
+  no_repetition: 'FollowUp',
+  postcallrecap: 'FollowUp',
+  NoRepetition: 'FollowUp',
+
+  sentences: 'Sentences',
+  readability: 'Sentences',
+  Readability: 'Sentences',
+
+  process: 'Process',
+
+  opening: 'Opening',
+  greetinghandover: 'Opening',
+  GreetingHandover: 'Opening',
+
+  call: 'Call',
+  escalationdecision: 'Call',
+
+  grammar: 'Grammar',
+  empathy: 'Empathy',
 };
 
 function normalizeParams(raw: Record<string, any> | null) {
   if (!raw) return {} as Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }>;
   const safe = raw.__agent_parameters || raw;
   const out: Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }> = {};
+
   for (const [k, v] of Object.entries(safe)) {
     if (k.startsWith('__')) continue;
-    const key = DB_KEY_TO_PASCAL[k] ?? k;
-    const sc = typeof v === 'object' && v !== null
-      ? ((v as any).score === true ? 'Yes' : (v as any).score === false ? 'No' : 'NA')
-      : (v === true ? 'Yes' : v === false ? 'No' : 'NA');
-    out[key] = { score: sc as 'Yes' | 'No' | 'NA', reasoning: (typeof v === 'object' && (v as any)?.reasoning) || '' };
+    const key = KEY_MAP[k] ?? k;
+    let score: 'Yes' | 'No' | 'NA' = 'NA';
+    let reasoning = '';
+
+    if (typeof v === 'object' && v !== null) {
+      const sc = (v as any).score;
+      if (sc === true || sc === 1 || sc === 'Yes' || sc === 'YES' || sc === 'yes' || sc === 1.0) {
+        score = 'Yes';
+      } else if (sc === false || sc === 0 || sc === 'No' || sc === 'NO' || sc === 'no' || sc === 0.0) {
+        score = 'No';
+      } else {
+        score = 'NA';
+      }
+      reasoning = (v as any).reasoning || (v as any).comment || '';
+    } else {
+      if (v === true || v === 1 || v === 'Yes' || v === 'YES' || v === 'yes') {
+        score = 'Yes';
+      } else if (v === false || v === 0 || v === 'No' || v === 'NO' || v === 'no') {
+        score = 'No';
+      } else {
+        score = 'NA';
+      }
+    }
+
+    out[key] = { score, reasoning };
   }
   return out;
 }
@@ -267,16 +322,37 @@ export default function IRScorePanel({
                       <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
                         {(['Yes', 'No', 'NA'] as const).map(opt => {
                           const selected = score === opt;
+                          let bg = '#FFFFFF';
+                          let color = '#D4D4D8';
+                          let border = '1px solid #F4F4F5';
+
+                          if (selected) {
+                            if (opt === 'Yes') {
+                              bg = '#DCFCE7';
+                              color = '#15803D';
+                              border = '1px solid #86EFAC';
+                            } else if (opt === 'No') {
+                              bg = '#FEE2E2';
+                              color = '#B91C1C';
+                              border = '1px solid #FCA5A5';
+                            } else {
+                              bg = '#F4F4F5';
+                              color = '#52525B';
+                              border = '1px solid #E4E4E7';
+                            }
+                          }
+
                           return (
                             <button
                               key={opt}
                               disabled
                               style={{
                                 height: 28, padding: '0 9px', borderRadius: 8,
-                                border: `1px solid ${selected ? '#E4E4E7' : '#E4E4E7'}`,
-                                background: selected ? '#E4E4E7' : '#FFFFFF',
-                                color: selected ? '#6B6B6B' : '#C7C7CC',
+                                border,
+                                background: bg,
+                                color,
                                 fontSize: 12, fontFamily: SANS, cursor: 'default',
+                                fontWeight: selected ? 600 : 400,
                               }}
                             >
                               {opt}
@@ -286,7 +362,11 @@ export default function IRScorePanel({
                       </div>
                     </div>
                     {reasoning && (
-                      <div style={{ marginTop: 10, fontSize: 12, color: '#6B6B6B', lineHeight: 1.5 }}>
+                      <div style={{
+                        marginTop: 8, fontSize: 12, color: '#3F3F46', lineHeight: 1.5,
+                        background: '#F8FAFC', padding: '8px 10px', borderRadius: 6,
+                        border: '1px solid #E2E8F0',
+                      }}>
                         {reasoning}
                       </div>
                     )}

@@ -15,10 +15,7 @@ export default async function QualityLayout({ children }: { children: React.Reac
 
   if (!['admin', 'quality', 'tl', 'agent'].includes(role)) redirect('/');
 
-  // Agent: no sidebar, just pass through
-  if (role === 'agent') return <>{children}</>;
-
-  // Admin / QA / TL: new QualityShell with sidebar nav
+  // Admin / QA / TL / Agent: QualityShell with sidebar nav
   return (
     <QualityShell role={role} email={email} name={name}>
       {children}
