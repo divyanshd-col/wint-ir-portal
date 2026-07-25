@@ -337,7 +337,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning,  setActioning]  = useState<string | null>(null);
-  const [forwarded,  setForwarded]  = useState<Set<string>>(new Set());
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -356,6 +356,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
 
   async function forwardToQA(flagId: string) {
     setActioning(flagId);
+    setActionError(null);
     try {
       const res = await fetch('/api/cx/tl/disputes/forward', {
         method: 'POST',
@@ -363,9 +364,15 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         body: JSON.stringify({ flagId }),
       });
       if (res.ok) {
-        setForwarded(prev => new Set(prev).add(flagId));
+        // Row leaves this queue immediately; it reappears under "Disputes
+        // Reviewed" as tl_forwarded on the next load.
         setDisputes(prev => prev.filter(d => d.flagId !== flagId));
+      } else {
+        // Don't fail silently — the TL would think the dispute moved on to QA.
+        setActionError('Could not forward that dispute — please retry.');
       }
+    } catch {
+      setActionError('Could not forward that dispute — please retry.');
     } finally {
       setActioning(null);
     }
@@ -374,6 +381,13 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
   const colCount = 9;
 
   return (
+    <>
+    {actionError && (
+      <div style={{
+        padding: '10px 16px', fontSize: 13, color: '#b91c1c',
+        background: '#fef2f2', borderBottom: '1px solid var(--qa-border)',
+      }}>{actionError}</div>
+    )}
     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
       <thead>
         <tr>
@@ -456,7 +470,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     >
                       View
                     </button>
-                    {status === 'pending' && !forwarded.has(d.flagId) && (
+                    {status === 'pending' && (
                       <button
                         onClick={() => forwardToQA(d.flagId)}
                         disabled={actioning === d.flagId}
@@ -470,9 +484,6 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                       >
                         {actioning === d.flagId ? '…' : 'Forward to QA'}
                       </button>
-                    )}
-                    {status === 'pending' && forwarded.has(d.flagId) && (
-                      <span style={{ fontSize: 12, color: 'var(--qa-text-2)', fontWeight: 500 }}>✓ Forwarded</span>
                     )}
                   </div>
                 </td>
@@ -524,6 +535,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         )}
       </tbody>
     </table>
+    </>
   );
 }
 

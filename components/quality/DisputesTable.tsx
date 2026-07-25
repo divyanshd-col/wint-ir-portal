@@ -110,8 +110,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     }
   }
 
-  // The old "Raised by" chips (TL / TL Endorsed) are gone: every new dispute is
-  // agent-raised and goes straight to QA, so those filters could never match again.
+  // The old "Raised by" chips (TL / TL Endorsed) are gone: every dispute that
+  // reaches QA has been forwarded by a TL, so the chip marked every row and the
+  // filters could never narrow anything down.
   const hasFilters = !!(chatIdSearch || callsFilter !== 'all');
 
   let visibleDisputes = disputes;
@@ -258,14 +259,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       {d.raisedBy}
                     </span>
                     {d.raisedByName}
-                    {d.tlForwarded && (
-                      <span style={{
-                        marginLeft: 8, display: 'inline-block', fontSize: 10, fontWeight: 600,
-                        textTransform: 'uppercase', letterSpacing: '0.04em',
-                        background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                        borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
-                      }}>TL Endorsed</span>
-                    )}
                   </td>
                   <td style={tdNum}>
                     {d.botIqsScore !== null ? (
