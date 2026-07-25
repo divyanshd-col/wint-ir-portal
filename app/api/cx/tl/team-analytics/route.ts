@@ -4,39 +4,43 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
+import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
-// Canonical parameter definitions (order matches quality.ts PARAM_ORDER)
-export const PARAM_DEFS = [
-  { key: 'technical',               label: 'Accuracy',                             weight: 20 },
-  { key: 'all_questions',           label: 'Issue Resolution',                     weight: 25 },
-  { key: 'expectation',             label: 'Expectation Setting & Follow-Through', weight: 20 },
-  { key: 'dissatisfactionhandling', label: 'Dissatisfaction Handling',             weight: 10 },
-  { key: 'contextual',              label: 'Contextual & Personalization',         weight: 10 },
-  { key: 'follow_up',               label: 'Post-Call Recap / Follow-up',          weight:  5 },
-  { key: 'sentences',               label: 'Readability & Tone',                   weight:  3 },
-  { key: 'process',                 label: 'Process-wise',                         weight:  0 },
-  { key: 'opening',                 label: 'Greeting & Handover',                  weight:  2 },
-  { key: 'call',                    label: 'Call Escalation Decision',             weight:  5 },
-  { key: 'grammar',                 label: 'Grammar / Structure',                  weight:  0 },
-  { key: 'empathy',                 label: 'Empathy',                              weight:  5 },
+// Canonical v4 parameter definitions, derived from lib/quality.ts so this route can
+// never drift from the rubric again (the previous hand-copied list was v3-keyed and
+// silently zeroed out the 5 v4-only parameters).
+export const PARAM_DEFS = PARAM_ORDER.map(p => ({
+  key: PASCAL_TO_DB[p] || p.toLowerCase(),
+  label: PARAM_NAMES[p] ?? p,
+  weight: Math.round((WEIGHTS[p] ?? 0) * 100),
+}));
+
+// The CALL rubric (lib/call-quality.ts) is a separate, unchanged pipeline that still
+// stores v3-style keys — keep its defs independent so re-keying the chat defs to v4
+// doesn't blank the calls panel.
+const CALL_PARAM_DEFS = [
+  { key: 'technical',     label: 'Technically / Legally Correct', weight: 20 },
+  { key: 'all_questions', label: 'All Questions Addressed',       weight: 10 },
+  { key: 'expectation',   label: 'Expectation Setting',           weight: 10 },
+  { key: 'process',       label: 'Process',                       weight:  5 },
+  { key: 'grammar',       label: 'Vocabulary & Grammar',          weight:  5 },
+  { key: 'empathy',       label: 'Active Listening & Empathy',    weight: 10 },
+  { key: 'call_opening',  label: 'Call Opening',                  weight:  5 },
+  { key: 'call_closing',  label: 'Call Closing',                  weight:  5 },
+  { key: 'fillers',       label: 'Fillers & Speech Clarity',      weight:  5 },
+  { key: 'energy_tone',   label: 'Energy Level & Tone',           weight: 10 },
+  { key: 'simplifying',   label: 'Simplifying Answers',           weight: 15 },
 ];
 
-// DB stores param keys in historical PascalCase, V4 camelCase, and snake_case formats
-const PASCAL_TO_SNAKE: Record<string, string> = {
-  Technical: 'technical', Accuracy: 'technical', technical: 'technical', accuracy: 'technical',
-  AllQuestions: 'all_questions', IssueResolution: 'all_questions', all_questions: 'all_questions', issue_resolution: 'all_questions',
-  Expectation: 'expectation', ExpectationFollowThrough: 'expectation', expectation: 'expectation', expectationfollowthrough: 'expectation',
-  DissatisfactionHandling: 'dissatisfactionhandling', dissatisfactionhandling: 'dissatisfactionhandling', dissatisfaction_handling: 'dissatisfactionhandling',
-  Contextual: 'contextual', Personalization: 'contextual', contextual: 'contextual', personalization: 'contextual',
-  FollowUp: 'follow_up', PostCallRecap: 'follow_up', follow_up: 'follow_up', postcallrecap: 'follow_up',
-  Sentences: 'sentences', Readability: 'sentences', sentences: 'sentences', readability: 'sentences',
-  Process: 'process', process: 'process',
-  Opening: 'opening', GreetingHandover: 'opening', opening: 'opening', greetinghandover: 'opening',
-  Call: 'call', EscalationDecision: 'call', call: 'call', escalationdecision: 'call',
-  Grammar: 'grammar', grammar: 'grammar',
-  Empathy: 'empathy', empathy: 'empathy',
+// Normalize any stored key spelling (canonical snake, old no-underscore v4, or
+// PascalCase) to the canonical v4 db key. Legacy v3-only keys (process, grammar…)
+// normalize to themselves, don't match a v4 PARAM_DEF, and drop out — intentional:
+// blending v3 rows into v4 pass rates would conflate two different rubrics.
+const normKey = (k: string) => {
+  const pascal = ALL_DB_KEY_TO_PASCAL[k] ?? (PASCAL_TO_DB[k] ? k : undefined);
+  return pascal ? (PASCAL_TO_DB[pascal] ?? k) : k;
 };
-const normKey = (k: string) => PASCAL_TO_SNAKE[k] ?? k;
 
 function getDateRange(period: string, from?: string | null, to?: string | null) {
   const today = new Date();
@@ -66,10 +70,12 @@ const CHAT_SUMMARY_SELECT = `
   COUNT(c.id)::int AS volume
 `;
 
+// Pass rate with half credit: v4 stores 0.5 for partial passes — count it as 0.5
+// toward the numerator instead of an outright fail. Score compared as text only.
 const CHAT_PARAM_SELECT = `
   p.key AS param_key,
   ROUND(
-    COUNT(*) FILTER (WHERE (p.val->>'score') = 'true')::numeric
+    SUM(CASE WHEN p.val->>'score' = 'true' THEN 1 WHEN p.val->>'score' = '0.5' THEN 0.5 ELSE 0 END)::numeric
     / NULLIF(
         COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),
         0
@@ -82,9 +88,13 @@ const CHAT_PARAM_FROM = `
   JOIN conversations c ON c.id = s.chat_id
 `;
 
+// v4 nests the human-leg params under __agent_parameters; legacy rows keep them at
+// the top level. Iterate whichever container exists so both generations aggregate.
 const CHAT_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
-    CASE WHEN s.parameters::text LIKE '{%' THEN s.parameters::jsonb ELSE '{}'::jsonb END
+    CASE WHEN s.parameters::text LIKE '{%'
+         THEN COALESCE(s.parameters::jsonb->'__agent_parameters', s.parameters::jsonb)
+         ELSE '{}'::jsonb END
   ) AS p(key, val)
 `;
 
@@ -354,8 +364,8 @@ export async function GET(req: NextRequest) {
     emails: null,
   }));
 
-  const paramDefs = (teamPM: Record<string, number | null>, cxPM: Record<string, number | null>) =>
-    PARAM_DEFS.map(p => ({ ...p, team_score: teamPM[p.key] ?? null, cx_score: cxPM[p.key] ?? null }));
+  const paramDefs = (defs: typeof PARAM_DEFS, teamPM: Record<string, number | null>, cxPM: Record<string, number | null>) =>
+    defs.map(p => ({ ...p, team_score: teamPM[p.key] ?? null, cx_score: cxPM[p.key] ?? null }));
 
   return NextResponse.json({
     dateFrom,
@@ -368,12 +378,12 @@ export async function GET(req: NextRequest) {
       chats: {
         team: { csat_pct: teamChatRow?.csat_pct ?? null, iqs: teamChatRow?.iqs ?? null, volume: teamChatRow?.volume ?? 0 },
         cx:   { csat_pct: cxChatRow?.csat_pct ?? null,   iqs: cxChatRow?.iqs ?? null,   volume: cxChatRow?.volume ?? 0 },
-        params: paramDefs(teamChatPM, cxChatPM),
+        params: paramDefs(PARAM_DEFS, teamChatPM, cxChatPM),
       },
       calls: {
         team: { csat_pct: teamCallRow?.csat_pct ?? null, iqs: teamCallRow?.iqs ?? null, volume: teamCallRow?.volume ?? 0 },
         cx:   { csat_pct: cxCallRow?.csat_pct ?? null,   iqs: cxCallRow?.iqs ?? null,   volume: cxCallRow?.volume ?? 0 },
-        params: paramDefs(teamCallPM, cxCallPM),
+        params: paramDefs(CALL_PARAM_DEFS, teamCallPM, cxCallPM),
       },
       emails: null,
     },

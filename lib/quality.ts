@@ -245,20 +245,25 @@ export function analyzeConversationTiming(
 }
 
 // ── IQS calculation ──────────────────────────────────────────────────────────
-// Normalizes by sum of applicable weights so old DB rows with Tags still score correctly.
-// 'NA' parameters are excluded from both numerator (total) and denominator (possible).
+// Normalizes by sum of applicable weights. Both 'NA' AND parameters absent from
+// `scores` are excluded from numerator (total) and denominator (possible) — this
+// matches computeIQS() in lib/scoring/prompt_v4.ts, the authoritative engine.
+// A missing key must NOT default to a pass: if `scores` is keyed for a different
+// parameter generation than `activeWeights` (e.g. v3 scores against v4 weights),
+// every key would miss and the old `?? 'Yes'` default silently returned 100.
+// Skipping instead surfaces the mismatch as an obviously-wrong low score.
+// Pass the correct isV4 flag at every call site so the weight set matches the scores.
 export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number {
   const activeWeights = isBot ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(activeWeights)) {
-    const score = scores[param] ?? 'Yes';
-    if (score !== 'NA') {
-      possible += weight;
-      if (score === 'Yes') {
-        total += weight;
-      } else if (score === 'Half') {
-        total += weight * 0.5;
-      }
+    const score = scores[param];
+    if (score === undefined || score === 'NA') continue;
+    possible += weight;
+    if (score === 'Yes') {
+      total += weight;
+    } else if (score === 'Half') {
+      total += weight * 0.5;
     }
   }
   return possible > 0 ? Math.round((total / possible) * 100) : 0;
@@ -273,12 +278,16 @@ export function computeIqsFromRawParams(paramsObj: any, isBot = false): number |
 
   if (!targetParams || typeof targetParams !== 'object') return null;
 
-  const paramKeys = isBot ? BOT_PARAM_ORDER : PARAM_ORDER;
+  // Score each generation against its own rubric. A legacy v3 chat must NOT be
+  // routed through resolveParamCell's v4 alias mapping and v4 weights — that
+  // drops Process/Grammar and drifts the displayed score from the stored one.
+  const isV4 = isBot ? true : isV4Evaluation(paramsObj);
+  const paramKeys = isBot ? BOT_PARAM_ORDER : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
   const scores: Record<string, ParamScore> = {};
   let hasValidParam = false;
 
   for (const pascal of paramKeys) {
-    const rawVal = isBot
+    const rawVal = (isBot || !isV4)
       ? (targetParams[PASCAL_TO_DB[pascal] || pascal] ?? targetParams[pascal])
       : resolveParamCell(targetParams, pascal);
     const hasData = rawVal !== undefined && rawVal !== null
@@ -299,7 +308,7 @@ export function computeIqsFromRawParams(paramsObj: any, isBot = false): number |
   }
 
   if (!hasValidParam) return null;
-  return calculateIQS(scores, isBot);
+  return calculateIQS(scores, isBot, isV4);
 }
 
 // ── Scoring system prompt ────────────────────────────────────────────────────
@@ -960,7 +969,10 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     reasoning['Process'] = 'Bot-handled chat — Myra follows process by definition.';
   }
 
-  const iqs = calculateIQS(scores, isBot); // always recalculate
+  // Legacy manual-scoring path: IQS_SYSTEM_PROMPT emits v3 parameter names for the
+  // human rubric, so score against V3_WEIGHTS (isV4=false). Bot uses BOT_WEIGHTS
+  // regardless of the flag. Without this, v3 keys miss the v4 WEIGHTS set entirely.
+  const iqs = calculateIQS(scores, isBot, false); // always recalculate
 
   // Extract uncertain_parameters — validate structure
   let uncertainParameters: Array<{ parameter: string; question: string }> | undefined;

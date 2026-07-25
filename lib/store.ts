@@ -252,7 +252,8 @@ export interface IQSFlagComment {
   createdAt: string;  // ISO
 }
 
-export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
+/** Returns false if the insert failed — callers must not report success on false. */
+export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
   try {
     // Ensure the conversation exists in Postgres before inserting
     const convs = await query('SELECT id FROM conversations WHERE id = $1', [String(entry.chatId)]);
@@ -289,8 +290,10 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<void> {
       entry.reviewedAt || null,
       entry.reviewNote || null,
     ]);
+    return true;
   } catch (err: any) {
     log.warn('store', 'Failed to append flag', { err: err.message });
+    return false;
   }
 }
 

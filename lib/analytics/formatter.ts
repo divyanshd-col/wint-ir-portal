@@ -1,6 +1,8 @@
 import type { AnalyticsFilters, InsightBlock, QueryShape } from './types';
 import type { AgentFinalAnswer } from './agent';
 import { IQS_PARAMS } from './templates';
+// Display names come from the shared rubric definition — no more local copy to drift.
+import { PARAM_NAMES } from '@/lib/quality';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -11,22 +13,6 @@ export function fmtSecs(s: number | null | undefined): string {
   if (mins === 0) return `${secs}s`;
   return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
 }
-
-const PARAM_NAMES: Record<string, string> = {
-  Technical:                'Accuracy',
-  AllQuestions:             'Issue Resolution',
-  Expectation:              'Expectation Setting & Follow-Through',
-  DissatisfactionHandling: 'Dissatisfaction Handling',
-  Contextual:               'Contextual & Personalization',
-  FollowUp:                 'Post-Call Recap / Follow-up',
-  Sentences:                'Readability & Tone',
-  Process:                  'Process-wise',
-  Opening:                  'Greeting & Handover',
-  Call:                     'Call Escalation Decision',
-  Tags:                     'Tags Accuracy',
-  Grammar:                  'Grammar / Structure',
-  Empathy:                  'Empathy',
-};
 
 // ── Filter header ─────────────────────────────────────────────────────────────
 

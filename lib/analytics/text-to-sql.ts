@@ -69,8 +69,10 @@ KEY QUERY PATTERNS:
   -- Bad CSAT:                csat_label = 'bad'
   -- CBB CSAT:                csat_label = 'could_be_better'
   -- Unclassified chats:      tags->>'disposition' IS NULL
-  -- IQS param pass rate:     (parameters->'technical'->>'score')::text = 'true'
-  -- IQS param fail rate:     (parameters->'technical'->>'score')::text = 'false'
+  -- IQS param pass rate:     COALESCE(parameters->'__agent_parameters'->'accuracy', parameters->'accuracy')->>'score' = 'true'
+  -- IQS param fail rate:     COALESCE(parameters->'__agent_parameters'->'accuracy', parameters->'accuracy')->>'score' = 'false'
+  -- IQS param keys (v4):     issue_resolution, accuracy, expectation_follow_through, dissatisfactionhandling, personalization, empathy, escalation_decision, readability, greeting_handover, post_call_recap
+  -- Score values are text 'true' | 'false' | '0.5' | 'null' — never cast score to boolean
   -- Week bucket:             date_trunc('week', closed_at)::date AS week_start
   -- Day bucket:              closed_at::date AS day
   -- Agent join:              JOIN agents a ON a.id = c.agent_id

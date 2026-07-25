@@ -28,7 +28,6 @@ interface DisputeRow {
 }
 
 interface Props {
-  userEmail: string;
   agentName: string;
 }
 
@@ -784,10 +783,11 @@ function DisputeRowComp({ row, tab, statusText, isOpen, isLast, cancelling, onCa
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function buildParams(e: IQSScoreEntry): Record<string, { score: boolean | null; reasoning: string }> {
-  const out: Record<string, { score: boolean | null; reasoning: string }> = {};
+function buildParams(e: IQSScoreEntry): Record<string, { score: boolean | number | null; reasoning: string }> {
+  const out: Record<string, { score: boolean | number | null; reasoning: string }> = {};
   for (const [k, v] of Object.entries(e.scores || {})) {
-    out[k] = { score: v === 'Yes' ? true : v === 'No' ? false : null, reasoning: e.reasoning?.[k] || '' };
+    // Keep 0.5 distinct — IRScorePanel renders it as 'Half', not NA.
+    out[k] = { score: v === 'Yes' ? true : v === 'No' ? false : v === 'Half' ? 0.5 : null, reasoning: e.reasoning?.[k] || '' };
   }
   return out;
 }

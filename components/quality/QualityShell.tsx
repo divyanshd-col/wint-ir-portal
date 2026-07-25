@@ -48,7 +48,7 @@ export const NAV_ALL = [
   { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'] },
   { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin', 'tl'] },
   { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'] },
-  { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['tl'] },
+  { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['admin', 'tl'] },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

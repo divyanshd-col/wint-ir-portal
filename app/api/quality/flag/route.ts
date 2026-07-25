@@ -32,7 +32,12 @@ export async function POST(req: NextRequest) {
     agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
     raisedByRole: 'ir', paramCategory: 'qa', status: 'pending',
   };
-  await storeAppendIQSFlag(flag);
+  const saved = await storeAppendIQSFlag(flag);
+  if (!saved) {
+    // Don't report success on a swallowed insert failure — the dispute would
+    // simply never appear in anyone's queue.
+    return NextResponse.json({ error: 'Failed to save dispute — please retry' }, { status: 500 });
+  }
   await storeAppendAuditEntry({ id: randomUUID(), action: 'ir_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
@@ -73,12 +78,17 @@ export async function GET() {
   return NextResponse.json({ flags });
 }
 
+// The full lifecycle union from IQSFlag — writes outside it are rejected so the
+// column can't accumulate arbitrary strings (it has no CHECK constraint in PG).
+const VALID_FLAG_STATUSES = new Set(['ir_pending_tl', 'pending', 'tl_forwarded', 'tl_resolved', 'reviewed', 'cancelled']);
+
 export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'agent']);
   if (response) return response;
 
   const { id, status, reviewNote, action } = await req.json();
   if (!id || !status) return NextResponse.json({ error: 'id and status required' }, { status: 400 });
+  if (!VALID_FLAG_STATUSES.has(status)) return NextResponse.json({ error: `invalid status: ${status}` }, { status: 400 });
 
   const role = (session.user as any)?.role;
   const email = (session.user as any)?.email || '';

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { getScoredConversationsSummary } from '@/lib/robylon/db';
 import { PARAM_ORDER } from '@/lib/quality';
-import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY, LEGACY_V3_ALIAS_KEY } from '@/lib/param-keys';
+import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
 
 // Canonical db-key per PARAM_ORDER entry, sourced from the shared map so this
@@ -35,18 +35,20 @@ export async function GET(req: NextRequest) {
   }
   const where = filterConditions.length ? `WHERE ${filterConditions.join(' AND ')}` : '';
 
-  // Params with no v3 equivalent (the 5 v4-only ones) may still be stored under
-  // an older no-underscore key written before PASCAL_TO_DB covered them —
-  // COALESCE picks up either. (The v3-alias dialect from the retired CAT1/CAT2
-  // shim is intentionally not merged here — that key is shared with an actual,
+  // v4 nests params under __agent_parameters; legacy v3 rows store them at the top
+  // level; the 5 v4-only params may also sit under an older no-underscore key —
+  // COALESCE picks up whichever exists. (The v3-alias dialect from the retired
+  // CAT1/CAT2 shim is intentionally NOT merged: that key is shared with a
   // semantically different v3 parameter, so blending it would conflate the two.)
+  // Score is compared as TEXT, never `::boolean` — that cast raises on v4's 0.5
+  // half-scores and 500s the request. A 0.5 counts toward _total but not _yes.
   const selectParts = Object.entries(PARAM_DB_KEYS).map(([pascalKey, dbKey]) => {
     const fallbackKey = LEGACY_V4_FALLBACK_KEY[pascalKey];
     const paramExpr = fallbackKey
-      ? `COALESCE(s.parameters->'${dbKey}', s.parameters->'${fallbackKey}')`
-      : `s.parameters->'${dbKey}'`;
+      ? `COALESCE(s.parameters->'__agent_parameters'->'${dbKey}', s.parameters->'${dbKey}', s.parameters->'__agent_parameters'->'${fallbackKey}', s.parameters->'${fallbackKey}')`
+      : `COALESCE(s.parameters->'__agent_parameters'->'${dbKey}', s.parameters->'${dbKey}')`;
     return `
-      COUNT(*) FILTER (WHERE (${paramExpr}->>'score')::boolean = true)::int AS "${dbKey}_yes",
+      COUNT(*) FILTER (WHERE ${paramExpr}->>'score' = 'true')::int AS "${dbKey}_yes",
       COUNT(*) FILTER (WHERE ${paramExpr}->'score' IS NOT NULL AND ${paramExpr}->>'score' != 'null')::int AS "${dbKey}_total"
     `;
   }).join(', ');

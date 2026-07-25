@@ -1,6 +1,8 @@
 import { query } from '@/lib/cx/db';
 import { buildQuery, IQS_PARAMS } from './templates';
 import type { AnalyticsFilters, TemplateExtras } from './types';
+import { PARAM_NAMES as QUALITY_PARAM_NAMES } from '@/lib/quality';
+import { resolveParamCell } from '@/lib/param-keys';
 
 const QUERY_TIMEOUT_MS = 30_000;
 const ROW_CAP = 10_000;
@@ -189,22 +191,6 @@ export interface ParamFailureRate {
 export function computeParamFailureRates(
   conversations: Array<{ parameters: any }>,
 ): ParamFailureRate[] {
-  const PARAM_NAMES: Record<string, string> = {
-    Technical:                'Accuracy',
-    AllQuestions:             'Issue Resolution',
-    Expectation:              'Expectation Setting & Follow-Through',
-    DissatisfactionHandling: 'Dissatisfaction Handling',
-    Contextual:               'Contextual & Personalization',
-    FollowUp:                 'Post-Call Recap / Follow-up',
-    Sentences:                'Readability & Tone',
-    Process:                  'Process-wise',
-    Opening:                  'Greeting & Handover',
-    Call:                     'Call Escalation Decision',
-    Tags:                     'Tags Accuracy',
-    Grammar:                  'Grammar / Structure',
-    Empathy:                  'Empathy',
-  };
-
   const N = conversations.length;
   if (!N) return [];
 
@@ -214,15 +200,19 @@ export function computeParamFailureRates(
     for (const c of conversations) {
       let params = c.parameters;
       if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
-      const score = params?.[p]?.score;
-      if (score === true || score === false) {
+      // resolveParamCell handles every storage dialect (v4 nested, legacy flat,
+      // old no-underscore keys). The old code indexed PascalCase at the top
+      // level, which never matched a stored row — every rate came back empty.
+      const safe = params?.__agent_parameters || params || {};
+      const score = resolveParamCell(safe, p).score;
+      if (score === true || score === false || score === 0.5) {
         applicable++;
         if (score === false) failed++;
       }
     }
     return {
       param: p,
-      displayName: PARAM_NAMES[p] ?? p,
+      displayName: QUALITY_PARAM_NAMES[p] ?? p,
       failureRate: applicable >= 10 ? failed / applicable : -1,
       applicable,
       applicability: N > 0 ? applicable / N : 0,

@@ -4,16 +4,14 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import Anthropic from '@anthropic-ai/sdk';
 
-const DB_KEY_TO_PARAM: Record<string, string> = {
-  technical: 'Technical', all_questions: 'AllQuestions', expectation: 'Expectation',
-  contextual: 'Contextual', follow_up: 'FollowUp', sentences: 'Sentences',
-  process: 'Process', opening: 'Opening', call: 'Call', grammar: 'Grammar', empathy: 'Empathy',
-};
-
+// Map any stored key (v4 canonical, old no-underscore v4, or legacy v3) to its
+// canonical Pascal name. The old v3-only map left 6 of 10 v4 params out of the
+// coaching prompt entirely.
 function normParam(raw: string): string {
-  return DB_KEY_TO_PARAM[raw] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
+  return ALL_DB_KEY_TO_PASCAL[raw] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
 }
 
 export async function POST(req: NextRequest) {
@@ -133,6 +131,7 @@ export async function POST(req: NextRequest) {
       if (!paramRates[pk]) paramRates[pk] = { yes: 0, total: 0 };
       const score = val?.score;
       if (score === true || score === 'Yes') { paramRates[pk].yes++; paramRates[pk].total++; }
+      else if (score === 0.5 || score === 'Half') { paramRates[pk].yes += 0.5; paramRates[pk].total++; }
       else if (score === false || score === 'No') { paramRates[pk].total++; }
     }
   }

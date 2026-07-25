@@ -1,5 +1,16 @@
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/auth';
+import { redirect } from 'next/navigation';
 import ChatEvaluationPage from '@/components/quality/ChatEvaluationPage';
 
-export default function Page() {
+export default async function Page() {
+  // Chat evaluation is a QA/admin surface. The /quality layout + middleware admit
+  // agent and tl to the section (for their own dashboards), so this page must gate
+  // itself — otherwise a tl/agent hitting the URL directly renders the QA scoring UI.
+  const session = await getServerSession(authOptions);
+  if (!session) redirect('/login');
+  const role = ((session.user as any)?.role as string) || '';
+  if (!['admin', 'quality'].includes(role)) redirect('/quality');
+
   return <ChatEvaluationPage />;
 }

@@ -1,11 +1,25 @@
 import type { AnalyticsFilters, TemplateExtras } from './types';
+import { PARAM_ORDER } from '@/lib/quality';
+import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
 
-// ── IQS parameter keys (PascalCase — must match DB storage) ──────────────────
-const IQS_PARAMS = [
-  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Contextual',
-  'FollowUp', 'Sentences', 'Process', 'Opening',
-  'Call', 'Tags', 'Grammar', 'Empathy',
-] as const;
+// ── IQS parameter keys — the canonical v4 Pascal names, derived from the rubric
+// so this module can never drift again. (The old hardcoded PascalCase list was
+// queried verbatim against the DB, which stores snake_case — every count was 0.)
+const IQS_PARAMS: readonly string[] = PARAM_ORDER;
+
+// JSONB accessor for one parameter that works across storage dialects:
+// v4 nests under __agent_parameters, legacy rows are flat, and the 5 v4-only
+// params may sit under an old no-underscore key.
+export function paramCellSql(pascal: string, alias = 's'): string {
+  const dbKey = PASCAL_TO_DB[pascal] || pascal.toLowerCase();
+  const fb = LEGACY_V4_FALLBACK_KEY[pascal];
+  const candidates = [
+    `${alias}.parameters->'__agent_parameters'->'${dbKey}'`,
+    `${alias}.parameters->'${dbKey}'`,
+    ...(fb ? [`${alias}.parameters->'__agent_parameters'->'${fb}'`, `${alias}.parameters->'${fb}'`] : []),
+  ];
+  return `COALESCE(${candidates.join(', ')})`;
+}
 
 // ── Shared WHERE builder ──────────────────────────────────────────────────────
 
@@ -295,9 +309,10 @@ export function iqs_parameter_failure_rates(f: AnalyticsFilters): { sql: string;
 
   const cols = IQS_PARAMS.flatMap(p => {
     const col = p.toLowerCase();
+    const cell = paramCellSql(p);
     return [
-      `COUNT(*) FILTER (WHERE (s.parameters->'${p}'->>'score') IN ('true','false'))::int AS ${col}_applicable`,
-      `COUNT(*) FILTER (WHERE (s.parameters->'${p}'->>'score') = 'false')::int AS ${col}_failed`,
+      `COUNT(*) FILTER (WHERE (${cell}->>'score') IN ('true','false','0.5'))::int AS ${col}_applicable`,
+      `COUNT(*) FILTER (WHERE (${cell}->>'score') = 'false')::int AS ${col}_failed`,
     ];
   }).join(',\n        ');
 

@@ -4,6 +4,7 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 function avgOrNull(nums: number[]): number | null {
   const valid = nums.filter(n => n != null && !isNaN(n));
@@ -45,44 +46,12 @@ function trailing5Weeks(): string[] {
   return weeks;
 }
 
-const DB_KEY_TO_PARAM: Record<string, string> = {
-  technical:                'Technical',
-  accuracy:                 'Technical',
-  Technical:                'Technical',
-  all_questions:            'AllQuestions',
-  issue_resolution:         'AllQuestions',
-  AllQuestions:             'AllQuestions',
-  expectation:              'Expectation',
-  expectationfollowthrough: 'Expectation',
-  Expectation:              'Expectation',
-  dissatisfactionhandling:  'DissatisfactionHandling',
-  dissatisfaction_handling: 'DissatisfactionHandling',
-  DissatisfactionHandling:  'DissatisfactionHandling',
-  contextual:               'Contextual',
-  personalization:          'Contextual',
-  Contextual:               'Contextual',
-  follow_up:                'FollowUp',
-  postcallrecap:            'FollowUp',
-  FollowUp:                 'FollowUp',
-  sentences:                'Sentences',
-  readability:              'Sentences',
-  Sentences:                'Sentences',
-  process:                  'Process',
-  Process:                  'Process',
-  opening:                  'Opening',
-  greetinghandover:         'Opening',
-  Opening:                  'Opening',
-  call:                     'Call',
-  escalationdecision:       'Call',
-  Call:                     'Call',
-  grammar:                  'Grammar',
-  Grammar:                  'Grammar',
-  empathy:                  'Empathy',
-  Empathy:                  'Empathy',
-};
-
+// Map any stored parameter key (v4 canonical, old no-underscore v4, or legacy v3
+// snake_case) to its canonical Pascal name. Previously this deliberately folded v4
+// keys back onto v3 names (accuracy→Technical), but PARAM_ORDER/PARAM_NAMES are now
+// v4, so that back-mapping dropped 8 of 10 parameters from the WoW aggregation.
 function normalizeParamKey(raw: string): string {
-  return DB_KEY_TO_PARAM[raw] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
+  return ALL_DB_KEY_TO_PASCAL[raw] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
 }
 
 export async function GET(req: NextRequest) {
@@ -330,16 +299,15 @@ export async function GET(req: NextRequest) {
         if (!wowParamMap[wk][pk]) wowParamMap[wk][pk] = { yes: 0, total: 0 };
         const score = val?.score;
         if (score === true || score === 'Yes') { wowParamMap[wk][pk].yes++; wowParamMap[wk][pk].total++; }
+        else if (score === 0.5 || score === 'Half') { wowParamMap[wk][pk].yes += 0.5; wowParamMap[wk][pk].total++; }
         else if (score === false || score === 'No') { wowParamMap[wk][pk].total++; }
         // NA: skip (doesn't affect pass rate)
       }
     }
   }
 
-  const CHAT_ACTIVE_PARAM_ORDER = [
-    'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Contextual',
-    'FollowUp', 'Sentences', 'Opening', 'Call', 'Empathy',
-  ];
+  // Show every weighted v4 parameter, in rubric order (was a hardcoded v3 list).
+  const CHAT_ACTIVE_PARAM_ORDER = PARAM_ORDER;
 
   const wowParams = {
     chats: CHAT_ACTIVE_PARAM_ORDER.map(pk => ({

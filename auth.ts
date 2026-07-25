@@ -62,9 +62,11 @@ export const authOptions: NextAuthOptions = {
     },
 
     async redirect({ url, baseUrl }) {
-      // After sign-in, send admins to /analytics instead of /
+      // After sign-in, land on /quality: every role can access it and its page
+      // role-routes internally (agent → own dashboard, QA/TL/admin → team view).
+      // The old /analytics target bounced QA and agents off middleware back to /.
       if (url === baseUrl || url === `${baseUrl}/`) {
-        return `${baseUrl}/analytics`;
+        return `${baseUrl}/quality`;
       }
       // Honour explicit callbackUrl (e.g. signOut → /login)
       return url.startsWith(baseUrl) ? url : baseUrl;

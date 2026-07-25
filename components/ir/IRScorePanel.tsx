@@ -38,13 +38,22 @@ interface IRScorePanelProps {
 
 // Resolves each canonical parameter (v3 or v4) via the shared, backward-compatible
 // key resolver — a chat scored under any historical key dialect still displays.
+type DisplayScore = 'Yes' | 'No' | 'NA' | 'Half';
+
 function normalizeParams(raw: Record<string, any> | null, paramOrder: string[]) {
-  if (!raw) return {} as Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }>;
+  if (!raw) return {} as Record<string, { score: DisplayScore; reasoning: string }>;
   const safe = raw.__agent_parameters || raw;
-  const out: Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }> = {};
+  const out: Record<string, { score: DisplayScore; reasoning: string }> = {};
   for (const pascal of paramOrder) {
     const cell = resolveParamCell(safe, pascal);
-    const sc = cell.score === true || cell.score === 1 ? 'Yes' : cell.score === false || cell.score === 0 ? 'No' : 'NA';
+    // v4 uses 0.5 for half credit — surface it as 'Half' rather than collapsing to NA.
+    const sc: DisplayScore = cell.score === true || cell.score === 1
+      ? 'Yes'
+      : cell.score === 0.5 || cell.score === 'Half'
+      ? 'Half'
+      : cell.score === false || cell.score === 0
+      ? 'No'
+      : 'NA';
     out[pascal] = { score: sc, reasoning: cell.comment ?? cell.reasoning ?? '' };
   }
   return out;
@@ -254,7 +263,7 @@ export default function IRScorePanel({
                         </span>
                       )}
                       <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
-                        {(['Yes', 'No', 'NA'] as const).map(opt => {
+                        {(['Yes', 'Half', 'No', 'NA'] as const).map(opt => {
                           const selected = score === opt;
                           return (
                             <button

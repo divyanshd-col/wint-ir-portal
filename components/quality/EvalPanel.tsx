@@ -136,8 +136,17 @@ export default function EvalPanel({
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
 
-  const safeParamsForBotCheck: Record<string, any> = parameters?.__agent_parameters || parameters?.__bot_parameters || parameters || {};
-  const hasBotParams = !!(safeParamsForBotCheck && (safeParamsForBotCheck['issue_resolution'] || safeParamsForBotCheck['accuracy'] || safeParamsForBotCheck['correct_escalation'] || safeParamsForBotCheck['IssueResolution'] || safeParamsForBotCheck['Accuracy'] || safeParamsForBotCheck['clarity'] || safeParamsForBotCheck['Clarity']));
+  // Detect a bot chat by BOT-DISTINCTIVE parameters only. IssueResolution/Accuracy/
+  // Personalization are shared between the v4 human and bot rubrics, so keying off
+  // them forced every v4 human-only chat onto the bot tab. Look at __bot_parameters
+  // when present, otherwise the top level only if there is no __agent_parameters.
+  const BOT_ONLY_PARAM_KEYS = [
+    'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity',
+  ];
+  const botParamsSrc: Record<string, any> = parameters?.__bot_parameters
+    || (parameters?.__agent_parameters ? {} : parameters) || {};
+  const hasBotParams = Object.keys(botParamsSrc).some(k => BOT_ONLY_PARAM_KEYS.includes(k));
   const isBotChat = conversationType === 'bot' || hasBotParams;
   const isHybrid = conversationType === 'hybrid';
   const showTabs = isHybrid;
@@ -206,7 +215,9 @@ export default function EvalPanel({
     for (const [key, s] of Object.entries(currentParamState)) {
       scores[key] = scoreToParamScore(s.score);
     }
-    return calculateIQS(scores, activeTab === 'bot');
+    // currentParamState is keyed by the active generation's PARAM_ORDER (v4 or V3),
+    // so pass isV4 to select the matching weight set. The bot tab uses BOT_WEIGHTS.
+    return calculateIQS(scores, activeTab === 'bot', isV4);
   })();
 
   const failCount = Object.values(currentParamState).filter(s => s.score === 0.0).length;

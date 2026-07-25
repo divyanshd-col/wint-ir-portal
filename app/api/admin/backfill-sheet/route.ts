@@ -4,16 +4,19 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { appendQualityAlertToSheet } from '@/lib/quality-sheet';
 
-// Scores are stored with PascalCase keys (Technical, AllQuestions, Process)
-// matching the LLM output format. Support both casing for safety.
+// Mirrors CRITICAL_PARAMS in lib/quality-alert.ts — v4 keys (accuracy /
+// issue_resolution) plus their legacy v3 spellings, in every stored casing.
 const CRITICAL_PARAMS = [
-  { keys: ['Technical', 'technical'],       label: 'Technically / Legally Incorrect' },
-  { keys: ['AllQuestions', 'all_questions'], label: 'All Questions Not Answered' },
-  { keys: ['Process', 'process'],           label: 'Process Incorrect' },
+  { keys: ['Accuracy', 'accuracy', 'Technical', 'technical'],                       label: 'Technically / Legally Incorrect' },
+  { keys: ['IssueResolution', 'issue_resolution', 'AllQuestions', 'all_questions'], label: 'Issue Not Resolved / Questions Unanswered' },
+  { keys: ['Process', 'process'],                                                   label: 'Process Incorrect' },
 ];
 
 function getParam(params: Record<string, any>, keys: string[]) {
+  // v4 nests the human-leg params under __agent_parameters; legacy rows are flat.
+  const nested = params?.__agent_parameters || {};
   for (const k of keys) {
+    if (nested[k] !== undefined) return nested[k];
     if (params[k] !== undefined) return params[k];
   }
   return undefined;
@@ -53,12 +56,11 @@ export async function POST() {
     LEFT JOIN contacts ct ON ct.id = c.contact_id
     WHERE (c.closed_at AT TIME ZONE 'Asia/Kolkata')::date = $1
       AND (
-        (s.parameters->'Technical'->>'score')     = 'false'
-        OR (s.parameters->'technical'->>'score')     = 'false'
-        OR (s.parameters->'AllQuestions'->>'score') = 'false'
-        OR (s.parameters->'all_questions'->>'score') = 'false'
-        OR (s.parameters->'Process'->>'score')    = 'false'
-        OR (s.parameters->'process'->>'score')    = 'false'
+        COALESCE(s.parameters->'__agent_parameters'->'accuracy', s.parameters->'accuracy',
+                 s.parameters->'Technical', s.parameters->'technical')->>'score' = 'false'
+        OR COALESCE(s.parameters->'__agent_parameters'->'issue_resolution', s.parameters->'issue_resolution',
+                    s.parameters->'AllQuestions', s.parameters->'all_questions')->>'score' = 'false'
+        OR COALESCE(s.parameters->'Process', s.parameters->'process')->>'score' = 'false'
       )
     ORDER BY c.closed_at ASC
   `, [today]);

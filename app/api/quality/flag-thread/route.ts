@@ -16,9 +16,10 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ comments });
 }
 
-// POST — add a comment to a flag thread
+// POST — add a comment to a flag thread. TL is view-only; disputes are QA-owned,
+// and the agent who raised the dispute can reply. TL may still read via GET.
 export async function POST(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  const { session, response } = await requireRole(['admin', 'quality', 'agent']);
   if (response) return response;
 
   const { flagId, content } = await req.json();

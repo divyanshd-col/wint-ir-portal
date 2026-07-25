@@ -8,7 +8,12 @@ import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
 import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
-import { DB_KEY_TO_LEGACY as DB_TO_PASCAL } from '@/lib/param-keys';
+import { ALL_DB_KEY_TO_PASCAL as DB_TO_PASCAL } from '@/lib/param-keys';
+
+// Bot-distinctive DB keys — parameters that appear ONLY in the bot rubric, never
+// the human one. IssueResolution/Accuracy/Personalization are shared between both
+// rubrics in v4, so keying off them mis-flags every v4 human chat as a bot chat.
+const BOT_ONLY_DB_KEYS = ['correct_escalation', 'no_repetition', 'expectation_setting', 'clarity'];
 
 const ROUTE = 'cx/qa/review';
 
@@ -39,6 +44,11 @@ export async function PATCH(
 
   const { action, parameters, note, flagId } = body;
   if (!action) return NextResponse.json({ error: 'action required' }, { status: 400 });
+  // A resolve without its flag would mark the chat reviewed but leave the dispute
+  // stuck in 'pending' forever — reject it up front.
+  if (action === 'resolve' && !flagId) {
+    return NextResponse.json({ error: 'flagId required for resolve' }, { status: 400 });
+  }
 
   try {
     const beforeState = await query<{ conversation_type: string; iqs_score: number; parameters: any }>(
@@ -51,10 +61,11 @@ export async function PATCH(
     const oldParams = beforeState[0]?.parameters ?? null;
     const isBot = beforeState[0]?.conversation_type === 'bot' || (() => {
       if (!oldParams) return false;
-      const safeParams = oldParams.__agent_parameters || oldParams.__bot_parameters || oldParams;
-      return Object.keys(safeParams).some(k => [
-        'issue_resolution', 'accuracy', 'correct_escalation', 'no_repetition', 'personalization', 'expectation_setting', 'clarity'
-      ].includes(k));
+      // A bot-only chat stores its params under __bot_parameters (no __agent_parameters).
+      // Detect it by the presence of a bot-distinctive key, not a shared one.
+      const safeParams = oldParams.__bot_parameters
+        || (oldParams.__agent_parameters ? {} : oldParams);
+      return Object.keys(safeParams).some(k => BOT_ONLY_DB_KEYS.includes(k));
     })();
 
     if (action === 'submit') {
@@ -83,13 +94,23 @@ export async function PATCH(
           try { existingParams = JSON.parse(existingParams); } catch { existingParams = {}; }
         }
 
-        // Merge incoming parameters (snake_case) into existing
+        const isV4 = isV4Evaluation(existingParams);
+
+        // Merge incoming parameters (snake_case) into existing.
+        // Clone the nested containers up front so we can mirror overrides into
+        // whichever one the review panel reads back from (EvalPanel reads
+        // __agent_parameters for the agent tab, __bot_parameters for the bot tab).
+        // Writing only the top-level keys — as before — left the panel showing the
+        // stale AI values on reopen. Only mirror when the container already exists,
+        // so a legacy v3 chat is not accidentally promoted to a v4 shape.
         const merged: Record<string, any> = { ...existingParams };
+        if (existingParams.__agent_parameters) merged.__agent_parameters = { ...existingParams.__agent_parameters };
+        if (existingParams.__bot_parameters) merged.__bot_parameters = { ...existingParams.__bot_parameters };
         let paramChanges = 0;
-        
-        // Merge nested bot parameters if provided
+
+        // Merge nested bot parameters if provided (hybrid chats send them here)
         if (parameters.__bot_parameters) {
-          merged.__bot_parameters = { ...(existingParams.__bot_parameters || {}) };
+          merged.__bot_parameters = { ...(merged.__bot_parameters || {}) };
           for (const [key, val] of Object.entries(parameters.__bot_parameters) as [string, any][]) {
             const prev = merged.__bot_parameters[key];
             if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
@@ -97,11 +118,19 @@ export async function PATCH(
           }
         }
 
+        // Top-level incoming params are agent params (agent/hybrid) or bot params
+        // (bot-only). Mirror each into the container the panel reads from.
         for (const [key, val] of Object.entries(parameters) as [string, any][]) {
           if (!key.startsWith('__')) {
             const prev = existingParams[key];
             if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
-            merged[key] = { score: val.score, reasoning: val.reasoning };
+            const cell = { score: val.score, reasoning: val.reasoning };
+            merged[key] = cell;
+            if (isBot) {
+              if (merged.__bot_parameters) merged.__bot_parameters[key] = cell;
+            } else if (merged.__agent_parameters) {
+              merged.__agent_parameters[key] = cell;
+            }
           }
         }
         if (note) merged['__review_note'] = note;
@@ -138,10 +167,13 @@ export async function PATCH(
           }
         }
         
-        // Always calculate both if the params exist
+        // Always calculate both if the params exist. Pass isV4 so the human score
+        // uses the v4 WEIGHTS for a v4 chat and V3_WEIGHTS for a legacy one — without
+        // it, v3 keys miss the v4 weight set and calculateIQS returns a wrong number.
+        // (bot_iqs uses BOT_WEIGHTS regardless of the flag.)
         merged['__scores'] = {
-          agent_iqs: isBot ? null : calculateIQS(pascalScores, false),
-          bot_iqs: calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true),
+          agent_iqs: isBot ? null : calculateIQS(pascalScores, false, isV4),
+          bot_iqs: calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true, isV4),
         };
         const newIqs = isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs;
 

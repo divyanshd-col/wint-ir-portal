@@ -33,17 +33,19 @@ const PERIOD_LABELS: Record<Period, string> = { '7': '7 days', '30': '30 days', 
 
 interface ParamItem { key: string; label: string; altKey?: string; }
 
+// Keys are the canonical v4 db keys the member-analytics API now aggregates under
+// (see PASCAL_TO_DB in lib/param-keys.ts) — must stay in lockstep with that route.
 const CHAT_PARAM_DEFS: ParamItem[] = [
-  { key: 'technical',               label: 'Accuracy' },
-  { key: 'all_questions',           label: 'Issue Resolution' },
-  { key: 'expectation',             label: 'Expectation Setting & Follow-Through' },
-  { key: 'dissatisfactionhandling', label: 'Dissatisfaction Handling' },
-  { key: 'contextual',              label: 'Contextual & Personalization' },
-  { key: 'follow_up',               label: 'Post-Call Recap / Follow-up' },
-  { key: 'sentences',               label: 'Readability & Tone' },
-  { key: 'opening',                 label: 'Greeting & Handover' },
-  { key: 'call',                    label: 'Call Escalation Decision' },
-  { key: 'empathy',                 label: 'Empathy' },
+  { key: 'issue_resolution',           label: 'Issue Resolution' },
+  { key: 'accuracy',                   label: 'Accuracy' },
+  { key: 'expectation_follow_through', label: 'Expectation Setting & Follow-Through' },
+  { key: 'dissatisfactionhandling',    label: 'Dissatisfaction Handling' },
+  { key: 'personalization',            label: 'Personalization' },
+  { key: 'empathy',                    label: 'Empathy' },
+  { key: 'escalation_decision',        label: 'Call Escalation Decision' },
+  { key: 'readability',                label: 'Readability & Tone' },
+  { key: 'greeting_handover',          label: 'Greeting & Handover' },
+  { key: 'post_call_recap',            label: 'Post-Call Recap' },
 ];
 
 const CALL_PARAM_DEFS: ParamItem[] = [

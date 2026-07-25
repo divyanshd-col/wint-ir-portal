@@ -38,9 +38,9 @@ export async function GET() {
   return NextResponse.json({ items });
 }
 
-// PATCH — mark a call-skipped chat as reviewed
+// PATCH — mark a call-skipped chat as reviewed. TL is view-only for chat quality.
 export async function PATCH(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  const { session, response } = await requireRole(['admin', 'quality']);
   if (response) return response;
 
   const { id, status, reviewNote } = await req.json();

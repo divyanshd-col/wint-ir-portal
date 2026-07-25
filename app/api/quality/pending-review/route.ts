@@ -154,7 +154,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  // TL is view-only for chat quality — only QA/admin may mark items reviewed.
+  const { session, response } = await requireRole(['admin', 'quality']);
   if (response) return response;
 
   const role = (session.user as any)?.role;

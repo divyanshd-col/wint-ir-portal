@@ -239,7 +239,7 @@ function EvaluatedChatsSection() {
           ) : chats.length === 0 ? (
             <tr>
               <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
-                No chats pending TL review
+                No evaluated chats found for your team
               </td>
             </tr>
           ) : (

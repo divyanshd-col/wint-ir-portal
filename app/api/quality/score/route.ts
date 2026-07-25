@@ -8,7 +8,8 @@ import { hasCallInteraction, fireQualityAlert } from '@/lib/quality-alert';
 import Anthropic from '@anthropic-ai/sdk';
 
 export async function POST(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  // TL is view-only for chat quality — only QA/admin may run scoring.
+  const { session, response } = await requireRole(['admin', 'quality']);
   if (response) return response;
 
   const body = await req.json();

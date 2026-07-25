@@ -5,38 +5,26 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
 import { getWeekStart, getLast8Weeks } from '@/lib/cx/week';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
+import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 // ── Param definitions (mirrors team-analytics) ─────────────────────────────────
-export const PARAM_DEFS = [
-  { key: 'technical',               label: 'Accuracy',                             weight: 20 },
-  { key: 'all_questions',           label: 'Issue Resolution',                     weight: 25 },
-  { key: 'expectation',             label: 'Expectation Setting & Follow-Through', weight: 20 },
-  { key: 'dissatisfactionhandling', label: 'Dissatisfaction Handling',             weight: 10 },
-  { key: 'contextual',              label: 'Contextual & Personalization',         weight: 10 },
-  { key: 'follow_up',               label: 'Post-Call Recap / Follow-up',          weight:  5 },
-  { key: 'sentences',               label: 'Readability & Tone',                   weight:  3 },
-  { key: 'process',                 label: 'Process-wise',                         weight:  0 },
-  { key: 'opening',                 label: 'Greeting & Handover',                  weight:  2 },
-  { key: 'call',                    label: 'Call Escalation Decision',             weight:  5 },
-  { key: 'grammar',                 label: 'Grammar / Structure',                  weight:  0 },
-  { key: 'empathy',                 label: 'Empathy',                              weight:  5 },
-];
+// Derived from lib/quality.ts so this route can never drift from the rubric again
+// (the previous hand-copied list was v3-keyed and zeroed out the 5 v4-only params).
+export const PARAM_DEFS = PARAM_ORDER.map(p => ({
+  key: PASCAL_TO_DB[p] || p.toLowerCase(),
+  label: PARAM_NAMES[p] ?? p,
+  weight: Math.round((WEIGHTS[p] ?? 0) * 100),
+}));
 
-const PASCAL_TO_SNAKE: Record<string, string> = {
-  Technical: 'technical', Accuracy: 'technical', technical: 'technical', accuracy: 'technical',
-  AllQuestions: 'all_questions', IssueResolution: 'all_questions', all_questions: 'all_questions', issue_resolution: 'all_questions',
-  Expectation: 'expectation', ExpectationFollowThrough: 'expectation', expectation: 'expectation', expectationfollowthrough: 'expectation',
-  DissatisfactionHandling: 'dissatisfactionhandling', dissatisfactionhandling: 'dissatisfactionhandling', dissatisfaction_handling: 'dissatisfactionhandling',
-  Contextual: 'contextual', Personalization: 'contextual', contextual: 'contextual', personalization: 'contextual',
-  FollowUp: 'follow_up', PostCallRecap: 'follow_up', follow_up: 'follow_up', postcallrecap: 'follow_up',
-  Sentences: 'sentences', Readability: 'sentences', sentences: 'sentences', readability: 'sentences',
-  Process: 'process', process: 'process',
-  Opening: 'opening', GreetingHandover: 'opening', opening: 'opening', greetinghandover: 'opening',
-  Call: 'call', EscalationDecision: 'call', call: 'call', escalationdecision: 'call',
-  Grammar: 'grammar', grammar: 'grammar',
-  Empathy: 'empathy', empathy: 'empathy',
+// Normalize any stored key spelling (canonical snake, old no-underscore v4, or
+// PascalCase) to the canonical v4 db key. Legacy v3-only keys normalize to
+// themselves, don't match a v4 def, and drop out — intentional: blending v3 rows
+// into v4 pass rates would conflate two different rubrics.
+export const normKey = (k: string) => {
+  const pascal = ALL_DB_KEY_TO_PASCAL[k] ?? (PASCAL_TO_DB[k] ? k : undefined);
+  return pascal ? (PASCAL_TO_DB[pascal] ?? k) : k;
 };
-export const normKey = (k: string) => PASCAL_TO_SNAKE[k] ?? k;
 
 // ── Date range ─────────────────────────────────────────────────────────────────
 function getDateRange(period: string, from?: string | null, to?: string | null) {
@@ -66,9 +54,13 @@ const CHAT_SUMMARY_SELECT = `
   COUNT(c.id)::int AS volume
 `;
 
+// v4 nests the human-leg params under __agent_parameters; legacy rows keep them at
+// the top level. Iterate whichever container exists so both generations aggregate.
 const CHAT_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
-    CASE WHEN s.parameters::text LIKE '{%' THEN s.parameters::jsonb ELSE '{}'::jsonb END
+    CASE WHEN s.parameters::text LIKE '{%'
+         THEN COALESCE(s.parameters::jsonb->'__agent_parameters', s.parameters::jsonb)
+         ELSE '{}'::jsonb END
   ) AS p(key, val)
 `;
 
@@ -78,9 +70,11 @@ const CALL_PARAM_LATERAL = `
   ) AS p(key, val)
 `;
 
+// Pass rate with half credit: v4 stores 0.5 for partial passes — count it as 0.5
+// toward the numerator instead of an outright fail. Score compared as text only.
 const PASS_RATE_SELECT = `
   p.key AS param_key,
-  ROUND(COUNT(*) FILTER (WHERE (p.val->>'score')='true')::numeric
+  ROUND(SUM(CASE WHEN p.val->>'score'='true' THEN 1 WHEN p.val->>'score'='0.5' THEN 0.5 ELSE 0 END)::numeric
         / NULLIF(COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),0)*100,1)::float AS pass_rate
 `;
 

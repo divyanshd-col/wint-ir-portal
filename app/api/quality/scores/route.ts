@@ -13,7 +13,6 @@ import {
   getAgentNamesByQA,
   type GetScoredConversationsOptions
 } from '@/lib/robylon/db';
-import { PARAM_ORDER } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
 const SLA_THRESHOLD_SECS = 180; // 3 minutes handoff SLA

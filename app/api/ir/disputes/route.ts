@@ -38,11 +38,14 @@ export async function GET(req: NextRequest) {
 
     try {
       const { query } = await import('@/lib/cx/db');
+      // iqs_scores' primary key is chat_id, NOT conversation_id. The old column
+      // name threw on every row, the bare catch swallowed it, and the agent saw
+      // "—" for IQS and a null parameters panel on every dispute.
       const rows = await query<any>(
         `SELECT s.iqs_score, c.closed_at, s.parameters
          FROM iqs_scores s
-         LEFT JOIN conversations c ON c.id = s.conversation_id
-         WHERE s.conversation_id = $1
+         LEFT JOIN conversations c ON c.id = s.chat_id
+         WHERE s.chat_id = $1
          LIMIT 1`,
         [f.chatId],
       );

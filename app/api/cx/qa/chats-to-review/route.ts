@@ -144,11 +144,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filters.csat = csatValues;
   }
 
-  // param_fail: a PascalCase key like 'Technical' — filter to chats where that param scored false
+  // param_fail: a PascalCase key like 'Accuracy' — filter to chats where that param scored false.
+  // v4 nests params under __agent_parameters; legacy v3 rows store them at the top level.
+  // Compare score as TEXT — a `::boolean` cast raises on v4's 0.5 half-scores and 500s the request.
   const paramFail = searchParams.get('param_fail');
   if (paramFail && PASCAL_TO_DB[paramFail]) {
     const dbKey = PASCAL_TO_DB[paramFail];
-    extraWhere += ` AND (i.parameters->'${dbKey}'->>'score')::boolean = false`;
+    extraWhere += ` AND COALESCE(i.parameters->'__agent_parameters'->'${dbKey}', i.parameters->'${dbKey}')->>'score' = 'false'`;
     filters.paramFail = paramFail;
   }
 
