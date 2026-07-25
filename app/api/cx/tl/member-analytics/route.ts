@@ -182,7 +182,7 @@ export async function GET(req: NextRequest) {
   const userAny = session.user as Record<string, string | undefined>;
   const role = userAny.role;
   const email = userAny.email ?? '';
-  if (role !== 'tl' && role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (role !== 'tl' && role !== 'admin' && role !== 'agent') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
   const period = searchParams.get('period') ?? '7';
@@ -210,6 +210,13 @@ export async function GET(req: NextRequest) {
       const fallback = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active' ORDER BY name ASC`, []);
       tlAgentNames = fallback.map(r => r.name);
     }
+  }
+
+  if (role === 'agent') {
+    const config = await readConfig();
+    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
+    const selfAgentName = configUser?.agentName || email.split('@')[0];
+    tlAgentNames = selfAgentName ? [selfAgentName] : tlAgentNames.slice(0, 1);
   }
 
   if (tlAgentNames.length === 0) {

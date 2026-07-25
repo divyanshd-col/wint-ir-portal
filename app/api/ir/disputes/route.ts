@@ -30,11 +30,16 @@ export async function GET(req: NextRequest) {
     flags = flags.filter(f => f.status === 'tl_resolved' || f.status === 'reviewed');
   }
 
-  // Enrich with iqs_score + closed_at from DB
+  // Enrich with iqs_score + closed_at + bot/call IQS + csat from DB
   const enriched = await Promise.all(flags.map(async (f) => {
     let iqsScore: number | null = null;
+    let botIqsScore: number | null = null;
+    let callIqsScore: number | null = null;
     let closedAt: string | null = null;
     let parameters: Record<string, any> | null = null;
+    let csatScore: number | null = null;
+    let disposition = '';
+    let subDisposition: string | null = null;
 
     try {
       const { query } = await import('@/lib/cx/db');
@@ -42,7 +47,7 @@ export async function GET(req: NextRequest) {
       // name threw on every row, the bare catch swallowed it, and the agent saw
       // "—" for IQS and a null parameters panel on every dispute.
       const rows = await query<any>(
-        `SELECT s.iqs_score, c.closed_at, s.parameters
+        `SELECT s.iqs_score, c.closed_at, s.parameters, c.csat_score, c.tags
          FROM iqs_scores s
          LEFT JOIN conversations c ON c.id = s.chat_id
          WHERE s.chat_id = $1
@@ -50,9 +55,23 @@ export async function GET(req: NextRequest) {
         [f.chatId],
       );
       if (rows.length > 0) {
-        iqsScore = rows[0].iqs_score ?? null;
+        iqsScore = rows[0].iqs_score != null ? parseFloat(rows[0].iqs_score) : null;
         closedAt = rows[0].closed_at ? new Date(rows[0].closed_at).toISOString() : null;
         parameters = rows[0].parameters ?? null;
+        csatScore = rows[0].csat_score ?? null;
+        const tags = rows[0].tags || {};
+        disposition = tags.disposition || '';
+        subDisposition = tags.sub_disposition || null;
+
+        if (parameters?.__scores) {
+          if (parameters.__scores.bot_iqs != null) botIqsScore = parseFloat(parameters.__scores.bot_iqs);
+          if (parameters.__scores.agent_iqs != null) iqsScore = parseFloat(parameters.__scores.agent_iqs);
+          if (parameters.__scores.call_iqs != null) callIqsScore = parseFloat(parameters.__scores.call_iqs);
+        }
+        if (botIqsScore === null && parameters) {
+          const { computeIqsFromRawParams } = await import('@/lib/quality');
+          botIqsScore = computeIqsFromRawParams(parameters, true);
+        }
       }
     } catch {
       // DB unavailable — return flag data only
@@ -62,6 +81,11 @@ export async function GET(req: NextRequest) {
       flagId: f.id,
       chatId: f.chatId,
       iqsScore,
+      botIqsScore,
+      callIqsScore,
+      csatScore,
+      disposition,
+      subDisposition,
       closedAt: closedAt || f.flaggedAt,
       status: f.status,
       paramCategory: f.paramCategory,

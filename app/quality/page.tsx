@@ -17,14 +17,6 @@ export default async function QualityPage() {
 
   if (!role || !['admin', 'quality', 'tl', 'agent'].includes(role)) redirect('/');
 
-  // Agent: personal quality dashboard (unchanged)
-  if (role === 'agent') {
-    const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username) === email);
-    const selfAgentName = configUser?.agentName || undefined;
-    return <AgentAnalyticsDashboard userEmail={email} selfAgentName={selfAgentName} />;
-  }
-
-  // Admin / QA / TL: QA Analytics Dashboard
+  // Admin / QA / TL / Agent: QA Analytics Dashboard
   return <QAAnalyticsDashboard />;
 }

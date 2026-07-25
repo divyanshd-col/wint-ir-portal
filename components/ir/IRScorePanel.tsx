@@ -38,6 +38,8 @@ interface IRScorePanelProps {
 
 // Resolves each canonical parameter (v3 or v4) via the shared, backward-compatible
 // key resolver — a chat scored under any historical key dialect still displays.
+// (Deliberately NOT a v4→v3 KEY_MAP: folding v4 params onto v3 names is the drift
+// this branch removed, and it collapses 0.5 half-scores to NA.)
 type DisplayScore = 'Yes' | 'No' | 'NA' | 'Half';
 
 function normalizeParams(raw: Record<string, any> | null, paramOrder: string[]) {
@@ -47,11 +49,11 @@ function normalizeParams(raw: Record<string, any> | null, paramOrder: string[]) 
   for (const pascal of paramOrder) {
     const cell = resolveParamCell(safe, pascal);
     // v4 uses 0.5 for half credit — surface it as 'Half' rather than collapsing to NA.
-    const sc: DisplayScore = cell.score === true || cell.score === 1
+    const sc: DisplayScore = cell.score === true || cell.score === 1 || cell.score === 'Yes'
       ? 'Yes'
       : cell.score === 0.5 || cell.score === 'Half'
       ? 'Half'
-      : cell.score === false || cell.score === 0
+      : cell.score === false || cell.score === 0 || cell.score === 'No'
       ? 'No'
       : 'NA';
     out[pascal] = { score: sc, reasoning: cell.comment ?? cell.reasoning ?? '' };
@@ -265,16 +267,37 @@ export default function IRScorePanel({
                       <div style={{ display: 'flex', gap: 5, flexShrink: 0 }}>
                         {(['Yes', 'Half', 'No', 'NA'] as const).map(opt => {
                           const selected = score === opt;
+                          let bg = '#FFFFFF';
+                          let color = '#D4D4D8';
+                          let border = '1px solid #F4F4F5';
+
+                          if (selected) {
+                            if (opt === 'Yes') {
+                              bg = '#DCFCE7';
+                              color = '#15803D';
+                              border = '1px solid #86EFAC';
+                            } else if (opt === 'No') {
+                              bg = '#FEE2E2';
+                              color = '#B91C1C';
+                              border = '1px solid #FCA5A5';
+                            } else {
+                              bg = '#F4F4F5';
+                              color = '#52525B';
+                              border = '1px solid #E4E4E7';
+                            }
+                          }
+
                           return (
                             <button
                               key={opt}
                               disabled
                               style={{
                                 height: 28, padding: '0 9px', borderRadius: 8,
-                                border: `1px solid ${selected ? '#E4E4E7' : '#E4E4E7'}`,
-                                background: selected ? '#E4E4E7' : '#FFFFFF',
-                                color: selected ? '#6B6B6B' : '#C7C7CC',
+                                border,
+                                background: bg,
+                                color,
                                 fontSize: 12, fontFamily: SANS, cursor: 'default',
+                                fontWeight: selected ? 600 : 400,
                               }}
                             >
                               {opt}
@@ -284,7 +307,11 @@ export default function IRScorePanel({
                       </div>
                     </div>
                     {reasoning && (
-                      <div style={{ marginTop: 10, fontSize: 12, color: '#6B6B6B', lineHeight: 1.5 }}>
+                      <div style={{
+                        marginTop: 8, fontSize: 12, color: '#3F3F46', lineHeight: 1.5,
+                        background: '#F8FAFC', padding: '8px 10px', borderRadius: 6,
+                        border: '1px solid #E2E8F0',
+                      }}>
                         {reasoning}
                       </div>
                     )}

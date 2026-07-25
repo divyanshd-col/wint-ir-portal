@@ -236,25 +236,40 @@ export default function MemberAnalyticsDashboard() {
       {/* ── Page header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24, gap: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>Member Analytics</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>{agents.length <= 1 ? 'My Analytics' : 'Member Analytics'}</h1>
 
           {/* Agent selector */}
           <div ref={agentDropRef} style={{ position: 'relative' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2)' }}>
-              <span>Viewing:</span>
-              <button
-                onClick={() => setShowAgentDrop(p => !p)}
-                style={{
-                  height: 32, padding: '0 12px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
-                  borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
-                  fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >
-                {loading && !selectedAgent ? <Skeleton w={80} h={14} /> : (selectedAgent || '—')}
-                <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
-              </button>
-            </div>
-            {showAgentDrop && agents.length > 0 && (
+            {agents.length <= 1 ? (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                <span>Viewing:</span>
+                <span
+                  style={{
+                    height: 32, padding: '0 12px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
+                    borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
+                    fontSize: 13, fontWeight: 500, color: 'var(--qa-text)',
+                  }}
+                >
+                  {loading && !selectedAgent ? <Skeleton w={80} h={14} /> : (selectedAgent || '—')}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2)' }}>
+                <span>Viewing:</span>
+                <button
+                  onClick={() => setShowAgentDrop(p => !p)}
+                  style={{
+                    height: 32, padding: '0 12px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
+                    borderRadius: 8, display: 'inline-flex', alignItems: 'center', gap: 8,
+                    fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >
+                  {loading && !selectedAgent ? <Skeleton w={80} h={14} /> : (selectedAgent || '—')}
+                  <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
+                </button>
+              </div>
+            )}
+            {showAgentDrop && agents.length > 1 && (
               <div style={{
                 position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40,
                 background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,

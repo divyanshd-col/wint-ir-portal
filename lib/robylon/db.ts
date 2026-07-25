@@ -338,6 +338,7 @@ export interface GetScoredConversationsOptions {
   dispositions?: string[];
   csat?: string;
   conversationType?: string;
+  hasCalls?: boolean;
   minUserMessages?: number;
   chatIdSearch?: string;
 }
@@ -392,7 +393,23 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
     params.push(parseInt(opts.csat, 10));
     conditions.push(`c.csat_score = $${params.length}`);
   }
-  if (opts.conversationType) {
+  if (opts.conversationType === 'has_calls' || opts.hasCalls) {
+    conditions.push(`EXISTS (
+      SELECT 1 FROM call_recordings cr
+      WHERE cr.chat_id = c.id
+         OR (
+           c.contact_id IS NOT NULL 
+           AND cr.contact_id = c.contact_id 
+           AND cr.called_at IS NOT NULL
+           AND (c.started_at IS NULL OR cr.called_at >= c.started_at)
+           AND (c.closed_at IS NULL OR cr.called_at <= c.closed_at)
+         )
+    )`);
+  } else if (opts.conversationType === 'human_only') {
+    conditions.push(`(a.name IS NULL OR a.name != 'Robylon AI') AND (c.agent_id IS NULL OR c.agent_id NOT IN (15, 447, 784))`);
+  } else if (opts.conversationType === 'bot_only') {
+    conditions.push(`(a.name = 'Robylon AI' OR c.agent_id IN (15, 447, 784))`);
+  } else if (opts.conversationType && opts.conversationType !== 'all') {
     params.push(opts.conversationType);
     conditions.push(`c.conversation_type = $${params.length}`);
   }

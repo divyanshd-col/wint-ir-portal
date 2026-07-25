@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 
 // ─────────────────────────────── Types ────────────────────────────────────────
@@ -240,7 +240,7 @@ export default function AgentAnalyticsDashboard({}: Props) {
         </div>
 
         {([
-          { href: '/quality', label: 'My Analytics', active: true },
+          { href: '/tl/member-analytics', label: 'My Analytics', active: false },
           { href: '/agent/quality-chats', label: 'My Quality Chats', active: false },
         ] as const).map(({ href, label, active }) => (
           <Link key={href} href={href} style={S({
@@ -398,8 +398,8 @@ export default function AgentAnalyticsDashboard({}: Props) {
                           {data.categories.map(cat => {
                             const isOpen = openKeys.has(cat.disposition);
                             return (
-                              <>
-                                <tr key={cat.disposition} onClick={() => toggleCategory(cat.disposition)} style={S({ cursor: 'pointer', height: 48, borderBottom: '1px solid var(--qa-border-sub)' })}>
+                              <Fragment key={cat.disposition}>
+                                <tr onClick={() => toggleCategory(cat.disposition)} style={S({ cursor: 'pointer', height: 48, borderBottom: '1px solid var(--qa-border-sub)' })}>
                                   <td style={S({ padding: '0 16px', fontSize: 14, fontWeight: 500, color: 'var(--qa-text)' })}>
                                     <span style={S({ display: 'inline-block', width: 10, height: 10, marginRight: 10, color: 'var(--qa-text-2)', fontSize: 10, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', transformOrigin: 'center' })}>▶</span>
                                     {cat.disposition}
@@ -416,7 +416,7 @@ export default function AgentAnalyticsDashboard({}: Props) {
                                     <td style={S({ padding: '0 16px', textAlign: 'right', fontFamily: 'ui-monospace, monospace', fontSize: 13, color: 'var(--qa-text)' })}>{fmtSecs(child.resolutionSecs)}</td>
                                   </tr>
                                 ))}
-                              </>
+                              </Fragment>
                             );
                           })}
                         </tbody>

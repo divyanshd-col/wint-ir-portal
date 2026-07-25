@@ -37,8 +37,9 @@ function NavLink({
 }
 
 export default function PageNav({ username, role, isAdmin }: PageNavProps) {
-  const canSeeQuality   = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
-  const canSeeAnalytics = isAdmin || role === 'tl';
+  const canSeeQuality         = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
+  const canSeeAnalytics       = isAdmin || role === 'tl';
+  const canSeeMemberAnalytics = isAdmin || role === 'tl' || role === 'agent';
 
   return (
     <aside className="w-64 bg-[#1a1a1a] flex-col shrink-0 hidden lg:flex h-screen sticky top-0">
@@ -80,7 +81,7 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
         {canSeeQuality && (
           <NavLink
             href="/quality"
-            label={role === 'agent' ? 'My Quality' : 'Quality'}
+            label="Analytics"
             icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z" />
@@ -112,10 +113,10 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
             }
           />
         )}
-        {canSeeAnalytics && (
+        {canSeeMemberAnalytics && (
           <NavLink
             href="/tl/member-analytics"
-            label="Member Analytics"
+            label={role === 'agent' ? 'My Analytics' : 'Member Analytics'}
             icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <circle cx="6" cy="5" r="2.5" />

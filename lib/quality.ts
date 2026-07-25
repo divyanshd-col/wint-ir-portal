@@ -141,7 +141,10 @@ export interface IQSScoreEntry {
   date?: string;
   tags?: string;
   iqs: number;
+  botIqsScore?: number | null;
+  callIqsScore?: number | null;
   csat?: string;
+  parameters?: Record<string, any>;
   slackUrl?: string;
   provider: string;
   model: string;
