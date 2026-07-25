@@ -93,7 +93,6 @@ export default function IRScorePanel({
   const activeParamNames = isV4 ? PARAM_NAMES : V3_PARAM_NAMES;
   const activeWeights    = isV4 ? WEIGHTS : V3_WEIGHTS;
   const params = normalizeParams(parameters, activeParamOrder);
-  const failCount = Object.values(params).filter(p => p.score === 'No').length;
 
   const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
   const [txLoading, setTxLoading] = useState(true);
@@ -172,7 +171,9 @@ export default function IRScorePanel({
         }}>
           {/* ── Left panel ── */}
           <div style={{
-            width: 400, flexShrink: 0, borderRight: '1px solid #E4E4E7',
+            // Wider param column, shrinking back to 400 when space is tight so
+            // the transcript pane stays readable.
+            width: 496, minWidth: 400, flexShrink: 1, borderRight: '1px solid #E4E4E7',
             display: 'flex', flexDirection: 'column',
           }}>
             {/* Header */}
@@ -180,17 +181,8 @@ export default function IRScorePanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <ScoreRing score={iqsScore} />
                 <div>
-                  <div style={{ fontSize: 16, fontWeight: 600, color: '#111111' }}>{agentName || '—'}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                    <span style={{
-                      height: 20, padding: '0 8px', border: '1px solid #E4E4E7',
-                      borderRadius: 999, fontSize: 12, color: '#6B6B6B',
-                      display: 'inline-flex', alignItems: 'center',
-                    }}>
-                      {failCount} fail{failCount !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 13, color: '#A1A1AA', marginTop: 6 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#111111' }}>{agentName || '—'}</div>
+                  <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 6 }}>
                     <span style={{ fontFamily: MONO }}>{chatId?.slice(0, 14)}</span>
                     {' · '}{date}
                   </div>
@@ -333,15 +325,12 @@ export default function IRScorePanel({
           </div>
 
           {/* ── Right panel ── */}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+          <div style={{ flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column' }}>
             {/* Header */}
             <div style={{
               padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0,
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
-              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
-                {transcript.length > 0 ? `${transcript.length} messages` : txLoading ? 'Loading…' : 'No transcript'}
-              </span>
               <div style={{ flex: 1 }} />
 
               {/* Dispute actions */}

@@ -220,8 +220,6 @@ export default function EvalPanel({
     return calculateIQS(scores, activeTab === 'bot', isV4);
   })();
 
-  const failCount = Object.values(currentParamState).filter(s => s.score === 0.0).length;
-
   const gatesData = gates || (parameters as any)?.__gates || (parameters as any)?.gates;
 
   function resolveGateScore(gateItem: any, defaultVal: 'Yes' | 'No' | 'NA'): 'Yes' | 'No' | 'NA' {
@@ -414,12 +412,16 @@ export default function EvalPanel({
     margin: 16,
   };
   const leftPanel: React.CSSProperties = {
-    width: 400, flexShrink: 0,
+    // Wider param column, but allowed to shrink back to 400 when space is
+    // tight so the transcript pane stays readable.
+    width: 496, minWidth: 400, flexShrink: 1,
     borderRight: '1px solid var(--qa-border)',
     display: 'flex', flexDirection: 'column',
   };
   const rightPanel: React.CSSProperties = {
-    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+    // minWidth keeps the transcript readable — below it, the left column
+    // shrinks back toward 400 instead.
+    flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column',
   };
 
   return (
@@ -434,17 +436,10 @@ export default function EvalPanel({
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <ScoreRing score={liveIqs} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     {agentName}
-                    <span style={{
-                      height: 20, padding: '0 8px', border: '1px solid var(--qa-border)',
-                      borderRadius: 999, fontSize: 12, color: 'var(--qa-text-2)',
-                      display: 'inline-flex', alignItems: 'center', fontWeight: 400,
-                    }}>
-                      {failCount} fail{failCount !== 1 ? 's' : ''}
-                    </span>
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                  <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
                     <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{chatId}</span>
                     <span>·</span>
                     <span>{fmtDate(closedAt)}</span>
@@ -474,42 +469,6 @@ export default function EvalPanel({
                 </div>
               </div>
 
-              {/* Dispute banner */}
-              {dispute && dispute.challengedParams.length > 0 && (
-                <div style={{
-                  marginTop: 12, padding: '8px 12px',
-                  border: '1px solid var(--qa-border)', borderRadius: 6,
-                  background: 'var(--qa-gray-50)', fontSize: 12,
-                  color: 'var(--qa-text-2)', lineHeight: 1.6,
-                  display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8,
-                }}>
-                  <span style={{
-                    height: 18, padding: '0 7px', borderRadius: 999,
-                    background: 'var(--qa-gray-700)', color: '#fff',
-                    fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                    letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
-                  }}>
-                    {dispute.raisedBy} disputed
-                  </span>
-                  {dispute.challengedParams.map(d => (
-                    <strong key={d.param} style={{ color: 'var(--qa-text)' }}>
-                      {PARAM_NAMES[d.param] ?? d.param}
-                    </strong>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Compliance Gates Card */}
-            <div style={{ margin: '12px 16px 0 16px', background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12, flexShrink: 0 }}>
-              <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                Compliance Gates: <span style={{ color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d' }}>{overallGateResult}</span>
-              </h5>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                <div>G1 Advice: <ScoreBadge score={g1Badge} /></div>
-                <div>G2 Fabrication: <ScoreBadge score={g2Badge} /></div>
-                <div>G3 Identity: <ScoreBadge score={g3Badge} /></div>
-              </div>
             </div>
 
             {/* Param list */}
@@ -547,6 +506,19 @@ export default function EvalPanel({
               </div>
             )}
             <div style={{ flex: 1, overflowY: 'auto' }}>
+              {/* Compliance Gates — scrolls away with the params to free space for them */}
+              <div style={{
+                margin: '12px 16px', background: '#f8fafc', border: '1px solid var(--qa-border)',
+                borderRadius: 8, padding: '10px 12px',
+                display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, fontSize: 12,
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                  Compliance Gates: <span style={{ color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d' }}>{overallGateResult}</span>
+                </span>
+                <span>G1 Advice: <ScoreBadge score={g1Badge} /></span>
+                <span>G2 Fabrication: <ScoreBadge score={g2Badge} /></span>
+                <span>G3 Identity: <ScoreBadge score={g3Badge} /></span>
+              </div>
               {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
                 const disputed = disputeMap.get(pascal);
@@ -710,9 +682,6 @@ export default function EvalPanel({
               padding: '0 16px', borderBottom: '1px solid var(--qa-border)',
               display: 'flex', alignItems: 'center', gap: 8, height: 52, flexShrink: 0,
             }}>
-              <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
-                {transcript == null ? '…' : `${transcript.length} messages`}
-              </span>
               {/* History toggle */}
               <button
                 onClick={() => {
@@ -746,7 +715,30 @@ export default function EvalPanel({
                   </svg>
                 </button>
               )}
-              <div style={{ flex: 1 }} />
+              {/* Disputed params — truncates so it never pushes the action buttons off */}
+              <div style={{
+                flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 8,
+                overflow: 'hidden', whiteSpace: 'nowrap',
+              }}>
+                {dispute && dispute.challengedParams.length > 0 && (
+                  <>
+                    <span style={{
+                      height: 18, padding: '0 7px', borderRadius: 999, flexShrink: 0,
+                      background: 'var(--qa-gray-700)', color: '#fff',
+                      fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+                      letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
+                    }}>
+                      {dispute.raisedBy} disputed
+                    </span>
+                    <span
+                      title={dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    >
+                      {dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                    </span>
+                  </>
+                )}
+              </div>
               {/* Primary action (submit/resolve modes) */}
               {(mode === 'submit' || mode === 'resolve') && (
                 <button
