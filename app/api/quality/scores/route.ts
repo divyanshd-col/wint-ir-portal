@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { csatScore } from '@/lib/stats';
 import {
   getAllScoredConversations,
@@ -38,7 +38,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
       continue;
     }
     // Map DB snake_case key → legacy PascalCase; fall back to first-letter capitalize
-    const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
+    const k = ALL_DB_KEY_TO_PASCAL[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
     scores[k]    = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
     reasoning[k] = val.reasoning || '';
   }

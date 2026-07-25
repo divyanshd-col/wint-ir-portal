@@ -6,7 +6,7 @@ import { readLogsFromSheet } from '@/lib/sheets';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
-import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry } from '@/lib/quality';
 
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
@@ -15,7 +15,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
   const scores: Record<string, string> = {};
   const reasoning: Record<string, string> = {};
   for (const [key, val] of Object.entries(params) as [string, any][]) {
-    const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
+    const k = ALL_DB_KEY_TO_PASCAL[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
     scores[k]    = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
     reasoning[k] = val?.reasoning || '';
   }

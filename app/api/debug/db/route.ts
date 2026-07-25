@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 export async function GET() {
   const { session, response } = await requireRole('admin');
@@ -97,7 +97,7 @@ export async function GET() {
         const params = row.parameters || {};
         const scores: Record<string, string> = {};
         for (const [key, val] of Object.entries(params) as [string, any][]) {
-          const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
+          const k = ALL_DB_KEY_TO_PASCAL[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
           scores[k] = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
         }
         const iqsNum = row.iqs;

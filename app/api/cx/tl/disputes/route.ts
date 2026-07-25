@@ -26,7 +26,7 @@ export interface TLDisputeRow {
   raisedByName:     string;
   raisedAt:         string;
   status:           'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
-  paramCategory:    'cat1' | 'cat2';
+  paramCategory:    'cat1' | 'cat2' | 'qa';
   reviewNote:       string | null;
   tlForwarded:      boolean;
   agentNote:        string;

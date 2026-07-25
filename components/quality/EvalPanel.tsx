@@ -1,12 +1,12 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import {
-  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, CAT1_PARAMS, CAT2_PARAMS,
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
   V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
-import { PASCAL_TO_DB } from '@/lib/param-keys';
+import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -30,7 +30,7 @@ export interface EvalPanelProps {
   disposition:   string;
   parameters:    Record<string, { score: any; reasoning: string }>;
   gates?:        any;
-  mode:          'submit' | 'resolve' | 'view' | 'tl-browse';
+  mode:          'submit' | 'resolve' | 'view';
   dispute?: {
     raisedBy:       string;
     raisedByName:   string;
@@ -146,30 +146,12 @@ export default function EvalPanel({
 
   const isV4 = isV4Evaluation(parameters);
 
-  const V4_TO_V3_MAP: Record<string, string> = {
-    'Technical': 'accuracy',
-    'AllQuestions': 'issue_resolution',
-    'Expectation': 'expectationfollowthrough',
-    'Contextual': 'personalization',
-    'Sentences': 'readability',
-    'Opening': 'greetinghandover',
-    'Call': 'escalationdecision',
-    'Empathy': 'empathy',
-    'FollowUp': 'postcallrecap',
-    'DissatisfactionHandling': 'dissatisfactionhandling',
-  };
-
   function initAgentParams(): Record<string, ParamState> {
     const safeParams = parameters?.__agent_parameters || parameters || {};
     const state: Record<string, ParamState> = {};
     const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
     for (const pascal of paramOrderToUse) {
-      const dbKey = PASCAL_TO_DB[pascal] || pascal;
-      const v4Key = V4_TO_V3_MAP[pascal];
-      const raw   = (safeParams as any)[dbKey] 
-                 ?? (safeParams as any)[pascal]
-                 ?? (v4Key ? (safeParams as any)[v4Key] : undefined)
-                 ?? {};
+      const raw = isV4 ? resolveParamCell(safeParams, pascal) : ((safeParams as any)[PASCAL_TO_DB[pascal] || pascal] ?? (safeParams as any)[pascal] ?? {});
       state[pascal] = { score: normalizeScore(raw.score).value, reasoning: raw.comment ?? raw.reasoning ?? '' };
     }
     return state;
@@ -193,8 +175,6 @@ export default function EvalPanel({
   const activeParamOrder = activeTab === 'bot' ? BOT_PARAM_ORDER : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
   const activeParamNames = activeTab === 'bot' ? BOT_PARAM_NAMES : (isV4 ? PARAM_NAMES : V3_PARAM_NAMES);
   const activeWeights = activeTab === 'bot' ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
-  const activeCAT2Params = activeTab === 'bot' ? new Set<string>() : CAT2_PARAMS;
-  
   const currentParamState = activeTab === 'bot' ? botParamState : agentParamState;
 
   function pctLabel(key: string): string {
@@ -214,12 +194,6 @@ export default function EvalPanel({
   const [history,        setHistory]        = useState<HistoryEntry[] | null>(null);
   const [historyOpen,    setHistoryOpen]    = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
-
-  const [tlGeneralNote,  setTlGeneralNote]  = useState('');
-  const [tlParamNotes,   setTlParamNotes]   = useState<Record<string, string>>({});
-  const [tlSubmitting,   setTlSubmitting]   = useState(false);
-  const [tlErr,          setTlErr]          = useState('');
-  const [tlDone,         setTlDone]         = useState<'submit' | 'override' | 'dispute' | null>(null);
 
   const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
 
@@ -292,14 +266,6 @@ export default function EvalPanel({
   })();
 
   const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve') : (isModified ? 'Override' : 'Submit');
-
-  const changedParamsInTL = mode === 'tl-browse' ? activeParamOrder.filter(p => {
-    const orig = activeTab === 'bot' ? initBotParams()[p] : initAgentParams()[p];
-    return currentParamState[p].score !== orig.score;
-  }) : [];
-  const tlCat1Changed = changedParamsInTL.some(p => CAT1_PARAMS.has(p));
-  const tlCat2Changed = changedParamsInTL.some(p => activeCAT2Params.has(p));
-  const tlActionLabel = tlCat1Changed ? 'Raise Dispute' : tlCat2Changed ? 'Correct Parameters' : 'Submit';
 
   // Fetch transcript on mount
   useEffect(() => {
@@ -405,66 +371,6 @@ export default function EvalPanel({
       setSubmitErr(e.message ?? 'Submit failed');
     } finally {
       setSubmitting(false);
-    }
-  }
-
-  // TL: submit / override / raise dispute
-  async function submitTLAction() {
-    if (tlActionLabel === 'Correct Parameters' && !tlGeneralNote.trim()) {
-      setTlErr('Please add a note explaining your change.');
-      return;
-    }
-    setTlSubmitting(true);
-    setTlErr('');
-    try {
-      if (tlActionLabel === 'Submit') {
-        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'tl-submit', note: tlGeneralNote.trim() || undefined }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-        setTlDone('submit');
-      } else if (tlActionLabel === 'Correct Parameters') {
-        const params: Record<string, { score: number | null; reasoning: string }> = {};
-        for (const pascal of changedParamsInTL) {
-          const st = activeTab === 'bot' ? botParamState[pascal] : agentParamState[pascal];
-          params[PASCAL_TO_DB[pascal] || pascal] = { score: st.score, reasoning: st.reasoning };
-        }
-        const res = await fetch(`/api/cx/qa/review/${encodeURIComponent(chatId)}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'tl-override', parameters: params, note: tlGeneralNote.trim() || undefined }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-        setTlDone('override');
-      } else {
-        // Raise Dispute — require a note per CAT1 changed param
-        const cat1Params = changedParamsInTL.filter(p => CAT1_PARAMS.has(p));
-        const missing = cat1Params.filter(p => !(tlParamNotes[p] ?? '').trim());
-        if (missing.length) {
-          setTlErr('Add a note for each challenged parameter.');
-          setTlSubmitting(false);
-          return;
-        }
-        const res = await fetch('/api/quality/flag', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId,
-            agentNote: '',
-            challengedParams: cat1Params.map(p => ({ param: p, note: (tlParamNotes[p] ?? '').trim() })),
-            raisedByRole: 'tl',
-          }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error ?? 'Failed');
-        setTlDone('dispute');
-      }
-      onDone();
-    } catch (e: any) {
-      setTlErr(e.message ?? 'Action failed');
-    } finally {
-      setTlSubmitting(false);
     }
   }
 
@@ -633,12 +539,7 @@ export default function EvalPanel({
               {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
                 const disputed = disputeMap.get(pascal);
-                // QA modes: CAT2 params are TL's domain — hide entirely from QA
-                const isTLParam = activeCAT2Params.has(pascal);
-                const qaReadOnly = (mode === 'submit' || mode === 'resolve') && isTLParam;
-                // In tl-browse, CAT1 changed params get a highlight
-                const tlChanged = mode === 'tl-browse' && changedParamsInTL.includes(pascal);
-                const paramReadOnly = isReadOnly || qaReadOnly;
+                const paramReadOnly = isReadOnly;
                 return (
                   <div key={pascal} style={{
                     padding: '14px 16px',
@@ -646,12 +547,10 @@ export default function EvalPanel({
                     ...(disputed ? {
                       background: 'var(--qa-gray-50)',
                       boxShadow: 'inset 3px 0 0 var(--qa-gray-700)',
-                    } : tlChanged ? {
-                      background: 'var(--qa-gray-50)',
                     } : {}),
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: 13, fontWeight: tlChanged ? 600 : 500, flex: 1, minWidth: 0 }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
                         {activeParamNames[pascal]}
                         {disputed && (
                           <span style={{
@@ -662,16 +561,6 @@ export default function EvalPanel({
                             verticalAlign: 'middle',
                           }}>
                             {dispute?.raisedBy} disputes
-                          </span>
-                        )}
-                        {qaReadOnly && (
-                          <span style={{
-                            marginLeft: 8, height: 16, padding: '0 6px', borderRadius: 4,
-                            background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                            fontSize: 10, fontWeight: 500, color: 'var(--qa-text-3)',
-                            display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle',
-                          }}>
-                            TL
                           </span>
                         )}
                       </span>
@@ -847,29 +736,6 @@ export default function EvalPanel({
                 </button>
               )}
               <div style={{ flex: 1 }} />
-              {/* TL: dynamic action button */}
-              {mode === 'tl-browse' && !tlDone && (
-                <button
-                  onClick={submitTLAction}
-                  disabled={tlSubmitting}
-                  style={{
-                    height: 36, padding: '0 16px', borderRadius: 8,
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                    cursor: tlSubmitting ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex', alignItems: 'center',
-                    border: '1px solid var(--qa-gray-700)',
-                    background: 'var(--qa-gray-700)', color: '#fff',
-                    opacity: tlSubmitting ? 0.7 : 1,
-                  }}
-                >
-                  {tlSubmitting ? 'Saving…' : tlActionLabel}
-                </button>
-              )}
-              {mode === 'tl-browse' && tlDone && (
-                <span style={{ fontSize: 13, color: 'var(--qa-text-2)', fontWeight: 500 }}>
-                  {tlDone === 'dispute' ? 'Dispute raised ✓' : tlDone === 'override' ? 'Override saved ✓' : 'Submitted ✓'}
-                </span>
-              )}
               {/* Primary action (submit/resolve modes) */}
               {(mode === 'submit' || mode === 'resolve') && (
                 <button
@@ -897,52 +763,6 @@ export default function EvalPanel({
                 fontSize: 16, lineHeight: 1,
               }}>×</button>
             </div>
-
-            {/* TL note area (shown when params are changed) */}
-            {mode === 'tl-browse' && changedParamsInTL.length > 0 && !tlDone && (
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border)', flexShrink: 0, background: 'var(--qa-gray-50)' }}>
-                {tlActionLabel === 'Raise Dispute' ? (
-                  // Per-param note for each CAT1 param being disputed
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>
-                      Note required per challenged parameter
-                    </div>
-                    {changedParamsInTL.filter(p => CAT1_PARAMS.has(p)).map(p => (
-                      <div key={p}>
-                        <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--qa-text-2)', marginBottom: 3 }}>{p}</div>
-                        <textarea
-                          value={tlParamNotes[p] ?? ''}
-                          onChange={e => setTlParamNotes(prev => ({ ...prev, [p]: e.target.value }))}
-                          placeholder={`Why should ${p} be corrected?`}
-                          rows={2}
-                          style={{
-                            width: '100%', resize: 'vertical',
-                            border: '1px solid var(--qa-border)', borderRadius: 6,
-                            padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                            lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <textarea
-                    value={tlGeneralNote}
-                    onChange={e => setTlGeneralNote(e.target.value)}
-                    placeholder={tlActionLabel === 'Submit' ? 'Optional comment…' : 'Required: explain your change…'}
-                    rows={2}
-                    style={{
-                      width: '100%', resize: 'vertical',
-                      border: '1px solid var(--qa-border)', borderRadius: 6,
-                      padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                      lineHeight: 1.5, fontFamily: 'inherit', background: 'var(--qa-card)', outline: 'none',
-                    }}
-                  />
-                )}
-                {tlErr && <div style={{ fontSize: 12, color: '#dc2626', fontWeight: 600, marginTop: 4 }}>{tlErr}</div>}
-              </div>
-            )}
 
             {/* History panel */}
             {historyOpen && (

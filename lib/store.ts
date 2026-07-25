@@ -228,9 +228,13 @@ export interface IQSFlag {
   updatedAt?: string;          // ISO — last state transition
   /** who created this flag */
   raisedByRole: 'ir' | 'tl';
-  /** category of challenged params after split (ir mixed → two flags) */
-  paramCategory: 'cat1' | 'cat2';
-  /** links the CAT1 and CAT2 sibling flags created from the same mixed IR dispute */
+  /**
+   * Historical: 'cat1'/'cat2' routed a dispute through the old CAT1/CAT2 TL
+   * split. Disputes now go straight to QA, so new flags use 'qa'. Kept
+   * non-optional — iqs_flags.param_category is NOT NULL in Postgres.
+   */
+  paramCategory: 'cat1' | 'cat2' | 'qa';
+  /** links sibling flags created from the same mixed IR dispute (historical only) */
   parentFlagId?: string;
   status: 'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
   reviewedBy?: string;

@@ -22,7 +22,10 @@ export async function GET(req: NextRequest) {
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
 
   if (statusFilter === 'pending') {
-    flags = flags.filter(f => f.status === 'ir_pending_tl' || f.status === 'tl_forwarded');
+    // 'pending' is where a fresh dispute lands now that it goes straight to QA.
+    // 'ir_pending_tl'/'tl_forwarded' are kept so disputes raised before the
+    // CAT1/CAT2/TL stage was removed still show up as pending.
+    flags = flags.filter(f => f.status === 'pending' || f.status === 'ir_pending_tl' || f.status === 'tl_forwarded');
   } else if (statusFilter === 'resolved') {
     flags = flags.filter(f => f.status === 'tl_resolved' || f.status === 'reviewed');
   }

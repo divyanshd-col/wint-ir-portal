@@ -297,7 +297,7 @@ export default function TLChatTable() {
                       mobileNumber={chat.mobileNumber}
                       reviewedBy={chat.reviewedBy}
                       reviewedAt={chat.reviewedAt}
-                      mode="tl-browse"
+                      mode="view"
                       onDone={() => setExpandedId(null)}
                       onClose={() => setExpandedId(null)}
                       colSpan={7}

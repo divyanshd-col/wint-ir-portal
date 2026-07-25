@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation } from '@/lib/quality';
+import { resolveParamCell } from '@/lib/param-keys';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -35,27 +36,16 @@ interface IRScorePanelProps {
   onDisputeRaised?: () => void;
 }
 
-const DB_KEY_TO_PASCAL: Record<string, string> = {
-  technical: 'Technical', all_questions: 'AllQuestions', expectation: 'Expectation',
-  contextual: 'Contextual', follow_up: 'FollowUp', sentences: 'Sentences',
-  process: 'Process', opening: 'Opening', call: 'Call', grammar: 'Grammar', empathy: 'Empathy',
-  dissatisfactionhandling: 'DissatisfactionHandling',
-  issue_resolution: 'IssueResolution', accuracy: 'Accuracy', correct_escalation: 'CorrectEscalation',
-  no_repetition: 'NoRepetition', personalization: 'Personalization', expectation_setting: 'ExpectationSetting',
-  clarity: 'Clarity',
-};
-
-function normalizeParams(raw: Record<string, any> | null) {
+// Resolves each canonical parameter (v3 or v4) via the shared, backward-compatible
+// key resolver — a chat scored under any historical key dialect still displays.
+function normalizeParams(raw: Record<string, any> | null, paramOrder: string[]) {
   if (!raw) return {} as Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }>;
   const safe = raw.__agent_parameters || raw;
   const out: Record<string, { score: 'Yes' | 'No' | 'NA'; reasoning: string }> = {};
-  for (const [k, v] of Object.entries(safe)) {
-    if (k.startsWith('__')) continue;
-    const key = DB_KEY_TO_PASCAL[k] ?? k;
-    const sc = typeof v === 'object' && v !== null
-      ? ((v as any).score === true ? 'Yes' : (v as any).score === false ? 'No' : 'NA')
-      : (v === true ? 'Yes' : v === false ? 'No' : 'NA');
-    out[key] = { score: sc as 'Yes' | 'No' | 'NA', reasoning: (typeof v === 'object' && (v as any)?.reasoning) || '' };
+  for (const pascal of paramOrder) {
+    const cell = resolveParamCell(safe, pascal);
+    const sc = cell.score === true || cell.score === 1 ? 'Yes' : cell.score === false || cell.score === 0 ? 'No' : 'NA';
+    out[pascal] = { score: sc, reasoning: cell.comment ?? cell.reasoning ?? '' };
   }
   return out;
 }
@@ -87,7 +77,11 @@ export default function IRScorePanel({
   challengedParams = [], reviewNote, colSpan,
   onClose, onDisputeRaised, flagStatus,
 }: IRScorePanelProps) {
-  const params = normalizeParams(parameters);
+  const isV4 = isV4Evaluation(parameters);
+  const activeParamOrder = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
+  const activeParamNames = isV4 ? PARAM_NAMES : V3_PARAM_NAMES;
+  const activeWeights    = isV4 ? WEIGHTS : V3_WEIGHTS;
+  const params = normalizeParams(parameters, activeParamOrder);
   const failCount = Object.values(params).filter(p => p.score === 'No').length;
 
   const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
@@ -154,7 +148,7 @@ export default function IRScorePanel({
   const date = closedAt ? new Date(closedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
   const isRejected = reviewNote?.toLowerCase().includes('reject');
 
-  const pendingStatusLabel = flagStatus === 'ir_pending_tl' ? 'Raised' : 'Under Review';
+  const pendingStatusLabel = flagStatus === 'tl_forwarded' ? 'Under Review' : 'Raised';
   const reviewedOutcome = isRejected ? 'Rejected' : 'Accepted';
 
   return (
@@ -204,11 +198,6 @@ export default function IRScorePanel({
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {(() => {
-                const isV4 = isV4Evaluation(parameters);
-                const activeParamOrder = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
-                const activeParamNames = isV4 ? PARAM_NAMES : V3_PARAM_NAMES;
-                const activeWeights    = isV4 ? WEIGHTS : V3_WEIGHTS;
-
                 return activeParamOrder.map((param, idx) => {
                   const entry = params[param];
                   const score = entry?.score || 'NA';

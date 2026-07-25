@@ -2,18 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
 import type { IQSFlag, IQSChallengedParam, IQSAuditEntry } from '@/lib/store';
-import { CAT1_PARAMS, CAT2_PARAMS } from '@/lib/quality';
 import { randomUUID } from 'crypto';
 
+// TL is view-only — only QA/admin can act on a dispute.
 function reviewAccess(session: any) {
-  return ['admin', 'quality', 'tl'].includes(session?.user?.role || '');
+  return ['admin', 'quality'].includes(session?.user?.role || '');
 }
 
+// Agent-raised disputes go straight to QA — no CAT1/CAT2 split, no TL stage.
 export async function POST(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  const { session, response } = await requireRole(['admin', 'quality', 'agent']);
   if (response) return response;
 
-  const { scoreId, chatId, agentNote, challengedParams, raisedByRole } = await req.json();
+  const { scoreId, chatId, agentNote, challengedParams } = await req.json();
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
   const { readConfig } = await import('@/lib/config');
@@ -26,46 +27,13 @@ export async function POST(req: NextRequest) {
   const params: IQSChallengedParam[] = Array.isArray(challengedParams) ? challengedParams : [];
   const now = new Date().toISOString();
 
-  // TL-raised dispute: CAT1 only, goes directly to QA (status: 'pending')
-  if (raisedByRole === 'tl') {
-    const flag: IQSFlag = {
-      id: randomUUID(), scoreId, chatId, agentName, agentEmail: email,
-      agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
-      raisedByRole: 'tl', paramCategory: 'cat1', status: 'pending',
-    };
-    await storeAppendIQSFlag(flag);
-    await storeAppendAuditEntry({ id: randomUUID(), action: 'tl_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
-    return NextResponse.json({ ok: true, flagId: flag.id });
-  }
-
-  // IR-raised dispute: route by param category
-  const cat1Params = params.filter(p => CAT1_PARAMS.has(p.param));
-  const cat2Params = params.filter(p => CAT2_PARAMS.has(p.param));
-  const hasCat1 = cat1Params.length > 0;
-  const hasCat2 = cat2Params.length > 0;
-
-  const baseFlag = {
-    scoreId, chatId, agentName, agentEmail: email,
-    agentNote: agentNote || '', flaggedAt: now, raisedByRole: 'ir' as const,
-    status: 'ir_pending_tl' as const,
+  const flag: IQSFlag = {
+    id: randomUUID(), scoreId, chatId, agentName, agentEmail: email,
+    agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
+    raisedByRole: 'ir', paramCategory: 'qa', status: 'pending',
   };
-
-  if (hasCat1 && hasCat2) {
-    // Mixed: create two flags — one per category
-    const cat2Flag: IQSFlag = { ...baseFlag, id: randomUUID(), paramCategory: 'cat2', challengedParams: cat2Params };
-    const cat1Flag: IQSFlag = { ...baseFlag, id: randomUUID(), paramCategory: 'cat1', challengedParams: cat1Params, parentFlagId: cat2Flag.id };
-    await storeAppendIQSFlag(cat2Flag);
-    await storeAppendIQSFlag(cat1Flag);
-    await storeAppendAuditEntry({ id: randomUUID(), action: 'ir_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { paramCategory: 'cat2', challengedParams: cat2Params, agentName } } as IQSAuditEntry);
-    await storeAppendAuditEntry({ id: randomUUID(), action: 'ir_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { paramCategory: 'cat1', challengedParams: cat1Params, agentName, siblingFlagId: cat2Flag.id } } as IQSAuditEntry);
-    return NextResponse.json({ ok: true, flagIds: [cat2Flag.id, cat1Flag.id] });
-  }
-
-  const paramCategory = hasCat1 ? 'cat1' : 'cat2';
-  const selectedParams = hasCat1 ? cat1Params : cat2Params;
-  const flag: IQSFlag = { ...baseFlag, id: randomUUID(), paramCategory, challengedParams: selectedParams };
   await storeAppendIQSFlag(flag);
-  await storeAppendAuditEntry({ id: randomUUID(), action: 'ir_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { paramCategory, challengedParams: selectedParams, agentName } } as IQSAuditEntry);
+  await storeAppendAuditEntry({ id: randomUUID(), action: 'ir_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
 
@@ -106,7 +74,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
+  const { session, response } = await requireRole(['admin', 'quality', 'agent']);
   if (response) return response;
 
   const { id, status, reviewNote, action } = await req.json();
@@ -123,7 +91,11 @@ export async function PATCH(req: NextRequest) {
     const flag = flags.find((f: any) => f.id === id);
     if (!flag) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
     if (role === 'agent' && flag.agentEmail !== email) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    if (flag.status !== 'ir_pending_tl') return NextResponse.json({ error: 'Can only cancel pending disputes' }, { status: 400 });
+    // 'pending' is the steady state for a fresh dispute now that it goes straight to QA;
+    // 'ir_pending_tl' is kept for any dispute raised before the CAT1/CAT2/TL stage was removed.
+    if (flag.status !== 'ir_pending_tl' && flag.status !== 'pending') {
+      return NextResponse.json({ error: 'Can only cancel pending disputes' }, { status: 400 });
+    }
     const ok = await storeUpdateIQSFlag(id, { status: 'cancelled', updatedAt: new Date().toISOString() });
     if (!ok) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
     return NextResponse.json({ ok: true });

@@ -1,46 +1,35 @@
-import { PASCAL_TO_DB } from './param-keys';
+import { PASCAL_TO_DB, resolveParamCell } from './param-keys';
+import { HUMAN_WEIGHTS as V4_HUMAN_WEIGHTS_PCT } from './scoring/prompt_v4';
 
 /**
  * IQS Quality Scoring — types, config, scoring prompt, and KV storage.
  * Ported from the standalone Python iqs_scorer tool.
  */
 
-// ── Parameter weights (20% Technical is highest) ────────────────────────────
-export const WEIGHTS: Record<string, number> = {
-  Technical:    0.20,
-  AllQuestions: 0.25,
-  Expectation:  0.20,
-  DissatisfactionHandling: 0.10,
-  Contextual:   0.10,
-  FollowUp:     0.05,
-  Sentences:    0.03,
-  Process:      0.00,
-  Opening:      0.02,
-  Call:         0.05,
-  Grammar:      0.00,
-  Empathy:      0.05,
-};
+export { resolveParamCell };
+
+// ── Parameter weights ────────────────────────────────────────────────────────
+// Sourced from lib/scoring/prompt_v4.ts's HUMAN_WEIGHTS (0-100 scale there,
+// converted to fractions here) so there is one place that defines what v4
+// actually scores — no more hand-duplicated, drifting copy.
+export const WEIGHTS: Record<string, number> = Object.fromEntries(
+  Object.entries(V4_HUMAN_WEIGHTS_PCT).map(([k, v]) => [k, v / 100])
+);
 
 export const PARAM_NAMES: Record<string, string> = {
-  Technical:                'Accuracy',
-  AllQuestions:             'Issue Resolution',
-  Expectation:              'Expectation Setting & Follow-Through',
-  DissatisfactionHandling: 'Dissatisfaction Handling',
-  Contextual:               'Contextual & Personalization',
-  FollowUp:                 'Post-Call Recap / Follow-up',
-  Sentences:                'Readability & Tone',
-  Process:                  'Process-wise',
-  Opening:                  'Greeting & Handover',
-  Call:                     'Call Escalation Decision',
-  Grammar:                  'Grammar / Structure',
-  Empathy:                  'Empathy',
+  IssueResolution:           'Issue Resolution',
+  Accuracy:                  'Accuracy',
+  ExpectationFollowThrough:  'Expectation Setting & Follow-Through',
+  DissatisfactionHandling:   'Dissatisfaction Handling',
+  Personalization:           'Personalization',
+  Empathy:                   'Empathy',
+  EscalationDecision:        'Call Escalation Decision',
+  Readability:               'Readability & Tone',
+  GreetingHandover:          'Greeting & Handover',
+  PostCallRecap:             'Post-Call Recap',
 };
 
-export const PARAM_ORDER = [
-  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Contextual',
-  'FollowUp', 'Sentences', 'Process', 'Opening',
-  'Call', 'Grammar', 'Empathy',
-];
+export const PARAM_ORDER = Object.keys(V4_HUMAN_WEIGHTS_PCT);
 
 // V3 Legacy parameter order, names, and weights for old chats
 export const V3_PARAM_ORDER = [
@@ -112,16 +101,6 @@ export const BOT_PARAM_ORDER = [
   'IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition',
   'Personalization', 'ExpectationSetting', 'Clarity',
 ];
-
-// CAT 1: QA-owned — bot + QA score these; TL can only dispute, not override
-export const CAT1_PARAMS = new Set([
-  'Technical', 'AllQuestions', 'Expectation', 'DissatisfactionHandling', 'Process', 'FollowUp', 'Opening', 'Call',
-]);
-
-// CAT 2: TL-owned — TL can override these directly
-export const CAT2_PARAMS = new Set([
-  'Contextual', 'Sentences', 'Grammar', 'Empathy',
-]);
 
 export type ParamScore = 'Yes' | 'No' | 'NA' | 'Half';
 
@@ -299,9 +278,12 @@ export function computeIqsFromRawParams(paramsObj: any, isBot = false): number |
   let hasValidParam = false;
 
   for (const pascal of paramKeys) {
-    const dbKey = PASCAL_TO_DB[pascal] || pascal;
-    const rawVal = targetParams[dbKey] ?? targetParams[pascal];
-    if (rawVal !== undefined && rawVal !== null) {
+    const rawVal = isBot
+      ? (targetParams[PASCAL_TO_DB[pascal] || pascal] ?? targetParams[pascal])
+      : resolveParamCell(targetParams, pascal);
+    const hasData = rawVal !== undefined && rawVal !== null
+      && !(typeof rawVal === 'object' && rawVal.score === undefined);
+    if (hasData) {
       hasValidParam = true;
       const scoreVal = typeof rawVal === 'object' && rawVal !== null ? rawVal.score : rawVal;
       if (scoreVal === true || scoreVal === 1 || scoreVal === '1' || String(scoreVal).toLowerCase() === 'yes' || String(scoreVal).toLowerCase() === 'pass') {

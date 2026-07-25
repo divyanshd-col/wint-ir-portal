@@ -690,8 +690,11 @@ function DisputesSection() {
               const isOpen = expandedId === row.flagId;
               const isLast = idx === rows.length - 1;
               const isRejected = row.reviewNote?.toLowerCase().includes('reject');
+              // 'pending'/'ir_pending_tl' both mean "raised, awaiting QA" — the
+              // latter only appears on disputes raised before the CAT1/CAT2/TL
+              // stage was removed. 'tl_forwarded' is likewise historical.
               const statusText = tab === 'pending'
-                ? (row.status === 'ir_pending_tl' ? 'Raised' : 'Under Review')
+                ? (row.status === 'tl_forwarded' ? 'Under Review' : 'Raised')
                 : (isRejected ? 'Rejected' : 'Accepted');
               return (
                 <>
@@ -758,7 +761,7 @@ function DisputeRowComp({ row, tab, statusText, isOpen, isLast, cancelling, onCa
       </td>
       <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {tab === 'pending' && row.status === 'ir_pending_tl' && (
+          {tab === 'pending' && (row.status === 'pending' || row.status === 'ir_pending_tl') && (
             <button
               disabled={cancelling === row.flagId}
               onClick={onCancel}

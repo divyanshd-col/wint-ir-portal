@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { PASCAL_TO_DB, DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
@@ -363,7 +363,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     for (const [dbKey, val] of Object.entries(safeAgentParams) as [string, any][]) {
       if (dbKey.startsWith('__')) continue;
       if (val?.score === false) {
-        const pascal = DB_KEY_TO_LEGACY[dbKey];
+        const pascal = ALL_DB_KEY_TO_PASCAL[dbKey];
         if (pascal) failedParams.push(pascal);
       }
     }

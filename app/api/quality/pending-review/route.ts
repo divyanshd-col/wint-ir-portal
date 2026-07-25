@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { DB_KEY_TO_LEGACY } from '@/lib/param-keys';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { getAllScoredConversations, getScoredConversationsFilterOptions, getAgentNamesByTL, getAgentNamesByQA, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { storeGetIQSFlags } from '@/lib/store';
 import { readConfig } from '@/lib/config';
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
         if (Array.isArray(val) && val.length > 0) uncertain = val;
         continue;
       }
-      const k = DB_KEY_TO_LEGACY[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
+      const k = ALL_DB_KEY_TO_PASCAL[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
       scores[k]    = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
       reasoning[k] = val?.reasoning || '';
     }
