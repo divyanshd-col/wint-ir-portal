@@ -31,6 +31,7 @@ export interface TLDisputeRow {
   agentNote:        string;
   challengedParams: { param: string; note: string }[];
   parameters:       Record<string, { score: boolean | null; reasoning: string }>;
+  conversationType?: 'bot' | 'agent' | 'hybrid';
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -86,12 +87,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     disposition: string; sub_disposition: string | null;
     iqs_score: string; parameters: any;
     csat_score: string | null; mobile_number: string | null;
+    conversation_type: string | null;
   }>(
     `SELECT c.id AS chat_id, a.name AS agent_name, c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
             i.iqs_score, i.parameters, c.csat_score,
-            ct.phone AS mobile_number
+            ct.phone AS mobile_number, c.conversation_type
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -166,6 +168,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       agentNote:        flag.agentNote,
       challengedParams: flag.challengedParams ?? [],
       parameters:       params,
+      conversationType: db.conversation_type as any,
     });
   }
 

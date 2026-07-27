@@ -303,6 +303,7 @@ function EvaluatedChatsSection() {
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={7}
+                    conversationType={chat.conversationType}
                   />
                 )}
               </React.Fragment>
@@ -527,6 +528,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={colCount}
+                    conversationType={d.conversationType}
                   />
                 </>
               )}
