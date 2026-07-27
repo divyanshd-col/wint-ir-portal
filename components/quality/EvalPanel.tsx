@@ -147,7 +147,7 @@ export default function EvalPanel({
   const botParamsSrc: Record<string, any> = parameters?.__bot_parameters
     || (parameters?.__agent_parameters ? {} : parameters) || {};
   const hasBotParams = Object.keys(botParamsSrc).some(k => BOT_ONLY_PARAM_KEYS.includes(k));
-  const isBotChat = conversationType === 'bot' || hasBotParams;
+  const isBotChat = conversationType === 'bot' || (conversationType !== 'agent' && conversationType !== 'hybrid' && hasBotParams);
   const isHybrid = conversationType === 'hybrid';
   const showTabs = isHybrid;
 
@@ -254,7 +254,8 @@ export default function EvalPanel({
 
   const isModified = (() => {
     let mod = false;
-    if (!isBotChat) {
+    const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
+    if (checkAgent) {
       const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
       for (const pascal of paramOrderToUse) {
         const orig = initAgentParams()[pascal];
@@ -264,11 +265,12 @@ export default function EvalPanel({
         }
       }
     }
-    if (isHybrid || isBotChat) {
+    const checkBot = isHybrid || isBotChat || parameters?.__bot_parameters || activeTab === 'bot';
+    if (checkBot) {
       for (const pascal of BOT_PARAM_ORDER) {
         const orig = initBotParams()[pascal];
         const cur  = botParamState[pascal];
-        if (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim()) mod = true;
+        if (cur && (cur.score !== orig.score || (cur.reasoning ?? '').trim() !== (orig.reasoning ?? '').trim())) mod = true;
       }
     }
     return mod;
@@ -342,7 +344,8 @@ export default function EvalPanel({
       if (isModified) {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
         
-        if (!isBotChat) {
+        const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
+        if (checkAgent) {
           const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
           for (const pascal of paramOrderToUse) {
             const dbKey = PASCAL_TO_DB[pascal] || pascal;
@@ -352,13 +355,14 @@ export default function EvalPanel({
           }
         }
         
-        if (isHybrid || isBotChat) {
+        const checkBot = isHybrid || isBotChat || parameters?.__bot_parameters || activeTab === 'bot';
+        if (checkBot) {
           const botParams: Record<string, { score: number | null; reasoning: string }> = {};
           for (const pascal of BOT_PARAM_ORDER) {
             const dbKey = PASCAL_TO_DB[pascal] || pascal;
             botParams[dbKey] = { score: botParamState[pascal].score, reasoning: botParamState[pascal].reasoning };
           }
-          if (isBotChat) {
+          if (isBotChat && !parameters?.__agent_parameters) {
             Object.assign(params, botParams);
           } else {
             params['__bot_parameters'] = botParams as any;

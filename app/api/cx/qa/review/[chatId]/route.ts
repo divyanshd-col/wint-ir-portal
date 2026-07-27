@@ -59,14 +59,16 @@ export async function PATCH(
     );
     const oldScore = beforeState[0]?.iqs_score ?? null;
     const oldParams = beforeState[0]?.parameters ?? null;
-    const isBot = beforeState[0]?.conversation_type === 'bot' || (() => {
+    const convType = beforeState[0]?.conversation_type;
+    const isBot = convType === 'bot' || (convType !== 'agent' && convType !== 'hybrid' && (() => {
       if (!oldParams) return false;
+      if (oldParams.__agent_parameters && !oldParams.__bot_parameters) return false;
       // A bot-only chat stores its params under __bot_parameters (no __agent_parameters).
       // Detect it by the presence of a bot-distinctive key, not a shared one.
       const safeParams = oldParams.__bot_parameters
         || (oldParams.__agent_parameters ? {} : oldParams);
       return Object.keys(safeParams).some(k => BOT_ONLY_DB_KEYS.includes(k));
-    })();
+    })());
 
     if (action === 'submit') {
       await query(
@@ -126,10 +128,11 @@ export async function PATCH(
             if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
             const cell = { score: val.score, reasoning: val.reasoning };
             merged[key] = cell;
-            if (isBot) {
-              if (merged.__bot_parameters) merged.__bot_parameters[key] = cell;
-            } else if (merged.__agent_parameters) {
+            if (merged.__agent_parameters) {
               merged.__agent_parameters[key] = cell;
+            }
+            if (isBot && merged.__bot_parameters) {
+              merged.__bot_parameters[key] = cell;
             }
           }
         }
@@ -137,10 +140,14 @@ export async function PATCH(
 
         // Recalculate IQS — convert snake_case scores to PascalCase Yes/No/NA
         const pascalScores: Record<string, ParamScore> = {};
-        for (const [dbKey, val] of Object.entries(merged) as [string, any][]) {
+        const safeAgentParams = {
+          ...(merged.__agent_parameters || {}),
+          ...merged,
+        };
+        for (const [dbKey, val] of Object.entries(safeAgentParams) as [string, any][]) {
           if (dbKey.startsWith('__')) continue;
           const pascal = DB_TO_PASCAL[dbKey] || dbKey;
-          if (pascal) {
+          if (pascal && val && typeof val === 'object') {
             pascalScores[pascal] = val.score === true || val.score === 1
               ? 'Yes'
               : val.score === false || val.score === 0
