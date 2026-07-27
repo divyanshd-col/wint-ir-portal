@@ -72,6 +72,28 @@ export async function GET(req: NextRequest) {
           botIqsScore = computeIqsFromRawParams(parameters, true);
         }
       }
+
+      // If no chat score found or flag is explicitly for a call, try call_evaluations & call_recordings
+      const targetCallId = f.callId || f.chatId;
+      if (targetCallId) {
+        const callRows = await query<any>(
+          `SELECT ce.iqs_percent, ce.iqs_scores, cr.called_at, cr.call_disposition, cr.call_sub_disposition
+           FROM call_evaluations ce
+           JOIN call_recordings cr ON cr.id = ce.call_id
+           WHERE ce.call_id = $1 OR ce.chat_id = $1
+           LIMIT 1`,
+          [targetCallId]
+        );
+        if (callRows.length > 0) {
+          const cRow = callRows[0];
+          callIqsScore = cRow.iqs_percent != null ? parseFloat(cRow.iqs_percent) : null;
+          if (iqsScore === null) iqsScore = callIqsScore;
+          if (!closedAt && cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
+          if (!disposition) disposition = cRow.call_disposition || '';
+          if (!subDisposition) subDisposition = cRow.call_sub_disposition || null;
+          if (!parameters) parameters = cRow.iqs_scores ?? null;
+        }
+      }
     } catch {
       // DB unavailable — return flag data only
     }
@@ -79,6 +101,7 @@ export async function GET(req: NextRequest) {
     return {
       flagId: f.id,
       chatId: f.chatId,
+      callId: f.callId || f.chatId,
       iqsScore,
       botIqsScore,
       callIqsScore,

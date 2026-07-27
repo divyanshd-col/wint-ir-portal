@@ -12,9 +12,9 @@ function avg(nums: number[]): number | null {
 
 // DB stores parameters with keys like "Technical", "AllQuestions", etc.
 // Normalise to CallParamScore
-function normaliseScore(raw: boolean | null | undefined): 'Yes' | 'No' | 'NA' {
-  if (raw === true)  return 'Yes';
-  if (raw === false) return 'No';
+function normaliseScore(raw: any): 'Yes' | 'No' | 'NA' {
+  if (raw === true || raw === 'Yes' || raw === 'yes' || raw === 2)  return 'Yes';
+  if (raw === false || raw === 'No' || raw === 'no' || raw === 0) return 'No';
   return 'NA';
 }
 
@@ -22,13 +22,45 @@ function normParamsFromDb(params: any): { scores: Record<string, string>; reason
   const scores: Record<string, string> = {};
   const reasoning: Record<string, string> = {};
   if (!params || typeof params !== 'object') return { scores, reasoning };
+
+  // Check if params has v3.1 structure: { scores: {...}, evidence: {...} }
+  if (params.scores && typeof params.scores === 'object') {
+    const rawScores = params.scores;
+    const rawEvidence = params.evidence || {};
+    Object.keys(rawScores).forEach(p => {
+      scores[p] = normaliseScore(rawScores[p]);
+      const ev = rawEvidence[p];
+      reasoning[p] = ev ? (Array.isArray(ev) ? ev[0]?.note || '' : typeof ev === 'object' ? ev.note || '' : String(ev)) : '';
+    });
+    return { scores, reasoning };
+  }
+
+  // Otherwise check standard or legacy key-value pairs
   for (const key of CALL_PARAM_ORDER) {
     const entry = params[key];
     if (entry) {
-      scores[key]   = normaliseScore(entry.score);
-      reasoning[key] = entry.reasoning || '';
+      if (typeof entry === 'object' && entry !== null) {
+        scores[key]   = normaliseScore(entry.score);
+        reasoning[key] = entry.reasoning || '';
+      } else {
+        scores[key] = normaliseScore(entry);
+      }
     }
   }
+
+  // Also include any P1..P11 direct keys if present
+  ['P1', 'P2', 'P3', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10', 'P11'].forEach(p => {
+    if (params[p] !== undefined && !scores[p]) {
+      const entry = params[p];
+      if (typeof entry === 'object' && entry !== null) {
+        scores[p] = normaliseScore(entry.score);
+        reasoning[p] = entry.reasoning || '';
+      } else {
+        scores[p] = normaliseScore(entry);
+      }
+    }
+  });
+
   return { scores, reasoning };
 }
 
@@ -51,10 +83,17 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // Role-based agent scoping
   let agentNames: string[] | undefined;
   if (role === 'agent') {
-    const selfName = user?.agentName || '';
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig();
+    const configUser = config.users.find(u => (u.email || u.username) === userEmail);
+    const selfName = configUser?.agentName || user?.agentName || userEmail.split('@')[0];
     agentNames = selfName ? [selfName] : [];
   } else if (role === 'tl') {
-    const tlAgents = await getAgentNamesByTL(userEmail);
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig();
+    const configUser = config.users.find(u => (u.email || u.username) === userEmail);
+    const tlAgentName = configUser?.agentName || userEmail;
+    const tlAgents = await getAgentNamesByTL(tlAgentName);
     agentNames = agentFilter ? tlAgents.filter(n => n === agentFilter) : tlAgents;
   } else if (role === 'quality') {
     const qaAgents = await getAgentNamesByQA(userEmail);
@@ -82,13 +121,15 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   // Normalise rows for the frontend
   const entries = rows.map((r: any) => {
     const { scores, reasoning } = normParamsFromDb(r.parameters);
-    const failedParams = CALL_PARAM_ORDER.filter(k => scores[k] === 'No');
+    const failedParams = Object.keys(scores).filter(k => scores[k] === 'No');
     return {
       callId:            r.callId,
       chatId:            r.chatId,
       agentName:         r.agentName || '',
       date:              r.date || '',
       calledAt:          r.calledAt || '',
+      disposition:       r.disposition || '',
+      subDisposition:    r.subDisposition || '',
       durationSeconds:   r.durationSeconds ?? null,
       language:          r.language || '',
       interruptionCount: r.interruptionCount ?? 0,
@@ -97,6 +138,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       scores,
       reasoning,
       failedParams,
+      gates:             r.gates || null,
+      verdict:           r.verdict || null,
+      rawParameters:     r.parameters || null,
       modelVersion:      r.modelVersion || '',
       scoredAt:          r.scoredAt || '',
     };

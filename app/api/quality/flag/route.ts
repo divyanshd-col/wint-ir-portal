@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'agent']);
   if (response) return response;
 
-  const { scoreId, chatId, agentNote, challengedParams } = await req.json();
-  if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
+  const { scoreId, chatId, callId, agentNote, challengedParams } = await req.json();
+  const effectiveChatId = chatId || callId;
+  if (!effectiveChatId) return NextResponse.json({ error: 'chatId or callId required' }, { status: 400 });
 
   const { readConfig } = await import('@/lib/config');
   const config = await readConfig();
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
   const now = new Date().toISOString();
 
   const flag: IQSFlag = {
-    id: randomUUID(), scoreId, chatId, agentName, agentEmail: email,
+    id: randomUUID(), scoreId, chatId: effectiveChatId, callId: callId || undefined, agentName, agentEmail: email,
     agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
     raisedByRole: 'ir', paramCategory: 'qa', status: 'pending',
   };

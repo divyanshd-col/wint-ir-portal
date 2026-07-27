@@ -220,6 +220,7 @@ export interface IQSFlag {
   id: string;
   scoreId?: string;
   chatId: string;
+  callId?: string;
   agentName: string;
   agentEmail: string;
   agentNote: string;

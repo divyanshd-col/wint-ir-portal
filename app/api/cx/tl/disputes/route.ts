@@ -14,6 +14,7 @@ const ROUTE = 'cx/tl/disputes';
 export interface TLDisputeRow {
   flagId:           string;
   chatId:           string;
+  callId?:          string;
   agentName:        string;
   iqsScore:         number | null;
   botIqsScore?:     number | null;
@@ -99,8 +100,30 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      WHERE c.id = ANY($1)`,
     [chatIds]
   );
-
   const dbMap = new Map(dbRows.map(r => [r.chat_id, r]));
+
+  // Bulk-fetch call data from call_evaluations / call_recordings
+  const targetCallIds = [...new Set(flags.map(f => f.callId || f.chatId).filter(Boolean))];
+  const callDbRows = await query<{
+    call_id: string; chat_id: string | null; agent_name: string | null;
+    called_at: string; disposition: string; sub_disposition: string | null;
+    iqs_percent: string | null; parameters: any;
+  }>(
+    `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, '') AS agent_name,
+            cr.called_at, cr.call_disposition AS disposition,
+            cr.call_sub_disposition AS sub_disposition,
+            ce.iqs_percent, ce.iqs_scores AS parameters
+     FROM call_evaluations ce
+     JOIN call_recordings cr ON cr.id = ce.call_id
+     LEFT JOIN agents a ON a.id = ce.agent_id
+     WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
+    [targetCallIds]
+  );
+  const callDbMap = new Map<string, typeof callDbRows[0]>();
+  callDbRows.forEach(r => {
+    callDbMap.set(r.call_id, r);
+    if (r.chat_id) callDbMap.set(r.chat_id, r);
+  });
 
   // Build role label for who raised the dispute
   const config = await readConfig();
@@ -119,11 +142,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const disputes: TLDisputeRow[] = [];
   for (const flag of flags) {
     const db = dbMap.get(flag.chatId);
-    if (!db) continue;
-    // Only show disputes for this TL's agents
-    if (!agentNames.includes(db.agent_name ?? '')) continue;
+    const callDb = callDbMap.get(flag.callId || flag.chatId);
 
-    let params = db.parameters ?? {};
+    if (!db && !callDb) continue;
+
+    const agentName = db?.agent_name || callDb?.agent_name || flag.agentName;
+    // Only show disputes for this TL's agents
+    if (!agentNames.includes(agentName)) continue;
+
+    let params = db?.parameters ?? callDb?.parameters ?? {};
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
     let botIqsScore: number | null = null;
@@ -136,27 +163,33 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (iqsScore === null) {
+    if (callDb?.iqs_percent != null) {
+      callIqsScore = parseFloat(callDb.iqs_percent);
+      if (iqsScore === null) iqsScore = callIqsScore;
+    }
+
+    if (iqsScore === null && !callDb) {
       iqsScore = computeIqsFromRawParams(params, false);
     }
-    if (botIqsScore === null) {
+    if (botIqsScore === null && !callDb) {
       botIqsScore = computeIqsFromRawParams(params, true);
     }
-    if (botIqsScore === null && db.iqs_score !== null && db.iqs_score !== undefined) {
+    if (botIqsScore === null && db?.iqs_score != null) {
       botIqsScore = parseFloat(db.iqs_score);
     }
 
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
-      agentName:        db.agent_name ?? flag.agentName,
+      callId:           flag.callId || callDb?.call_id,
+      agentName:        agentName,
       iqsScore,
       botIqsScore,
       callIqsScore,
-      closedAt:         db.closed_at,
-      csatScore:        db.csat_score ? parseInt(db.csat_score) : null,
-      disposition:      db.disposition,
-      subDisposition:   db.sub_disposition,
+      closedAt:         db?.closed_at || callDb?.called_at || flag.flaggedAt,
+      csatScore:        db?.csat_score ? parseInt(db.csat_score) : null,
+      disposition:      db?.disposition || callDb?.disposition || '',
+      subDisposition:   db?.sub_disposition || callDb?.sub_disposition || null,
       raisedBy:         raisedByLabel(flag),
       raisedByName:     flag.agentName,
       raisedAt:         flag.flaggedAt,
