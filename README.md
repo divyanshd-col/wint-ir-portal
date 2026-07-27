@@ -2,7 +2,7 @@
 
 An AI-powered Investor Relations (IR) operations platform. Agents use it to triage investor queries in real time, quality teams use it to score chat and call interactions, team leads use it for coaching and analytics, and data analysts use it to query conversation data in plain English.
 
-> Built on **Next.js 15 App Router**, powered by **Google Gemini** and **Anthropic Claude**, with a **PostgreSQL** database and **Google Drive** as the knowledge base.
+> Built on **Next.js 16 App Router**, powered by **Google Gemini** and **Anthropic Claude**, with a **PostgreSQL** database and **Google Drive** as the knowledge base.
 
 ---
 
@@ -19,7 +19,7 @@ An AI-powered Investor Relations (IR) operations platform. Agents use it to tria
 9. [Environment Variables](#environment-variables)
 10. [User Management](#user-management)
 11. [Admin Scripts](#admin-scripts)
-12. [Deployment](#deployment)
+12. [Deployment & GitHub Pages](#deployment)
 
 ---
 
@@ -30,25 +30,33 @@ Next.js App (App Router)
 │
 ├── /login                    — Credentials-based login
 ├── /                         — IR agent chat (real-time triage)
-├── /quality                  — Quality evaluation hub
+├── /quality                  — Quality evaluation hub (QA)
 │   ├── /chat-evaluation      — Evaluate chat transcripts
 │   ├── /call-evaluation      — Evaluate call recordings
-│   └── /tl-evaluation        — TL view of evaluations
-├── /analytics                — Text-to-SQL analytics dashboard
-├── /call-analysis            — Call analytics & scoring
+│   ├── /tl-evaluation        — TL view of evaluations
+│   └── /disputes             — QA dispute management portal
+├── /agent                    — Agent self-service quality & analytics portal
+│   ├── /quality-chats        — My Quality Chats (scores, parameters, raise disputes)
+│   └── /quality-calls        — My Quality Calls (call scores, audio player, AI summary, raise disputes)
 ├── /tl                       — Team Lead dashboard
-│   ├── /member-analytics     — Per-agent coaching insights
-│   └── /quality-chats        — Chat quality review for TLs
+│   ├── /member-analytics     — Per-agent coaching insights & stats
+│   ├── /quality-chats        — Chat quality review & TL dispute approvals
+│   └── /quality-calls        — Call quality review & TL dispute approvals
+├── /analytics                — Text-to-SQL analytics dashboard
+├── /call-analysis            — Multimodal call audio analyzer sandbox
 ├── /cx                       — CX queue view (agent-level)
-├── /settings                 — Admin: users, config, KB
-└── /agent                    — Agent self-analytics
+└── /settings                 — Admin: users, config, KB sync
 
 app/api/
 ├── chat/                     — IR triage pipeline (analyze, answer, draft)
 ├── cx/                       — CX data APIs (QA, TL, agent, disputes)
-├── quality/                  — IQS evaluation APIs
-├── call-quality/             — Call scoring + transcription
-├── call-analysis/            — Two-pass audio analyzer
+│   └── tl/disputes/          — TL dispute review & resolution API
+├── ir/                       — Agent IR APIs
+│   └── disputes/             — Agent dispute submission API
+├── quality/                  — Chat IQS evaluation & flag APIs
+├── call-quality/             — Call scoring + 2-pass transcription pipeline
+│   └── scores/               — Call evaluation scores & parameters API
+├── call-analysis/            — Audio analysis engine
 ├── analytics/                — SQL query agent
 ├── conversations/            — Conversation retrieval
 ├── corrections/              — Manual score corrections
@@ -62,7 +70,7 @@ lib/
 ├── call-quality.ts           — Call IQS scorer + transcription
 ├── call-analyzer.ts          — Two-pass audio analysis
 ├── analytics/                — SQL agent, classifier, themes, summarizer
-├── store.ts                  — DB queries
+├── store.ts                  — DB queries & dispute routing
 ├── drive.ts                  — Google Drive knowledge base
 ├── slack.ts                  — Slack notifications
 ├── gemini.ts                 — Gemini client wrapper
@@ -71,15 +79,17 @@ lib/
 
 **Core data flow:**
 ```
-Investor query (via WhatsApp/Robylon)
-    → Webhook ingest → PostgreSQL
-    → Agent opens chat in IR Portal
+Investor query (via WhatsApp/Robylon) or Voice Call Recording
+    → Webhook / Audio upload → PostgreSQL
+    → Agent opens chat in IR Portal / Audio processed via 2-Pass Gemini Multimodal pipeline
     → Stage 0: Intent classified by Router
     → Stage 1: Facts collected via structured questions
     → Stage 2: Answer generated from KB + facts
-    → Agent sends reply to investor
-    → QA team evaluates transcript → IQS score stored
-    → TL reviews coaching insights
+    → Agent sends reply / Voice Call scored on 11 parameters
+    → QA / AI evaluates interaction → IQS score stored
+    → Agent views scores in My Quality Chats / My Quality Calls
+    → Agent raises dispute → Routed to TL → Escalated to QA if needed
+    → TL reviews coaching insights & member analytics
     → Analytics team queries data in plain English
 ```
 
@@ -91,12 +101,16 @@ Investor query (via WhatsApp/Robylon)
 |---|---|
 | **Real-time triage chat** | AI walks agents through structured fact-collection before generating a resolution |
 | **Knowledge Base (KB)** | Google Drive folder with PDFs/Docs auto-indexed and retrieved via keyword RAG |
-| **Chat IQS scoring** | 11-parameter quality evaluation of WhatsApp/chat interactions |
-| **Call IQS scoring** | 11-parameter quality evaluation of voice calls with audio energy detection |
+| **Chat IQS scoring** | 11-parameter quality evaluation of WhatsApp/chat interactions with parameter overrides |
+| **Call IQS scoring** | 11-parameter quality evaluation of voice calls with audio energy & sentiment detection |
 | **Call transcription** | Two-pass Gemini multimodal pipeline transcribes, translates, and annotates calls |
+| **My Quality Chats (Agent)** | Agent view of chat quality scores, 11-parameter breakdown, and dispute tracking |
+| **My Quality Calls (Agent)** | Agent view of call evaluations, audio player, AI call summary/coaching, and dispute tracking |
+| **TL Quality Calls & Chats** | Team Lead portal to inspect team call/chat scores, listen to audio, and approve/reject disputes |
+| **3-Tier Dispute Workflow** | Structured dispute routing (Agent → Team Lead → QA) with parameter override tracking |
 | **Analytics agent** | Natural language → SQL → insight synthesis with chart type selection |
-| **TL coaching** | AI-generated strengths, watches, and tips per agent based on their stats |
-| **QA disputes** | Agents can raise disputes on IQS scores; TLs/QA can accept or reject |
+| **TL coaching** | AI-generated strengths, watches, and tips per agent based on their performance stats |
+| **Agent Analytics Access** | Enables Analytics and Member Analytics tabs for agent role self-monitoring |
 | **Slack alerts** | Quality drop and CSAT alerts pushed to Slack |
 | **Google Sheets sync** | Quality scores optionally synced to a tracking sheet |
 | **Role-based access** | Roles: `agent`, `tl`, `qa`, `admin` |
@@ -108,10 +122,10 @@ Investor query (via WhatsApp/Robylon)
 
 | Role | What they can do |
 |---|---|
-| `agent` | Access triage chat, view own analytics, raise IQS disputes |
-| `tl` | View team quality chats, member analytics with AI coaching |
-| `qa` | Evaluate chats & calls, manage disputes, configure dispositions |
-| `admin` | Everything above + user management, KB management, config |
+| `agent` | Access triage chat, view own analytics & member analytics, view My Quality Chats & My Quality Calls, raise chat & call IQS disputes |
+| `tl` | View team quality chats & quality calls, member analytics with AI coaching briefs, review & resolve/escalate agent disputes |
+| `qa` | Evaluate chats & calls, final override authority on disputes, manage dispute portal (`/quality/disputes`), configure dispositions |
+| `admin` | Everything above + user management, KB management, system configuration |
 
 ---
 
@@ -289,22 +303,25 @@ TL opens /tl/member-analytics
 
 ---
 
-### 6. QA Dispute Flow
+### 6. 3-Tier Quality Dispute Flow (Agent → TL → QA)
 
-Agents can challenge IQS scores they disagree with.
+Agents can challenge both Chat IQS and Call IQS scores they disagree with through a 3-tier escalation hierarchy.
 
 ```
-Agent views their score in /agent or /quality
+Agent views score in /agent/quality-chats or /agent/quality-calls
          ↓
-  Clicks "Raise Dispute" → submits reason
+  Clicks "Raise Dispute" → selects parameter & enters reason
          ↓
-  QA / TL notified (Slack alert optional)
+  Dispute routed to Agent's Team Lead (TL)
          ↓
-  QA opens /cx/qa/disputes → reviews conversation
+  TL reviews in /tl/quality-chats or /tl/quality-calls
+         ├── TL Accepts → score recalculates & parameter override saved
+         ├── TL Rejects → dispute closed (original score stands)
+         └── TL Escalates → routed to QA team
          ↓
-  Accepts (score updated) or Rejects (score stands)
+  QA reviews in /quality/disputes with final override authority
          ↓
-  Agent notified of outcome
+  Notification sent & updated IQS score synced across dashboards
 ```
 
 ---
@@ -809,25 +826,42 @@ Located in `scripts/`. Run with `node scripts/<name>.mjs`.
 
 ---
 
-## Deployment
+## Deployment & Documentation Hosting
 
-### Vercel (Recommended)
+### 1. Application Deployment (Vercel)
 
 ```bash
 npm install -g vercel
 vercel
 ```
 
-1. Add all `.env.local` variables in Vercel Project → Settings → Environment Variables
-2. Set `NEXTAUTH_URL` to your production domain (e.g. `https://ir.wintwealth.com`)
-3. Set `NEXTAUTH_SECRET` to a strong random value
+1. Add all `.env.local` variables in Vercel Project → Settings → Environment Variables.
+2. Set `NEXTAUTH_URL` to your production domain (e.g. `https://ir.wintwealth.com`).
+3. Set `NEXTAUTH_SECRET` to a strong random value.
 
-### Production Considerations
+#### Production Considerations
+- PostgreSQL must be reachable from Vercel — use Supabase, Neon, or RDS with connection pooling.
+- Use a pooled `DATABASE_URL` for serverless (e.g. `?pgbouncer=true`).
+- Refresh the KB on demand or set up a cron job for periodic re-indexing.
+- Vercel `maxDuration` is already configured in `vercel.json` for long audio analysis calls.
 
-- PostgreSQL must be reachable from Vercel — use Supabase, Neon, or RDS with connection pooling
-- Use a pooled `DATABASE_URL` for serverless (e.g. `?pgbouncer=true`)
-- Refresh the KB on demand or set up a cron job for periodic re-indexing
-- Vercel `maxDuration` is already configured in `vercel.json` for long audio analysis calls
+---
+
+### 2. Documentation Site Deployment (GitHub Pages & GitHub Actions)
+
+The documentation for this repository is hosted on **GitHub Pages** and automatically updated using **GitHub Actions**.
+
+#### How It Works
+- The GitHub Actions workflow ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)) triggers on every push to `main` or `release` branches.
+- It bundles `README.md`, `docs/`, and `docs/index.html` into a static documentation portal powered by **Docsify**.
+- The site includes interactive full-text search, sidebar navigation, dark/light theme toggle, and code syntax highlighting.
+
+#### One-Time Setup in GitHub Repository Settings:
+1. Go to your repository on GitHub: `https://github.com/divyanshd-col/wint-ir-portal/settings/pages`.
+2. Under **Build and deployment**:
+   - **Source**: Select `GitHub Actions`.
+3. Push to `main` or `release` branch (or run manually from **Actions** tab → **Deploy Documentation to GitHub Pages** → **Run workflow**).
+4. Access your live documentation website at: `https://<github-user-or-org>.github.io/wint-ir-portal/`.
 
 ---
 
