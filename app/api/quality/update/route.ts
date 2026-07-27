@@ -64,8 +64,15 @@ export async function PATCH(req: NextRequest) {
         for (const [legacyKey, val] of Object.entries(scores) as [string, string][]) {
           const dbKey = PASCAL_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
           if (!params[dbKey]) params[dbKey] = {};
-          params[dbKey].score = val === 'Yes' ? true : val === 'No' ? false : val === 'Half' ? 0.5 : null;
+          const scoreVal = val === 'Yes' ? true : val === 'No' ? false : val === 'Half' ? 0.5 : null;
+          params[dbKey].score = scoreVal;
           if (reasoning?.[legacyKey] !== undefined) params[dbKey].reasoning = reasoning[legacyKey];
+
+          if (params.__agent_parameters) {
+            if (!params.__agent_parameters[dbKey]) params.__agent_parameters[dbKey] = {};
+            params.__agent_parameters[dbKey].score = scoreVal;
+            if (reasoning?.[legacyKey] !== undefined) params.__agent_parameters[dbKey].reasoning = reasoning[legacyKey];
+          }
         }
       }
 
@@ -74,6 +81,11 @@ export async function PATCH(req: NextRequest) {
           const dbKey = PASCAL_TO_DB[legacyKey] ?? legacyKey.toLowerCase();
           if (!params[dbKey]) params[dbKey] = {};
           params[dbKey].reasoning = text;
+
+          if (params.__agent_parameters) {
+            if (!params.__agent_parameters[dbKey]) params.__agent_parameters[dbKey] = {};
+            params.__agent_parameters[dbKey].reasoning = text;
+          }
         }
       }
 
@@ -86,7 +98,8 @@ export async function PATCH(req: NextRequest) {
       const hasBotParams = scores
         ? Object.keys(scores).some(k => BOT_ONLY_PASCAL.includes(k))
         : Object.keys(existingParamsObj).some(k => BOT_ONLY_SNAKE.includes(k));
-      const isBot = convRow[0]?.conversation_type === 'bot' || hasBotParams;
+      const convType = convRow[0]?.conversation_type;
+      const isBot = convType === 'bot' || (convType !== 'agent' && convType !== 'hybrid' && hasBotParams);
       const isV4 = rowExists ? isV4Evaluation(existing[0].parameters) : true;
       const newIqs = scores ? calculateIQS(scores, isBot, isV4) : (rowExists ? existing[0].iqs_score : 0);
 
@@ -150,13 +163,14 @@ export async function PATCH(req: NextRequest) {
     }
 
     const convRow = await query<{ conversation_type: string }>(`SELECT conversation_type FROM conversations WHERE id = $1`, [chatId]);
+    const convType2 = convRow[0]?.conversation_type;
     const existingParamsObj2 = rowExists && existing[0]?.parameters
       ? (existing[0].parameters.__agent_parameters || existing[0].parameters.__bot_parameters || existing[0].parameters)
       : {};
     const hasBotParams2 = scores
       ? Object.keys(scores).some(k => BOT_ONLY_PASCAL.includes(k))
       : Object.keys(existingParamsObj2).some(k => BOT_ONLY_SNAKE.includes(k));
-    const isBot = convRow[0]?.conversation_type === 'bot' || hasBotParams2;
+    const isBot = convType2 === 'bot' || (convType2 !== 'agent' && convType2 !== 'hybrid' && hasBotParams2);
     const isV4b = rowExists ? isV4Evaluation(existing[0].parameters) : true;
     const finalIqs = scores ? calculateIQS(scores, isBot, isV4b) : (rowExists ? existing[0].iqs_score : 0);
 
