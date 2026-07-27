@@ -141,15 +141,14 @@ export default function EvalPanel({
   // them forced every v4 human-only chat onto the bot tab. Look at __bot_parameters
   // when present, otherwise the top level only if there is no __agent_parameters.
   const BOT_ONLY_PARAM_KEYS = [
-    'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
-    'CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity',
+    'correct_escalation', 'no_repetition', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity',
   ];
-  const botParamsSrc: Record<string, any> = parameters?.__bot_parameters
-    || (parameters?.__agent_parameters ? {} : parameters) || {};
-  const hasBotParams = Object.keys(botParamsSrc).some(k => BOT_ONLY_PARAM_KEYS.includes(k));
-  const isBotChat = conversationType === 'bot' || (conversationType !== 'agent' && conversationType !== 'hybrid' && hasBotParams);
+  const botParamsSrc: Record<string, any> = parameters?.__bot_parameters || {};
+  const hasBotParams = Object.keys(botParamsSrc).some(k => BOT_ONLY_PARAM_KEYS.includes(k)) || !!parameters?.__bot_parameters || !!(parameters as any)?.__scores?.bot_iqs;
+  const isBotChat = conversationType === 'bot';
   const isHybrid = conversationType === 'hybrid';
-  const showTabs = isHybrid;
+  const showTabs = isHybrid || hasBotParams || !!parameters?.__agent_parameters || (!!parameters && Object.keys(parameters).length > 0);
 
   const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(isBotChat ? 'bot' : 'agent');
 
