@@ -60,6 +60,88 @@ function CSATBadge({ score }: { score: number | null }) {
   );
 }
 
+// ─── Dispute Status Pill ───────────────────────────────────────────────────────
+export function DisputeStatusPill({
+  status,
+  raisedByRole,
+  reviewNote,
+  parameters,
+}: {
+  status: string;
+  raisedByRole?: string;
+  reviewNote?: string | null;
+  parameters?: any;
+}) {
+  const role = (raisedByRole || '').toLowerCase();
+  const note = (reviewNote || '').toLowerCase();
+
+  let label = '';
+  let bg = '#f4f4f5';
+  let color = '#52525b';
+  let border = '#e4e4e7';
+
+  if (status === 'pending' || status === 'ir_pending_tl') {
+    label = 'Dispute raised by IR';
+    bg = '#fefce8';
+    color = '#854d0e';
+    border = '#fef08a';
+  } else if (status === 'tl_forwarded') {
+    if (role === 'tl') {
+      label = 'Dispute raised by TL';
+    } else {
+      label = 'Forwarded by TL';
+    }
+    bg = '#eff6ff';
+    color = '#1d4ed8';
+    border = '#bfdbfe';
+  } else if (status === 'tl_resolved') {
+    label = 'Resolved by TL';
+    bg = '#f3f4f6';
+    color = '#374151';
+    border = '#e5e7eb';
+  } else if (status === 'reviewed') {
+    const hasAnswerChanges = Array.isArray(parameters?.__answerChanges) && parameters.__answerChanges.length > 0;
+    const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
+    if (isUpdated) {
+      label = 'Updated by QA';
+      bg = '#f0fdf4';
+      color = '#166534';
+      border = '#bbf7d0';
+    } else {
+      label = 'Resolved by QA';
+      bg = '#faf5ff';
+      color = '#6b21a8';
+      border = '#e9d5ff';
+    }
+  } else if (status === 'cancelled') {
+    label = 'Cancelled';
+    bg = '#fef2f2';
+    color = '#991b1b';
+    border = '#fecaca';
+  } else {
+    label = status;
+  }
+
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '3px 8px',
+        borderRadius: 4,
+        fontSize: 11,
+        fontWeight: 600,
+        background: bg,
+        color: color,
+        border: `1px solid ${border}`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
 // ─── Chat ID cell ─────────────────────────────────────────────────────────────
 function ChatIdCell({ chatId }: { chatId: string }) {
   if (/^\d+$/.test(chatId.trim())) {
@@ -300,6 +382,8 @@ function EvaluatedChatsSection() {
                     gates={(chat as any).gates}
                     mobileNumber={chat.mobileNumber}
                     mode="view"
+                    allowRaiseDispute={true}
+                    onDisputeRaised={() => fetchChats(page)}
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={7}
@@ -379,7 +463,30 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
     }
   }
 
-  const colCount = 9;
+  async function resolveAtTLLevel(flagId: string) {
+    const note = prompt('Enter a note explaining why this query was resolved at TL level:');
+    if (note === null) return; // User cancelled prompt
+    setActioning(flagId);
+    setActionError(null);
+    try {
+      const res = await fetch('/api/cx/tl/disputes/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ flagId, reviewNote: note || 'Resolved query at TL level' }),
+      });
+      if (res.ok) {
+        setDisputes(prev => prev.filter(d => d.flagId !== flagId));
+      } else {
+        setActionError('Could not resolve that dispute — please retry.');
+      }
+    } catch {
+      setActionError('Could not resolve that dispute — please retry.');
+    } finally {
+      setActioning(null);
+    }
+  }
+
+  const colCount = 10;
 
   return (
     <>
@@ -400,7 +507,8 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
           <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
           <th style={th}>CSAT</th>
           <th style={th}>Raised</th>
-          <th style={{ ...th, textAlign: 'right' }}>{status === 'pending' ? 'Action' : 'Outcome'}</th>
+          <th style={th}>{status === 'pending' ? 'Status' : 'Outcome'}</th>
+          <th style={{ ...th, textAlign: 'right' }}>Action</th>
         </tr>
       </thead>
       <tbody>
@@ -454,12 +562,21 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                   <br />
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtTime(d.raisedAt)}</span>
                 </td>
+                <td style={{ ...td }}>
+                  <DisputeStatusPill
+                    status={d.status}
+                    raisedByRole={d.raisedByRole}
+                    reviewNote={d.reviewNote}
+                    parameters={d.parameters}
+                  />
+                  {d.reviewNote && (
+                    <div style={{ fontSize: 11, color: 'var(--qa-text-3)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: 2 }} title={d.reviewNote}>
+                      {d.reviewNote}
+                    </div>
+                  )}
+                </td>
                 <td style={{ ...td, textAlign: 'right' }}>
                   <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                    {status === 'resolved' && d.reviewNote && (
-                      <span style={{ fontSize: 12, color: 'var(--qa-text-3)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                        title={d.reviewNote}>{d.reviewNote}</span>
-                    )}
                     <button
                       onClick={() => setExpandedId(prev => prev === d.chatId ? null : d.chatId)}
                       style={{
@@ -472,19 +589,34 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                       View
                     </button>
                     {status === 'pending' && (
-                      <button
-                        onClick={() => forwardToQA(d.flagId)}
-                        disabled={actioning === d.flagId}
-                        style={{
-                          height: 28, padding: '0 12px', borderRadius: 8,
-                          fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                          background: 'var(--qa-gray-700)', color: '#fff',
-                          border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                          opacity: actioning === d.flagId ? 0.6 : 1,
-                        }}
-                      >
-                        {actioning === d.flagId ? '…' : 'Forward to QA'}
-                      </button>
+                      <>
+                        <button
+                          onClick={() => resolveAtTLLevel(d.flagId)}
+                          disabled={actioning === d.flagId}
+                          style={{
+                            height: 28, padding: '0 10px', borderRadius: 8,
+                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                            background: 'var(--qa-card)', color: 'var(--qa-text)',
+                            border: '1px solid var(--qa-border)', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
+                            opacity: actioning === d.flagId ? 0.6 : 1,
+                          }}
+                        >
+                          Resolve
+                        </button>
+                        <button
+                          onClick={() => forwardToQA(d.flagId)}
+                          disabled={actioning === d.flagId}
+                          style={{
+                            height: 28, padding: '0 12px', borderRadius: 8,
+                            fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                            background: 'var(--qa-gray-700)', color: '#fff',
+                            border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
+                            opacity: actioning === d.flagId ? 0.6 : 1,
+                          }}
+                        >
+                          {actioning === d.flagId ? '…' : 'Forward to QA'}
+                        </button>
+                      </>
                     )}
                   </div>
                 </td>

@@ -13,10 +13,10 @@ function reviewAccess(session: any) {
 // Every agent-raised dispute goes to the TL first for review/forwarding — no
 // CAT1/CAT2 split, just a single queue the TL forwards on to QA.
 export async function POST(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'agent']);
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
-  const { scoreId, chatId, agentNote, challengedParams } = await req.json();
+  const { scoreId, chatId, agentNote, challengedParams, raisedByRole } = await req.json();
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
   const { readConfig } = await import('@/lib/config');
@@ -29,10 +29,14 @@ export async function POST(req: NextRequest) {
   const params: IQSChallengedParam[] = Array.isArray(challengedParams) ? challengedParams : [];
   const now = new Date().toISOString();
 
+  const isTL = role === 'tl' || raisedByRole === 'tl';
+  const effectiveRaisedByRole = isTL ? 'tl' : 'ir';
+  const initialStatus = isTL ? 'tl_forwarded' : 'pending';
+
   const flag: IQSFlag = {
     id: randomUUID(), scoreId, chatId, agentName, agentEmail: email,
     agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
-    raisedByRole: 'ir', paramCategory: 'qa', status: 'pending',
+    raisedByRole: effectiveRaisedByRole, paramCategory: 'qa', status: initialStatus,
   };
   const saved = await storeAppendIQSFlag(flag);
   if (!saved) {
@@ -40,7 +44,8 @@ export async function POST(req: NextRequest) {
     // simply never appear in anyone's queue.
     return NextResponse.json({ error: 'Failed to save dispute — please retry' }, { status: 500 });
   }
-  await storeAppendAuditEntry({ id: randomUUID(), action: 'ir_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
+  const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
+  await storeAppendAuditEntry({ id: randomUUID(), action: auditAction, chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
 

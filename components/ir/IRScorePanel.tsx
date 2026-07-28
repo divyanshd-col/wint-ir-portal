@@ -129,14 +129,43 @@ export default function IRScorePanel({
     });
   }, []);
 
-  const canSubmit = picks.size > 0 && sharedNote.trim().length > 0;
+  const startDisputing = useCallback(() => {
+    setDisputing(true);
+    const isNonPerfectScore = (s: any) => {
+      if (s == null) return false;
+      if (typeof s === 'boolean') return !s;
+      if (typeof s === 'number') return s < 1.0;
+      if (typeof s === 'string') return s.toLowerCase() !== 'yes' && s !== '1.0' && s !== '1';
+      return false;
+    };
+    const nonPerfect = activeParamOrder.filter(p => isNonPerfectScore(params[p]?.score));
+    if (nonPerfect.length > 0) {
+      setPicks(new Set(nonPerfect));
+    } else if (activeParamOrder.length > 0) {
+      setPicks(new Set([activeParamOrder[0]]));
+    }
+  }, [activeParamOrder, params]);
+
+  const canSubmit = sharedNote.trim().length > 0;
 
   const submitDispute = async () => {
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     setError('');
     try {
-      const challenged = [...picks].map(p => ({ param: p, note: sharedNote.trim() }));
+      let finalPicks = new Set(picks);
+      if (finalPicks.size === 0) {
+        const isNonPerfectScore = (s: any) => {
+          if (s == null) return false;
+          if (typeof s === 'boolean') return !s;
+          if (typeof s === 'number') return s < 1.0;
+          if (typeof s === 'string') return s.toLowerCase() !== 'yes' && s !== '1.0' && s !== '1';
+          return false;
+        };
+        const nonPerfect = activeParamOrder.filter(p => isNonPerfectScore(params[p]?.score));
+        finalPicks = new Set(nonPerfect.length > 0 ? nonPerfect : activeParamOrder);
+      }
+      const challenged = [...finalPicks].map(p => ({ param: p, note: sharedNote.trim() }));
       const res = await fetch('/api/quality/flag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -194,9 +223,24 @@ export default function IRScorePanel({
             <div style={{
               fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
               color: '#A1A1AA', padding: '16px 16px 4px', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             }}>
-              Parameter Scores
+              <span>Parameter Scores</span>
+              {disputing && (
+                <span style={{ fontSize: 11, color: '#2563eb', fontWeight: 600, textTransform: 'none' }}>
+                  {picks.size} selected for dispute
+                </span>
+              )}
             </div>
+
+            {disputing && (
+              <div style={{
+                fontSize: 12, color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe',
+                borderRadius: 6, padding: '8px 12px', margin: '4px 16px 8px', flexShrink: 0,
+              }}>
+                Select parameter(s) to challenge on the left, then write your reason on the right.
+              </div>
+            )}
 
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -228,6 +272,15 @@ export default function IRScorePanel({
                       onMouseLeave={disputing ? e => { (e.currentTarget as HTMLElement).style.background = isPicked ? '#FAFAFB' : 'transparent'; } : undefined}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {disputing && (
+                          <input
+                            type="checkbox"
+                            checked={isPicked}
+                            onChange={() => togglePick(param)}
+                            onClick={e => e.stopPropagation()}
+                            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#111111' }}
+                          />
+                        )}
                         <span style={{ fontSize: 13, fontWeight: 500, color: '#111111', flex: '0 1 auto' }}>
                           {activeParamNames[param] || param}
                         </span>
@@ -341,7 +394,7 @@ export default function IRScorePanel({
                     background: '#FFFFFF', border: '1px solid #E4E4E7',
                     fontSize: 13, fontWeight: 500, color: '#111111', cursor: 'pointer', fontFamily: SANS,
                   }}
-                  onClick={() => setDisputing(true)}
+                  onClick={startDisputing}
                 >
                   Raise Dispute
                 </button>
