@@ -25,16 +25,76 @@ function buildParamFailColumns(): { columns: string; pairs: Array<{ db: string; 
 
 // ── Agent helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Merges any duplicate agent rows matching `name` (case-insensitive or prefix) into `primaryId`.
+ * Reassigns conversations and call_recordings to `primaryId` and removes duplicate rows.
+ */
+export async function mergeAgentDuplicates(primaryId: number, name: string): Promise<void> {
+  if (!primaryId || !name) return;
+  const trimmed = name.trim();
+
+  const duplicates = await query<{ id: number; tl_name: string | null; qa_name: string | null }>(
+    `SELECT id, tl_name, qa_name FROM agents 
+     WHERE id != $1 AND (
+       LOWER(name) = LOWER($2) OR 
+       LOWER(name) LIKE LOWER($2 || ' %') OR 
+       LOWER($2) LIKE LOWER(name || ' %')
+     )`,
+    [primaryId, trimmed]
+  );
+
+  if (duplicates.length === 0) return;
+  const dupIds = duplicates.map(d => d.id);
+
+  const firstWithTL = duplicates.find(d => d.tl_name)?.tl_name;
+  const firstWithQA = duplicates.find(d => d.qa_name)?.qa_name;
+  if (firstWithTL || firstWithQA) {
+    await query(
+      `UPDATE agents 
+       SET tl_name = COALESCE(tl_name, $2), qa_name = COALESCE(qa_name, $3) 
+       WHERE id = $1`,
+      [primaryId, firstWithTL ?? null, firstWithQA ?? null]
+    );
+  }
+
+  await query(`UPDATE conversations SET agent_id = $1 WHERE agent_id = ANY($2)`, [primaryId, dupIds]);
+  await query(`UPDATE call_recordings SET agent_id = $1 WHERE agent_id = ANY($2)`, [primaryId, dupIds]);
+  await query(`DELETE FROM agents WHERE id = ANY($1)`, [dupIds]);
+}
+
 /** Get or create an agent by name. Returns agent.id */
 export async function upsertAgent(name: string): Promise<number | null> {
   if (!name) return null;
-  const existing = await query<{ id: number }>(`SELECT id FROM agents WHERE name = $1`, [name]);
-  if (existing.length) return existing[0].id;
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+
+  // 1. Exact match
+  const existing = await query<{ id: number }>(`SELECT id FROM agents WHERE name = $1`, [trimmed]);
+  if (existing.length) {
+    await mergeAgentDuplicates(existing[0].id, trimmed);
+    return existing[0].id;
+  }
+
+  // 2. Case-insensitive or prefix match (e.g. 'Vedant' matching 'Vedant G', 'Aksa' matching 'Aksa Jacob')
+  const fuzzy = await query<{ id: number }>(
+    `SELECT id FROM agents WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($1 || ' %') OR LOWER($1) LIKE LOWER(name || ' %') LIMIT 1`,
+    [trimmed],
+  );
+  if (fuzzy.length) {
+    await mergeAgentDuplicates(fuzzy[0].id, trimmed);
+    return fuzzy[0].id;
+  }
+
+  // 3. Fallback insert
   const rows = await query<{ id: number }>(
     `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-    [name],
+    [trimmed],
   );
-  return rows[0]?.id ?? null;
+  const newId = rows[0]?.id ?? null;
+  if (newId) {
+    await mergeAgentDuplicates(newId, trimmed);
+  }
+  return newId;
 }
 
 export async function getAgentName(agentId: number): Promise<string> {

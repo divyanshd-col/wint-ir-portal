@@ -104,19 +104,31 @@ export async function PATCH(req: NextRequest) {
   const { session, response } = await requireRole('admin');
   if (response) return response;
 
-  const { agent_name, tl_name, qa_name } = await req.json();
-  if (!agent_name) return NextResponse.json({ error: 'agent_name required' }, { status: 400 });
+  const { agent_id, agent_name, new_name, tl_name, qa_name } = await req.json();
+  const targetName = (new_name || agent_name || '').trim();
+  if (!targetName && !agent_id) {
+    return NextResponse.json({ error: 'agent_name or agent_id required' }, { status: 400 });
+  }
 
-  // Upsert: create agent row if it doesn't exist yet, then update the columns passed
-  await query(
-    `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO NOTHING`,
-    [agent_name]
-  );
-  if (tl_name !== undefined) {
-    await query(`UPDATE agents SET tl_name = $1 WHERE LOWER(name) = LOWER($2)`, [tl_name || null, agent_name]);
+  const { upsertAgent, mergeAgentDuplicates } = await import('@/lib/robylon/db');
+
+  let primaryId: number | null = agent_id ?? null;
+  if (!primaryId && agent_name) {
+    primaryId = await upsertAgent(agent_name);
   }
-  if (qa_name !== undefined) {
-    await query(`UPDATE agents SET qa_name = $1 WHERE LOWER(name) = LOWER($2)`, [qa_name || null, agent_name]);
+
+  if (primaryId) {
+    if (new_name) {
+      await query(`UPDATE agents SET name = $1 WHERE id = $2`, [new_name.trim(), primaryId]);
+    }
+    if (tl_name !== undefined) {
+      await query(`UPDATE agents SET tl_name = $1 WHERE id = $2`, [tl_name || null, primaryId]);
+    }
+    if (qa_name !== undefined) {
+      await query(`UPDATE agents SET qa_name = $1 WHERE id = $2`, [qa_name || null, primaryId]);
+    }
+    await mergeAgentDuplicates(primaryId, targetName || agent_name);
   }
+
   return NextResponse.json({ ok: true });
 }
