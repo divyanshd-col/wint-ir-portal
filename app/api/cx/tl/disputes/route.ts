@@ -24,6 +24,7 @@ export interface TLDisputeRow {
   subDisposition:   string | null;
   raisedBy:         string;
   raisedByName:     string;
+  raisedByRole:     'ir' | 'tl';
   raisedAt:         string;
   status:           'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
   reviewNote:       string | null;
@@ -155,6 +156,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       iqsScore = null;
     }
 
+    const roleTag = raisedByLabel(flag);
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
@@ -162,12 +164,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       iqsScore,
       botIqsScore,
       callIqsScore,
-      closedAt:         db.closed_at,
+      closedAt:         db.closed_at ? new Date(db.closed_at).toISOString() : flag.flaggedAt || '',
       csatScore:        db.csat_score ? parseInt(db.csat_score) : null,
       disposition:      db.disposition,
       subDisposition:   db.sub_disposition,
-      raisedBy:         raisedByLabel(flag),
+      raisedBy:         roleTag,
       raisedByName:     flag.agentName,
+      raisedByRole:     flag.raisedByRole || (roleTag === 'TL' ? 'tl' : 'ir'),
       raisedAt:         flag.flaggedAt,
       status:           flag.status,
       reviewNote:       flag.reviewNote ?? null,

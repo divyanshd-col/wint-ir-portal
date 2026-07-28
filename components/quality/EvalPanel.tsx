@@ -42,6 +42,8 @@ export interface EvalPanelProps {
   reviewedBy?:   string | null;
   reviewedAt?:   string | null;
   reviewNote?:   string | null;
+  allowRaiseDispute?: boolean;
+  onDisputeRaised?:   () => void;
   onDone:        () => void;
   onClose:       () => void;
   colSpan:       number;
@@ -133,6 +135,7 @@ export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
   parameters, gates, mode, dispute, flagId,
   mobileNumber, reviewedBy, reviewNote,
+  allowRaiseDispute, onDisputeRaised,
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
 
@@ -204,6 +207,53 @@ export default function EvalPanel({
   const [historyLoading, setHistoryLoading] = useState(false);
 
   const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
+
+  // Dispute creation state (for TL)
+  const [disputing, setDisputing] = useState(false);
+  const [disputePicks, setDisputePicks] = useState<Set<string>>(new Set());
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [disputeDone, setDisputeDone] = useState(false);
+  const [disputeError, setDisputeError] = useState('');
+
+  function toggleDisputePick(pascal: string) {
+    setDisputePicks(prev => {
+      const next = new Set(prev);
+      if (next.has(pascal)) next.delete(pascal); else next.add(pascal);
+      return next;
+    });
+  }
+
+  async function submitTLDispute() {
+    if (disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting) return;
+    setDisputeSubmitting(true);
+    setDisputeError('');
+    try {
+      const challengedParams = [...disputePicks].map(p => ({
+        param: p,
+        note: disputeReason.trim(),
+      }));
+      const res = await fetch('/api/quality/flag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId,
+          challengedParams,
+          agentNote: disputeReason.trim(),
+          raisedByRole: 'tl',
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.error ?? 'Failed to submit dispute');
+      setDisputeDone(true);
+      setDisputing(false);
+      onDisputeRaised?.();
+    } catch (err: any) {
+      setDisputeError(err.message || 'Failed to submit dispute');
+    } finally {
+      setDisputeSubmitting(false);
+    }
+  }
 
   const disputeMap = new Map<string, { note: string }>(
     (dispute?.challengedParams ?? []).map(d => [d.param, { note: d.note }])
@@ -536,6 +586,14 @@ export default function EvalPanel({
                     } : {}),
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {disputing && (
+                        <input
+                          type="checkbox"
+                          checked={disputePicks.has(pascal)}
+                          onChange={() => toggleDisputePick(pascal)}
+                          style={{ cursor: 'pointer', width: 15, height: 15, accentColor: 'var(--qa-gray-700)' }}
+                        />
+                      )}
                       <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
                         {activeParamNames[pascal]}
                         {disputed && (
@@ -628,6 +686,57 @@ export default function EvalPanel({
                 );
               })}
             </div>
+
+            {/* Dispute composer for TL */}
+            {disputing && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
+                  Reason for Dispute (QA Review)
+                </div>
+                <textarea
+                  value={disputeReason}
+                  onChange={e => setDisputeReason(e.target.value)}
+                  placeholder="Explain why you disagree with the score on selected parameters…"
+                  rows={3}
+                  style={{
+                    width: '100%', resize: 'vertical',
+                    border: '1px solid var(--qa-border)', borderRadius: 6,
+                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                    lineHeight: 1.5, fontFamily: 'inherit',
+                    background: 'var(--qa-card)', outline: 'none',
+                  }}
+                />
+                {disputeError && (
+                  <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 6 }}>{disputeError}</div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginRight: 'auto' }}>
+                    {disputePicks.size} parameter{disputePicks.size === 1 ? '' : 's'} selected
+                  </span>
+                  <button
+                    onClick={() => { setDisputing(false); setDisputePicks(new Set()); setDisputeReason(''); setDisputeError(''); }}
+                    style={{
+                      height: 30, padding: '0 12px', borderRadius: 6, border: '1px solid var(--qa-border)',
+                      background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitTLDispute}
+                    disabled={disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting}
+                    style={{
+                      height: 30, padding: '0 14px', borderRadius: 6, border: 'none',
+                      background: 'var(--qa-gray-700)', color: '#fff', fontSize: 12, fontWeight: 500,
+                      cursor: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 'not-allowed' : 'pointer',
+                      opacity: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 0.6 : 1,
+                    }}
+                  >
+                    {disputeSubmitting ? 'Sending to QA…' : 'Submit Dispute to QA'}
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Review note (QA modes) */}
             {(mode === 'submit' || mode === 'resolve') && (
@@ -742,6 +851,30 @@ export default function EvalPanel({
                   </>
                 )}
               </div>
+              {/* Raise dispute button for TL */}
+              {allowRaiseDispute && mode === 'view' && (
+                disputeDone ? (
+                  <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, padding: '0 8px' }}>
+                    ✓ Dispute Sent to QA
+                  </span>
+                ) : !disputing ? (
+                  <button
+                    onClick={() => setDisputing(true)}
+                    style={{
+                      height: 32, padding: '0 12px', borderRadius: 8,
+                      fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                      border: '1px solid var(--qa-border)', background: 'var(--qa-card)',
+                      color: 'var(--qa-text)', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                    </svg>
+                    Raise Dispute to QA
+                  </button>
+                ) : null
+              )}
               {/* Primary action (submit/resolve modes) */}
               {(mode === 'submit' || mode === 'resolve') && (
                 <button

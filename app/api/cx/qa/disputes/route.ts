@@ -49,9 +49,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const t0 = Date.now();
 
-  // Resolve QA's dispositions
+  // Resolve QA's dispositions and assigned agents
   const config = await readConfig();
-  let dispositions: string[];
+  let dispositions: string[] = [];
+  let myAgents: Set<string> | null = null;
+
   if (role === 'admin') {
     const rows = await query<{ d: string }>(
       `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
@@ -62,11 +64,20 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const map = config.qaDispositionMap ?? [];
     const entry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
     dispositions = entry?.dispositions ?? [];
-  }
 
-  if (!dispositions.length) {
-    log.warn(ROUTE, 'no dispositions', { email, role });
-    return NextResponse.json({ disputes: [] });
+    const me = config.users.find(u => (u.email || u.username) === email);
+    const myQAName = me?.agentName || email.split('@')[0];
+    try {
+      const rows = await query<{ name: string }>(
+        `SELECT name FROM agents WHERE LOWER(qa_name) = LOWER($1)`,
+        [myQAName],
+      );
+      if (rows.length > 0) {
+        myAgents = new Set(rows.map((r: any) => (r.name || '').toLowerCase()));
+      }
+    } catch {
+      // CX DB unavailable
+    }
   }
 
   // QA only sees disputes once TL has forwarded them — 'pending'/'ir_pending_tl'
@@ -107,7 +118,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             ct.phone AS mobile_number,
             c.contact_id, c.started_at, c.conversation_type
      FROM conversations c
-     JOIN iqs_scores i ON i.chat_id = c.id
+     LEFT JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE c.id = ANY($1)`,
@@ -190,8 +201,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const db = dbMap.get(flag.chatId);
     if (!db) continue;
 
-    // Scope-check: only disputes in QA's dispositions
-    if (!dispositions.includes(db.disposition)) continue;
+    // Scope-check: dispute is visible if admin, or matching QA's assigned agents, or matching QA's dispositions
+    if (role === 'quality') {
+      const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
+      const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
+      const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
+
+      if (hasRestrictions && !agentMatches && !dispositionMatches) {
+        continue;
+      }
+    }
 
     // Robylon AI / Bot check
     const isBot = flag.agentName === 'Robylon AI' || db.agent_name === 'Robylon AI' || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)));
@@ -242,7 +261,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore,
       callTranscriptStatus: callInfo.status,
       callTranscriptLabel: callInfo.label,
-      closedAt:         db.closed_at,
+      closedAt:         db.closed_at ? new Date(db.closed_at).toISOString() : flag.flaggedAt || '',
       csatScore:        db.csat_score ? parseInt(db.csat_score) : null,
       mobileNumber:     db.mobile_number ?? null,
       disposition:      db.disposition,
@@ -264,8 +283,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     finalDisputes = disputes.filter(d => d.callTranscriptStatus === 'no_call');
   }
 
-  // Sort by closedAt desc
-  finalDisputes.sort((a, b) => b.closedAt.localeCompare(a.closedAt));
+  // Sort by closedAt desc safely
+  finalDisputes.sort((a, b) => new Date(b.closedAt || 0).getTime() - new Date(a.closedAt || 0).getTime());
 
   log.info(ROUTE, 'result', {
     flagCount: pendingFlags.length,
