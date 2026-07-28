@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - release
+      - docs/github-pages-workflow
   workflow_dispatch:
 
 # Permissions required for GitHub Pages deployment
@@ -34,6 +35,7 @@ jobs:
       - name: Prepare Documentation Artifact
         run: |
           mkdir -p site
+          touch site/.nojekyll
           cp README.md site/
           cp -r docs/* site/
 
