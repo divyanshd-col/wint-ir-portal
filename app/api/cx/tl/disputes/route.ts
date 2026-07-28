@@ -31,6 +31,7 @@ export interface TLDisputeRow {
   agentNote:        string;
   challengedParams: { param: string; note: string }[];
   parameters:       Record<string, { score: boolean | null; reasoning: string }>;
+  conversationType?: 'bot' | 'agent' | 'hybrid';
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -82,16 +83,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // Bulk-fetch chat data
   const chatIds = [...new Set(flags.map(f => f.chatId))];
   const dbRows = await query<{
-    chat_id: string; agent_name: string | null; closed_at: string;
+    chat_id: string; agent_id: number | null; agent_name: string | null; closed_at: string;
     disposition: string; sub_disposition: string | null;
     iqs_score: string; parameters: any;
     csat_score: string | null; mobile_number: string | null;
+    conversation_type: string | null;
   }>(
-    `SELECT c.id AS chat_id, a.name AS agent_name, c.closed_at,
+    `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name, c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
             i.iqs_score, i.parameters, c.csat_score,
-            ct.phone AS mobile_number
+            ct.phone AS mobile_number, c.conversation_type
      FROM conversations c
      JOIN iqs_scores i ON i.chat_id = c.id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -136,7 +138,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (iqsScore === null) {
+    const isBot = db.agent_name === 'Robylon AI'
+      || db.conversation_type === 'bot'
+      || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)));
+
+    if (iqsScore === null && !isBot) {
       iqsScore = computeIqsFromRawParams(params, false);
     }
     if (botIqsScore === null) {
@@ -144,6 +150,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
     if (botIqsScore === null && db.iqs_score !== null && db.iqs_score !== undefined) {
       botIqsScore = parseFloat(db.iqs_score);
+    }
+    if (isBot) {
+      iqsScore = null;
     }
 
     disputes.push({
@@ -166,6 +175,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       agentNote:        flag.agentNote,
       challengedParams: flag.challengedParams ?? [],
       parameters:       params,
+      conversationType: db.conversation_type as any,
     });
   }
 
