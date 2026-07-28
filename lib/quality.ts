@@ -275,9 +275,18 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
   if (!paramsObj || typeof paramsObj !== 'object') return null;
 
+  const isBotParams = !!(
+    paramsObj.__bot_parameters ||
+    paramsObj.issue_resolution !== undefined ||
+    paramsObj.IssueResolution !== undefined ||
+    paramsObj.bot_handover !== undefined ||
+    paramsObj.BotHandover !== undefined ||
+    (paramsObj.__scores && paramsObj.__scores.bot_iqs !== undefined && paramsObj.__scores.agent_iqs === undefined)
+  );
+
   const targetParams = isBot
     ? (paramsObj.__bot_parameters || (paramsObj.issue_resolution !== undefined || paramsObj.IssueResolution !== undefined ? paramsObj : null))
-    : (paramsObj.__agent_parameters || paramsObj);
+    : (paramsObj.__agent_parameters || (isBotParams ? null : paramsObj));
 
   if (!targetParams || typeof targetParams !== 'object') return null;
 

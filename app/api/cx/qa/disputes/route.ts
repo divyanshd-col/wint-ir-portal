@@ -217,7 +217,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (iqsScore === null) {
+    if (iqsScore === null && !isBot) {
       iqsScore = computeIqsFromRawParams(params, false);
     }
     if (botIqsScore === null) {
@@ -225,6 +225,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
     if (botIqsScore === null && db.iqs_score !== null && db.iqs_score !== undefined) {
       botIqsScore = parseFloat(db.iqs_score);
+    }
+    if (isBot) {
+      iqsScore = null;
     }
 
     disputes.push({

@@ -255,6 +255,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   sqlParams.push(limit, offset);
   const rows = await query<{
     chat_id: string;
+    agent_id: number | null;
     agent_name: string | null;
     iqs_score: string | null;
     call_iqs_score: string | null;
@@ -272,7 +273,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     started_at: string | null;
     conversation_type: string | null;
   }>(
-    `SELECT c.id AS chat_id, a.name AS agent_name,
+    `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name,
             i.iqs_score, i.call_iqs_score, c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
@@ -382,7 +383,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (iqsScore === null) {
+    const isBotOnly = r.conversation_type === 'bot'
+      || r.agent_name === 'Robylon AI'
+      || r.agent_name === 'Robylon'
+      || r.agent_name === 'Robylon Automation'
+      || (r.agent_id !== null && [15, 447, 784].includes(Number(r.agent_id)));
+
+    if (iqsScore === null && !isBotOnly) {
       iqsScore = computeIqsFromRawParams(params, false);
     }
     if (botIqsScore === null) {
@@ -392,6 +399,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       if (r.conversation_type !== 'agent' || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
         botIqsScore = parseFloat(r.iqs_score);
       }
+    }
+    if (isBotOnly) {
+      iqsScore = null;
     }
 
     return {
