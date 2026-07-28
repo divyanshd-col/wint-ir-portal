@@ -81,6 +81,7 @@ export async function PATCH(
       await storeAppendAuditEntry({ id: randomUUID(), action: 'review_submitted', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { note: note ?? null } } as IQSAuditEntry);
 
     } else if (action === 'override' || action === 'resolve') {
+      let isScoreUpdated = false;
       if (parameters) {
         // Fetch existing to merge
         const existing = await query<{ parameters: any; iqs_score: number }>(
@@ -99,18 +100,11 @@ export async function PATCH(
         const isV4 = isV4Evaluation(existingParams);
 
         // Merge incoming parameters (snake_case) into existing.
-        // Clone the nested containers up front so we can mirror overrides into
-        // whichever one the review panel reads back from (EvalPanel reads
-        // __agent_parameters for the agent tab, __bot_parameters for the bot tab).
-        // Writing only the top-level keys — as before — left the panel showing the
-        // stale AI values on reopen. Only mirror when the container already exists,
-        // so a legacy v3 chat is not accidentally promoted to a v4 shape.
         const merged: Record<string, any> = { ...existingParams };
         if (existingParams.__agent_parameters) merged.__agent_parameters = { ...existingParams.__agent_parameters };
         if (existingParams.__bot_parameters) merged.__bot_parameters = { ...existingParams.__bot_parameters };
         let paramChanges = 0;
 
-        // Merge nested bot parameters if provided (hybrid chats send them here)
         if (parameters.__bot_parameters) {
           merged.__bot_parameters = { ...(merged.__bot_parameters || {}) };
           for (const [key, val] of Object.entries(parameters.__bot_parameters) as [string, any][]) {
@@ -120,8 +114,6 @@ export async function PATCH(
           }
         }
 
-        // Top-level incoming params are agent params (agent/hybrid) or bot params
-        // (bot-only). Mirror each into the container the panel reads from.
         for (const [key, val] of Object.entries(parameters) as [string, any][]) {
           if (!key.startsWith('__')) {
             const prev = existingParams[key];
@@ -138,7 +130,6 @@ export async function PATCH(
         }
         if (note) merged['__review_note'] = note;
 
-        // Recalculate IQS — convert snake_case scores to PascalCase Yes/No/NA
         const pascalScores: Record<string, ParamScore> = {};
         const safeAgentParams = {
           ...(merged.__agent_parameters || {}),
@@ -174,15 +165,13 @@ export async function PATCH(
           }
         }
         
-        // Always calculate both if the params exist. Pass isV4 so the human score
-        // uses the v4 WEIGHTS for a v4 chat and V3_WEIGHTS for a legacy one — without
-        // it, v3 keys miss the v4 weight set and calculateIQS returns a wrong number.
-        // (bot_iqs uses BOT_WEIGHTS regardless of the flag.)
         merged['__scores'] = {
           agent_iqs: isBot ? null : calculateIQS(pascalScores, false, isV4),
           bot_iqs: calculateIQS(Object.keys(botPascalScores).length ? botPascalScores : pascalScores, true, isV4),
         };
         const newIqs = isBot ? merged['__scores'].bot_iqs : merged['__scores'].agent_iqs;
+
+        isScoreUpdated = (oldIqs !== null && newIqs !== null && oldIqs !== newIqs) || (paramChanges > 0);
 
         await query(
           `UPDATE iqs_scores
@@ -209,14 +198,17 @@ export async function PATCH(
 
       // For resolve: mark the KV flag as reviewed
       if (action === 'resolve' && flagId) {
+        const autoNote = isScoreUpdated ? 'Score updated by QA' : 'Resolved by QA (No score change)';
+        const finalNote = note ? (isScoreUpdated && !note.toLowerCase().includes('score') ? `${note} (Score updated)` : note) : autoNote;
+
         await storeUpdateIQSFlag(flagId, {
           status:     'reviewed',
           reviewedBy: email,
           reviewedAt: new Date().toISOString(),
-          reviewNote: note,
+          reviewNote: finalNote,
         });
-        log.info(ROUTE, 'flag resolved', { chatId, flagId, reviewer: email });
-        await storeAppendAuditEntry({ id: randomUUID(), action: 'dispute_resolved', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { flagId, note: note ?? null } } as IQSAuditEntry);
+        log.info(ROUTE, 'flag resolved', { chatId, flagId, reviewer: email, isScoreUpdated });
+        await storeAppendAuditEntry({ id: randomUUID(), action: 'dispute_resolved', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { flagId, note: finalNote } } as IQSAuditEntry);
       }
     } else if (action === 'reopen') {
       await query(

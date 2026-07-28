@@ -61,8 +61,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     dispositions = entry?.dispositions ?? [];
   }
 
-  if (!dispositions.length) {
-    log.warn(ROUTE, 'no dispositions', { email, role });
+  const me = config.users.find(u => (u.email || u.username) === email);
+  const myQAName = me?.agentName || email.split('@')[0] || '';
+
+  if (role !== 'admin' && !dispositions.length && !myQAName) {
+    log.warn(ROUTE, 'no dispositions or qa_name', { email, role });
     return NextResponse.json({ chats: [], total: 0 });
   }
 
@@ -72,9 +75,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // Optional narrowing by one or more dispositions within the QA's set
   const dispositionFilters = searchParams.getAll('disposition_filter').filter(d => dispositions.includes(d));
   const effectiveDispositions = dispositionFilters.length ? dispositionFilters : dispositions;
+  const safeDispositions = effectiveDispositions.length > 0 ? effectiveDispositions : ['__NONE__'];
 
   // Build dynamic WHERE clauses
-  const sqlParams: unknown[] = [effectiveDispositions];
+  const sqlParams: unknown[] = [safeDispositions];
   let paramIdx = 2;
   let extraWhere = '';
 
@@ -222,13 +226,35 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
 
-  const baseWhere = reviewedMode
-    ? `c.tags->>'disposition' = ANY($1)
-       AND i.status = 'reviewed'`
-    : `c.tags->>'disposition' = ANY($1)
-       AND i.status IN ('pending', 'reopened')
-       AND i.iqs_score IS NOT NULL
-       AND i.iqs_score <= 85`;
+  let baseWhere = '';
+  if (reviewedMode) {
+    if (role === 'admin') {
+      baseWhere = `i.status = 'reviewed'`;
+    } else {
+      const emailIdx = paramIdx++;
+      sqlParams.push(email.toLowerCase());
+      const qaNameIdx = paramIdx++;
+      sqlParams.push(myQAName.toLowerCase());
+
+      baseWhere = `i.status = 'reviewed' AND (
+        LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
+        OR LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx}
+        OR c.tags->>'disposition' = ANY($1::text[])
+      )`;
+    }
+  } else {
+    if (role === 'admin') {
+      baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
+    } else {
+      const qaNameIdx = paramIdx++;
+      sqlParams.push(myQAName.toLowerCase());
+
+      baseWhere = `i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85 AND (
+        LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx}
+        OR c.tags->>'disposition' = ANY($1::text[])
+      )`;
+    }
+  }
 
   log.info(ROUTE, 'query-plan', {
     role, email,

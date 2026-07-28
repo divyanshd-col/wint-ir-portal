@@ -437,6 +437,7 @@ export interface IQSAuditEntry {
     | 'score_overridden'
     | 'dispute_resolved'
     | 'tl_forwarded_dispute'
+    | 'tl_resolved_dispute'
     | 'tl_resolved_cat2'
     | 'tl_override'
     | 'tl_submit'

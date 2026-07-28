@@ -147,6 +147,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   );
 }
 
+import { DisputeStatusPill } from '@/components/tl/QualityChatsPage';
+
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
 interface DisputeRow {
@@ -160,6 +162,7 @@ interface DisputeRow {
   subDisposition?: string;
   closedAt: string;
   status: string;
+  raisedByRole?: 'ir' | 'tl' | string;
   challengedParams: { param: string; note: string }[];
   agentNote: string;
   reviewNote: string;
@@ -849,18 +852,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
                           {dateStr}
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12, color: '#6B6B6B' }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              background: '#fefce8',
-                              color: '#854d0e',
-                              fontWeight: 500,
-                            }}
-                          >
-                            {statusText}
-                          </span>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                          <DisputeStatusPill
+                            status={row.status}
+                            raisedByRole={row.raisedByRole}
+                            reviewNote={row.reviewNote}
+                            parameters={row.parameters}
+                          />
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -1022,21 +1020,15 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           {dateStr}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
-                          {row.reviewedBy || 'TL / QA'}
+                          {row.reviewedBy || 'QA'}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              background: isRejected ? '#fef2f2' : '#f0fdf4',
-                              color: isRejected ? '#991b1b' : '#166534',
-                              border: `1px solid ${isRejected ? '#fecaca' : '#bbf7d0'}`,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {outcomeText}
-                          </span>
+                          <DisputeStatusPill
+                            status={row.status}
+                            raisedByRole={row.raisedByRole}
+                            reviewNote={row.reviewNote}
+                            parameters={row.parameters}
+                          />
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
                           <button
