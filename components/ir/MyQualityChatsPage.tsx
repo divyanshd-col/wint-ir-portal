@@ -920,6 +920,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           chatId={row.chatId}
                           agentName={agentName}
                           iqsScore={row.iqsScore}
+                          botIqsScore={row.botIqsScore}
                           closedAt={row.closedAt}
                           parameters={row.parameters}
                           mode="pending"
@@ -1067,6 +1068,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           chatId={row.chatId}
                           agentName={agentName}
                           iqsScore={row.iqsScore}
+                          botIqsScore={row.botIqsScore}
                           closedAt={row.closedAt}
                           parameters={row.parameters}
                           mode="reviewed"
