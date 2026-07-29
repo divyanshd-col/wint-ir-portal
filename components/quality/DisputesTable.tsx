@@ -366,7 +366,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                         flagId={d.flagId}
                         agentNote={d.agentNote}
                         agentName={d.agentName}
-                        flaggedAt={d.flaggedAt}
+                        flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
                         compact
                       />
                     </td>

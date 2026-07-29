@@ -135,7 +135,7 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
   parameters, gates, mode, dispute, flagId,
-  mobileNumber, reviewedBy, reviewNote,
+  mobileNumber, reviewedBy, reviewedAt, reviewNote,
   allowRaiseDispute, onDisputeRaised,
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
