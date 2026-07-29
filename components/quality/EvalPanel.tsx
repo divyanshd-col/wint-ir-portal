@@ -543,22 +543,6 @@ export default function EvalPanel({
 
             </div>
 
-            {/* Dispute Thread & Comments */}
-            {(flagId || (dispute as any)?.flagId) && (
-              <div style={{ padding: '8px 16px 0' }}>
-                <DisputeThread
-                  flagId={flagId || (dispute as any)?.flagId}
-                  agentNote={dispute?.agentNote}
-                  reviewNote={reviewNote}
-                  agentName={dispute?.raisedByName || agentName}
-                  reviewedBy={reviewedBy}
-                  reviewerRole={reviewerRole}
-                  reviewedAt={reviewedAt}
-                  compact
-                />
-              </div>
-            )}
-
             {/* Resolution Note composer for QA (modes submit/resolve) */}
             {(mode === 'submit' || mode === 'resolve') && (
               <div style={{ margin: '8px 16px 12px', padding: '12px 14px', background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, flexShrink: 0 }}>

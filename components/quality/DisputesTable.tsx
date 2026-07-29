@@ -374,29 +374,43 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 )}
 
                 {expandedId === d.chatId && (
-                  <ErrorBoundary><EvalPanel
-                    chatId={d.chatId}
-                    agentName={d.agentName}
-                    iqsScore={d.iqsScore ?? 0}
-                    closedAt={d.closedAt}
-                    disposition={d.disposition}
-                    parameters={d.parameters}
-                    gates={(d as any).gates}
-                    mobileNumber={d.mobileNumber}
-                    mode="resolve"
-                    flagId={d.flagId}
-                    dispute={{
-                      raisedBy:        d.raisedBy,
-                      raisedByName:    d.raisedByName,
-                      agentNote:       d.agentNote,
-                      challengedParams: d.challengedParams,
-                    }}
-                    onDone={() => removeDispute(d.chatId)}
-                    onClose={() => setExpandedId(null)}
-                    colSpan={8}
-                    conversationType={d.conversationType}
-                  />
-                  </ErrorBoundary>
+                  <React.Fragment>
+                    <tr>
+                      <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                        <DisputeThread
+                          flagId={d.flagId}
+                          agentNote={d.agentNote}
+                          agentName={d.agentName}
+                          flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
+                          compact
+                        />
+                      </td>
+                    </tr>
+                    <ErrorBoundary>
+                      <EvalPanel
+                        chatId={d.chatId}
+                        agentName={d.agentName}
+                        iqsScore={d.iqsScore ?? 0}
+                        closedAt={d.closedAt}
+                        disposition={d.disposition}
+                        parameters={d.parameters}
+                        gates={(d as any).gates}
+                        mobileNumber={d.mobileNumber}
+                        mode="resolve"
+                        flagId={d.flagId}
+                        dispute={{
+                          raisedBy:        d.raisedBy,
+                          raisedByName:    d.raisedByName,
+                          agentNote:       d.agentNote,
+                          challengedParams: d.challengedParams,
+                        }}
+                        onDone={() => removeDispute(d.chatId)}
+                        onClose={() => setExpandedId(null)}
+                        colSpan={8}
+                        conversationType={d.conversationType}
+                      />
+                    </ErrorBoundary>
+                  </React.Fragment>
                 )}
               </React.Fragment>
             );
