@@ -591,7 +591,10 @@ export default function EvalPanel({
               </div>
               {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
-                const disputed = disputeMap.get(pascal);
+                const pickKey  = `${activeTab}:${pascal}`;
+                const disputed = (dispute?.challengedParams ?? []).find(c =>
+                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal)
+                );
                 const paramReadOnly = isReadOnly;
                 return (
                   <div key={pascal} style={{

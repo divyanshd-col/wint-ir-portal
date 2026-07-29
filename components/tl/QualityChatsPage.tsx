@@ -668,6 +668,12 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     parameters={d.parameters}
                     mobileNumber={d.csatScore != null ? String(d.csatScore) : null}
                     mode="view"
+                    dispute={{
+                      raisedBy:        d.raisedBy,
+                      raisedByName:    d.raisedByName,
+                      agentNote:       d.agentNote,
+                      challengedParams: d.challengedParams,
+                    }}
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={colCount}
