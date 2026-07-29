@@ -549,8 +549,9 @@ export default function EvalPanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'agent' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'agent' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    cursor: 'pointer'
+                    background: 'none', cursor: 'pointer'
                   }}
                 >
                   Agent Parameters
@@ -560,8 +561,9 @@ export default function EvalPanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'bot' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'bot' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    cursor: 'pointer'
+                    background: 'none', cursor: 'pointer'
                   }}
                 >
                   Bot Parameters

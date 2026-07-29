@@ -230,8 +230,9 @@ export default function IRScorePanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'agent' ? '#111111' : '#A1A1AA',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'agent' ? '2px solid #111111' : '2px solid transparent',
-                    background: 'none', border: 'none', cursor: 'pointer', fontFamily: SANS,
+                    background: 'none', cursor: 'pointer', fontFamily: SANS,
                   }}
                 >
                   Agent Parameters
@@ -242,8 +243,9 @@ export default function IRScorePanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'bot' ? '#111111' : '#A1A1AA',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'bot' ? '2px solid #111111' : '2px solid transparent',
-                    background: 'none', border: 'none', cursor: 'pointer', fontFamily: SANS,
+                    background: 'none', cursor: 'pointer', fontFamily: SANS,
                   }}
                 >
                   Bot Parameters
