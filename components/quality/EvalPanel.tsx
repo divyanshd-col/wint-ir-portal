@@ -391,6 +391,14 @@ export default function EvalPanel({
 
   // Submit evaluation
   async function submit() {
+    let noteToUse = noteText.trim();
+    if (mode === 'resolve' && !noteToUse) {
+      const promptNote = prompt('Enter a resolution note explaining the decision for Agent & TL:');
+      if (promptNote === null) return; // User cancelled prompt
+      noteToUse = promptNote.trim();
+      if (noteToUse) setNoteText(noteToUse);
+    }
+
     setSubmitting(true);
     setSubmitErr('');
     try {
@@ -398,7 +406,7 @@ export default function EvalPanel({
         : (isModified ? 'override' : 'submit');
 
       const body: any = { action, flagId };
-      if (noteText.trim()) body.note = noteText.trim();
+      if (noteToUse) body.note = noteToUse;
 
       if (isModified) {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
@@ -543,38 +551,7 @@ export default function EvalPanel({
 
             </div>
 
-            {/* Resolution Note composer for QA (modes submit/resolve) */}
-            {(mode === 'submit' || mode === 'resolve') && (
-              <div style={{ margin: '8px 16px 12px', padding: '12px 14px', background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, flexShrink: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)', marginBottom: 6 }}>
-                  📝 Resolution / Review Note (Saved upon resolving)
-                </div>
-                <textarea
-                  value={noteText}
-                  onChange={e => setNoteText(e.target.value)}
-                  placeholder="Type resolution reason or explanation for Agent & TL (e.g. Verified agent response, score retained)..."
-                  rows={2}
-                  style={{
-                    width: '100%', resize: 'vertical',
-                    border: '1px solid var(--qa-border)', borderRadius: 6,
-                    padding: '8px 10px', fontSize: 13, color: 'var(--qa-text)',
-                    lineHeight: 1.4, fontFamily: 'inherit',
-                    background: '#ffffff', outline: 'none',
-                  }}
-                />
-                {isModified && (
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={needsKbUpdate}
-                      onChange={e => setNeedsKbUpdate(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    Mark for Prompt / KB update
-                  </label>
-                )}
-              </div>
-            )}
+
 
             {/* Param list */}
             {showTabs ? (
@@ -903,22 +880,35 @@ export default function EvalPanel({
               )}
               {/* Primary action (submit/resolve modes) */}
               {(mode === 'submit' || mode === 'resolve') && (
-                <button
-                  onClick={submit}
-                  disabled={submitting}
-                  style={{
-                    height: 36, padding: '0 16px', borderRadius: 8,
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                    cursor: submitting ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex', alignItems: 'center',
-                    border: '1px solid var(--qa-gray-700)',
-                    background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
-                    color: '#fff',
-                    opacity: submitting ? 0.7 : 1,
-                  }}
-                >
-                  {submitting ? 'Saving…' : primaryLabel}
-                </button>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {isModified && (
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={needsKbUpdate}
+                        onChange={e => setNeedsKbUpdate(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      Mark KB Update
+                    </label>
+                  )}
+                  <button
+                    onClick={submit}
+                    disabled={submitting}
+                    style={{
+                      height: 36, padding: '0 16px', borderRadius: 8,
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                      cursor: submitting ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex', alignItems: 'center',
+                      border: '1px solid var(--qa-gray-700)',
+                      background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
+                      color: '#fff',
+                      opacity: submitting ? 0.7 : 1,
+                    }}
+                  >
+                    {submitting ? 'Saving…' : primaryLabel}
+                  </button>
+                </div>
               )}
               {/* Close */}
               <button onClick={onClose} style={{
