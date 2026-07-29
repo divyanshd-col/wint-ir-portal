@@ -836,15 +836,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {agentName}
-                          <span style={{
-                            fontSize: 10, fontWeight: 700,
-                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
-                            border: `1px solid ${targetInfo.badgeBorder}`,
-                            borderRadius: 4, padding: '1px 5px', marginLeft: 8,
-                            display: 'inline-block', verticalAlign: 'middle',
-                          }}>
-                            {targetInfo.label}
-                          </span>
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.botIqsScore ?? null} />
@@ -1014,15 +1005,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {agentName}
-                          <span style={{
-                            fontSize: 10, fontWeight: 700,
-                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
-                            border: `1px solid ${targetInfo.badgeBorder}`,
-                            borderRadius: 4, padding: '1px 5px', marginLeft: 8,
-                            display: 'inline-block', verticalAlign: 'middle',
-                          }}>
-                            {targetInfo.label}
-                          </span>
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.botIqsScore ?? null} />

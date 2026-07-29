@@ -251,18 +251,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       d.chatId
                     )}
                   </td>
-                  <td style={{ ...td, fontWeight: 500 }}>
-                    {d.agentName}
-                    <span style={{
-                      fontSize: 10, fontWeight: 700,
-                      background: targetInfo.badgeBg, color: targetInfo.badgeText,
-                      border: `1px solid ${targetInfo.badgeBorder}`,
-                      borderRadius: 4, padding: '1px 5px', marginLeft: 8,
-                      display: 'inline-block', verticalAlign: 'middle',
-                    }}>
-                      {targetInfo.label}
-                    </span>
-                  </td>
+                  <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
                   <td style={{ ...td, fontSize: 13 }}>
                     <span style={{
                       display: 'inline-block', fontSize: 10, fontWeight: 600,
