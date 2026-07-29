@@ -559,6 +559,39 @@ export default function EvalPanel({
               </div>
             )}
 
+            {/* Resolution Note composer for QA (modes submit/resolve) */}
+            {(mode === 'submit' || mode === 'resolve') && (
+              <div style={{ margin: '8px 16px 12px', padding: '12px 14px', background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, flexShrink: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)', marginBottom: 6 }}>
+                  📝 Resolution / Review Note (Saved upon resolving)
+                </div>
+                <textarea
+                  value={noteText}
+                  onChange={e => setNoteText(e.target.value)}
+                  placeholder="Type resolution reason or explanation for Agent & TL (e.g. Verified agent response, score retained)..."
+                  rows={2}
+                  style={{
+                    width: '100%', resize: 'vertical',
+                    border: '1px solid var(--qa-border)', borderRadius: 6,
+                    padding: '8px 10px', fontSize: 13, color: 'var(--qa-text)',
+                    lineHeight: 1.4, fontFamily: 'inherit',
+                    background: '#ffffff', outline: 'none',
+                  }}
+                />
+                {isModified && (
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={needsKbUpdate}
+                      onChange={e => setNeedsKbUpdate(e.target.checked)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    Mark for Prompt / KB update
+                  </label>
+                )}
+              </div>
+            )}
+
             {/* Param list */}
             {showTabs ? (
               <div style={{ display: 'flex', padding: '16px 16px 0', borderBottom: '1px solid var(--qa-border)', gap: 16 }}>
@@ -778,38 +811,7 @@ export default function EvalPanel({
               </div>
             )}
 
-            {/* Review note (QA modes) */}
-            {(mode === 'submit' || mode === 'resolve') && (
-              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
-                  Review Note
-                </div>
-                <textarea
-                  value={noteText}
-                  onChange={e => setNoteText(e.target.value)}
-                  placeholder="Add your evaluation comment…"
-                  rows={2}
-                  style={{
-                    width: '100%', resize: 'vertical',
-                    border: '1px solid var(--qa-border)', borderRadius: 6,
-                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                    lineHeight: 1.5, fontFamily: 'inherit',
-                    background: 'var(--qa-card)', outline: 'none',
-                  }}
-                />
-                {isModified && (
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={needsKbUpdate}
-                      onChange={e => setNeedsKbUpdate(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    Mark for Prompt / KB update
-                  </label>
-                )}
-              </div>
-            )}
+
             {isReadOnly && reviewNote && (
               <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 4 }}>
