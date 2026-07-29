@@ -4,6 +4,7 @@ import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
 import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -638,7 +639,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                         </div>
                       )}
                       {d.challengedParams.length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
                           <span style={{
                             fontSize: 10, fontWeight: 700,
                             background: targetInfo.badgeBg, color: targetInfo.badgeText,
@@ -657,6 +658,16 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                           ))}
                         </div>
                       )}
+                      <DisputeThread
+                        flagId={d.flagId}
+                        agentNote={d.agentNote}
+                        reviewNote={d.reviewNote}
+                        agentName={d.agentName}
+                        reviewedBy={(d as any).reviewedBy}
+                        flaggedAt={(d as any).flaggedAt || d.raisedAt}
+                        reviewedAt={(d as any).reviewedAt}
+                        compact
+                      />
                     </td>
                   </tr>
                   <EvalPanel

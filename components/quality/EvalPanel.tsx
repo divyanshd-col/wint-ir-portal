@@ -542,6 +542,21 @@ export default function EvalPanel({
 
             </div>
 
+            {/* Dispute Thread & Comments */}
+            {(flagId || (dispute as any)?.flagId) && (
+              <div style={{ padding: '8px 16px 0' }}>
+                <DisputeThread
+                  flagId={flagId || (dispute as any)?.flagId}
+                  agentNote={dispute?.agentNote}
+                  reviewNote={reviewNote}
+                  agentName={dispute?.raisedByName || agentName}
+                  reviewedBy={reviewedBy}
+                  reviewedAt={reviewedAt}
+                  compact
+                />
+              </div>
+            )}
+
             {/* Param list */}
             {showTabs ? (
               <div style={{ display: 'flex', padding: '16px 16px 0', borderBottom: '1px solid var(--qa-border)', gap: 16 }}>
@@ -799,21 +814,6 @@ export default function EvalPanel({
                   Review Note
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>{reviewNote}</div>
-              </div>
-            )}
-
-            {/* Dispute Thread & Comments */}
-            {(flagId || (dispute as any)?.flagId) && (
-              <div style={{ padding: '0 16px' }}>
-                <DisputeThread
-                  flagId={flagId || (dispute as any)?.flagId}
-                  agentNote={dispute?.agentNote}
-                  reviewNote={reviewNote}
-                  agentName={dispute?.raisedByName || agentName}
-                  reviewedBy={reviewedBy}
-                  reviewedAt={reviewedAt}
-                  compact
-                />
               </div>
             )}
 

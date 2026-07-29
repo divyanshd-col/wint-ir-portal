@@ -268,6 +268,19 @@ export default function IRScorePanel({
               </div>
             )}
 
+            {/* Dispute Thread & Comments */}
+            {flagId && (mode === 'pending' || mode === 'reviewed') && (
+              <div style={{ padding: '8px 16px 0' }}>
+                <DisputeThread
+                  flagId={flagId}
+                  reviewNote={reviewNote}
+                  agentName={agentName}
+                  reviewedBy={reviewedBy}
+                  compact
+                />
+              </div>
+            )}
+
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {(() => {
@@ -402,19 +415,6 @@ export default function IRScorePanel({
               });
             })()}
             </div>
-
-            {/* Dispute Thread & Comments */}
-            {flagId && (mode === 'pending' || mode === 'reviewed') && (
-              <div style={{ padding: '0 16px 16px' }}>
-                <DisputeThread
-                  flagId={flagId}
-                  reviewNote={reviewNote}
-                  agentName={agentName}
-                  reviewedBy={reviewedBy}
-                  compact
-                />
-              </div>
-            )}
           </div>
 
           {/* ── Right panel ── */}
