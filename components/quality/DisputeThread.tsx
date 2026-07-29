@@ -156,7 +156,7 @@ export function DisputeThread({
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        justify: 'space-between',
+        justifyContent: 'space-between',
         marginBottom: 12,
         paddingBottom: 8,
         borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
