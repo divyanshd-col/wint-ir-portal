@@ -924,7 +924,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           parameters={row.parameters}
                           mode="pending"
                           challengedParams={row.challengedParams}
+                          agentNote={row.agentNote}
                           reviewNote={row.reviewNote}
+                          flaggedAt={row.flaggedAt}
                           flagId={row.flagId}
                           flagStatus={row.status}
                           colSpan={9}
@@ -1073,7 +1075,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           parameters={row.parameters}
                           mode="reviewed"
                           challengedParams={row.challengedParams}
+                          agentNote={row.agentNote}
                           reviewNote={row.reviewNote}
+                          reviewedBy={row.reviewedBy}
+                          flaggedAt={row.flaggedAt}
+                          reviewedAt={row.reviewedAt}
                           flagId={row.flagId}
                           flagStatus={row.status}
                           colSpan={10}
