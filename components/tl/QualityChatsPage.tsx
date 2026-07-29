@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
-import { getDisputeClassification } from '@/lib/quality';
+import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -664,7 +664,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                               fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
                               background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
                               borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
-                            }}>{cp.param.startsWith('bot:') ? `Bot: ${cp.param.slice(4)}` : cp.param.replace(/^agent:/, '')}</span>
+                            }}>{formatParamLabel(cp.param)}</span>
                           ))}
                         </div>
                       )}
