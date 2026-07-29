@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation } from '@/lib/quality';
+import {
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS,
+  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS,
+  isV4Evaluation,
+} from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
@@ -23,6 +28,7 @@ interface IRScorePanelProps {
   chatId: string;
   agentName: string;
   iqsScore: number | null;
+  botIqsScore?: number | null;
   closedAt: string;
   parameters: Record<string, any> | null;
   mode: 'evaluated' | 'pending' | 'reviewed';
@@ -42,9 +48,11 @@ interface IRScorePanelProps {
 // this branch removed, and it collapses 0.5 half-scores to NA.)
 type DisplayScore = 'Yes' | 'No' | 'NA' | 'Half';
 
-function normalizeParams(raw: Record<string, any> | null, paramOrder: string[]) {
+function normalizeParams(raw: Record<string, any> | null, paramOrder: string[], isBot: boolean) {
   if (!raw) return {} as Record<string, { score: DisplayScore; reasoning: string }>;
-  const safe = raw.__agent_parameters || raw;
+  const safe = isBot
+    ? (raw.__bot_parameters || (raw.__agent_parameters ? {} : raw))
+    : (raw.__agent_parameters || raw);
   const out: Record<string, { score: DisplayScore; reasoning: string }> = {};
   for (const pascal of paramOrder) {
     const cell = resolveParamCell(safe, pascal);
@@ -84,15 +92,25 @@ function ScoreRing({ score }: { score: number | null }) {
 }
 
 export default function IRScorePanel({
-  chatId, agentName, iqsScore, closedAt, parameters, mode,
+  chatId, agentName, iqsScore, botIqsScore, closedAt, parameters, mode,
   challengedParams = [], reviewNote, colSpan,
   onClose, onDisputeRaised, flagStatus,
 }: IRScorePanelProps) {
+  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>('agent');
   const isV4 = isV4Evaluation(parameters);
-  const activeParamOrder = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
-  const activeParamNames = isV4 ? PARAM_NAMES : V3_PARAM_NAMES;
-  const activeWeights    = isV4 ? WEIGHTS : V3_WEIGHTS;
-  const params = normalizeParams(parameters, activeParamOrder);
+  const activeParamOrder = activeTab === 'bot'
+    ? BOT_PARAM_ORDER
+    : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
+  const activeParamNames = activeTab === 'bot'
+    ? BOT_PARAM_NAMES
+    : (isV4 ? PARAM_NAMES : V3_PARAM_NAMES);
+  const activeWeights = activeTab === 'bot'
+    ? BOT_WEIGHTS
+    : (isV4 ? WEIGHTS : V3_WEIGHTS);
+  const params = normalizeParams(parameters, activeParamOrder, activeTab === 'bot');
+  const currentScore = activeTab === 'bot'
+    ? (botIqsScore ?? parameters?.__scores?.bot_iqs ?? iqsScore)
+    : iqsScore;
 
   const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
   const [txLoading, setTxLoading] = useState(true);
@@ -208,7 +226,7 @@ export default function IRScorePanel({
             {/* Header */}
             <div style={{ padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <ScoreRing score={iqsScore} />
+                <ScoreRing score={currentScore} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#111111' }}>{agentName || '—'}</div>
                   <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 6 }}>
@@ -219,15 +237,39 @@ export default function IRScorePanel({
               </div>
             </div>
 
-            {/* Section label */}
+            {/* Tab header */}
             <div style={{
-              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
-              color: '#A1A1AA', padding: '16px 16px 4px', flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '12px 16px 0', borderBottom: '1px solid #E4E4E7', flexShrink: 0,
             }}>
-              <span>Parameter Scores</span>
+              <div style={{ display: 'flex', gap: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('agent')}
+                  style={{
+                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
+                    color: activeTab === 'agent' ? '#111111' : '#A1A1AA',
+                    borderBottom: activeTab === 'agent' ? '2px solid #111111' : '2px solid transparent',
+                    background: 'none', border: 'none', cursor: 'pointer', fontFamily: SANS,
+                  }}
+                >
+                  Agent Parameters
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bot')}
+                  style={{
+                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
+                    color: activeTab === 'bot' ? '#111111' : '#A1A1AA',
+                    borderBottom: activeTab === 'bot' ? '2px solid #111111' : '2px solid transparent',
+                    background: 'none', border: 'none', cursor: 'pointer', fontFamily: SANS,
+                  }}
+                >
+                  Bot Parameters
+                </button>
+              </div>
               {disputing && (
-                <span style={{ fontSize: 11, color: '#2563eb', fontWeight: 600, textTransform: 'none' }}>
+                <span style={{ fontSize: 11, color: '#2563eb', fontWeight: 600, paddingBottom: 8 }}>
                   {picks.size} selected for dispute
                 </span>
               )}
