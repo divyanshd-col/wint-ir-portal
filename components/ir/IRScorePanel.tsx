@@ -220,31 +220,6 @@ export default function IRScorePanel({
                   </div>
                 </div>
               </div>
-
-              {/* Target & Disputed Params Badges */}
-              {challengedParams.length > 0 && (() => {
-                const targetInfo = getDisputeClassification(challengedParams);
-                return (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 10 }}>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700,
-                      background: targetInfo.badgeBg, color: targetInfo.badgeText,
-                      border: `1px solid ${targetInfo.badgeBorder}`,
-                      borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
-                    }}>
-                      Target: {targetInfo.label}
-                    </span>
-                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #71717A)' }}>Disputed Params</span>
-                    {challengedParams.map(cp => (
-                      <span key={cp.param} title={cp.note} style={{
-                        fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                        background: '#F4F4F5', border: '1px solid #E4E4E7',
-                        borderRadius: 4, padding: '2px 6px', color: '#52525B', cursor: cp.note ? 'help' : 'default',
-                      }}>{formatParamLabel(cp.param)}</span>
-                    ))}
-                  </div>
-                );
-              })()}
             </div>
 
             {/* Tab header */}
@@ -296,22 +271,7 @@ export default function IRScorePanel({
               </div>
             )}
 
-            {/* Dispute Thread & Comments */}
-            {flagId && (mode === 'pending' || mode === 'reviewed') && (
-              <div style={{ padding: '8px 16px 0' }}>
-                <DisputeThread
-                  flagId={flagId}
-                  agentNote={agentNote}
-                  reviewNote={reviewNote}
-                  agentName={agentName}
-                  reviewedBy={reviewedBy}
-                  reviewerRole={flagStatus === 'tl_resolved' ? 'tl' : 'quality'}
-                  flaggedAt={flaggedAt}
-                  reviewedAt={reviewedAt}
-                  compact
-                />
-              </div>
-            )}
+
 
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
