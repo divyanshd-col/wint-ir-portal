@@ -233,32 +233,26 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     } else {
       const emailIdx = paramIdx++;
       sqlParams.push(email.toLowerCase());
+      const qaNameIdx = paramIdx++;
+      sqlParams.push(myQAName.toLowerCase());
 
-      if (dispositions.length > 0) {
-        baseWhere = `i.status = 'reviewed' AND (
-          c.tags->>'disposition' = ANY($1::text[])
-          OR LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
-        )`;
-      } else {
-        const qaNameIdx = paramIdx++;
-        sqlParams.push(myQAName.toLowerCase());
-        baseWhere = `i.status = 'reviewed' AND (
-          LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
-          OR LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx}
-        )`;
-      }
+      baseWhere = `i.status = 'reviewed' AND (
+        LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
+        OR LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx}
+        OR c.tags->>'disposition' = ANY($1::text[])
+      )`;
     }
   } else {
     if (role === 'admin') {
       baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
     } else {
-      if (dispositions.length > 0) {
-        baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-      } else {
-        const qaNameIdx = paramIdx++;
-        sqlParams.push(myQAName.toLowerCase());
-        baseWhere = `LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx} AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-      }
+      const qaNameIdx = paramIdx++;
+      sqlParams.push(myQAName.toLowerCase());
+
+      baseWhere = `i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85 AND (
+        LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx}
+        OR c.tags->>'disposition' = ANY($1::text[])
+      )`;
     }
   }
 

@@ -201,15 +201,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const db = dbMap.get(flag.chatId);
     if (!db) continue;
 
-    // Scope-check: dispute is visible if admin, or matching QA's assigned dispositions (or agents if no dispositions configured)
+    // Scope-check: dispute is visible if admin, or matching QA's assigned agents, or matching QA's dispositions
     if (role === 'quality') {
       const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
       const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
+      const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
 
-      if (dispositions.length > 0) {
-        if (!dispositionMatches) continue;
-      } else if (myAgents && myAgents.size > 0) {
-        if (!agentMatches) continue;
+      if (hasRestrictions && !agentMatches && !dispositionMatches) {
+        continue;
       }
     }
 
