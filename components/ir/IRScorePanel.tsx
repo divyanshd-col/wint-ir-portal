@@ -276,6 +276,7 @@ export default function IRScorePanel({
                   reviewNote={reviewNote}
                   agentName={agentName}
                   reviewedBy={reviewedBy}
+                  reviewerRole={flagStatus === 'tl_resolved' ? 'tl' : 'quality'}
                   compact
                 />
               </div>

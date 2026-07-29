@@ -18,6 +18,7 @@ interface Props {
   reviewNote?: string | null;
   agentName?: string | null;
   reviewedBy?: string | null;
+  reviewerRole?: string | null;
   flaggedAt?: string | null;
   reviewedAt?: string | null;
   compact?: boolean;
@@ -88,6 +89,7 @@ export function DisputeThread({
   reviewNote,
   agentName,
   reviewedBy,
+  reviewerRole,
   flaggedAt,
   reviewedAt,
   compact = false,
@@ -257,7 +259,7 @@ export function DisputeThread({
               <span style={{ fontSize: 13, fontWeight: 600, color: '#065f46' }}>
                 {reviewedBy || 'Reviewer'}
               </span>
-              <RoleBadge role="quality" />
+              <RoleBadge role={reviewerRole || 'quality'} />
               <span style={{
                 fontSize: 10,
                 fontWeight: 600,

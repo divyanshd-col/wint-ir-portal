@@ -42,6 +42,7 @@ export interface EvalPanelProps {
   mobileNumber?: string | null;
   reviewedBy?:   string | null;
   reviewedAt?:   string | null;
+  reviewerRole?: string | null;
   reviewNote?:   string | null;
   allowRaiseDispute?: boolean;
   onDisputeRaised?:   () => void;
@@ -135,7 +136,7 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
   parameters, gates, mode, dispute, flagId,
-  mobileNumber, reviewedBy, reviewedAt, reviewNote,
+  mobileNumber, reviewedBy, reviewedAt, reviewerRole, reviewNote,
   allowRaiseDispute, onDisputeRaised,
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
@@ -551,6 +552,7 @@ export default function EvalPanel({
                   reviewNote={reviewNote}
                   agentName={dispute?.raisedByName || agentName}
                   reviewedBy={reviewedBy}
+                  reviewerRole={reviewerRole}
                   reviewedAt={reviewedAt}
                   compact
                 />

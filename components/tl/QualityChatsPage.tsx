@@ -664,6 +664,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                         reviewNote={d.reviewNote}
                         agentName={d.agentName}
                         reviewedBy={(d as any).reviewedBy}
+                        reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
                         flaggedAt={(d as any).flaggedAt || d.raisedAt}
                         reviewedAt={(d as any).reviewedAt}
                         compact
