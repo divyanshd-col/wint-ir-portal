@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import EvalPanel from './EvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
+import { getDisputeClassification } from '@/lib/quality';
 
 interface Props {
   onCountChange?: (count: number) => void;
@@ -225,7 +226,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
               </td>
             </tr>
           ) : (
-            visibleDisputes.map(d => (
+            visibleDisputes.map(d => {
+              const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
+              return (
               <React.Fragment key={d.chatId}>
                 <tr
                   style={{ background: expandedId === d.chatId || threadId === d.flagId ? 'var(--qa-gray-50)' : undefined }}
@@ -248,7 +251,18 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       d.chatId
                     )}
                   </td>
-                  <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
+                  <td style={{ ...td, fontWeight: 500 }}>
+                    {d.agentName}
+                    <span style={{
+                      fontSize: 10, fontWeight: 700,
+                      background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                      border: `1px solid ${targetInfo.badgeBorder}`,
+                      borderRadius: 4, padding: '1px 5px', marginLeft: 8,
+                      display: 'inline-block', verticalAlign: 'middle',
+                    }}>
+                      {targetInfo.label}
+                    </span>
+                  </td>
                   <td style={{ ...td, fontSize: 13 }}>
                     <span style={{
                       display: 'inline-block', fontSize: 10, fontWeight: 600,
@@ -455,8 +469,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                   </ErrorBoundary>
                 )}
               </React.Fragment>
-            ))
-          )}
+            );
+          })
+        )}
         </tbody>
       </table>
     </div>

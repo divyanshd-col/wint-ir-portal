@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
+import { getDisputeClassification } from '@/lib/quality';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -529,7 +530,9 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
             </td>
           </tr>
         ) : (
-          disputes.map(d => (
+          disputes.map(d => {
+            const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
+            return (
             <React.Fragment key={d.flagId}>
               <tr
                 style={{ background: expandedId === d.chatId ? 'var(--qa-gray-50)' : undefined }}
@@ -537,7 +540,18 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                 onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}
               >
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
-                <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
+                <td style={{ ...td, fontWeight: 500 }}>
+                  {d.agentName}
+                  <span style={{
+                    fontSize: 10, fontWeight: 700,
+                    background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                    border: `1px solid ${targetInfo.badgeBorder}`,
+                    borderRadius: 4, padding: '1px 5px', marginLeft: 8,
+                    display: 'inline-block', verticalAlign: 'middle',
+                  }}>
+                    {targetInfo.label}
+                  </span>
+                </td>
                 <td style={{ ...td, fontSize: 13 }}>
                   <span style={{
                     display: 'inline-block', fontSize: 10, fontWeight: 600,
@@ -636,6 +650,14 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                       )}
                       {d.challengedParams.length > 0 && (
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                            border: `1px solid ${targetInfo.badgeBorder}`,
+                            borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
+                          }}>
+                            Target: {targetInfo.label}
+                          </span>
                           <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>Disputed Params</span>
                           {d.challengedParams.map(cp => (
                             <span key={cp.param} title={cp.note} style={{
@@ -665,8 +687,9 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                 </>
               )}
             </React.Fragment>
-          ))
-        )}
+          );
+        })
+      )}
       </tbody>
     </table>
     </>

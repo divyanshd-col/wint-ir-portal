@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
-  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
@@ -153,7 +153,15 @@ export default function EvalPanel({
   const isHybrid = conversationType === 'hybrid';
   const showTabs = isHybrid || hasBotParams || !!parameters?.__agent_parameters || (!!parameters && Object.keys(parameters).length > 0);
 
-  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(isBotChat ? 'bot' : 'agent');
+  const disputeTarget = getDisputeClassification(dispute?.challengedParams, conversationType);
+
+  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(() => {
+    if (dispute?.challengedParams && dispute.challengedParams.length > 0) {
+      if (disputeTarget.type === 'bot') return 'bot';
+      if (disputeTarget.type === 'agent') return 'agent';
+    }
+    return isBotChat ? 'bot' : 'agent';
+  });
 
   const isV4 = isV4Evaluation(parameters);
 
@@ -509,6 +517,15 @@ export default function EvalPanel({
                         <span>·</span>
                         <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
                           Disputed by {dispute.raisedBy} ({dispute.raisedByName})
+                        </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          background: disputeTarget.badgeBg, color: disputeTarget.badgeText,
+                          border: `1px solid ${disputeTarget.badgeBorder}`,
+                          borderRadius: 4, padding: '1px 6px', marginLeft: 4,
+                          display: 'inline-block', verticalAlign: 'middle',
+                        }}>
+                          {disputeTarget.label}
                         </span>
                       </>
                     )}

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import type { CSSProperties } from 'react';
 import type { IQSScoreEntry } from '@/lib/quality';
-import { PARAM_NAMES } from '@/lib/quality';
+import { PARAM_NAMES, getDisputeClassification } from '@/lib/quality';
 import IRScorePanel from './IRScorePanel';
 
 // ─── Shared UI Tokens & Styles ────────────────────────────────────────────────
@@ -820,8 +820,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 pendingDisputes.map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
                   const isLast = idx === pendingDisputes.length - 1 && !isOpen;
-                  // 'pending'/'ir_pending_tl' = awaiting TL review; 'tl_forwarded' =
-                  // TL has forwarded it on to QA for a final decision.
+                  const targetInfo = getDisputeClassification(row.challengedParams);
                   const statusText = row.status === 'pending' || row.status === 'ir_pending_tl'
                     ? 'Raised'
                     : row.status === 'tl_forwarded' ? 'Forwarded to QA' : 'Under Review';
@@ -837,6 +836,15 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {agentName}
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                            border: `1px solid ${targetInfo.badgeBorder}`,
+                            borderRadius: 4, padding: '1px 5px', marginLeft: 8,
+                            display: 'inline-block', verticalAlign: 'middle',
+                          }}>
+                            {targetInfo.label}
+                          </span>
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.botIqsScore ?? null} />
@@ -988,6 +996,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 reviewedDisputes.map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
                   const isLast = idx === reviewedDisputes.length - 1 && !isOpen;
+                  const targetInfo = getDisputeClassification(row.challengedParams);
                   const isRejected = row.reviewNote?.toLowerCase().includes('reject');
                   const outcomeText = isRejected ? 'Rejected' : 'Accepted';
 
@@ -1005,6 +1014,15 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {agentName}
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                            border: `1px solid ${targetInfo.badgeBorder}`,
+                            borderRadius: 4, padding: '1px 5px', marginLeft: 8,
+                            display: 'inline-block', verticalAlign: 'middle',
+                          }}>
+                            {targetInfo.label}
+                          </span>
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.botIqsScore ?? null} />
