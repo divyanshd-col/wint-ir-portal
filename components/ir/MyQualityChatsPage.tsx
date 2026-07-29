@@ -702,6 +702,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           chatId={e.chatId}
                           agentName={e.agentName || agentName}
                           iqsScore={e.iqs}
+                          botIqsScore={e.botIqsScore}
                           closedAt={e.date || e.scoredAt || ''}
                           parameters={buildParams(e)}
                           mode="evaluated"
@@ -919,6 +920,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           chatId={row.chatId}
                           agentName={agentName}
                           iqsScore={row.iqsScore}
+                          botIqsScore={row.botIqsScore}
                           closedAt={row.closedAt}
                           parameters={row.parameters}
                           mode="pending"
@@ -1066,6 +1068,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           chatId={row.chatId}
                           agentName={agentName}
                           iqsScore={row.iqsScore}
+                          botIqsScore={row.botIqsScore}
                           closedAt={row.closedAt}
                           parameters={row.parameters}
                           mode="reviewed"

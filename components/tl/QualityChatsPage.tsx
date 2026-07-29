@@ -642,7 +642,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                               fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
                               background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
                               borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
-                            }}>{cp.param}</span>
+                            }}>{cp.param.startsWith('bot:') ? `Bot: ${cp.param.slice(4)}` : cp.param.replace(/^agent:/, '')}</span>
                           ))}
                         </div>
                       )}

@@ -46,7 +46,9 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
 
   let botIqsScore: number | null = null;
   let callIqsScore: number | null = null;
+  let agentIqsScore: number | null = row.iqs != null ? parseFloat(row.iqs) : null;
   if (params?.__scores) {
+    if (params.__scores.agent_iqs != null) agentIqsScore = parseFloat(params.__scores.agent_iqs);
     if (params.__scores.bot_iqs != null) botIqsScore = parseFloat(params.__scores.bot_iqs);
     if (params.__scores.call_iqs != null) callIqsScore = parseFloat(params.__scores.call_iqs);
   }
@@ -57,7 +59,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     scoredAt:        row.scoredAt,
     agentName:       row.agentName || '',
     date:            row.date ? String(row.date).slice(0, 10) : '',
-    iqs:             row.iqs,
+    iqs:             agentIqsScore,
     botIqsScore:     botIqsScore ?? undefined,
     callIqsScore:    callIqsScore ?? undefined,
     csat:            csatStr,
