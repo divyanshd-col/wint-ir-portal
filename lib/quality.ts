@@ -102,6 +102,81 @@ export const BOT_PARAM_ORDER = [
   'Personalization', 'ExpectationSetting', 'Clarity',
 ];
 
+export interface DisputeTargetInfo {
+  type: 'agent' | 'bot' | 'hybrid';
+  label: 'AGENT' | 'BOT' | 'AGENT & BOT';
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+}
+
+/**
+ * Classifies whether a dispute targets Agent parameters, Bot parameters, or Both (Hybrid).
+ */
+export function getDisputeClassification(
+  challengedParams?: Array<{ param: string; note?: string }> | null,
+  conversationType?: string
+): DisputeTargetInfo {
+  const BOT_ONLY_KEYS = [
+    'correct_escalation', 'no_repetition', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity',
+  ];
+
+  if (!challengedParams || challengedParams.length === 0) {
+    if (conversationType === 'bot') {
+      return { type: 'bot', label: 'BOT', badgeBg: '#fef2f2', badgeText: '#991b1b', badgeBorder: '#fecaca' };
+    }
+    return { type: 'agent', label: 'AGENT', badgeBg: '#eff6ff', badgeText: '#1d4ed8', badgeBorder: '#bfdbfe' };
+  }
+
+  let hasBot = false;
+  let hasAgent = false;
+
+  for (const cp of challengedParams) {
+    const p = cp.param || '';
+    if (p.startsWith('bot:')) {
+      hasBot = true;
+    } else if (p.startsWith('agent:')) {
+      hasAgent = true;
+    } else if (BOT_ONLY_KEYS.includes(p)) {
+      hasBot = true;
+    } else {
+      hasAgent = true;
+    }
+  }
+
+  if (hasBot && hasAgent) {
+    return { type: 'hybrid', label: 'AGENT & BOT', badgeBg: '#f3e8ff', badgeText: '#6b21a8', badgeBorder: '#e9d5ff' };
+  }
+  if (hasBot) {
+    return { type: 'bot', label: 'BOT', badgeBg: '#fef2f2', badgeText: '#991b1b', badgeBorder: '#fecaca' };
+  }
+  return { type: 'agent', label: 'AGENT', badgeBg: '#eff6ff', badgeText: '#1d4ed8', badgeBorder: '#bfdbfe' };
+}
+
+/**
+ * Formats a challenged parameter key for UI display (e.g. 'agent:Accuracy' -> 'Agent: Accuracy').
+ */
+export function formatParamLabel(paramKey: string): string {
+  if (!paramKey) return '';
+  if (paramKey.startsWith('bot:')) {
+    const raw = paramKey.slice(4);
+    return `Bot: ${BOT_PARAM_NAMES[raw] || PARAM_NAMES[raw] || raw}`;
+  }
+  if (paramKey.startsWith('agent:')) {
+    const raw = paramKey.slice(6);
+    return `Agent: ${PARAM_NAMES[raw] || BOT_PARAM_NAMES[raw] || raw}`;
+  }
+  const BOT_ONLY_KEYS = [
+    'correct_escalation', 'no_repetition', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity',
+  ];
+  if (BOT_ONLY_KEYS.includes(paramKey)) {
+    return `Bot: ${BOT_PARAM_NAMES[paramKey] || paramKey}`;
+  }
+  return `Agent: ${PARAM_NAMES[paramKey] || BOT_PARAM_NAMES[paramKey] || paramKey}`;
+}
+
 export type ParamScore = 'Yes' | 'No' | 'NA' | 'Half';
 
 /**

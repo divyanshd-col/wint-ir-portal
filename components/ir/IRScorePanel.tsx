@@ -6,9 +6,10 @@ import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS,
   V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS,
-  isV4Evaluation,
+  isV4Evaluation, getDisputeClassification, formatParamLabel,
 } from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -33,8 +34,11 @@ interface IRScorePanelProps {
   parameters: Record<string, any> | null;
   mode: 'evaluated' | 'pending' | 'reviewed';
   challengedParams?: ChallengedParam[];
+  agentNote?: string;
   reviewNote?: string;
   reviewedBy?: string;
+  flaggedAt?: string;
+  reviewedAt?: string;
   colSpan: number;
   flagId?: string;
   flagStatus?: string;
@@ -93,7 +97,7 @@ function ScoreRing({ score }: { score: number | null }) {
 
 export default function IRScorePanel({
   chatId, agentName, iqsScore, botIqsScore, closedAt, parameters, mode,
-  challengedParams = [], reviewNote, reviewedBy, colSpan, flagId,
+  challengedParams = [], agentNote, reviewNote, reviewedBy, flaggedAt, reviewedAt, colSpan, flagId,
   onClose, onDisputeRaised, flagStatus,
 }: IRScorePanelProps) {
   const [activeTab, setActiveTab] = useState<'agent' | 'bot'>('agent');
@@ -230,8 +234,9 @@ export default function IRScorePanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'agent' ? '#111111' : '#A1A1AA',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'agent' ? '2px solid #111111' : '2px solid transparent',
-                    background: 'none', border: 'none', cursor: 'pointer', fontFamily: SANS,
+                    background: 'none', cursor: 'pointer', fontFamily: SANS,
                   }}
                 >
                   Agent Parameters
@@ -242,8 +247,9 @@ export default function IRScorePanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'bot' ? '#111111' : '#A1A1AA',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'bot' ? '2px solid #111111' : '2px solid transparent',
-                    background: 'none', border: 'none', cursor: 'pointer', fontFamily: SANS,
+                    background: 'none', cursor: 'pointer', fontFamily: SANS,
                   }}
                 >
                   Bot Parameters
@@ -264,6 +270,8 @@ export default function IRScorePanel({
                 Select parameter(s) to challenge on the left, then write your reason on the right.
               </div>
             )}
+
+
 
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>

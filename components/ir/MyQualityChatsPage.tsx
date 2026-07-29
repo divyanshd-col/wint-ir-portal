@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import type { CSSProperties } from 'react';
 import type { IQSScoreEntry } from '@/lib/quality';
-import { PARAM_NAMES } from '@/lib/quality';
+import { PARAM_NAMES, getDisputeClassification, formatParamLabel } from '@/lib/quality';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 import IRScorePanel from './IRScorePanel';
 
 // ─── Shared UI Tokens & Styles ────────────────────────────────────────────────
@@ -820,8 +821,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 pendingDisputes.map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
                   const isLast = idx === pendingDisputes.length - 1 && !isOpen;
-                  // 'pending'/'ir_pending_tl' = awaiting TL review; 'tl_forwarded' =
-                  // TL has forwarded it on to QA for a final decision.
+                  const targetInfo = getDisputeClassification(row.challengedParams);
                   const statusText = row.status === 'pending' || row.status === 'ir_pending_tl'
                     ? 'Raised'
                     : row.status === 'tl_forwarded' ? 'Forwarded to QA' : 'Under Review';
@@ -915,22 +915,64 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                       </tr>
                       {isOpen && (
-                        <IRScorePanel
-                          key={`panel-${row.flagId}`}
-                          chatId={row.chatId}
-                          agentName={agentName}
-                          iqsScore={row.iqsScore}
-                          botIqsScore={row.botIqsScore}
-                          closedAt={row.closedAt}
-                          parameters={row.parameters}
-                          mode="pending"
-                          challengedParams={row.challengedParams}
-                          reviewNote={row.reviewNote}
-                          flagId={row.flagId}
-                          flagStatus={row.status}
-                          colSpan={9}
-                          onClose={() => setExpandedDisputeId(null)}
-                        />
+                        <>
+                          <tr>
+                            <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                              {row.challengedParams.length > 0 && (() => {
+                                const targetInfo = getDisputeClassification(row.challengedParams);
+                                return (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 700,
+                                      background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                                      border: `1px solid ${targetInfo.badgeBorder}`,
+                                      borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
+                                    }}>
+                                      Target: {targetInfo.label}
+                                    </span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>Disputed Params</span>
+                                    {row.challengedParams.map(cp => (
+                                      <span key={cp.param} title={cp.note} style={{
+                                        fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                        background: '#F4F4F5', border: '1px solid #E4E4E7',
+                                        borderRadius: 4, padding: '2px 6px', color: '#52525B', cursor: cp.note ? 'help' : 'default',
+                                      }}>{formatParamLabel(cp.param)}</span>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                              <DisputeThread
+                                flagId={row.flagId}
+                                agentNote={row.agentNote}
+                                reviewNote={row.reviewNote}
+                                agentName={agentName}
+                                reviewedBy={row.reviewedBy}
+                                reviewerRole={row.status === 'tl_resolved' ? 'tl' : 'quality'}
+                                flaggedAt={row.flaggedAt}
+                                reviewedAt={row.reviewedAt}
+                                compact
+                              />
+                            </td>
+                          </tr>
+                          <IRScorePanel
+                            key={`panel-${row.flagId}`}
+                            chatId={row.chatId}
+                            agentName={agentName}
+                            iqsScore={row.iqsScore}
+                            botIqsScore={row.botIqsScore}
+                            closedAt={row.closedAt}
+                            parameters={row.parameters}
+                            mode="pending"
+                            challengedParams={row.challengedParams}
+                            agentNote={row.agentNote}
+                            reviewNote={row.reviewNote}
+                            flaggedAt={row.flaggedAt}
+                            flagId={row.flagId}
+                            flagStatus={row.status}
+                            colSpan={9}
+                            onClose={() => setExpandedDisputeId(null)}
+                          />
+                        </>
                       )}
                     </Fragment>
                   );
@@ -988,6 +1030,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 reviewedDisputes.map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
                   const isLast = idx === reviewedDisputes.length - 1 && !isOpen;
+                  const targetInfo = getDisputeClassification(row.challengedParams);
                   const isRejected = row.reviewNote?.toLowerCase().includes('reject');
                   const outcomeText = isRejected ? 'Rejected' : 'Accepted';
 
@@ -1063,22 +1106,66 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                       </tr>
                       {isOpen && (
-                        <IRScorePanel
-                          key={`panel-${row.flagId}`}
-                          chatId={row.chatId}
-                          agentName={agentName}
-                          iqsScore={row.iqsScore}
-                          botIqsScore={row.botIqsScore}
-                          closedAt={row.closedAt}
-                          parameters={row.parameters}
-                          mode="reviewed"
-                          challengedParams={row.challengedParams}
-                          reviewNote={row.reviewNote}
-                          flagId={row.flagId}
-                          flagStatus={row.status}
-                          colSpan={10}
-                          onClose={() => setExpandedDisputeId(null)}
-                        />
+                        <>
+                          <tr>
+                            <td colSpan={10} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                              {row.challengedParams.length > 0 && (() => {
+                                const targetInfo = getDisputeClassification(row.challengedParams);
+                                return (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 700,
+                                      background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                                      border: `1px solid ${targetInfo.badgeBorder}`,
+                                      borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
+                                    }}>
+                                      Target: {targetInfo.label}
+                                    </span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>Disputed Params</span>
+                                    {row.challengedParams.map(cp => (
+                                      <span key={cp.param} title={cp.note} style={{
+                                        fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                        background: '#F4F4F5', border: '1px solid #E4E4E7',
+                                        borderRadius: 4, padding: '2px 6px', color: '#52525B', cursor: cp.note ? 'help' : 'default',
+                                      }}>{formatParamLabel(cp.param)}</span>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                              <DisputeThread
+                                flagId={row.flagId}
+                                agentNote={row.agentNote}
+                                reviewNote={row.reviewNote}
+                                agentName={agentName}
+                                reviewedBy={row.reviewedBy}
+                                reviewerRole={row.status === 'tl_resolved' ? 'tl' : 'quality'}
+                                flaggedAt={row.flaggedAt}
+                                reviewedAt={row.reviewedAt}
+                                compact
+                              />
+                            </td>
+                          </tr>
+                          <IRScorePanel
+                            key={`panel-${row.flagId}`}
+                            chatId={row.chatId}
+                            agentName={agentName}
+                            iqsScore={row.iqsScore}
+                            botIqsScore={row.botIqsScore}
+                            closedAt={row.closedAt}
+                            parameters={row.parameters}
+                            mode="reviewed"
+                            challengedParams={row.challengedParams}
+                            agentNote={row.agentNote}
+                            reviewNote={row.reviewNote}
+                            reviewedBy={row.reviewedBy}
+                            flaggedAt={row.flaggedAt}
+                            reviewedAt={row.reviewedAt}
+                            flagId={row.flagId}
+                            flagStatus={row.status}
+                            colSpan={10}
+                            onClose={() => setExpandedDisputeId(null)}
+                          />
+                        </>
                       )}
                     </Fragment>
                   );
