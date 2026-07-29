@@ -210,7 +210,7 @@ export function DisputeThread({
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 13, color: 'var(--qa-text, #334155)', lineHeight: 1.5, whitespace: 'pre-wrap' }}>
+            <div style={{ fontSize: 13, color: 'var(--qa-text, #334155)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
               {agentNote}
             </div>
           </div>
@@ -238,7 +238,7 @@ export function DisputeThread({
                   {fmtDateTime(c.createdAt)}
                 </span>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--qa-text, #27272A)', lineHeight: 1.5, whitespace: 'pre-wrap' }}>
+              <div style={{ fontSize: 13, color: 'var(--qa-text, #27272A)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                 {c.content}
               </div>
             </div>
@@ -275,7 +275,7 @@ export function DisputeThread({
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 13, color: '#064e3b', lineHeight: 1.5, whitespace: 'pre-wrap' }}>
+            <div style={{ fontSize: 13, color: '#064e3b', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
               {reviewNote}
             </div>
           </div>
