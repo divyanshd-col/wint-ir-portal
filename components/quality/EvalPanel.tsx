@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
-  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export interface EvalPanelProps {
   mobileNumber?: string | null;
   reviewedBy?:   string | null;
   reviewedAt?:   string | null;
+  reviewerRole?: string | null;
   reviewNote?:   string | null;
   allowRaiseDispute?: boolean;
   onDisputeRaised?:   () => void;
@@ -134,7 +136,7 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
   parameters, gates, mode, dispute, flagId,
-  mobileNumber, reviewedBy, reviewNote,
+  mobileNumber, reviewedBy, reviewedAt, reviewerRole, reviewNote,
   allowRaiseDispute, onDisputeRaised,
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
@@ -153,7 +155,15 @@ export default function EvalPanel({
   const isHybrid = conversationType === 'hybrid';
   const showTabs = isHybrid || hasBotParams || !!parameters?.__agent_parameters || (!!parameters && Object.keys(parameters).length > 0);
 
-  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(isBotChat ? 'bot' : 'agent');
+  const disputeTarget = getDisputeClassification(dispute?.challengedParams, conversationType);
+
+  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(() => {
+    if (dispute?.challengedParams && dispute.challengedParams.length > 0) {
+      if (disputeTarget.type === 'bot') return 'bot';
+      if (disputeTarget.type === 'agent') return 'agent';
+    }
+    return isBotChat ? 'bot' : 'agent';
+  });
 
   const isV4 = isV4Evaluation(parameters);
 
@@ -381,6 +391,14 @@ export default function EvalPanel({
 
   // Submit evaluation
   async function submit() {
+    let noteToUse = noteText.trim();
+    if (mode === 'resolve' && !noteToUse) {
+      const promptNote = prompt('Enter a resolution note explaining the decision for Agent & TL:');
+      if (promptNote === null) return; // User cancelled prompt
+      noteToUse = promptNote.trim();
+      if (noteToUse) setNoteText(noteToUse);
+    }
+
     setSubmitting(true);
     setSubmitErr('');
     try {
@@ -388,7 +406,7 @@ export default function EvalPanel({
         : (isModified ? 'override' : 'submit');
 
       const body: any = { action, flagId };
-      if (noteText.trim()) body.note = noteText.trim();
+      if (noteToUse) body.note = noteToUse;
 
       if (isModified) {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
@@ -510,6 +528,15 @@ export default function EvalPanel({
                         <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
                           Disputed by {dispute.raisedBy} ({dispute.raisedByName})
                         </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          background: disputeTarget.badgeBg, color: disputeTarget.badgeText,
+                          border: `1px solid ${disputeTarget.badgeBorder}`,
+                          borderRadius: 4, padding: '1px 6px', marginLeft: 4,
+                          display: 'inline-block', verticalAlign: 'middle',
+                        }}>
+                          {disputeTarget.label}
+                        </span>
                       </>
                     )}
                     {mode === 'view' && reviewedBy && (
@@ -524,6 +551,8 @@ export default function EvalPanel({
 
             </div>
 
+
+
             {/* Param list */}
             {showTabs ? (
               <div style={{ display: 'flex', padding: '16px 16px 0', borderBottom: '1px solid var(--qa-border)', gap: 16 }}>
@@ -532,8 +561,9 @@ export default function EvalPanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'agent' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'agent' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    cursor: 'pointer'
+                    background: 'none', cursor: 'pointer'
                   }}
                 >
                   Agent Parameters
@@ -543,8 +573,9 @@ export default function EvalPanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'bot' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'bot' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    cursor: 'pointer'
+                    background: 'none', cursor: 'pointer'
                   }}
                 >
                   Bot Parameters
@@ -574,7 +605,10 @@ export default function EvalPanel({
               </div>
               {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
-                const disputed = disputeMap.get(pascal);
+                const pickKey  = `${activeTab}:${pascal}`;
+                const disputed = (dispute?.challengedParams ?? []).find(c =>
+                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal)
+                );
                 const paramReadOnly = isReadOnly;
                 return (
                   <div key={pascal} style={{
@@ -738,38 +772,7 @@ export default function EvalPanel({
               </div>
             )}
 
-            {/* Review note (QA modes) */}
-            {(mode === 'submit' || mode === 'resolve') && (
-              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
-                  Review Note
-                </div>
-                <textarea
-                  value={noteText}
-                  onChange={e => setNoteText(e.target.value)}
-                  placeholder="Add your evaluation comment…"
-                  rows={2}
-                  style={{
-                    width: '100%', resize: 'vertical',
-                    border: '1px solid var(--qa-border)', borderRadius: 6,
-                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                    lineHeight: 1.5, fontFamily: 'inherit',
-                    background: 'var(--qa-card)', outline: 'none',
-                  }}
-                />
-                {isModified && (
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={needsKbUpdate}
-                      onChange={e => setNeedsKbUpdate(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    Mark for Prompt / KB update
-                  </label>
-                )}
-              </div>
-            )}
+
             {isReadOnly && reviewNote && (
               <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 4 }}>
@@ -877,22 +880,35 @@ export default function EvalPanel({
               )}
               {/* Primary action (submit/resolve modes) */}
               {(mode === 'submit' || mode === 'resolve') && (
-                <button
-                  onClick={submit}
-                  disabled={submitting}
-                  style={{
-                    height: 36, padding: '0 16px', borderRadius: 8,
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                    cursor: submitting ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex', alignItems: 'center',
-                    border: '1px solid var(--qa-gray-700)',
-                    background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
-                    color: '#fff',
-                    opacity: submitting ? 0.7 : 1,
-                  }}
-                >
-                  {submitting ? 'Saving…' : primaryLabel}
-                </button>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  {isModified && (
+                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={needsKbUpdate}
+                        onChange={e => setNeedsKbUpdate(e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                      />
+                      Mark KB Update
+                    </label>
+                  )}
+                  <button
+                    onClick={submit}
+                    disabled={submitting}
+                    style={{
+                      height: 36, padding: '0 16px', borderRadius: 8,
+                      fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                      cursor: submitting ? 'not-allowed' : 'pointer',
+                      display: 'inline-flex', alignItems: 'center',
+                      border: '1px solid var(--qa-gray-700)',
+                      background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
+                      color: '#fff',
+                      opacity: submitting ? 0.7 : 1,
+                    }}
+                  >
+                    {submitting ? 'Saving…' : primaryLabel}
+                  </button>
+                </div>
               )}
               {/* Close */}
               <button onClick={onClose} style={{

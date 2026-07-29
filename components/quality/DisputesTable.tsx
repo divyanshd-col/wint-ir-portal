@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import EvalPanel from './EvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
+import { getDisputeClassification } from '@/lib/quality';
+import { DisputeThread } from './DisputeThread';
 
 interface Props {
   onCountChange?: (count: number) => void;
@@ -225,7 +227,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
               </td>
             </tr>
           ) : (
-            visibleDisputes.map(d => (
+            visibleDisputes.map(d => {
+              const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
+              return (
               <React.Fragment key={d.chatId}>
                 <tr
                   style={{ background: expandedId === d.chatId || threadId === d.flagId ? 'var(--qa-gray-50)' : undefined }}
@@ -357,106 +361,61 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 {/* Thread panel */}
                 {threadId === d.flagId && (
                   <tr>
-                    <td colSpan={8} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
-                      <div style={{ padding: '16px 20px' }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text-2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                          Dispute Thread
-                        </div>
-                        {threadLoad === d.flagId ? (
-                          <div style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Loading…</div>
-                        ) : (threads[d.flagId] ?? []).length === 0 ? (
-                          <div style={{ fontSize: 13, color: 'var(--qa-text-3)', marginBottom: 10 }}>No comments yet</div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                            {(threads[d.flagId] ?? []).map(c => (
-                              <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                                <div style={{
-                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                                  background: 'var(--qa-fill-med)', display: 'flex', alignItems: 'center',
-                                  justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)',
-                                }}>
-                                  {c.authorName.slice(0, 2).toUpperCase()}
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{c.authorName}</span>
-                                    <span style={{
-                                      fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                      background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                                      borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
-                                    }}>{c.role}</span>
-                                    <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtDate(c.createdAt)} {fmtTime(c.createdAt)}</span>
-                                  </div>
-                                  <div style={{ fontSize: 13, color: 'var(--qa-text)', lineHeight: 1.5 }}>{c.content}</div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* New comment input */}
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                          <textarea
-                            value={newComment}
-                            onChange={e => setNewComment(e.target.value)}
-                            placeholder="Add a comment…"
-                            rows={2}
-                            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) postComment(d.flagId); }}
-                            style={{
-                              flex: 1, resize: 'vertical',
-                              border: '1px solid var(--qa-border)', borderRadius: 6,
-                              padding: '6px 8px', fontSize: 13, color: 'var(--qa-text)',
-                              lineHeight: 1.5, fontFamily: 'inherit',
-                              background: 'var(--qa-card)', outline: 'none',
-                            }}
-                          />
-                          <button
-                            onClick={() => postComment(d.flagId)}
-                            disabled={posting || !newComment.trim()}
-                            style={{
-                              height: 36, padding: '0 14px', borderRadius: 6,
-                              fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                              cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer',
-                              border: '1px solid var(--qa-gray-700)',
-                              background: 'var(--qa-gray-700)', color: '#fff',
-                              opacity: posting || !newComment.trim() ? 0.5 : 1, flexShrink: 0,
-                            }}
-                          >
-                            {posting ? '…' : 'Post'}
-                          </button>
-                        </div>
-                      </div>
+                    <td colSpan={8} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+                      <DisputeThread
+                        flagId={d.flagId}
+                        agentNote={d.agentNote}
+                        agentName={d.agentName}
+                        flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
+                        compact
+                      />
                     </td>
                   </tr>
                 )}
 
                 {expandedId === d.chatId && (
-                  <ErrorBoundary><EvalPanel
-                    chatId={d.chatId}
-                    agentName={d.agentName}
-                    iqsScore={d.iqsScore ?? 0}
-                    closedAt={d.closedAt}
-                    disposition={d.disposition}
-                    parameters={d.parameters}
-                    gates={(d as any).gates}
-                    mobileNumber={d.mobileNumber}
-                    mode="resolve"
-                    flagId={d.flagId}
-                    dispute={{
-                      raisedBy:        d.raisedBy,
-                      raisedByName:    d.raisedByName,
-                      agentNote:       d.agentNote,
-                      challengedParams: d.challengedParams,
-                    }}
-                    onDone={() => removeDispute(d.chatId)}
-                    onClose={() => setExpandedId(null)}
-                    colSpan={8}
-                    conversationType={d.conversationType}
-                  />
-                  </ErrorBoundary>
+                  <React.Fragment>
+                    <tr>
+                      <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                        <DisputeThread
+                          flagId={d.flagId}
+                          agentNote={d.agentNote}
+                          agentName={d.agentName}
+                          flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
+                          compact
+                        />
+                      </td>
+                    </tr>
+                    <ErrorBoundary>
+                      <EvalPanel
+                        chatId={d.chatId}
+                        agentName={d.agentName}
+                        iqsScore={d.iqsScore ?? 0}
+                        closedAt={d.closedAt}
+                        disposition={d.disposition}
+                        parameters={d.parameters}
+                        gates={(d as any).gates}
+                        mobileNumber={d.mobileNumber}
+                        mode="resolve"
+                        flagId={d.flagId}
+                        dispute={{
+                          raisedBy:        d.raisedBy,
+                          raisedByName:    d.raisedByName,
+                          agentNote:       d.agentNote,
+                          challengedParams: d.challengedParams,
+                        }}
+                        onDone={() => removeDispute(d.chatId)}
+                        onClose={() => setExpandedId(null)}
+                        colSpan={8}
+                        conversationType={d.conversationType}
+                      />
+                    </ErrorBoundary>
+                  </React.Fragment>
                 )}
               </React.Fragment>
-            ))
-          )}
+            );
+          })
+        )}
         </tbody>
       </table>
     </div>

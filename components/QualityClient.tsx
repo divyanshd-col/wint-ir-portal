@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, fmtDuration, iqsTheme } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, fmtDuration, iqsTheme, formatParamLabel } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
 import CallLinkTestClient from '@/components/CallLinkTestClient';
@@ -1281,7 +1281,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
                     <div className="space-y-1 mb-1">
                       {item.flag.challengedParams.map(cp => (
                         <div key={cp.param} className="bg-blue-50 rounded-xl px-3 py-2 border border-blue-100">
-                          <span className="text-xs font-semibold text-gray-700">{PARAM_NAMES[cp.param] || cp.param}</span>
+                          <span className="text-xs font-semibold text-gray-700">{formatParamLabel(cp.param)}</span>
                           {cp.note && <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">{cp.note}</p>}
                         </div>
                       ))}

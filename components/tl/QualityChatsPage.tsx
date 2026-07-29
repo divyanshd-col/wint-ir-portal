@@ -3,6 +3,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
+import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -529,7 +531,9 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
             </td>
           </tr>
         ) : (
-          disputes.map(d => (
+          disputes.map(d => {
+            const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
+            return (
             <React.Fragment key={d.flagId}>
               <tr
                 style={{ background: expandedId === d.chatId ? 'var(--qa-gray-50)' : undefined }}
@@ -635,17 +639,36 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                         </div>
                       )}
                       {d.challengedParams.length > 0 && (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                            border: `1px solid ${targetInfo.badgeBorder}`,
+                            borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
+                          }}>
+                            Target: {targetInfo.label}
+                          </span>
                           <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>Disputed Params</span>
                           {d.challengedParams.map(cp => (
                             <span key={cp.param} title={cp.note} style={{
                               fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
                               background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
                               borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
-                            }}>{cp.param.startsWith('bot:') ? `Bot: ${cp.param.slice(4)}` : cp.param.replace(/^agent:/, '')}</span>
+                            }}>{formatParamLabel(cp.param)}</span>
                           ))}
                         </div>
                       )}
+                      <DisputeThread
+                        flagId={d.flagId}
+                        agentNote={d.agentNote}
+                        reviewNote={d.reviewNote}
+                        agentName={d.agentName}
+                        reviewedBy={(d as any).reviewedBy}
+                        reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
+                        flaggedAt={(d as any).flaggedAt || d.raisedAt}
+                        reviewedAt={(d as any).reviewedAt}
+                        compact
+                      />
                     </td>
                   </tr>
                   <EvalPanel
@@ -657,6 +680,13 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     parameters={d.parameters}
                     mobileNumber={d.csatScore != null ? String(d.csatScore) : null}
                     mode="view"
+                    flagId={d.flagId}
+                    dispute={{
+                      raisedBy:        d.raisedBy,
+                      raisedByName:    d.raisedByName,
+                      agentNote:       d.agentNote,
+                      challengedParams: d.challengedParams,
+                    }}
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={colCount}
@@ -665,8 +695,9 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                 </>
               )}
             </React.Fragment>
-          ))
-        )}
+          );
+        })
+      )}
       </tbody>
     </table>
     </>
