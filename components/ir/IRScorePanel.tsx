@@ -110,7 +110,7 @@ export default function IRScorePanel({
   const params = normalizeParams(parameters, activeParamOrder, activeTab === 'bot');
   const currentScore = activeTab === 'bot'
     ? (botIqsScore ?? parameters?.__scores?.bot_iqs ?? iqsScore)
-    : iqsScore;
+    : (iqsScore ?? parameters?.__scores?.agent_iqs ?? null);
 
   const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
   const [txLoading, setTxLoading] = useState(true);
@@ -140,50 +140,27 @@ export default function IRScorePanel({
   }, [chatId]);
 
   const togglePick = useCallback((param: string) => {
+    const pickKey = `${activeTab}:${param}`;
     setPicks(prev => {
       const next = new Set(prev);
-      if (next.has(param)) next.delete(param); else next.add(param);
+      if (next.has(pickKey)) next.delete(pickKey); else next.add(pickKey);
       return next;
     });
-  }, []);
+  }, [activeTab]);
 
   const startDisputing = useCallback(() => {
     setDisputing(true);
-    const isNonPerfectScore = (s: any) => {
-      if (s == null) return false;
-      if (typeof s === 'boolean') return !s;
-      if (typeof s === 'number') return s < 1.0;
-      if (typeof s === 'string') return s.toLowerCase() !== 'yes' && s !== '1.0' && s !== '1';
-      return false;
-    };
-    const nonPerfect = activeParamOrder.filter(p => isNonPerfectScore(params[p]?.score));
-    if (nonPerfect.length > 0) {
-      setPicks(new Set(nonPerfect));
-    } else if (activeParamOrder.length > 0) {
-      setPicks(new Set([activeParamOrder[0]]));
-    }
-  }, [activeParamOrder, params]);
+    setPicks(new Set());
+  }, []);
 
-  const canSubmit = sharedNote.trim().length > 0;
+  const canSubmit = picks.size > 0 && sharedNote.trim().length > 0;
 
   const submitDispute = async () => {
     if (!canSubmit || submitting) return;
     setSubmitting(true);
     setError('');
     try {
-      let finalPicks = new Set(picks);
-      if (finalPicks.size === 0) {
-        const isNonPerfectScore = (s: any) => {
-          if (s == null) return false;
-          if (typeof s === 'boolean') return !s;
-          if (typeof s === 'number') return s < 1.0;
-          if (typeof s === 'string') return s.toLowerCase() !== 'yes' && s !== '1.0' && s !== '1';
-          return false;
-        };
-        const nonPerfect = activeParamOrder.filter(p => isNonPerfectScore(params[p]?.score));
-        finalPicks = new Set(nonPerfect.length > 0 ? nonPerfect : activeParamOrder);
-      }
-      const challenged = [...finalPicks].map(p => ({ param: p, note: sharedNote.trim() }));
+      const challenged = [...picks].map(p => ({ param: p, note: sharedNote.trim() }));
       const res = await fetch('/api/quality/flag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -291,8 +268,9 @@ export default function IRScorePanel({
                   const entry = params[param];
                   const score = entry?.score || 'NA';
                   const reasoning = entry?.reasoning || '';
-                  const dispChallenge = challengedParams.find(c => c.param === param);
-                  const isPicked = picks.has(param);
+                  const pickKey = `${activeTab}:${param}`;
+                  const dispChallenge = challengedParams.find(c => c.param === pickKey || c.param === param);
+                  const isPicked = picks.has(pickKey);
                   const weight = activeWeights?.[param] != null ? `${Math.round((activeWeights[param] ?? 0) * 100)}%` : '';
                   const isLast = idx === activeParamOrder.length - 1;
 
