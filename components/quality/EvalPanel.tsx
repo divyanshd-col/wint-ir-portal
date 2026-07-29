@@ -7,6 +7,7 @@ import {
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -798,6 +799,21 @@ export default function EvalPanel({
                   Review Note
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>{reviewNote}</div>
+              </div>
+            )}
+
+            {/* Dispute Thread & Comments */}
+            {(flagId || (dispute as any)?.flagId) && (
+              <div style={{ padding: '0 16px' }}>
+                <DisputeThread
+                  flagId={flagId || (dispute as any)?.flagId}
+                  agentNote={dispute?.agentNote}
+                  reviewNote={reviewNote}
+                  agentName={dispute?.raisedByName || agentName}
+                  reviewedBy={reviewedBy}
+                  reviewedAt={reviewedAt}
+                  compact
+                />
               </div>
             )}
 

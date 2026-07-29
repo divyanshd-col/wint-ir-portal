@@ -668,6 +668,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     parameters={d.parameters}
                     mobileNumber={d.csatScore != null ? String(d.csatScore) : null}
                     mode="view"
+                    flagId={d.flagId}
                     dispute={{
                       raisedBy:        d.raisedBy,
                       raisedByName:    d.raisedByName,

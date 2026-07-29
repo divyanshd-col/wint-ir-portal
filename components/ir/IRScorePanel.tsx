@@ -9,6 +9,7 @@ import {
   isV4Evaluation,
 } from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -401,6 +402,19 @@ export default function IRScorePanel({
               });
             })()}
             </div>
+
+            {/* Dispute Thread & Comments */}
+            {flagId && (mode === 'pending' || mode === 'reviewed') && (
+              <div style={{ padding: '0 16px 16px' }}>
+                <DisputeThread
+                  flagId={flagId}
+                  reviewNote={reviewNote}
+                  agentName={agentName}
+                  reviewedBy={reviewedBy}
+                  compact
+                />
+              </div>
+            )}
           </div>
 
           {/* ── Right panel ── */}
