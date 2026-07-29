@@ -46,7 +46,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
 
   let botIqsScore: number | null = null;
   let callIqsScore: number | null = null;
-  let agentIqsScore: number | null = row.iqs != null ? parseFloat(row.iqs) : null;
+  let agentIqsScore: number | null = row.iqs != null ? Number(row.iqs) : null;
   if (params?.__scores) {
     if (params.__scores.agent_iqs != null) agentIqsScore = parseFloat(params.__scores.agent_iqs);
     if (params.__scores.bot_iqs != null) botIqsScore = parseFloat(params.__scores.bot_iqs);

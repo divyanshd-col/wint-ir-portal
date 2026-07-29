@@ -93,7 +93,7 @@ function ScoreRing({ score }: { score: number | null }) {
 
 export default function IRScorePanel({
   chatId, agentName, iqsScore, botIqsScore, closedAt, parameters, mode,
-  challengedParams = [], reviewNote, colSpan,
+  challengedParams = [], reviewNote, reviewedBy, colSpan, flagId,
   onClose, onDisputeRaised, flagStatus,
 }: IRScorePanelProps) {
   const [activeTab, setActiveTab] = useState<'agent' | 'bot'>('agent');
@@ -109,7 +109,7 @@ export default function IRScorePanel({
     : (isV4 ? WEIGHTS : V3_WEIGHTS);
   const params = normalizeParams(parameters, activeParamOrder, activeTab === 'bot');
   const currentScore = activeTab === 'bot'
-    ? (botIqsScore ?? parameters?.__scores?.bot_iqs ?? iqsScore)
+    ? (botIqsScore ?? parameters?.__scores?.bot_iqs ?? null)
     : (iqsScore ?? parameters?.__scores?.agent_iqs ?? null);
 
   const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
@@ -121,6 +121,10 @@ export default function IRScorePanel({
   const [disputeDone, setDisputeDone] = useState(false);
   const [error, setError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setActiveTab('agent');
+  }, [chatId]);
 
   useEffect(() => {
     setTxLoading(true);
@@ -269,7 +273,7 @@ export default function IRScorePanel({
                   const score = entry?.score || 'NA';
                   const reasoning = entry?.reasoning || '';
                   const pickKey = `${activeTab}:${param}`;
-                  const dispChallenge = challengedParams.find(c => c.param === pickKey || c.param === param);
+                  const dispChallenge = challengedParams.find(c => c.param === pickKey || (activeTab === 'agent' && c.param === param));
                   const isPicked = picks.has(pickKey);
                   const weight = activeWeights?.[param] != null ? `${Math.round((activeWeights[param] ?? 0) * 100)}%` : '';
                   const isLast = idx === activeParamOrder.length - 1;
@@ -453,7 +457,7 @@ export default function IRScorePanel({
                 <span style={{ fontSize: 13, color: '#A1A1AA' }}>{pendingStatusLabel}</span>
               )}
               {mode === 'reviewed' && (
-                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{reviewedOutcome}</span>
+                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{reviewedOutcome}{reviewedBy ? ` by ${reviewedBy}` : ''}</span>
               )}
 
               {error && <span style={{ fontSize: 12, color: '#DC2626' }}>{error}</span>}
