@@ -1,5 +1,5 @@
-import { PASCAL_TO_DB, resolveParamCell } from './param-keys';
-import { HUMAN_WEIGHTS as V4_HUMAN_WEIGHTS_PCT } from './scoring/prompt_v4';
+import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL, LEGACY_V4_FALLBACK_KEY, resolveParamCell } from './param-keys';
+import { HUMAN_WEIGHTS as V4_HUMAN_WEIGHTS_PCT, BOT_WEIGHTS as V4_BOT_WEIGHTS_PCT } from './scoring/prompt_v4';
 
 /**
  * IQS Quality Scoring — types, config, scoring prompt, and KV storage.
@@ -385,6 +385,98 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
     }
   }
   return possible > 0 ? Math.round((total / possible) * 100) : 0;
+}
+
+export type PooledParamInput =
+  | { yes?: number; half?: number; total?: number; score?: number | null }
+  | number
+  | null
+  | undefined;
+
+export interface WeightedOverallOptions {
+  roundDecimals?: number; // e.g. 1 for 1 decimal place (85.5), 0 or undefined for integer (86)
+}
+
+/**
+ * Computes a fixed-weight blend of pooled parameter scores for a period/rollup headline.
+ * Formula: overall = Σ(parameter_score × weight) ÷ Σ(weight of parameters present)
+ * Parameter score is pooled across chats (half-credit for 0.5, NA excluded).
+ * Weights sourced from HUMAN_WEIGHTS / BOT_WEIGHTS in prompt_v4.ts.
+ */
+export function calculateWeightedOverallIQS(
+  paramScores: Record<string, PooledParamInput> | null | undefined,
+  channel: 'bot' | 'human' = 'human',
+  options: WeightedOverallOptions = {}
+): number | null {
+  if (!paramScores || typeof paramScores !== 'object') return null;
+
+  const weightsSource = channel === 'bot' ? V4_BOT_WEIGHTS_PCT : V4_HUMAN_WEIGHTS_PCT;
+
+  const weightMap: Record<string, { key: string; weight: number }> = {};
+  for (const [pascalKey, w] of Object.entries(weightsSource)) {
+    weightMap[pascalKey] = { key: pascalKey, weight: w };
+    const dbKey = PASCAL_TO_DB[pascalKey];
+    if (dbKey) weightMap[dbKey] = { key: pascalKey, weight: w };
+    const fallbackKey = LEGACY_V4_FALLBACK_KEY[pascalKey];
+    if (fallbackKey) weightMap[fallbackKey] = { key: pascalKey, weight: w };
+  }
+
+  const canonicalPresent: Record<string, { paramScore: number; weight: number }> = {};
+
+  for (const [rawKey, rawVal] of Object.entries(paramScores)) {
+    if (rawVal === undefined || rawVal === null || rawKey.startsWith('__')) continue;
+
+    const pascalKey = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+    const info = weightMap[rawKey] || weightMap[pascalKey];
+    if (!info) continue;
+
+    let paramScore: number | null = null;
+    let isPresent = false;
+
+    if (typeof rawVal === 'number') {
+      if (!isNaN(rawVal)) {
+        paramScore = rawVal > 1 ? rawVal / 100 : rawVal;
+        isPresent = true;
+      }
+    } else if (typeof rawVal === 'object') {
+      if (rawVal.total !== undefined && rawVal.total > 0) {
+        const yes = rawVal.yes ?? 0;
+        const half = rawVal.half ?? 0;
+        paramScore = (yes + 0.5 * half) / rawVal.total;
+        isPresent = true;
+      } else if (rawVal.score !== undefined && rawVal.score !== null) {
+        const sc = typeof rawVal.score === 'number' ? rawVal.score : parseFloat(String(rawVal.score));
+        if (!isNaN(sc)) {
+          paramScore = sc > 1 ? sc / 100 : sc;
+          isPresent = true;
+        }
+      }
+    }
+
+    if (isPresent && paramScore !== null && !isNaN(paramScore)) {
+      paramScore = Math.max(0, Math.min(1, paramScore));
+      canonicalPresent[info.key] = { paramScore, weight: info.weight };
+    }
+  }
+
+  let totalWeightedScore = 0;
+  let totalPresentWeight = 0;
+
+  for (const item of Object.values(canonicalPresent)) {
+    totalWeightedScore += item.paramScore * item.weight;
+    totalPresentWeight += item.weight;
+  }
+
+  if (totalPresentWeight === 0) return null;
+
+  const resultPct = (totalWeightedScore / totalPresentWeight) * 100;
+  const decimals = options.roundDecimals ?? 0;
+
+  if (decimals > 0) {
+    const factor = Math.pow(10, decimals);
+    return Math.round(resultPct * factor) / factor;
+  }
+  return Math.round(resultPct);
 }
 
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {

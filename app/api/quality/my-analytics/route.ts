@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
-import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, calculateWeightedOverallIQS } from '@/lib/quality';
 import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 function avgOrNull(nums: number[]): number | null {
@@ -46,12 +46,32 @@ function trailing5Weeks(): string[] {
   return weeks;
 }
 
-// Map any stored parameter key (v4 canonical, old no-underscore v4, or legacy v3
-// snake_case) to its canonical Pascal name. Previously this deliberately folded v4
-// keys back onto v3 names (accuracy→Technical), but PARAM_ORDER/PARAM_NAMES are now
-// v4, so that back-mapping dropped 8 of 10 parameters from the WoW aggregation.
 function normalizeParamKey(raw: string): string {
   return ALL_DB_KEY_TO_PASCAL[raw] ?? (raw.charAt(0).toUpperCase() + raw.slice(1));
+}
+
+function extractPooledParamsFromRawArray(paramsArray: any[]): Record<string, { yes: number; total: number }> {
+  const pooled: Record<string, { yes: number; total: number }> = {};
+  if (!Array.isArray(paramsArray)) return pooled;
+  for (const paramObj of paramsArray) {
+    if (!paramObj) continue;
+    const targetObj = paramObj.__agent_parameters || paramObj;
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+      if (rawKey.startsWith('__')) continue;
+      const pk = normalizeParamKey(rawKey);
+      if (!PARAM_ORDER.includes(pk)) continue;
+      if (!pooled[pk]) pooled[pk] = { yes: 0, total: 0 };
+      const score = val?.score;
+      if (score === true || score === 'Yes' || score === 1 || score === '1') {
+        pooled[pk].yes++; pooled[pk].total++;
+      } else if (score === 0.5 || score === 'Half') {
+        pooled[pk].yes += 0.5; pooled[pk].total++;
+      } else if (score === false || score === 'No' || score === 0 || score === '0') {
+        pooled[pk].total++;
+      }
+    }
+  }
+  return pooled;
 }
 
 export async function GET(req: NextRequest) {
@@ -92,17 +112,17 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Stat cards (period-scoped) ──────────────────────────────────────────────
-  // Chat stats from conversations + iqs_scores
   const chatStatRows = await query<{
-    total: string; with_iqs: string; avg_iqs: string;
+    total: string; with_iqs: string;
     csat_good: string; csat_total: string;
+    parameters: any;
   }>(`
     SELECT
       COUNT(c.id)::text                                                AS total,
       COUNT(s.iqs_score)::text                                         AS with_iqs,
-      AVG(s.iqs_score)::text                                           AS avg_iqs,
       COUNT(CASE WHEN c.csat_score = 5 THEN 1 END)::text              AS csat_good,
-      COUNT(CASE WHEN c.csat_score IN (1,3,5) THEN 1 END)::text       AS csat_total
+      COUNT(CASE WHEN c.csat_score IN (1,3,5) THEN 1 END)::text       AS csat_total,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM conversations c
     JOIN agents a ON a.id = c.agent_id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -132,10 +152,13 @@ export async function GET(req: NextRequest) {
   const cs = chatStatRows[0];
   const ks = callStatRows[0];
 
+  const chatPooledParams = extractPooledParamsFromRawArray(cs?.parameters);
+  const chatIqsScore = calculateWeightedOverallIQS(chatPooledParams, 'human');
+
   const statCards = {
     chats: {
       volume: parseInt(cs?.total ?? '0'),
-      iqs:    cs?.avg_iqs ? Math.round(parseFloat(cs.avg_iqs)) : null,
+      iqs:    chatIqsScore,
       csat:   pctOrNull(parseInt(cs?.csat_good ?? '0'), parseInt(cs?.csat_total ?? '0')),
     },
     calls: {
@@ -149,14 +172,14 @@ export async function GET(req: NextRequest) {
   // ── Category tree (period-scoped, chat IQS only) ────────────────────────────
   const catRows = await query<{
     disposition: string; sub_disposition: string;
-    avg_iqs: string; avg_res: string; count: string;
+    avg_res: string; count: string; parameters: any;
   }>(`
     SELECT
       COALESCE(c.tags->>'disposition', 'Other')          AS disposition,
       COALESCE(c.tags->>'sub_disposition', '')            AS sub_disposition,
-      AVG(s.iqs_score)::text                              AS avg_iqs,
       AVG(c.resolution_seconds)::text                     AS avg_res,
-      COUNT(c.id)::text                                   AS count
+      COUNT(c.id)::text                                   AS count,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM conversations c
     JOIN agents a ON a.id = c.agent_id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -170,26 +193,35 @@ export async function GET(req: NextRequest) {
 
   // Build disposition tree
   const dispMap: Record<string, {
-    iqsVals: number[]; resVals: number[]; count: number;
-    subs: Record<string, { iqsVals: number[]; resVals: number[]; count: number }>;
+    params: Record<string, { yes: number; total: number }>; resVals: number[]; count: number;
+    subs: Record<string, { params: Record<string, { yes: number; total: number }>; resVals: number[]; count: number }>;
   }> = {};
 
   for (const r of catRows) {
     const d = r.disposition || 'Other';
-    if (!dispMap[d]) dispMap[d] = { iqsVals: [], resVals: [], count: 0, subs: {} };
-    const iqs = r.avg_iqs ? parseFloat(r.avg_iqs) : null;
+    if (!dispMap[d]) dispMap[d] = { params: {}, resVals: [], count: 0, subs: {} };
     const res = r.avg_res ? parseFloat(r.avg_res) : null;
     const cnt = parseInt(r.count ?? '0');
     dispMap[d].count += cnt;
-    if (iqs != null) dispMap[d].iqsVals.push(iqs);
     if (res != null) dispMap[d].resVals.push(res);
+
+    const rowParams = extractPooledParamsFromRawArray(r.parameters);
+    for (const [pk, pval] of Object.entries(rowParams)) {
+      if (!dispMap[d].params[pk]) dispMap[d].params[pk] = { yes: 0, total: 0 };
+      dispMap[d].params[pk].yes += pval.yes;
+      dispMap[d].params[pk].total += pval.total;
+    }
 
     const sub = r.sub_disposition;
     if (sub) {
-      if (!dispMap[d].subs[sub]) dispMap[d].subs[sub] = { iqsVals: [], resVals: [], count: 0 };
+      if (!dispMap[d].subs[sub]) dispMap[d].subs[sub] = { params: {}, resVals: [], count: 0 };
       dispMap[d].subs[sub].count += cnt;
-      if (iqs != null) dispMap[d].subs[sub].iqsVals.push(iqs);
       if (res != null) dispMap[d].subs[sub].resVals.push(res);
+      for (const [pk, pval] of Object.entries(rowParams)) {
+        if (!dispMap[d].subs[sub].params[pk]) dispMap[d].subs[sub].params[pk] = { yes: 0, total: 0 };
+        dispMap[d].subs[sub].params[pk].yes += pval.yes;
+        dispMap[d].subs[sub].params[pk].total += pval.total;
+      }
     }
   }
 
@@ -198,13 +230,13 @@ export async function GET(req: NextRequest) {
     .slice(0, 10)
     .map(([disp, d]) => ({
       disposition: disp,
-      iqsChats: avgOrNull(d.iqsVals),
+      iqsChats: calculateWeightedOverallIQS(d.params, 'human'),
       resolutionSecs: avgOrNull(d.resVals),
       children: Object.entries(d.subs)
         .sort(([, a], [, b]) => b.count - a.count)
         .map(([name, s]) => ({
           name,
-          iqsChats: avgOrNull(s.iqsVals),
+          iqsChats: calculateWeightedOverallIQS(s.params, 'human'),
           resolutionSecs: avgOrNull(s.resVals),
         })),
     }));
@@ -262,8 +294,7 @@ export async function GET(req: NextRequest) {
         return r ? pctOrNull(parseInt(r.csat_good ?? '0'), parseInt(r.csat_total ?? '0')) : null;
       }),
       iqs: wowKeys.map(k => {
-        const r = wowByKey[k];
-        return r?.avg_chat_iqs ? Math.round(parseFloat(r.avg_chat_iqs)) : null;
+        return calculateWeightedOverallIQS(wowParamMap[k], 'human');
       }),
       volume: wowKeys.map(k => parseInt(wowByKey[k]?.chat_vol ?? '0')),
     },
