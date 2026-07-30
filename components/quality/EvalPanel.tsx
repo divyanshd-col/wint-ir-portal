@@ -988,7 +988,7 @@ export default function EvalPanel({
             )}
 
             {/* Transcript */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
               {txLoading ? (
                 <div style={{ color: 'var(--qa-text-3)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                   Loading transcript…
@@ -1064,6 +1064,7 @@ export default function EvalPanel({
                             borderRadius: 8, fontSize: 12, fontStyle: 'italic',
                             color: 'var(--qa-text-2)', padding: '8px 14px', display: 'inline-block',
                             maxWidth: '90%', lineHeight: 1.5,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere',
                           }}>
                             {msg.content}{systemTime}
                           </div>
@@ -1088,6 +1089,7 @@ export default function EvalPanel({
                             borderRadius: 8, fontSize: 12,
                             color: '#78350f', padding: '10px 14px', display: 'inline-block',
                             maxWidth: '76%', lineHeight: 1.5,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                           }}>
                             <div style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#b45309', marginBottom: 4 }}>
@@ -1109,13 +1111,15 @@ export default function EvalPanel({
                       <div key={idx} style={{
                         marginTop: gap + 'px',
                         display: 'flex', flexDirection: 'column',
-                        maxWidth: '76%',
+                        maxWidth: '76%', minWidth: 0,
                         alignSelf: isRight ? 'flex-end' : 'flex-start',
                         alignItems: isRight ? 'flex-end' : 'flex-start',
+                        wordBreak: 'break-word', overflowWrap: 'anywhere',
                       }}>
                         <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginBottom: 4 }}>{label}</span>
                         <div style={{
                           padding: '10px 14px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
+                          wordBreak: 'break-word', overflowWrap: 'anywhere',
                           ...(type === 'agent' ? { background: 'var(--qa-gray-700)', color: '#fff' }
                             : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
                             : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),
