@@ -41,10 +41,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   log.info(ROUTE, 'params', { raw: req.url.split('?')[1] ?? '' });
 
-  // Resolve dispositions for this QA
+  // Resolve dispositions — admin and quality both see ALL dispositions (unscoped)
   const config = await readConfig();
   let dispositions: string[];
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'quality') {
     const explicit = searchParams.getAll('disposition');
     if (explicit.length) {
       dispositions = explicit;
@@ -64,7 +64,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const me = config.users.find(u => (u.email || u.username) === email);
   const myQAName = me?.agentName || email.split('@')[0] || '';
 
-  if (role !== 'admin' && !dispositions.length && !myQAName) {
+  if (!['admin', 'quality'].includes(role) && !dispositions.length && !myQAName) {
     log.warn(ROUTE, 'no dispositions or qa_name', { email, role });
     return NextResponse.json({ chats: [], total: 0 });
   }
@@ -228,7 +228,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   let baseWhere = '';
   if (reviewedMode) {
-    if (role === 'admin') {
+    if (role === 'admin' || role === 'quality') {
       baseWhere = `i.status = 'reviewed'`;
     } else {
       const emailIdx = paramIdx++;
@@ -249,17 +249,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
   } else {
-    if (role === 'admin') {
-      baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-    } else {
-      if (dispositions.length > 0) {
-        baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-      } else {
-        const qaNameIdx = paramIdx++;
-        sqlParams.push(myQAName.toLowerCase());
-        baseWhere = `LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx} AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-      }
-    }
+    // admin and quality both see all pending chats across all dispositions
+    baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
   }
 
   log.info(ROUTE, 'query-plan', {
