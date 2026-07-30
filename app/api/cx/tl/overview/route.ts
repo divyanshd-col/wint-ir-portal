@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
+import { calculateWeightedOverallIQS } from '@/lib/quality';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
+
+function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; half: number; total: number }> {
+  const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+  if (!Array.isArray(paramsArray)) return pooled;
+  for (const paramObj of paramsArray) {
+    if (!paramObj) continue;
+    const targetObj = paramObj.__agent_parameters || paramObj;
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+      if (rawKey.startsWith('__')) continue;
+      const pk = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+      if (!pooled[pk]) pooled[pk] = { yes: 0, half: 0, total: 0 };
+      const score = val?.score;
+      if (score === true || score === 'Yes' || score === 1 || score === '1') {
+        pooled[pk].yes++; pooled[pk].total++;
+      } else if (score === 0.5 || score === 'Half') {
+        pooled[pk].half++; pooled[pk].total++;
+      } else if (score === false || score === 'No' || score === 0 || score === '0') {
+        pooled[pk].total++;
+      }
+    }
+  }
+  return pooled;
+}
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -22,13 +47,21 @@ export async function GET(req: NextRequest) {
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS bad_csat_pct,
       ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs,
-      ROUND(AVG(c.resolution_seconds)::numeric / 60, 0)::int AS avg_resolution_mins
+      ROUND(AVG(c.resolution_seconds)::numeric / 60, 0)::int AS avg_resolution_mins,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
   `, [dateFrom, dateTo]);
 
-  const agentRows = await query(`
+  if (summaryRow) {
+    const pooled = extractPooledParams(summaryRow.parameters);
+    const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+    if (weighted != null) summaryRow.avg_iqs = weighted;
+    delete summaryRow.parameters;
+  }
+
+  const agentRowsRaw = await query<any>(`
     SELECT
       a.id   AS agent_id,
       a.name AS agent_name,
@@ -38,7 +71,8 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS bad_csat_pct,
-      ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs
+      ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM agents a
     JOIN conversations c ON c.agent_id = a.id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -47,7 +81,17 @@ export async function GET(req: NextRequest) {
     ORDER BY conv_count DESC
   `, [dateFrom, dateTo]);
 
-  const dispRows = await query(`
+  const agentRows = agentRowsRaw.map((a: any) => {
+    const pooled = extractPooledParams(a.parameters);
+    const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+    const { parameters, ...rest } = a;
+    return {
+      ...rest,
+      avg_iqs: weighted ?? a.avg_iqs,
+    };
+  });
+
+  const dispRowsRaw = await query<any>(`
     SELECT
       COALESCE((c.tags::jsonb)->>'disposition', 'Unknown') AS disposition,
       COUNT(c.id)::int AS conv_count,
@@ -56,7 +100,8 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS bad_csat_pct,
-      ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs
+      ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
@@ -64,6 +109,16 @@ export async function GET(req: NextRequest) {
     ORDER BY bad_csat_pct DESC NULLS LAST
     LIMIT 10
   `, [dateFrom, dateTo]);
+
+  const dispRows = dispRowsRaw.map((d: any) => {
+    const pooled = extractPooledParams(d.parameters);
+    const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+    const { parameters, ...rest } = d;
+    return {
+      ...rest,
+      avg_iqs: weighted ?? d.avg_iqs,
+    };
+  });
 
   const subDispRows = await query(`
     SELECT

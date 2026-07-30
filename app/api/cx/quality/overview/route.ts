@@ -2,6 +2,31 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
+import { calculateWeightedOverallIQS, PARAM_ORDER } from '@/lib/quality';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
+
+function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; half: number; total: number }> {
+  const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+  if (!Array.isArray(paramsArray)) return pooled;
+  for (const paramObj of paramsArray) {
+    if (!paramObj) continue;
+    const targetObj = paramObj.__agent_parameters || paramObj;
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+      if (rawKey.startsWith('__')) continue;
+      const pk = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+      if (!pooled[pk]) pooled[pk] = { yes: 0, half: 0, total: 0 };
+      const score = val?.score;
+      if (score === true || score === 'Yes' || score === 1 || score === '1') {
+        pooled[pk].yes++; pooled[pk].total++;
+      } else if (score === 0.5 || score === 'Half') {
+        pooled[pk].half++; pooled[pk].total++;
+      } else if (score === false || score === 'No' || score === 0 || score === '0') {
+        pooled[pk].total++;
+      }
+    }
+  }
+  return pooled;
+}
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -25,11 +50,19 @@ export async function GET(req: NextRequest) {
       ROUND(
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
-      )::float AS bad_csat_pct
+      )::float AS bad_csat_pct,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
   `, [dateFrom, dateTo]);
+
+  if (summaryRow) {
+    const pooled = extractPooledParams(summaryRow.parameters);
+    const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+    if (weighted != null) summaryRow.avg_iqs = weighted;
+    delete summaryRow.parameters;
+  }
 
   const agentRows = await query(`
     SELECT
@@ -42,14 +75,24 @@ export async function GET(req: NextRequest) {
       ROUND(
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
-      )::float AS bad_csat_pct
+      )::float AS bad_csat_pct,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM agents a
     JOIN conversations c ON c.agent_id = a.id
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
     GROUP BY a.id, a.name
-    ORDER BY avg_iqs ASC NULLS LAST
   `, [dateFrom, dateTo]);
+
+  const updatedAgentRows = agentRows.map((a: any) => {
+    const pooled = extractPooledParams(a.parameters);
+    const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+    const { parameters, ...rest } = a;
+    return {
+      ...rest,
+      avg_iqs: weighted ?? a.avg_iqs,
+    };
+  }).sort((a: any, b: any) => (a.avg_iqs ?? 999) - (b.avg_iqs ?? 999));
 
   const paramRows = await query(`
     SELECT
@@ -102,7 +145,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     summary:    summaryRow ?? {},
-    agents:     agentRows,
+    agents:     updatedAgentRows,
     iqs_params: paramRows,
     attention:  attentionRows,
   });

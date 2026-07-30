@@ -5,6 +5,7 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { calculateWeightedOverallIQS } from '@/lib/quality';
 import { PARAM_DEFS, normKey } from '../route';
 
 function getDateRange(period: string, from?: string | null, to?: string | null) {
@@ -155,6 +156,11 @@ export async function GET(req: NextRequest) {
   for (const r of paramRows) {
     const k = normKey(r.param_key);
     if (paramMap[k] == null) paramMap[k] = r.pass_rate;
+  }
+
+  if (channel === 'chats') {
+    const weighted = calculateWeightedOverallIQS(paramMap, 'human', { roundDecimals: 1 });
+    if (weighted != null) stats.iqs = weighted;
   }
 
   const paramSummary = PARAM_DEFS
