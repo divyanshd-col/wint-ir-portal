@@ -518,7 +518,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         <col style={{ width: 65 }} />
         <col style={{ width: 110 }} />
         <col style={{ width: 150 }} />
-        <col style={{ width: 220 }} />
+        <col style={{ width: 260 }} />
       </colgroup>
       <thead>
         <tr>
@@ -607,7 +607,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                       style={{
                         border: '1px solid var(--qa-border)', padding: '0 10px',
                         height: 28, borderRadius: 8, fontFamily: 'inherit', fontSize: 12,
-                        color: 'var(--qa-text-2)', cursor: 'pointer',
+                        color: 'var(--qa-text-2)', cursor: 'pointer', whiteSpace: 'nowrap',
                         background: expandedId === d.chatId ? 'var(--qa-gray-100)' : 'transparent',
                       }}
                     >
@@ -623,7 +623,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             background: 'var(--qa-card)', color: 'var(--qa-text)',
                             border: '1px solid var(--qa-border)', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1,
+                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
                           }}
                         >
                           Resolve
@@ -636,7 +636,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             background: 'var(--qa-gray-700)', color: '#fff',
                             border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1,
+                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
                           }}
                         >
                           {actioning === d.flagId ? '…' : 'Forward to QA'}
