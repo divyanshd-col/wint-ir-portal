@@ -224,28 +224,45 @@ export function DisputeThread({
             Loading comments…
           </div>
         ) : (
-          comments.map(c => (
-            <div key={c.id} style={{
-              background: '#FFFFFF',
-              border: '1px solid var(--qa-border, #E4E4E7)',
-              borderRadius: 8,
-              padding: '10px 12px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #18181B)' }}>
-                  {c.authorName}
-                </span>
-                <RoleBadge role={c.role} />
-                <span style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginLeft: 'auto' }}>
-                  {fmtDateTime(c.createdAt)}
-                </span>
+          comments.map(c => {
+            const isForward = c.content.toLowerCase().includes('forwarded to');
+            return (
+              <div key={c.id} style={{
+                background: isForward ? '#fcfaef' : '#FFFFFF',
+                border: isForward ? '1px solid #fef08a' : '1px solid var(--qa-border, #E4E4E7)',
+                borderRadius: 8,
+                padding: '10px 12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #18181B)' }}>
+                    {c.authorName}
+                  </span>
+                  <RoleBadge role={c.role} />
+                  {isForward && (
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      background: '#f3e8ff',
+                      color: '#6b21a8',
+                      border: '1px solid #e9d5ff',
+                      borderRadius: 4,
+                      padding: '1px 5px',
+                    }}>
+                      FORWARDED TO QA
+                    </span>
+                  )}
+                  <span style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginLeft: 'auto' }}>
+                    {fmtDateTime(c.createdAt)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--qa-text, #27272A)', lineHeight: 1.5, whiteSpace: 'pre-wrap', fontWeight: isForward ? 600 : 400 }}>
+                  {c.content}
+                </div>
               </div>
-              <div style={{ fontSize: 13, color: 'var(--qa-text, #27272A)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                {c.content}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
+
 
         {/* Resolution Note (if dispute resolved) */}
         {reviewNote && (

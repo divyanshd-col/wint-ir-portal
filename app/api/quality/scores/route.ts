@@ -58,7 +58,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     chatId:          row.chatId,
     scoredAt:        row.scoredAt,
     agentName:       row.agentName || '',
-    date:            row.date ? String(row.date).slice(0, 10) : '',
+    date:            row.date ? (row.date instanceof Date ? row.date.toISOString().slice(0, 10) : typeof row.date === 'string' && row.date.includes('T') ? row.date.slice(0, 10) : String(row.date).slice(0, 10)) : '',
     iqs:             agentIqsScore,
     botIqsScore:     botIqsScore ?? undefined,
     callIqsScore:    callIqsScore ?? undefined,
