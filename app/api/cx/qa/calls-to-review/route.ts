@@ -36,10 +36,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   log.info(ROUTE, 'params', { raw: req.url.split('?')[1] ?? '' });
 
-  // Resolve dispositions for this QA
+  // Resolve dispositions — admin and quality both see ALL dispositions (unscoped)
   const config = await readConfig();
   let dispositions: string[];
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'quality') {
     const explicit = searchParams.getAll('disposition');
     if (explicit.length) {
       dispositions = explicit;

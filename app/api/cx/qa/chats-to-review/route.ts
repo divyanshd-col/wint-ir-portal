@@ -41,10 +41,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   log.info(ROUTE, 'params', { raw: req.url.split('?')[1] ?? '' });
 
-  // Resolve dispositions for this QA
+  // Resolve dispositions — admin and quality both see ALL dispositions (unscoped)
   const config = await readConfig();
   let dispositions: string[];
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'quality') {
     const explicit = searchParams.getAll('disposition');
     if (explicit.length) {
       dispositions = explicit;
@@ -64,7 +64,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const me = config.users.find(u => (u.email || u.username) === email);
   const myQAName = me?.agentName || email.split('@')[0] || '';
 
-  if (role !== 'admin' && !dispositions.length && !myQAName) {
+  if (!['admin', 'quality'].includes(role) && !dispositions.length && !myQAName) {
     log.warn(ROUTE, 'no dispositions or qa_name', { email, role });
     return NextResponse.json({ chats: [], total: 0 });
   }
@@ -78,10 +78,47 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const safeDispositions = effectiveDispositions.length > 0 ? effectiveDispositions : ['__NONE__'];
 
   // Build dynamic WHERE clauses
-  const sqlParams: unknown[] = [safeDispositions];
-  let paramIdx = 2;
-  let extraWhere = '';
+  const sqlParams: unknown[] = [];
+  let paramIdx = 1;
+  let baseWhere = '';
 
+  if (reviewedMode) {
+    if (role === 'admin' || role === 'quality') {
+      if (dispositionFilters.length > 0) {
+        const dispIdx = paramIdx++;
+        sqlParams.push(safeDispositions);
+        baseWhere = `i.status = 'reviewed' AND c.tags->>'disposition' = ANY($${dispIdx}::text[])`;
+      } else {
+        baseWhere = `i.status = 'reviewed'`;
+      }
+    } else {
+      const emailIdx = paramIdx++;
+      sqlParams.push(email.toLowerCase());
+
+      if (dispositions.length > 0) {
+        const dispIdx = paramIdx++;
+        sqlParams.push(safeDispositions);
+        baseWhere = `i.status = 'reviewed' AND (
+          c.tags->>'disposition' = ANY($${dispIdx}::text[])
+          OR LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
+        )`;
+      } else {
+        const qaNameIdx = paramIdx++;
+        sqlParams.push(myQAName.toLowerCase());
+        baseWhere = `i.status = 'reviewed' AND (
+          LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
+          OR LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx}
+        )`;
+      }
+    }
+  } else {
+    // admin and quality both see all pending chats across all dispositions
+    const dispIdx = paramIdx++;
+    sqlParams.push(safeDispositions);
+    baseWhere = `c.tags->>'disposition' = ANY($${dispIdx}::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
+  }
+
+  let extraWhere = '';
   const filters: Record<string, unknown> = {};
 
   const chatId = searchParams.get('chat_id');
@@ -226,42 +263,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
 
-  let baseWhere = '';
-  if (reviewedMode) {
-    if (role === 'admin') {
-      baseWhere = `i.status = 'reviewed'`;
-    } else {
-      const emailIdx = paramIdx++;
-      sqlParams.push(email.toLowerCase());
-
-      if (dispositions.length > 0) {
-        baseWhere = `i.status = 'reviewed' AND (
-          c.tags->>'disposition' = ANY($1::text[])
-          OR LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
-        )`;
-      } else {
-        const qaNameIdx = paramIdx++;
-        sqlParams.push(myQAName.toLowerCase());
-        baseWhere = `i.status = 'reviewed' AND (
-          LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
-          OR LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx}
-        )`;
-      }
-    }
-  } else {
-    if (role === 'admin') {
-      baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-    } else {
-      if (dispositions.length > 0) {
-        baseWhere = `c.tags->>'disposition' = ANY($1::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-      } else {
-        const qaNameIdx = paramIdx++;
-        sqlParams.push(myQAName.toLowerCase());
-        baseWhere = `LOWER(COALESCE(a.qa_name, '')) = $${qaNameIdx} AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
-      }
-    }
-  }
-
   log.info(ROUTE, 'query-plan', {
     role, email,
     reviewedMode,
@@ -283,8 +284,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   );
   const total = parseInt(countRows[0]?.total ?? '0');
 
-  // Data query
-  sqlParams.push(limit, offset);
+  // Data query: push limit & offset parameters dynamically
+  const limitIdx = paramIdx++;
+  sqlParams.push(limit);
+  const offsetIdx = paramIdx++;
+  sqlParams.push(offset);
+
   const rows = await query<{
     chat_id: string;
     agent_id: number | null;
@@ -318,8 +323,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      LEFT JOIN agents a ON a.id = c.agent_id
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}
-     ORDER BY ${reviewedMode ? 'i.reviewed_at DESC' : 'i.scored_at DESC'}
-     LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`,
+     ORDER BY ${reviewedMode ? 'COALESCE(i.reviewed_at, i.scored_at) DESC' : 'i.scored_at DESC'}
+     LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
     sqlParams
   );
 

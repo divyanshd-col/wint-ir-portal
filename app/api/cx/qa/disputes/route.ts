@@ -51,13 +51,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const t0 = Date.now();
 
   // Resolve QA's dispositions and assigned agents
+  // admin and quality both see ALL disputes across all dispositions (unscoped)
   const config = await readConfig();
   let dispositions: string[] = [];
   let myAgents: Set<string> | null = null;
   const me = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
   const myQAName = me?.agentName || email.split('@')[0];
 
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'quality') {
     const rows = await query<{ d: string }>(
       `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
        WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`

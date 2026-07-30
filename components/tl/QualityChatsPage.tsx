@@ -297,7 +297,16 @@ function EvaluatedChatsSection() {
         </div>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: 110 }} />
+          <col />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 65 }} />
+          <col style={{ width: 80 }} />
+        </colgroup>
         <thead>
           <tr>
             <th style={th}>Chat ID</th>
@@ -498,7 +507,19 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         background: '#fef2f2', borderBottom: '1px solid var(--qa-border)',
       }}>{actionError}</div>
     )}
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      <colgroup>
+        <col style={{ width: 90 }} />
+        <col />
+        <col style={{ width: 130 }} />
+        <col style={{ width: 85 }} />
+        <col style={{ width: 85 }} />
+        <col style={{ width: 75 }} />
+        <col style={{ width: 65 }} />
+        <col style={{ width: 110 }} />
+        <col style={{ width: 150 }} />
+        <col style={{ width: 260 }} />
+      </colgroup>
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
@@ -541,8 +562,8 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                 onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}
               >
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
-                <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
-                <td style={{ ...td, fontSize: 13 }}>
+                <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.agentName}</td>
+                <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span style={{
                     display: 'inline-block', fontSize: 10, fontWeight: 600,
                     textTransform: 'uppercase', letterSpacing: '0.04em',
@@ -586,7 +607,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                       style={{
                         border: '1px solid var(--qa-border)', padding: '0 10px',
                         height: 28, borderRadius: 8, fontFamily: 'inherit', fontSize: 12,
-                        color: 'var(--qa-text-2)', cursor: 'pointer',
+                        color: 'var(--qa-text-2)', cursor: 'pointer', whiteSpace: 'nowrap',
                         background: expandedId === d.chatId ? 'var(--qa-gray-100)' : 'transparent',
                       }}
                     >
@@ -602,7 +623,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             background: 'var(--qa-card)', color: 'var(--qa-text)',
                             border: '1px solid var(--qa-border)', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1,
+                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
                           }}
                         >
                           Resolve
@@ -615,7 +636,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
                             background: 'var(--qa-gray-700)', color: '#fff',
                             border: 'none', cursor: actioning === d.flagId ? 'not-allowed' : 'pointer',
-                            opacity: actioning === d.flagId ? 0.6 : 1,
+                            opacity: actioning === d.flagId ? 0.6 : 1, whiteSpace: 'nowrap',
                           }}
                         >
                           {actioning === d.flagId ? '…' : 'Forward to QA'}
