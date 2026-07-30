@@ -239,6 +239,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
 
+
     // Robylon AI / Bot check
     const isBot = flag.agentName === 'Robylon AI' || db.agent_name === 'Robylon AI' || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)));
     if (agentFilter === 'human_only' && isBot) {
