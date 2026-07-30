@@ -477,22 +477,19 @@ export default function EvalPanel({
     background: 'var(--qa-gray-50)',
   };
   const panelWrap: React.CSSProperties = {
-    display: 'flex', height: 520,
+    display: 'flex', height: 520, maxWidth: '100%',
     border: '1px solid var(--qa-border)', borderRadius: 8,
     background: 'var(--qa-card)', overflow: 'hidden',
-    margin: 16,
+    margin: '16px auto', boxSizing: 'border-box',
   };
   const leftPanel: React.CSSProperties = {
-    // Wider param column, but allowed to shrink back to 400 when space is
-    // tight so the transcript pane stays readable.
-    width: 496, minWidth: 400, flexShrink: 1,
+    width: 440, minWidth: 320, maxWidth: '48%', flexShrink: 1,
     borderRight: '1px solid var(--qa-border)',
-    display: 'flex', flexDirection: 'column',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
   };
   const rightPanel: React.CSSProperties = {
-    // minWidth keeps the transcript readable — below it, the left column
-    // shrinks back toward 400 instead.
-    flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column',
+    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',
   };
 
   return (
@@ -794,8 +791,9 @@ export default function EvalPanel({
           <div style={rightPanel}>
             {/* Right header */}
             <div style={{
-              padding: '0 16px', borderBottom: '1px solid var(--qa-border)',
-              display: 'flex', alignItems: 'center', gap: 8, height: 52, flexShrink: 0,
+              padding: '0 12px', borderBottom: '1px solid var(--qa-border)',
+              display: 'flex', alignItems: 'center', gap: 6, height: 52, flexShrink: 0,
+              minWidth: 0, overflow: 'hidden',
             }}>
               {/* History toggle */}
               <button
