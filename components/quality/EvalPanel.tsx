@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
-  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification, formatParamLabel,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
@@ -477,27 +477,24 @@ export default function EvalPanel({
     background: 'var(--qa-gray-50)',
   };
   const panelWrap: React.CSSProperties = {
-    display: 'flex', height: 520,
+    display: 'flex', height: 520, width: '100%', maxWidth: '100%',
     border: '1px solid var(--qa-border)', borderRadius: 8,
     background: 'var(--qa-card)', overflow: 'hidden',
-    margin: 16,
+    margin: '16px auto', boxSizing: 'border-box',
   };
   const leftPanel: React.CSSProperties = {
-    // Wider param column, but allowed to shrink back to 400 when space is
-    // tight so the transcript pane stays readable.
-    width: 496, minWidth: 400, flexShrink: 1,
+    width: 440, minWidth: 320, maxWidth: '48%', flexShrink: 1,
     borderRight: '1px solid var(--qa-border)',
-    display: 'flex', flexDirection: 'column',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
   };
   const rightPanel: React.CSSProperties = {
-    // minWidth keeps the transcript readable — below it, the left column
-    // shrinks back toward 400 instead.
-    flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column',
+    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',
   };
 
   return (
     <tr className="eval-panel-row">
-      <td colSpan={colSpan} style={td}>
+      <td colSpan={colSpan} style={{ ...td, maxWidth: 0, overflow: 'hidden' }}>
         <div style={panelWrap}>
 
           {/* ── LEFT ── */}
@@ -607,7 +604,7 @@ export default function EvalPanel({
                 const st       = currentParamState[pascal];
                 const pickKey  = `${activeTab}:${pascal}`;
                 const disputed = (dispute?.challengedParams ?? []).find(c =>
-                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal)
+                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal) || c.param.toLowerCase() === pickKey.toLowerCase()
                 );
                 const paramReadOnly = isReadOnly;
                 return (
@@ -794,8 +791,9 @@ export default function EvalPanel({
           <div style={rightPanel}>
             {/* Right header */}
             <div style={{
-              padding: '0 16px', borderBottom: '1px solid var(--qa-border)',
-              display: 'flex', alignItems: 'center', gap: 8, height: 52, flexShrink: 0,
+              padding: '0 12px', borderBottom: '1px solid var(--qa-border)',
+              display: 'flex', alignItems: 'center', gap: 6, height: 52, flexShrink: 0,
+              minWidth: 0, overflow: 'hidden',
             }}>
               {/* History toggle */}
               <button
@@ -846,11 +844,12 @@ export default function EvalPanel({
                       {dispute.raisedBy} disputed
                     </span>
                     <span
-                      title={dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      title={dispute.challengedParams.map(d => formatParamLabel(d.param) || d.param).join(' · ')}
                       style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     >
-                      {dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      {dispute.challengedParams.map(d => formatParamLabel(d.param) || d.param).join(' · ')}
                     </span>
+
                   </>
                 )}
               </div>
@@ -989,7 +988,7 @@ export default function EvalPanel({
             )}
 
             {/* Transcript */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
               {txLoading ? (
                 <div style={{ color: 'var(--qa-text-3)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                   Loading transcript…
@@ -1065,6 +1064,7 @@ export default function EvalPanel({
                             borderRadius: 8, fontSize: 12, fontStyle: 'italic',
                             color: 'var(--qa-text-2)', padding: '8px 14px', display: 'inline-block',
                             maxWidth: '90%', lineHeight: 1.5,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere',
                           }}>
                             {msg.content}{systemTime}
                           </div>
@@ -1089,6 +1089,7 @@ export default function EvalPanel({
                             borderRadius: 8, fontSize: 12,
                             color: '#78350f', padding: '10px 14px', display: 'inline-block',
                             maxWidth: '76%', lineHeight: 1.5,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                           }}>
                             <div style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#b45309', marginBottom: 4 }}>
@@ -1110,13 +1111,15 @@ export default function EvalPanel({
                       <div key={idx} style={{
                         marginTop: gap + 'px',
                         display: 'flex', flexDirection: 'column',
-                        maxWidth: '76%',
+                        maxWidth: '76%', minWidth: 0,
                         alignSelf: isRight ? 'flex-end' : 'flex-start',
                         alignItems: isRight ? 'flex-end' : 'flex-start',
+                        wordBreak: 'break-word', overflowWrap: 'anywhere',
                       }}>
                         <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginBottom: 4 }}>{label}</span>
                         <div style={{
                           padding: '10px 14px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
+                          wordBreak: 'break-word', overflowWrap: 'anywhere',
                           ...(type === 'agent' ? { background: 'var(--qa-gray-700)', color: '#fff' }
                             : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
                             : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),

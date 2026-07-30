@@ -27,6 +27,23 @@ export const PARAM_NAMES: Record<string, string> = {
   Readability:               'Readability & Tone',
   GreetingHandover:          'Greeting & Handover',
   PostCallRecap:             'Post-Call Recap',
+
+  // Lowercase & snake_case aliases
+  issue_resolution:          'Issue Resolution',
+  accuracy:                  'Accuracy',
+  expectation_follow_through:'Expectation Setting & Follow-Through',
+  dissatisfaction_handling:  'Dissatisfaction Handling',
+  personalization:           'Personalization',
+  empathy:                   'Empathy',
+  escalation_decision:       'Call Escalation Decision',
+  readability:               'Readability & Tone',
+  greeting_handover:         'Greeting & Handover',
+  post_call_recap:           'Post-Call Recap',
+  greetinghandover:          'Greeting & Handover',
+  dissatisfactionhandling:   'Dissatisfaction Handling',
+  expectationfollowthrough:  'Expectation Setting & Follow-Through',
+  escalationdecision:        'Call Escalation Decision',
+  postcallrecap:             'Post-Call Recap',
 };
 
 export const PARAM_ORDER = Object.keys(V4_HUMAN_WEIGHTS_PCT);
@@ -95,6 +112,18 @@ export const BOT_PARAM_NAMES: Record<string, string> = {
   Personalization: 'Personalization',
   ExpectationSetting: 'Expectation Setting',
   Clarity: 'Clarity',
+
+  // Lowercase & snake_case aliases
+  issue_resolution: 'Issue Resolution',
+  accuracy: 'Accuracy',
+  correct_escalation: 'Correct Escalation',
+  no_repetition: 'No Repetition',
+  personalization: 'Personalization',
+  expectation_setting: 'Expectation Setting',
+  clarity: 'Clarity',
+  correctescalation: 'Correct Escalation',
+  norepetition: 'No Repetition',
+  expectationsetting: 'Expectation Setting',
 };
 
 export const BOT_PARAM_ORDER = [
@@ -119,7 +148,7 @@ export function getDisputeClassification(
 ): DisputeTargetInfo {
   const BOT_ONLY_KEYS = [
     'correct_escalation', 'no_repetition', 'clarity',
-    'CorrectEscalation', 'NoRepetition', 'Clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity', 'ExpectationSetting', 'expectation_setting',
   ];
 
   if (!challengedParams || challengedParams.length === 0) {
@@ -159,23 +188,34 @@ export function getDisputeClassification(
  */
 export function formatParamLabel(paramKey: string): string {
   if (!paramKey) return '';
+  let prefix = '';
+  let raw = paramKey;
   if (paramKey.startsWith('bot:')) {
-    const raw = paramKey.slice(4);
-    return `Bot: ${BOT_PARAM_NAMES[raw] || PARAM_NAMES[raw] || raw}`;
+    prefix = 'Bot: ';
+    raw = paramKey.slice(4);
+  } else if (paramKey.startsWith('agent:')) {
+    prefix = 'Agent: ';
+    raw = paramKey.slice(6);
   }
-  if (paramKey.startsWith('agent:')) {
-    const raw = paramKey.slice(6);
-    return `Agent: ${PARAM_NAMES[raw] || BOT_PARAM_NAMES[raw] || raw}`;
-  }
+
+  const label =
+    PARAM_NAMES[raw] ||
+    BOT_PARAM_NAMES[raw] ||
+    V3_PARAM_NAMES[raw] ||
+    raw;
+
+  if (prefix) return `${prefix}${label}`;
+
   const BOT_ONLY_KEYS = [
     'correct_escalation', 'no_repetition', 'clarity',
-    'CorrectEscalation', 'NoRepetition', 'Clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity', 'ExpectationSetting', 'expectation_setting',
   ];
-  if (BOT_ONLY_KEYS.includes(paramKey)) {
-    return `Bot: ${BOT_PARAM_NAMES[paramKey] || paramKey}`;
+  if (BOT_ONLY_KEYS.includes(raw)) {
+    return `Bot: ${label}`;
   }
-  return `Agent: ${PARAM_NAMES[paramKey] || BOT_PARAM_NAMES[paramKey] || paramKey}`;
+  return `Agent: ${label}`;
 }
+
 
 export type ParamScore = 'Yes' | 'No' | 'NA' | 'Half';
 
