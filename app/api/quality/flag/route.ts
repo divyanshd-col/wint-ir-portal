@@ -5,7 +5,6 @@ import type { IQSFlag, IQSChallengedParam, IQSAuditEntry } from '@/lib/store';
 import { resolveQANameForChat } from '@/lib/qa-resolver';
 import { randomUUID } from 'crypto';
 
-
 // Only QA/admin can give a dispute its final review decision — TL's only power
 // over a dispute is forwarding it on (see /api/cx/tl/disputes/forward).
 function reviewAccess(session: any) {

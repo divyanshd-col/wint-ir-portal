@@ -1,15 +1,15 @@
-import { query as defaultQuery } from '@/lib/cx/db';
-import { readConfig as defaultReadConfig } from '@/lib/config';
+import { query } from '@/lib/cx/db';
+import { readConfig } from '@/lib/config';
 
 export interface QAResolverDeps {
-  query?: typeof defaultQuery;
-  readConfig?: typeof defaultReadConfig;
+  query?: <T = any>(sql: string, params?: any[]) => Promise<T[]>;
+  readConfig?: () => Promise<any>;
 }
 
 export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps): Promise<string> {
   if (!chatId) return 'QA';
-  const queryFn = deps?.query || defaultQuery;
-  const readConfigFn = deps?.readConfig || defaultReadConfig;
+  const queryFn = deps?.query || query;
+  const readConfigFn = deps?.readConfig || readConfig;
 
   try {
     const revRows = await queryFn<{ reviewed_by: string | null; agent_id: number | null; disposition: string | null }>(`
@@ -27,11 +27,10 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
 
     const row = revRows[0];
     if (row) {
-      // Tier 1: Reviewed QA
       if (row.reviewed_by && row.reviewed_by.trim()) {
         const rev = row.reviewed_by.trim();
         const config = await readConfigFn();
-        const u = config.users?.find(user => (user.email || user.username)?.toLowerCase() === rev.toLowerCase() || user.agentName?.toLowerCase() === rev.toLowerCase());
+        const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === rev.toLowerCase() || user.agentName?.toLowerCase() === rev.toLowerCase());
         if (u?.agentName) return u.agentName;
         if (rev.includes('@')) {
           const userRows = await queryFn<{ name: string }>(`SELECT name FROM cx_users WHERE LOWER(email) = LOWER($1)`, [rev]);
@@ -42,19 +41,16 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
         return rev;
       }
 
-      // Tier 2: Assigned Agent QA
       if (row.agent_id) {
         const agentRows = await queryFn<{ qa_name: string | null }>(`SELECT qa_name FROM agents WHERE id = $1`, [row.agent_id]);
-        if (agentRows[0]?.qa_name && agentRows[0].qa_name.trim()) return agentRows[0].qa_name.trim();
+        if (agentRows[0]?.qa_name) return agentRows[0].qa_name;
       }
-
-      // Tier 3: Disposition Map
 
       if (row.disposition) {
         const config = await readConfigFn();
-        const mapEntry = config.qaDispositionMap?.find(m => m.dispositions?.includes(row.disposition!));
+        const mapEntry = config.qaDispositionMap?.find((m: any) => m.dispositions?.includes(row.disposition!));
         if (mapEntry?.email) {
-          const u = config.users?.find(user => (user.email || user.username)?.toLowerCase() === mapEntry.email.toLowerCase());
+          const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === mapEntry.email.toLowerCase());
           if (u?.agentName) return u.agentName;
         }
       }
@@ -62,7 +58,6 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
   } catch (err) {
     console.error('Failed to resolve QA name for chat:', err);
   }
-
-  // Tier 4: Fallback
   return 'QA';
 }
+
