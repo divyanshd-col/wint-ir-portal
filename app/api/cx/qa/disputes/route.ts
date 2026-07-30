@@ -205,6 +205,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   for (const flag of pendingFlags) {
     const db = dbMap.get(flag.chatId);
     if (!db) continue;
+
     const chatReviewer = (db.chat_reviewed_by || db.call_reviewed_by || '').trim();
 
     // Scope-check: disputes forwarded by TL should be sent to the person who reviewed that chat instead of assigned QA
@@ -229,14 +230,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         // Chat was not reviewed by a specific QA yet — fallback to assigned QA or mapped dispositions
         const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
         const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
+        const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
 
-        if (dispositions.length > 0) {
-          if (!dispositionMatches) continue;
-        } else if (myAgents && myAgents.size > 0) {
-          if (!agentMatches) continue;
+        if (hasRestrictions && !agentMatches && !dispositionMatches) {
+          continue;
         }
       }
     }
+
 
     // Robylon AI / Bot check
     const isBot = flag.agentName === 'Robylon AI' || db.agent_name === 'Robylon AI' || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)));
