@@ -255,7 +255,7 @@ export async function getLatestConversationByPhone(phone: string): Promise<any |
 
 export async function getConversationHistory(chatId: string, limit = 10): Promise<any[]> {
   return query(`
-    SELECT c.id AS "chatId", COALESCE(c.closed_at, c.started_at)::date AS "date",
+    SELECT c.id AS "chatId", COALESCE(c.closed_at, c.started_at)::date::text AS "date",
            c.conversation_type AS "conversationType", c.csat_score, c.tags,
            a.name AS "agentName", s.iqs_score AS "iqs", s.scored_at AS "scoredAt"
     FROM conversations c
@@ -514,7 +514,7 @@ export async function getAllScoredConversations(
   const rows = await query(`
     SELECT
       c.id                        AS "chatId",
-      COALESCE(c.closed_at, c.started_at)::date AS "date",
+      COALESCE(c.closed_at, c.started_at)::date::text AS "date",
       c.conversation_type         AS "conversationType",
       c.frt_seconds               AS "frt",
       c.bot_to_team_seconds       AS "botToTeamSecs",

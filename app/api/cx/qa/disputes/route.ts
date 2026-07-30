@@ -32,6 +32,7 @@ export interface DisputeRow {
   parameters:   Record<string, { score: boolean | null; reasoning: string }>;
   tlForwarded:  boolean;
   conversationType?: 'bot' | 'agent' | 'hybrid';
+  reviewedBy?:  string | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -53,6 +54,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const config = await readConfig();
   let dispositions: string[] = [];
   let myAgents: Set<string> | null = null;
+  const me = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
+  const myQAName = me?.agentName || email.split('@')[0];
 
   if (role === 'admin') {
     const rows = await query<{ d: string }>(
@@ -65,8 +68,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const entry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
     dispositions = entry?.dispositions ?? [];
 
-    const me = config.users.find(u => (u.email || u.username) === email);
-    const myQAName = me?.agentName || email.split('@')[0];
     try {
       const rows = await query<{ name: string }>(
         `SELECT name FROM agents WHERE LOWER(qa_name) = LOWER($1)`,
@@ -103,6 +104,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     iqs_score: string | null;
     call_iqs_score: string | null;
     parameters: any;
+    chat_reviewed_by: string | null;
+    call_reviewed_by: string | null;
     csat_score: string | null;
     mobile_number: string | null;
     contact_id: number | null;
@@ -114,6 +117,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
             i.iqs_score, i.call_iqs_score, i.parameters,
+            i.reviewed_by AS chat_reviewed_by,
+            (SELECT reviewed_by FROM call_evaluations ce WHERE ce.chat_id = c.id AND reviewed_by IS NOT NULL AND reviewed_by != '' LIMIT 1) AS call_reviewed_by,
             c.csat_score,
             ct.phone AS mobile_number,
             c.contact_id, c.started_at, c.conversation_type
@@ -201,14 +206,35 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const db = dbMap.get(flag.chatId);
     if (!db) continue;
 
-    // Scope-check: dispute is visible if admin, or matching QA's assigned agents, or matching QA's dispositions
-    if (role === 'quality') {
-      const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
-      const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
-      const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
+    const chatReviewer = (db.chat_reviewed_by || db.call_reviewed_by || '').trim();
 
-      if (hasRestrictions && !agentMatches && !dispositionMatches) {
-        continue;
+    // Scope-check: disputes forwarded by TL should be sent to the person who reviewed that chat instead of assigned QA
+    if (role === 'quality') {
+      if (chatReviewer) {
+        // Chat was reviewed by a specific QA. Route to the reviewer instead of assigned QA.
+        const revLower = chatReviewer.toLowerCase();
+        const emailLower = email.toLowerCase();
+        const qaNameLower = (myQAName || '').toLowerCase();
+        const usernameLower = (me?.username || '').toLowerCase();
+
+        const isReviewer =
+          revLower === emailLower ||
+          (qaNameLower && revLower === qaNameLower) ||
+          (usernameLower && revLower === usernameLower) ||
+          (emailLower.includes('@') && revLower === emailLower.split('@')[0]);
+
+        if (!isReviewer) {
+          continue;
+        }
+      } else {
+        // Chat was not reviewed by a specific QA yet — fallback to assigned QA or mapped dispositions
+        const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
+        const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
+        const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
+
+        if (hasRestrictions && !agentMatches && !dispositionMatches) {
+          continue;
+        }
       }
     }
 
@@ -271,6 +297,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       parameters:       params,
       tlForwarded:      flag.status === 'tl_forwarded',
       conversationType: db.conversation_type as any,
+      reviewedBy:       chatReviewer || null,
     });
   }
 
