@@ -230,13 +230,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         // Chat was not reviewed by a specific QA yet — fallback to assigned QA or mapped dispositions
         const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
         const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
-        const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
 
-        if (hasRestrictions && !agentMatches && !dispositionMatches) {
-          continue;
+        if (dispositions.length > 0) {
+          if (!dispositionMatches) continue;
+        } else if (myAgents && myAgents.size > 0) {
+          if (!agentMatches) continue;
         }
       }
     }
+
 
     // Robylon AI / Bot check
     const isBot = flag.agentName === 'Robylon AI' || db.agent_name === 'Robylon AI' || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)));

@@ -49,6 +49,7 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
       }
 
       // Tier 3: Disposition Map
+
       if (row.disposition) {
         const config = await readConfigFn();
         const mapEntry = config.qaDispositionMap?.find(m => m.dispositions?.includes(row.disposition!));
