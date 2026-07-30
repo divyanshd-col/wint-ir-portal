@@ -1104,3 +1104,5 @@ export function iqsTheme(iqs: number) {
   if (iqs >= 70) return { text: '#c2410c', bg: '#ffedd5', bar: '#f97316', label: 'Average' };
   return { text: '#b91c1c', bg: '#fee2e2', bar: '#ef4444', label: 'At Risk' };
 }
+
+

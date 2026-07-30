@@ -95,9 +95,9 @@ export function resolveParamCell(safeParams: Record<string, any> | null | undefi
   const canonicalKey = PASCAL_TO_DB[pascalKey];
   const fallbackKey  = LEGACY_V4_FALLBACK_KEY[pascalKey];
   const aliasKey     = LEGACY_V3_ALIAS_KEY[pascalKey];
-  return (canonicalKey ? safeParams[canonicalKey] : undefined)
+  return safeParams[pascalKey]
+    ?? (canonicalKey ? safeParams[canonicalKey] : undefined)
     ?? (fallbackKey ? safeParams[fallbackKey] : undefined)
     ?? (aliasKey ? safeParams[aliasKey] : undefined)
-    ?? safeParams[pascalKey]
     ?? {};
 }

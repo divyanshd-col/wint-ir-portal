@@ -30,16 +30,16 @@ export interface TLChatRow {
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
-  const { session, response } = await requireRole(['tl', 'admin']);
+  const { session, response } = await requireRole(['tl', 'admin', 'quality']);
   if (response) return response;
   const role  = (session.user as any).role as string;
   const email = ((session.user as any).email || '') as string;
 
   const { searchParams } = new URL(req.url);
 
-  // Resolve TL's agents
+  // Resolve TL / QA / Admin agents
   let agentNames: string[];
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'quality') {
     const explicit = searchParams.get('agent');
     if (explicit) {
       agentNames = [explicit];
@@ -88,6 +88,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (csatValues.length) {
     extraWhere += ` AND c.csat_score = ANY($${paramIdx++})`;
     sqlParams.push(csatValues.map(Number));
+  }
+
+  const statusFilter = searchParams.get('status');
+  if (statusFilter === 'reviewed') {
+    extraWhere += ` AND i.status = 'reviewed'`;
+  } else if (['admin', 'quality'].includes(role)) {
+    // Exclude chats that are in the pending review section of Chat Evaluation for QA and Admin views
+    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85)`;
   }
 
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
