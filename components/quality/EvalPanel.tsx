@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
-  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification, formatParamLabel,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
@@ -607,7 +607,7 @@ export default function EvalPanel({
                 const st       = currentParamState[pascal];
                 const pickKey  = `${activeTab}:${pascal}`;
                 const disputed = (dispute?.challengedParams ?? []).find(c =>
-                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal)
+                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal) || c.param.toLowerCase() === pickKey.toLowerCase()
                 );
                 const paramReadOnly = isReadOnly;
                 return (
@@ -846,11 +846,12 @@ export default function EvalPanel({
                       {dispute.raisedBy} disputed
                     </span>
                     <span
-                      title={dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      title={dispute.challengedParams.map(d => formatParamLabel(d.param) || d.param).join(' · ')}
                       style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     >
-                      {dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      {dispute.challengedParams.map(d => formatParamLabel(d.param) || d.param).join(' · ')}
                     </span>
+
                   </>
                 )}
               </div>
