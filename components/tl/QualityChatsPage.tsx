@@ -297,7 +297,7 @@ function EvaluatedChatsSection() {
         </div>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <thead>
           <tr>
             <th style={th}>Chat ID</th>
@@ -498,7 +498,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         background: '#fef2f2', borderBottom: '1px solid var(--qa-border)',
       }}>{actionError}</div>
     )}
-    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+    <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
@@ -541,8 +541,8 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                 onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}
               >
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
-                <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
-                <td style={{ ...td, fontSize: 13 }}>
+                <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.agentName}</td>
+                <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span style={{
                     display: 'inline-block', fontSize: 10, fontWeight: 600,
                     textTransform: 'uppercase', letterSpacing: '0.04em',

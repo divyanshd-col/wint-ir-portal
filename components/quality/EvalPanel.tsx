@@ -477,7 +477,7 @@ export default function EvalPanel({
     background: 'var(--qa-gray-50)',
   };
   const panelWrap: React.CSSProperties = {
-    display: 'flex', height: 520, maxWidth: '100%',
+    display: 'flex', height: 520, width: '100%', maxWidth: '100%',
     border: '1px solid var(--qa-border)', borderRadius: 8,
     background: 'var(--qa-card)', overflow: 'hidden',
     margin: '16px auto', boxSizing: 'border-box',
@@ -494,7 +494,7 @@ export default function EvalPanel({
 
   return (
     <tr className="eval-panel-row">
-      <td colSpan={colSpan} style={td}>
+      <td colSpan={colSpan} style={{ ...td, maxWidth: 0, overflow: 'hidden' }}>
         <div style={panelWrap}>
 
           {/* ── LEFT ── */}
