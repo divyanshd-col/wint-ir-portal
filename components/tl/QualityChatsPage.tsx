@@ -298,6 +298,15 @@ function EvaluatedChatsSection() {
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: 110 }} />
+          <col />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 65 }} />
+          <col style={{ width: 80 }} />
+        </colgroup>
         <thead>
           <tr>
             <th style={th}>Chat ID</th>
@@ -499,6 +508,18 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
       }}>{actionError}</div>
     )}
     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      <colgroup>
+        <col style={{ width: 90 }} />
+        <col />
+        <col style={{ width: 130 }} />
+        <col style={{ width: 85 }} />
+        <col style={{ width: 85 }} />
+        <col style={{ width: 75 }} />
+        <col style={{ width: 65 }} />
+        <col style={{ width: 110 }} />
+        <col style={{ width: 150 }} />
+        <col style={{ width: 220 }} />
+      </colgroup>
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
