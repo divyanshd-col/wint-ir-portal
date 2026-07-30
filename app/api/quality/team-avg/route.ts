@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { getScoredConversationsSummary } from '@/lib/robylon/db';
-import { PARAM_ORDER } from '@/lib/quality';
+import { PARAM_ORDER, calculateWeightedOverallIQS } from '@/lib/quality';
 import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
 
@@ -37,11 +37,7 @@ export async function GET(req: NextRequest) {
 
   // v4 nests params under __agent_parameters; legacy v3 rows store them at the top
   // level; the 5 v4-only params may also sit under an older no-underscore key —
-  // COALESCE picks up whichever exists. (The v3-alias dialect from the retired
-  // CAT1/CAT2 shim is intentionally NOT merged: that key is shared with a
-  // semantically different v3 parameter, so blending it would conflate the two.)
-  // Score is compared as TEXT, never `::boolean` — that cast raises on v4's 0.5
-  // half-scores and 500s the request. A 0.5 counts toward _total but not _yes.
+  // COALESCE picks up whichever exists.
   const selectParts = Object.entries(PARAM_DB_KEYS).map(([pascalKey, dbKey]) => {
     const fallbackKey = LEGACY_V4_FALLBACK_KEY[pascalKey];
     const paramExpr = fallbackKey
@@ -49,6 +45,7 @@ export async function GET(req: NextRequest) {
       : `COALESCE(s.parameters->'__agent_parameters'->'${dbKey}', s.parameters->'${dbKey}')`;
     return `
       COUNT(*) FILTER (WHERE ${paramExpr}->>'score' = 'true')::int AS "${dbKey}_yes",
+      COUNT(*) FILTER (WHERE ${paramExpr}->>'score' = '0.5' OR ${paramExpr}->>'score' = 'Half')::int AS "${dbKey}_half",
       COUNT(*) FILTER (WHERE ${paramExpr}->'score' IS NOT NULL AND ${paramExpr}->>'score' != 'null')::int AS "${dbKey}_total"
     `;
   }).join(', ');
@@ -56,7 +53,6 @@ export async function GET(req: NextRequest) {
   const agentRows = await query<any>(`
     SELECT
       COALESCE(a.name, 'Unknown') AS "agentName",
-      AVG(s.iqs_score) AS "avgIqs",
       ${selectParts}
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
@@ -67,14 +63,15 @@ export async function GET(req: NextRequest) {
 
   const agentList = agentRows.map((row: any) => {
     const name = row.agentName;
-    const avgIqs = row.avgIqs != null ? Math.round(Number(row.avgIqs)) : 0;
-    const pData: Record<string, { yes: number; total: number }> = {};
+    const pData: Record<string, { yes: number; half: number; total: number }> = {};
     for (const [pascalKey, dbKey] of Object.entries(PARAM_DB_KEYS)) {
       pData[pascalKey] = {
         yes: row[`${dbKey}_yes`] || 0,
+        half: row[`${dbKey}_half`] || 0,
         total: row[`${dbKey}_total`] || 0,
       };
     }
+    const avgIqs = calculateWeightedOverallIQS(pData, 'human') ?? 0;
     return { name, avgIqs, params: pData };
   }).filter(a => a.avgIqs > 0);
 
