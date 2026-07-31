@@ -479,6 +479,38 @@ export function calculateWeightedOverallIQS(
   return Math.round(resultPct);
 }
 
+/**
+ * Pools parameter scores (Yes, Half, No) across an array of parameters objects (e.g. from jsonb_agg(s.parameters)).
+ */
+export function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; half: number; total: number }> {
+  const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+  if (!Array.isArray(paramsArray)) return pooled;
+  for (let paramObj of paramsArray) {
+    if (!paramObj) continue;
+    if (typeof paramObj === 'string') {
+      try { paramObj = JSON.parse(paramObj); } catch { continue; }
+    }
+    const targetObj = (typeof paramObj === 'object' && paramObj !== null)
+      ? (paramObj.__agent_parameters || paramObj)
+      : {};
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+      if (rawKey.startsWith('__')) continue;
+      const pk = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+      if (!pooled[pk]) pooled[pk] = { yes: 0, half: 0, total: 0 };
+      const score = typeof val === 'object' && val !== null ? val.score : val;
+      if (score === true || score === 'Yes' || score === 1 || score === '1') {
+        pooled[pk].yes++; pooled[pk].total++;
+      } else if (score === 0.5 || score === 'Half') {
+        pooled[pk].half++; pooled[pk].total++;
+      } else if (score === false || score === 'No' || score === 0 || score === '0') {
+        pooled[pk].total++;
+      }
+    }
+  }
+  return pooled;
+}
+
+
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
   if (!paramsObj || typeof paramsObj !== 'object') return null;
 

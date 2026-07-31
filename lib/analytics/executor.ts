@@ -1,5 +1,5 @@
 import { query } from '@/lib/cx/db';
-import { buildQuery, IQS_PARAMS } from './templates';
+import { buildQuery, IQS_PARAMS, postProcessTemplateRows } from './templates';
 import type { AnalyticsFilters, TemplateExtras } from './types';
 import { PARAM_NAMES as QUALITY_PARAM_NAMES } from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
@@ -107,6 +107,8 @@ export async function executeTemplate(
   if (rows.length > ROW_CAP) {
     throw new Error(`Result too large (${rows.length.toLocaleString()} rows). Apply more filters.`);
   }
+
+  postProcessTemplateRows(templateId, resolvedExtras, rows);
 
   return {
     rows,
