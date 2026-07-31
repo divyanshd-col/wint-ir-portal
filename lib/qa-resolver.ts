@@ -7,7 +7,7 @@ export interface QAResolverDeps {
 }
 
 export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps): Promise<string> {
-  if (!chatId) return 'QA';
+  if (!chatId) return 'Manorathi';
   const queryFn = deps?.query || query;
   const readConfigFn = deps?.readConfig || readConfig;
 
@@ -58,6 +58,6 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
   } catch (err) {
     console.error('Failed to resolve QA name for chat:', err);
   }
-  return 'QA';
+  return 'Manorathi';
 }
 
