@@ -16,13 +16,21 @@ export async function GET(req: NextRequest) {
   let selfAgentName = '';
   let scopedAgentNames: string[] | null = null;
   let assignedDispositions: string[] | null = null;
+  let strictDispositions: string[] | null = null;
 
-  if (['tl', 'quality'].includes(role)) {
+  if (['tl', 'quality', 'admin'].includes(role)) {
     const config = await readConfig();
     const configUser = config.users.find((u: any) => (u.email || u.username) === email);
     selfAgentName = configUser?.agentName || '';
-    if (role === 'quality' && configUser?.assignedDispositions?.length) {
-      assignedDispositions = configUser.assignedDispositions;
+    
+    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
+    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+
+    if (['quality', 'admin'].includes(role) && userDisps?.length) {
+      assignedDispositions = userDisps;
+      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+        strictDispositions = userDisps;
+      }
     }
   }
 
@@ -55,8 +63,12 @@ export async function GET(req: NextRequest) {
   } else if (agentFilter) {
     baseOpts.agentName = agentFilter;
   }
-  // Soft disposition default for QA: pre-filter unless QA explicitly overrides with a tag
-  if (assignedDispositions && !tag) baseOpts.dispositions = assignedDispositions;
+  
+  if (strictDispositions) {
+    baseOpts.dispositions = strictDispositions;
+  } else if (assignedDispositions && !tag) {
+    baseOpts.dispositions = assignedDispositions;
+  }
 
   let availableAgents: string[] = [];
   let availableDispositions: string[] = [];
@@ -66,7 +78,9 @@ export async function GET(req: NextRequest) {
   try {
     const filters = await getScoredConversationsFilterOptions(baseOpts);
     availableAgents = filters.availableAgents;
-    availableDispositions = filters.availableDispositions;
+    availableDispositions = strictDispositions
+      ? filters.availableDispositions.filter(d => strictDispositions!.includes(d))
+      : filters.availableDispositions;
     availableSubDispositions = filters.availableSubDispositions;
     dispositionSubMap = filters.dispositionSubMap;
   } catch (err: any) {
@@ -74,13 +88,22 @@ export async function GET(req: NextRequest) {
   }
 
   // Apply filters to get final set
+  let finalDisposition = tag || undefined;
+  if (strictDispositions && tag) {
+    if (strictDispositions.includes(tag)) {
+      finalDisposition = tag;
+    } else {
+      finalDisposition = '__UNAUTHORIZED__';
+    }
+  }
+
   const filteredOpts: GetScoredConversationsOptions = {
     ...baseOpts,
     iqsMin: effectiveMin > 0 ? effectiveMin : undefined,
     iqsMax: effectiveMax < 100 ? effectiveMax : 79,
     ...(dateFrom && { dateFrom }),
     ...(dateTo && { dateTo }),
-    ...(tag && { disposition: tag, dispositions: undefined }), // user override clears the default
+    ...(finalDisposition && { disposition: finalDisposition, dispositions: undefined }),
     ...(subTag && { subDisposition: subTag }),
   };
 

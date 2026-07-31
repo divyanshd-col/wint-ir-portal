@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
-import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
+import { getAllScoredConversations, getAgentNamesByTL, getAgentNamesByQA, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -52,6 +52,35 @@ export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
+  const role = (session.user as any)?.role;
+  const email = (session.user as any)?.email || '';
+
+  let selfAgentName = '';
+  let scopedAgentNames: string[] | null = null;
+  let strictDispositions: string[] | null = null;
+
+  if (['agent', 'tl', 'quality', 'admin'].includes(role)) {
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig();
+    const configUser = config.users.find(u => (u.email || u.username) === email);
+    selfAgentName = configUser?.agentName || '';
+    
+    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
+    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+
+    if (['quality', 'admin'].includes(role) && userDisps?.length) {
+      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+        strictDispositions = userDisps;
+      }
+    }
+  }
+
+  if (role === 'tl' && selfAgentName) {
+    scopedAgentNames = await getAgentNamesByTL(selfAgentName);
+  } else if (role === 'quality' && selfAgentName) {
+    scopedAgentNames = await getAgentNamesByQA(selfAgentName);
+  }
+
   const { searchParams } = new URL(req.url);
   const agentFilter    = searchParams.get('agent') || '';
   const tagFilter      = searchParams.get('tag') || '';
@@ -62,8 +91,28 @@ export async function GET(req: NextRequest) {
   const typeFilter     = searchParams.get('type') || '';
 
   const dbOpts: GetScoredConversationsOptions = { limit: 10000 };
-  if (agentFilter)  dbOpts.agentName = agentFilter;
-  if (tagFilter)    dbOpts.disposition = tagFilter;
+  
+  if (scopedAgentNames !== null) {
+    if (agentFilter) dbOpts.agentName = agentFilter;
+    else dbOpts.agentNames = scopedAgentNames;
+  } else if (agentFilter) {
+    dbOpts.agentName = agentFilter;
+  }
+
+  if (strictDispositions) {
+    if (tagFilter) {
+      if (strictDispositions.includes(tagFilter)) {
+        dbOpts.disposition = tagFilter;
+      } else {
+        dbOpts.disposition = '__UNAUTHORIZED__';
+      }
+    } else {
+      dbOpts.dispositions = strictDispositions;
+    }
+  } else {
+    if (tagFilter) dbOpts.disposition = tagFilter;
+  }
+
   if (subTagFilter) dbOpts.subDisposition = subTagFilter;
   if (csatFilter)   dbOpts.csat = csatFilter;
   if (dateFrom)     dbOpts.dateFrom = dateFrom;

@@ -111,15 +111,23 @@ export async function GET(req: NextRequest) {
   let scopedAgentNames: string[] | null = null; // null = no scope restriction
 
   let assignedDispositions: string[] | null = null;
+  let strictDispositions: string[] | null = null;
 
-  if (role === 'agent' || role === 'tl' || role === 'quality') {
+  if (role === 'agent' || role === 'tl' || role === 'quality' || role === 'admin') {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
     const email = session.user?.email || '';
     const configUser = config.users.find(u => (u.email || u.username) === email);
     selfAgentName = configUser?.agentName || '';
-    if (role === 'quality' && configUser?.assignedDispositions?.length) {
-      assignedDispositions = configUser.assignedDispositions;
+    
+    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
+    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+
+    if ((role === 'quality' || role === 'admin') && userDisps?.length) {
+      assignedDispositions = userDisps;
+      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+        strictDispositions = userDisps;
+      }
     }
   }
 
@@ -131,13 +139,26 @@ export async function GET(req: NextRequest) {
     scopedAgentNames = await getAgentNamesByQA(selfAgentName);
   }
 
-  // Push all filterable dimensions to DB — avoids fetching thousands of rows then filtering in memory
   const dbOpts: GetScoredConversationsOptions = {};
   if (!chatIdSearch) {
     if (dateFrom) dbOpts.dateFrom = dateFrom;
     if (dateTo)   dbOpts.dateTo   = dateTo;
-    if (tagFilter)     dbOpts.disposition     = tagFilter;
-    else if (assignedDispositions) dbOpts.dispositions = assignedDispositions; // soft default for QA
+    
+    if (strictDispositions) {
+      if (tagFilter) {
+        if (strictDispositions.includes(tagFilter)) {
+          dbOpts.disposition = tagFilter;
+        } else {
+          dbOpts.disposition = '__UNAUTHORIZED__';
+        }
+      } else {
+        dbOpts.dispositions = strictDispositions;
+      }
+    } else {
+      if (tagFilter)     dbOpts.disposition     = tagFilter;
+      else if (assignedDispositions) dbOpts.dispositions = assignedDispositions; // soft default for QA
+    }
+    
     if (subTagFilter)  dbOpts.subDisposition  = subTagFilter;
     if (csatFilter)    dbOpts.csat            = csatFilter;
     if (typeFilter)    dbOpts.conversationType = typeFilter;
@@ -200,7 +221,9 @@ export async function GET(req: NextRequest) {
   try {
     const filters = await getScoredConversationsFilterOptions(filterOpts);
     availableAgents = filters.availableAgents;
-    availableDispositions = filters.availableDispositions;
+    availableDispositions = strictDispositions
+      ? filters.availableDispositions.filter(d => strictDispositions!.includes(d))
+      : filters.availableDispositions;
     availableSubDispositions = filters.availableSubDispositions;
     dispositionSubMap = filters.dispositionSubMap;
   } catch (err: any) {
