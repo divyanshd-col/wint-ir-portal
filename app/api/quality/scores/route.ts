@@ -123,15 +123,12 @@ export async function GET(req: NextRequest) {
     const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
     const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
 
-    console.log('[DEBUG /quality/scores] Role:', role, 'Email:', email, 'userDisps length:', userDisps?.length);
-
     if ((role === 'quality' || role === 'admin') && userDisps?.length) {
       assignedDispositions = userDisps;
       if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
         strictDispositions = userDisps;
       }
     }
-    console.log('[DEBUG /quality/scores] strictDispositions set to:', strictDispositions ? strictDispositions.length : null);
   }
 
   if (role === 'agent' && selfAgentName) {
