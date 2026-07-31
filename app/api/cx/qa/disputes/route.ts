@@ -57,18 +57,28 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   let myAgents: Set<string> | null = null;
   const me = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
   const myQAName = me?.agentName || email.split('@')[0];
+  
+  const map = config.qaDispositionMap ?? [];
+  const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
+  const configUser = me;
 
-  if (role === 'admin' || role === 'quality') {
+  if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
     const rows = await query<{ d: string }>(
       `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
        WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`
     );
     dispositions = rows.map(r => r.d);
-  } else {
-    const map = config.qaDispositionMap ?? [];
-    const entry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
-    dispositions = entry?.dispositions ?? [];
-
+  } else if (qaEntry && qaEntry.dispositions.length > 0) {
+    dispositions = qaEntry.dispositions;
+  } else if (role === 'admin') {
+    const rows = await query<{ d: string }>(
+      `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
+       WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`
+    );
+    dispositions = rows.map(r => r.d);
+  } else if (role === 'quality') {
+    dispositions = configUser?.assignedDispositions ?? [];
+    
     try {
       const rows = await query<{ name: string }>(
         `SELECT name FROM agents WHERE LOWER(qa_name) = LOWER($1)`,

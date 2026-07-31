@@ -64,6 +64,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   let paramIdx = 2;
   let extraWhere = '';
 
+  const config = await readConfig();
+  const map = config.qaDispositionMap ?? [];
+  const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
+
+  // For QA (or mapped admins), restrict by assigned dispositions (except Manorathi)
+  if ((role === 'quality' || qaEntry) && email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+    const configUser = config.users.find(u => (u.email || u.username) === email);
+    const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
+    if (strictDispositions.length > 0) {
+      extraWhere += ` AND c.tags->>'disposition' = ANY($${paramIdx++})`;
+      sqlParams.push(strictDispositions);
+    } else {
+      // If no dispositions assigned, show nothing
+      extraWhere += ` AND 1 = 0`;
+    }
+  }
+
   const from = searchParams.get('from');
   if (from) {
     const fromDate = new Date(from + 'T00:00:00+05:30');
