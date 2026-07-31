@@ -1,7 +1,7 @@
 import { query } from '@/lib/cx/db';
-import { buildQuery, IQS_PARAMS } from './templates';
+import { buildQuery, IQS_PARAMS, postProcessTemplateRows } from './templates';
 import type { AnalyticsFilters, TemplateExtras } from './types';
-import { PARAM_NAMES as QUALITY_PARAM_NAMES } from '@/lib/quality';
+import { PARAM_NAMES as QUALITY_PARAM_NAMES, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
 
 const QUERY_TIMEOUT_MS = 30_000;
@@ -108,6 +108,8 @@ export async function executeTemplate(
     throw new Error(`Result too large (${rows.length.toLocaleString()} rows). Apply more filters.`);
   }
 
+  postProcessTemplateRows(templateId, resolvedExtras, rows);
+
   return {
     rows,
     templateId,
@@ -144,6 +146,19 @@ export async function executeRawSQL(sql: string): Promise<{ rows: any[]; rowCoun
 
   // Strip heavy columns that should never appear in analytics results
   stripHeavyColumns(rows);
+
+  for (const row of rows) {
+    if (row.parameters) {
+      const pooled = extractPooledParams(row.parameters);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (weighted !== null) {
+        if ('value' in row) row.value = weighted;
+        if ('avg_iqs' in row) row.avg_iqs = weighted;
+        if ('iqs' in row) row.iqs = weighted;
+      }
+      delete row.parameters;
+    }
+  }
 
   const result = { rows, rowCount: rows.length, latencyMs: Date.now() - start };
 

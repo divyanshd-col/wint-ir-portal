@@ -195,6 +195,8 @@ export default function QAAnalyticsDashboard() {
           rows={data?.byDisposition ?? []}
           loading={loading}
           periodLabel={periodLabel}
+          totalChatIQS={data?.iqs?.chat}
+          totalCallIQS={data?.iqs?.call}
         />
       </section>
 

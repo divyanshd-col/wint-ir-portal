@@ -4,6 +4,7 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
+import { calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 
 const ROUTE = 'cx/qa/wow-trend';
 
@@ -15,6 +16,7 @@ interface WeekRow {
   total_count:       string;
   sum_resolution:    string | null;
   resolution_count:  string;
+  parameters:        any;
 }
 
 function weekLabel(start: string): string {
@@ -99,7 +101,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
        COUNT(*) FILTER (WHERE a.name = ANY($4))::text                     AS bot_count,
        COUNT(*)::text                                                      AS total_count,
        SUM(c.resolution_seconds)   FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS sum_resolution,
-       COUNT(c.resolution_seconds) FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS resolution_count
+       COUNT(c.resolution_seconds) FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS resolution_count,
+       jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL)     AS parameters
      FROM conversations c
      LEFT JOIN iqs_scores i ON c.id = i.chat_id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -116,7 +119,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const bot    = parseInt(r.bot_count);
     const resCnt = parseInt(r.resolution_count);
 
-    const avgIqs = iqsCnt > 0 && r.sum_iqs ? Math.round(parseFloat(r.sum_iqs) / iqsCnt) : null;
+    // Overall IQS for the week is the fixed-weight blend of pooled parameter scores,
+    // matching the ring card and disposition table on the same dashboard. The old
+    // mean-of-per-chat-scores stays only as a fallback for weeks with no v4 params.
+    const pooled = extractPooledParams(r.parameters);
+    const weightedIqs = calculateWeightedOverallIQS(pooled, 'human');
+    const avgIqs = weightedIqs
+      ?? (iqsCnt > 0 && r.sum_iqs ? Math.round(parseFloat(r.sum_iqs) / iqsCnt) : null);
     const autoPct = total > 0 ? Math.round((bot / total) * 100) : null;
     const avgRes  = resCnt > 0 && r.sum_resolution
       ? Math.round(parseFloat(r.sum_resolution) / resCnt)
