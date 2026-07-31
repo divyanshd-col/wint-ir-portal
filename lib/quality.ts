@@ -395,6 +395,7 @@ export type PooledParamInput =
 
 export interface WeightedOverallOptions {
   roundDecimals?: number; // e.g. 1 for 1 decimal place (85.5), 0 or undefined for integer (86)
+  scale?: '0-1' | '0-100' | 'auto';
 }
 
 /**
@@ -421,6 +422,26 @@ export function calculateWeightedOverallIQS(
     if (fallbackKey) weightMap[fallbackKey] = { key: pascalKey, weight: w };
   }
 
+  // Determine numeric scale across the input object to avoid mixing per-parameter scales
+  const userScale = options.scale ?? 'auto';
+  let isPercentScale = userScale === '0-100';
+  if (userScale === 'auto') {
+    for (const rawVal of Object.values(paramScores)) {
+      if (rawVal === undefined || rawVal === null) continue;
+      if (typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 1) {
+        isPercentScale = true;
+        break;
+      }
+      if (typeof rawVal === 'object' && rawVal !== null && rawVal.score !== undefined) {
+        const sc = typeof rawVal.score === 'number' ? rawVal.score : parseFloat(String(rawVal.score));
+        if (!isNaN(sc) && sc > 1) {
+          isPercentScale = true;
+          break;
+        }
+      }
+    }
+  }
+
   const canonicalPresent: Record<string, { paramScore: number; weight: number }> = {};
 
   for (const [rawKey, rawVal] of Object.entries(paramScores)) {
@@ -435,7 +456,7 @@ export function calculateWeightedOverallIQS(
 
     if (typeof rawVal === 'number') {
       if (!isNaN(rawVal)) {
-        paramScore = rawVal > 1 ? rawVal / 100 : rawVal;
+        paramScore = isPercentScale ? rawVal / 100 : rawVal;
         isPresent = true;
       }
     } else if (typeof rawVal === 'object') {
@@ -447,7 +468,7 @@ export function calculateWeightedOverallIQS(
       } else if (rawVal.score !== undefined && rawVal.score !== null) {
         const sc = typeof rawVal.score === 'number' ? rawVal.score : parseFloat(String(rawVal.score));
         if (!isNaN(sc)) {
-          paramScore = sc > 1 ? sc / 100 : sc;
+          paramScore = isPercentScale ? sc / 100 : sc;
           isPresent = true;
         }
       }
@@ -478,6 +499,38 @@ export function calculateWeightedOverallIQS(
   }
   return Math.round(resultPct);
 }
+
+/**
+ * Pools parameter scores (Yes, Half, No) across an array of parameters objects (e.g. from jsonb_agg(s.parameters)).
+ */
+export function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; half: number; total: number }> {
+  const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+  if (!Array.isArray(paramsArray)) return pooled;
+  for (let paramObj of paramsArray) {
+    if (!paramObj) continue;
+    if (typeof paramObj === 'string') {
+      try { paramObj = JSON.parse(paramObj); } catch { continue; }
+    }
+    const targetObj = (typeof paramObj === 'object' && paramObj !== null)
+      ? (paramObj.__agent_parameters || paramObj)
+      : {};
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+      if (rawKey.startsWith('__')) continue;
+      const pk = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+      if (!pooled[pk]) pooled[pk] = { yes: 0, half: 0, total: 0 };
+      const score = typeof val === 'object' && val !== null ? val.score : val;
+      if (score === true || score === 'Yes' || score === 1 || score === '1') {
+        pooled[pk].yes++; pooled[pk].total++;
+      } else if (score === 0.5 || score === 'Half') {
+        pooled[pk].half++; pooled[pk].total++;
+      } else if (score === false || score === 'No' || score === 0 || score === '0') {
+        pooled[pk].total++;
+      }
+    }
+  }
+  return pooled;
+}
+
 
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
   if (!paramsObj || typeof paramsObj !== 'object') return null;

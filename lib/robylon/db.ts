@@ -1,6 +1,6 @@
 import { query } from '@/lib/cx/db';
 import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
-import { PARAM_ORDER, calculateWeightedOverallIQS } from '@/lib/quality';
+import { PARAM_ORDER, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 
 // Builds the per-parameter "fail count" SELECT columns for the v4 human rubric.
 // Two correctness points vs the old hardcoded SQL:
@@ -694,21 +694,25 @@ export async function getScoredConversationsAgentStats(opts: GetScoredConversati
       COUNT(*) FILTER (WHERE c.csat_score = 5)::int AS "csatGood",
       COUNT(*) FILTER (WHERE c.csat_score = 3)::int AS "csatCbb",
       COUNT(*) FILTER (WHERE c.csat_score = 1)::int AS "csatBad",
-      COUNT(*) FILTER (WHERE c.csat_score IN (1, 3, 5))::int AS "csatTotal"
+      COUNT(*) FILTER (WHERE c.csat_score IN (1, 3, 5))::int AS "csatTotal",
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     ${where}
     GROUP BY COALESCE(a.name, 'Unknown')
-    ORDER BY AVG(s.iqs_score) ASC
   `, params);
 
-  return rows.map(r => {
+  const stats = rows.map(r => {
     const csatTotal = r.csatTotal || 0;
+    const pooled = extractPooledParams(r.parameters);
+    const weightedIqs = calculateWeightedOverallIQS(pooled, 'human');
+    const avgIqs = weightedIqs ?? (r.avgIqs != null ? Math.round(Number(r.avgIqs)) : 0);
+
     return {
       agent: r.agent,
       chats: r.chats,
-      avgIqs: r.avgIqs != null ? Math.round(Number(r.avgIqs)) : 0,
+      avgIqs,
       minIqs: r.minIqs ?? 0,
       maxIqs: r.maxIqs ?? 0,
       high: r.high,
@@ -723,6 +727,8 @@ export async function getScoredConversationsAgentStats(opts: GetScoredConversati
       csatPct: csatTotal > 0 ? Math.round((r.csatGood / csatTotal) * 100) : null,
     };
   });
+
+  return stats.sort((a, b) => a.avgIqs - b.avgIqs);
 }
 
 export async function getScoredConversationsParamFails(opts: GetScoredConversationsOptions = {}): Promise<Record<string, number>> {

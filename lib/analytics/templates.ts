@@ -1,5 +1,5 @@
 import type { AnalyticsFilters, TemplateExtras } from './types';
-import { PARAM_ORDER } from '@/lib/quality';
+import { PARAM_ORDER, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 import { PASCAL_TO_DB, LEGACY_V4_FALLBACK_KEY } from '@/lib/param-keys';
 
 // ── IQS parameter keys — the canonical v4 Pascal names, derived from the rubric
@@ -171,13 +171,13 @@ export function top_agents_by_metric(f: AnalyticsFilters, extras?: TemplateExtra
   const metric = extras?.metricName || 'bad_csat_count';
 
   if (metric === 'avg_iqs') {
-    params.push(topN);
     return {
       sql: `
         SELECT
           a.name AS agent,
           ROUND(AVG(s.iqs_score), 1)::float AS avg_iqs,
-          COUNT(*)::int AS chats
+          COUNT(*)::int AS chats,
+          jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         JOIN iqs_scores s ON s.chat_id = c.id
@@ -185,7 +185,6 @@ export function top_agents_by_metric(f: AnalyticsFilters, extras?: TemplateExtra
         GROUP BY a.id, a.name
         HAVING COUNT(*) >= 3
         ORDER BY avg_iqs ASC
-        LIMIT $${next}
       `,
       params,
     };
@@ -341,7 +340,8 @@ export function team_breakdown(f: AnalyticsFilters, extras?: TemplateExtras): { 
           t.name AS team,
           t.type AS team_type,
           ROUND(AVG(s.iqs_score), 1)::float AS avg_iqs,
-          COUNT(*)::int AS chats
+          COUNT(*)::int AS chats,
+          jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN teams t ON t.id = c.team_id
         JOIN iqs_scores s ON s.chat_id = c.id
@@ -407,7 +407,8 @@ export function agent_breakdown_in_team(f: AnalyticsFilters, extras?: TemplateEx
         COUNT(*)::int AS chats,
         COUNT(*) FILTER (WHERE c.csat_label IN ('bad','could_be_better'))::int AS bad_csat,
         ROUND(AVG(s.iqs_score), 1)::float AS avg_iqs,
-        ROUND(AVG(c.frt_seconds))::int AS avg_frt_seconds
+        ROUND(AVG(c.frt_seconds))::int AS avg_frt_seconds,
+        jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
       FROM conversations c
       JOIN agents a ON a.id = c.agent_id
       LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -462,9 +463,10 @@ export function compare_two_windows(f: AnalyticsFilters, extras?: TemplateExtras
       ? `ROUND(AVG(s.iqs_score), 1)::float`
       : `COUNT(*)::int`;
     const iqsJoin = metric === 'avg_iqs' ? `JOIN iqs_scores s ON s.chat_id = c.id` : '';
+    const iqsAgg = metric === 'avg_iqs' ? `, jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters` : '';
 
     return {
-      sql: `SELECT '${label}' AS window_label, ${metricExpr} AS value, COUNT(*)::int AS count
+      sql: `SELECT '${label}' AS window_label, ${metricExpr} AS value, COUNT(*)::int AS count${iqsAgg}
             FROM conversations c ${iqsJoin}
             ${toWhere(wClauses)}`,
       params: localParams,
@@ -498,6 +500,65 @@ export function unclassified_count(f: AnalyticsFilters): { sql: string; params: 
     `,
     params,
   };
+}
+
+// ── Post-processing helper for pooled weighted IQS ────────────────────────────
+
+export function postProcessTemplateRows(
+  templateId: string,
+  extras: TemplateExtras | undefined,
+  rows: any[],
+): void {
+  if (!Array.isArray(rows) || rows.length === 0) return;
+  const metric = extras?.metricName;
+
+  if (templateId === 'top_agents_by_metric' && metric === 'avg_iqs') {
+    for (const row of rows) {
+      if (row.parameters) {
+        const pooled = extractPooledParams(row.parameters);
+        const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+        if (weighted !== null) row.avg_iqs = weighted;
+      }
+      delete row.parameters;
+    }
+    rows.sort((a, b) => (a.avg_iqs ?? 0) - (b.avg_iqs ?? 0));
+    const topN = extras?.topN ?? 10;
+    if (rows.length > topN) {
+      rows.splice(topN);
+    }
+  } else if (templateId === 'team_breakdown' && metric === 'avg_iqs') {
+    for (const row of rows) {
+      if (row.parameters) {
+        const pooled = extractPooledParams(row.parameters);
+        const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+        if (weighted !== null) row.avg_iqs = weighted;
+      }
+      delete row.parameters;
+    }
+    rows.sort((a, b) => (b.avg_iqs ?? 0) - (a.avg_iqs ?? 0));
+  } else if (templateId === 'agent_breakdown_in_team') {
+    for (const row of rows) {
+      if (row.parameters) {
+        const pooled = extractPooledParams(row.parameters);
+        const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+        if (weighted !== null) row.avg_iqs = weighted;
+      }
+      delete row.parameters;
+    }
+  } else if (templateId === 'compare_two_windows' && metric === 'avg_iqs') {
+    for (const row of rows) {
+      if (row.parameters) {
+        const pooled = extractPooledParams(row.parameters);
+        const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+        if (weighted !== null) row.value = weighted;
+      }
+      delete row.parameters;
+    }
+  } else {
+    for (const row of rows) {
+      if ('parameters' in row) delete row.parameters;
+    }
+  }
 }
 
 // ── Dispatcher ────────────────────────────────────────────────────────────────

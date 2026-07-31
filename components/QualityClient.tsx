@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, fmtDuration, iqsTheme, formatParamLabel } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, fmtDuration, iqsTheme, formatParamLabel, calculateWeightedOverallIQS } from '@/lib/quality';
 import type { IQSScoreEntry, ParamScore } from '@/lib/quality';
 import CallQualityClient from '@/components/CallQualityClient';
 import CallLinkTestClient from '@/components/CallLinkTestClient';
@@ -2818,7 +2818,25 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   };
 
   const totalToScore = rowLimit > 0 ? Math.min(rowLimit, isWint ? parsedRows.length : rawRows.length) : (isWint ? parsedRows.length : rawRows.length);
-  const avgIqs = batchResults.length ? Math.round(batchResults.reduce((s, e) => s + e.iqs, 0) / batchResults.length) : 0;
+
+  // Batch "Avg IQS" uses the same pooled fixed-weight blend as every other rollup, not a
+  // mean of the per-chat scores — a per-chat score renormalises over whichever parameters
+  // applied to that one chat, so averaging them weights sparse chats as heavily as full ones.
+  const avgIqs = useMemo(() => {
+    if (!batchResults.length) return 0;
+    const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+    for (const e of batchResults) {
+      for (const p of PARAM_ORDER) {
+        const v = e.scores?.[p];
+        if (v !== 'Yes' && v !== 'No' && v !== 'Half') continue; // NA and missing stay out
+        if (!pooled[p]) pooled[p] = { yes: 0, half: 0, total: 0 };
+        pooled[p].total++;
+        if (v === 'Yes') pooled[p].yes++;
+        else if (v === 'Half') pooled[p].half++;
+      }
+    }
+    return calculateWeightedOverallIQS(pooled, 'human') ?? 0;
+  }, [batchResults]);
 
 
   const wintAgentPreview = useMemo(() => {
