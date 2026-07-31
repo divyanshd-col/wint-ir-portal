@@ -48,7 +48,12 @@ const CHAT_SUMMARY_SELECT = `
   COUNT(c.id)::int AS volume
 `;
 
-const CHAT_PARAM_LATERAL = `
+// v4 nests the human-leg params under __agent_parameters; legacy rows keep them at the
+// top level. Iterate whichever container exists so both generations aggregate — without
+// the COALESCE, a v4 row yields only __-prefixed keys and every pass rate comes back null.
+// Exported so the sibling ai/ route reuses the exact same fragment instead of re-declaring
+// a subtly different one (which is how it silently drifted onto v3-only behaviour before).
+export const CHAT_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
     CASE WHEN s.parameters::text LIKE '{%'
          THEN COALESCE(s.parameters::jsonb->'__agent_parameters', s.parameters::jsonb)
@@ -56,13 +61,16 @@ const CHAT_PARAM_LATERAL = `
   ) AS p(key, val)
 `;
 
-const CALL_PARAM_LATERAL = `
+export const CALL_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
     CASE WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb ELSE '{}'::jsonb END
   ) AS p(key, val)
 `;
 
-const PASS_RATE_SELECT = `
+// Pass rate with half credit: v4 stores 0.5 for partial passes — count it as 0.5 toward
+// the numerator instead of an outright fail. Score compared as text only, never cast to
+// boolean: that cast raises on v4's 0.5 half-scores and 500s the request.
+export const PASS_RATE_SELECT = `
   p.key AS param_key,
   ROUND(SUM(CASE WHEN p.val->>'score'='true' THEN 1 WHEN p.val->>'score'='0.5' THEN 0.5 ELSE 0 END)::numeric
         / NULLIF(COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),0)*100,1)::float AS pass_rate
