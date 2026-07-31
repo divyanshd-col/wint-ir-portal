@@ -102,7 +102,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   let baseWhere = '';
 
   if (reviewedMode) {
-    if (role === 'admin' || email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
+    if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
+      if (dispositionFilters.length > 0) {
+        const dispIdx = paramIdx++;
+        sqlParams.push(safeDispositions);
+        baseWhere = `i.status = 'reviewed' AND c.tags->>'disposition' = ANY($${dispIdx}::text[])`;
+      } else {
+        baseWhere = `i.status = 'reviewed'`;
+      }
+    } else if (role === 'admin' && (!qaEntry || qaEntry.dispositions.length === 0)) {
       if (dispositionFilters.length > 0) {
         const dispIdx = paramIdx++;
         sqlParams.push(safeDispositions);
