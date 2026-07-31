@@ -171,7 +171,6 @@ export function top_agents_by_metric(f: AnalyticsFilters, extras?: TemplateExtra
   const metric = extras?.metricName || 'bad_csat_count';
 
   if (metric === 'avg_iqs') {
-    params.push(topN);
     return {
       sql: `
         SELECT
@@ -186,7 +185,6 @@ export function top_agents_by_metric(f: AnalyticsFilters, extras?: TemplateExtra
         GROUP BY a.id, a.name
         HAVING COUNT(*) >= 3
         ORDER BY avg_iqs ASC
-        LIMIT $${next}
       `,
       params,
     };
@@ -524,6 +522,10 @@ export function postProcessTemplateRows(
       delete row.parameters;
     }
     rows.sort((a, b) => (a.avg_iqs ?? 0) - (b.avg_iqs ?? 0));
+    const topN = extras?.topN ?? 10;
+    if (rows.length > topN) {
+      rows.splice(topN);
+    }
   } else if (templateId === 'team_breakdown' && metric === 'avg_iqs') {
     for (const row of rows) {
       if (row.parameters) {

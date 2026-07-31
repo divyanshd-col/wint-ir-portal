@@ -5,7 +5,7 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
 import { getWeekStart, getLast8Weeks } from '@/lib/cx/week';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateWeightedOverallIQS } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 // ── Param definitions (mirrors team-analytics) ─────────────────────────────────
@@ -232,11 +232,12 @@ export async function GET(req: NextRequest) {
         WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name = $3
       `, [dateFrom, dateTo, agentName]),
 
-      query<FlatCatRow>(`
+      query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
                ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds
+               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -245,12 +246,13 @@ export async function GET(req: NextRequest) {
         GROUP BY 1 ORDER BY COUNT(c.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
-      query<FlatCatRow>(`
+      query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
                c.tags->>'sub_disposition' AS sub_disposition,
                ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds
+               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -260,12 +262,13 @@ export async function GET(req: NextRequest) {
         GROUP BY 1, 2 ORDER BY 1, COUNT(c.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
-      query<{ week_start: string; csat_pct: number|null; iqs: number|null; volume: number }>(`
+      query<{ week_start: string; csat_pct: number|null; iqs: number|null; volume: number; parameters?: any }>(`
         SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
                ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
-               COUNT(c.id)::int AS volume
+               COUNT(c.id)::int AS volume,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -369,6 +372,28 @@ export async function GET(req: NextRequest) {
 
   const [chatStatRows, chatParents, chatSubs, chatWow, chatWowParams, chatPeriodParams] = chatsRes;
   const [callStatRows, callParents, callSubs, callWow, callWowParams] = callsRes;
+
+  for (const r of (chatParents as any[])) {
+    if (r.parameters) {
+      const pooled = extractPooledParams(r.parameters);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (weighted !== null) r.iqs = weighted;
+    }
+  }
+  for (const r of (chatSubs as any[])) {
+    if (r.parameters) {
+      const pooled = extractPooledParams(r.parameters);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (weighted !== null) r.iqs = weighted;
+    }
+  }
+  for (const r of (chatWow as any[])) {
+    if (r.parameters) {
+      const pooled = extractPooledParams(r.parameters);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (weighted !== null) r.iqs = weighted;
+    }
+  }
 
   const categories = buildCategories(
     chatParents as FlatCatRow[],

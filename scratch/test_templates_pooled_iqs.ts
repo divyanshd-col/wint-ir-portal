@@ -49,4 +49,19 @@ if (mockAgentRows[0].avg_iqs === 50.0) {
   process.exit(1);
 }
 
+// Test 3: Scale detection (0-100 vs 0-1)
+const percentInput = { Accuracy: 100, Empathy: 50, Personalization: 0 };
+const fractionInput = { Accuracy: 1.0, Empathy: 0.5, Personalization: 0.0 };
+
+const scorePercent = calculateWeightedOverallIQS(percentInput as any);
+const scoreFraction = calculateWeightedOverallIQS(fractionInput as any);
+
+console.log('Percent scale score:', scorePercent);
+console.log('Fraction scale score:', scoreFraction);
+
+if (scorePercent !== scoreFraction) {
+  console.error(`FAILED: Percent scale score (${scorePercent}) does not match fraction scale score (${scoreFraction})`);
+  process.exit(1);
+}
+
 console.log('SUCCESS! All pooled weighted IQS unit checks passed.');

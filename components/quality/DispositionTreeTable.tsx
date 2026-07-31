@@ -7,6 +7,8 @@ interface Props {
   rows:        DispositionRow[];
   loading:     boolean;
   periodLabel: string;
+  totalChatIQS?: number | null;
+  totalCallIQS?: number | null;
 }
 
 function fmt(v: number | null, suffix = '%') {
@@ -81,7 +83,7 @@ const DownloadIcon = () => (
 
 type SortCol = 'count' | 'csatChat' | 'csatCall' | 'aiChatCsat' | 'pctDeflected' | 'iqsChat' | 'iqsCall' | 'resolutionSecs';
 
-export default function DispositionTreeTable({ mode, rows, loading, periodLabel }: Props) {
+export default function DispositionTreeTable({ mode, rows, loading, periodLabel, totalChatIQS, totalCallIQS }: Props) {
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
   const [sortCol, setSortCol]   = useState<SortCol>('count');
   const [sortDir, setSortDir]   = useState<'desc' | 'asc'>('desc');
@@ -345,8 +347,8 @@ export default function DispositionTreeTable({ mode, rows, loading, periodLabel 
                         </>
                       ) : (
                         <>
-                          <td style={totNumStyle}>{fmtIQS(wavg(r => r.iqsChat))}</td>
-                          <td style={totNumStyle}>{fmtIQS(wavg(r => r.iqsCall))}</td>
+                          <td style={totNumStyle}>{fmtIQS(totalChatIQS ?? wavg(r => r.iqsChat))}</td>
+                          <td style={totNumStyle}>{fmtIQS(totalCallIQS ?? wavg(r => r.iqsCall))}</td>
                           <td style={totNumStyle}>—</td>
                           <td style={totNumStyle}>{fmtTime(wavg(r => r.resolutionSecs))}</td>
                         </>

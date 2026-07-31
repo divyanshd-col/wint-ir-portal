@@ -395,6 +395,7 @@ export type PooledParamInput =
 
 export interface WeightedOverallOptions {
   roundDecimals?: number; // e.g. 1 for 1 decimal place (85.5), 0 or undefined for integer (86)
+  scale?: '0-1' | '0-100' | 'auto';
 }
 
 /**
@@ -421,6 +422,26 @@ export function calculateWeightedOverallIQS(
     if (fallbackKey) weightMap[fallbackKey] = { key: pascalKey, weight: w };
   }
 
+  // Determine numeric scale across the input object to avoid mixing per-parameter scales
+  const userScale = options.scale ?? 'auto';
+  let isPercentScale = userScale === '0-100';
+  if (userScale === 'auto') {
+    for (const rawVal of Object.values(paramScores)) {
+      if (rawVal === undefined || rawVal === null) continue;
+      if (typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 1) {
+        isPercentScale = true;
+        break;
+      }
+      if (typeof rawVal === 'object' && rawVal !== null && rawVal.score !== undefined) {
+        const sc = typeof rawVal.score === 'number' ? rawVal.score : parseFloat(String(rawVal.score));
+        if (!isNaN(sc) && sc > 1) {
+          isPercentScale = true;
+          break;
+        }
+      }
+    }
+  }
+
   const canonicalPresent: Record<string, { paramScore: number; weight: number }> = {};
 
   for (const [rawKey, rawVal] of Object.entries(paramScores)) {
@@ -435,7 +456,7 @@ export function calculateWeightedOverallIQS(
 
     if (typeof rawVal === 'number') {
       if (!isNaN(rawVal)) {
-        paramScore = rawVal > 1 ? rawVal / 100 : rawVal;
+        paramScore = isPercentScale ? rawVal / 100 : rawVal;
         isPresent = true;
       }
     } else if (typeof rawVal === 'object') {
@@ -447,7 +468,7 @@ export function calculateWeightedOverallIQS(
       } else if (rawVal.score !== undefined && rawVal.score !== null) {
         const sc = typeof rawVal.score === 'number' ? rawVal.score : parseFloat(String(rawVal.score));
         if (!isNaN(sc)) {
-          paramScore = sc > 1 ? sc / 100 : sc;
+          paramScore = isPercentScale ? sc / 100 : sc;
           isPresent = true;
         }
       }
