@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveQANameForChat } from '../lib/qa-resolver';
 
-test('resolveQANameForChat - empty/invalid chatId returns QA fallback', async () => {
+test('resolveQANameForChat - empty/invalid chatId returns Manorathi fallback', async () => {
   const result = await resolveQANameForChat('');
-  assert.equal(result, 'QA');
+  assert.equal(result, 'Manorathi');
 });
 
 test('Tier 1: Reviewed QA - resolves via config.users email match', async () => {
@@ -102,7 +102,7 @@ test('Tier 3: Disposition Map - resolves via qaDispositionMap when unreviewed & 
   assert.equal(result, 'Sindhu');
 });
 
-test('Tier 4: Fallback - returns QA when no match found', async () => {
+test('Tier 4: Fallback - returns Manorathi when no match found', async () => {
   const mockQuery: any = async (sql: string) => {
     if (sql.includes('COALESCE')) {
       return [{ reviewed_by: null, agent_id: null, disposition: 'Unknown' }];
@@ -113,10 +113,10 @@ test('Tier 4: Fallback - returns QA when no match found', async () => {
   const mockReadConfig: any = async () => ({ users: [], qaDispositionMap: [] });
 
   const result = await resolveQANameForChat('107', { query: mockQuery, readConfig: mockReadConfig });
-  assert.equal(result, 'QA');
+  assert.equal(result, 'Manorathi');
 });
 
-test('Error Resilience - returns QA fallback on database exception', async () => {
+test('Error Resilience - returns Manorathi fallback on database exception', async () => {
   const mockQuery: any = async () => {
     throw new Error('Database connection timeout');
   };
@@ -124,5 +124,5 @@ test('Error Resilience - returns QA fallback on database exception', async () =>
   const mockReadConfig: any = async () => ({ users: [] });
 
   const result = await resolveQANameForChat('108', { query: mockQuery, readConfig: mockReadConfig });
-  assert.equal(result, 'QA');
+  assert.equal(result, 'Manorathi');
 });
