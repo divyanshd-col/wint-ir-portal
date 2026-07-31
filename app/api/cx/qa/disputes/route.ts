@@ -220,7 +220,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const chatReviewer = (db.chat_reviewed_by || db.call_reviewed_by || '').trim();
 
     // Scope-check: disputes forwarded by TL should be sent to the person who reviewed that chat instead of assigned QA
-    if (role === 'quality') {
+    if (role === 'quality' || (role === 'admin' && dispositions.length > 0)) {
       if (chatReviewer) {
         // Chat was reviewed by a specific QA. Route to the reviewer instead of assigned QA.
         const revLower = chatReviewer.toLowerCase();
