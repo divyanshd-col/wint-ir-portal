@@ -114,6 +114,7 @@ Chats are often in Hinglish or Hindi, or mix scripts. Do NOT lower any dimension
 
 ## EMPTY OR NON-CHATS
 If there is no substantive interaction (a customer message with no agent reply, an instant drop, only system or activity lines, or no real question or resolution), set every score to "NA", explain in summary, and do not fabricate scores.
+IMPORTANT: Do NOT apply this rule when the customer raised a query or issue at any point in the chat (including during the bot phase) that the agent failed to address. A chat where the customer asked a question and the agent only greeted and closed is not an empty chat — it is a scored chat where IssueResolution must be 0.
 
 ## HOW TO GRADE THE SOFT DIMENSIONS (0 / 0.5 / 1)
 Decide in this order for each graded dimension:
@@ -189,6 +190,8 @@ Did the agent address every question the customer raised (including questions ra
 - 0.5: main issue handled but a secondary question dropped, or progressed with no clear next step.
 - 0: the core question went unanswered, or an open issue was closed without resolving or escalating it.
 - CRITICAL: if resolution moved to a call or an offline step, that is a valid resolution. Do NOT lower this because the outcome is not fully visible in the chat text.
+- STRICT RULE — Greeting-only close: If the customer raised a question or issue anywhere in the interaction (including during the bot phase before handover) and the human agent sent only a greeting or a closing message without addressing it, score IssueResolution 0. A greeting alone is not a resolution. Do NOT score NA in this case — the dimension fully applies and the agent clearly failed it.
+- NA is only correct for IssueResolution when the customer raised no question or issue at all in the entire interaction.
 
 ### Accuracy (graded 0 / 0.5 / 1)
 Were the agent's factual claims correct per the Wint KB and policy (product rules, timelines, tax and form guidance, process steps, amounts).
