@@ -420,6 +420,28 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   );
 }
 
+// Helper to derive outcome key for a dispute row
+export function getDisputeOutcomeKey(d: TLDisputeRow): string {
+  const status = d.status;
+  const role = (d.raisedByRole || '').toLowerCase();
+  const note = (d.reviewNote || '').toLowerCase();
+
+  if (status === 'pending' || status === 'ir_pending_tl') {
+    return 'raised_ir';
+  } else if (status === 'tl_forwarded') {
+    return role === 'tl' ? 'raised_tl' : 'forwarded';
+  } else if (status === 'tl_resolved') {
+    return 'resolved_tl';
+  } else if (status === 'reviewed') {
+    const hasAnswerChanges = Array.isArray(d.parameters?.__answerChanges) && d.parameters.__answerChanges.length > 0;
+    const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
+    return isUpdated ? 'updated' : 'resolved_qa';
+  } else if (status === 'cancelled') {
+    return 'cancelled';
+  }
+  return status;
+}
+
 // ─── Section — Disputes ────────────────────────────────────────────────────────
 // 'pending': TL's actionable queue — the only action available is forwarding the
 // dispute on to QA (TL has no scoring power, so there's no self-resolve option).
@@ -434,6 +456,12 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const [page,       setPage]       = useState(1);
   const [limit,      setLimit]      = useState(20);
   const [pageSizeDrop, setPageSizeDrop] = useState(false);
+
+  // Filters
+  const [agentFilter,   setAgentFilter]   = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState('');
+  const [fromFilter,    setFromFilter]    = useState('');
+  const [toFilter,      setToFilter]      = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -455,6 +483,31 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   }, [status, onTotalChange]);
 
   useEffect(() => { setPage(1); }, [status, disputes.length]);
+
+  const agents = Array.from(new Set(disputes.map(d => d.agentName).filter(Boolean))).sort();
+
+  const filteredDisputes = disputes.filter(d => {
+    if (agentFilter && d.agentName !== agentFilter) return false;
+    if (outcomeFilter && getDisputeOutcomeKey(d) !== outcomeFilter) return false;
+    if (fromFilter) {
+      const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
+      if (dDate < fromFilter) return false;
+    }
+    if (toFilter) {
+      const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
+      if (dDate > toFilter) return false;
+    }
+    return true;
+  });
+
+  const colCount = 9;
+  const totalPages = Math.max(1, Math.ceil(filteredDisputes.length / limit));
+  const pagedDisputes = filteredDisputes.slice((page - 1) * limit, page * limit);
+
+  const inputStyle: React.CSSProperties = {
+    height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6,
+    fontSize: 12, fontFamily: 'inherit', background: 'var(--qa-card)', color: 'var(--qa-text)', outline: 'none',
+  };
 
   async function forwardToQA(flagId: string) {
     setActioning(flagId);
@@ -508,10 +561,6 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     }
   }
 
-  const colCount = 9;
-  const totalPages = Math.max(1, Math.ceil(disputes.length / limit));
-  const pagedDisputes = disputes.slice((page - 1) * limit, page * limit);
-
   return (
     <>
     {actionError && (
@@ -521,14 +570,57 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       }}>{actionError}</div>
     )}
 
-    {/* Header / Rows per page bar */}
+    {/* Header / Filter & Rows per page bar */}
     <div style={{
-      display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'flex-end',
+      display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
       padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
     }}>
+      {agents.length > 0 && (
+        <select value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
+          <option value="">All Agents</option>
+          {agents.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+      )}
+
+      <select value={outcomeFilter} onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
+        <option value="">{status === 'pending' ? 'All Statuses' : 'All Outcomes'}</option>
+        {status === 'resolved' ? (
+          <>
+            <option value="updated">Updated by QA</option>
+            <option value="resolved_qa">Resolved by QA</option>
+            <option value="resolved_tl">Resolved by TL</option>
+            <option value="forwarded">Forwarded by TL</option>
+            <option value="cancelled">Cancelled</option>
+          </>
+        ) : (
+          <>
+            <option value="raised_ir">Dispute raised by IR</option>
+            <option value="raised_tl">Dispute raised by TL</option>
+          </>
+        )}
+      </select>
+
+      <input type="date" value={fromFilter} onChange={e => { setFromFilter(e.target.value); setPage(1); }} style={inputStyle} placeholder="From" />
+      <input type="date" value={toFilter}   onChange={e => { setToFilter(e.target.value); setPage(1); }}   style={inputStyle} placeholder="To" />
+
+      {(agentFilter || outcomeFilter || fromFilter || toFilter) && (
+        <button
+          onClick={() => {
+            setAgentFilter('');
+            setOutcomeFilter('');
+            setFromFilter('');
+            setToFilter('');
+            setPage(1);
+          }}
+          style={chip}
+        >
+          Clear
+        </button>
+      )}
+
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
-          {loading ? 'Loading…' : `Showing ${pagedDisputes.length} of ${disputes.length}`}
+          {loading ? 'Loading…' : `Showing ${pagedDisputes.length} of ${filteredDisputes.length}`}
         </span>
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button

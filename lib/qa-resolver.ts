@@ -41,11 +41,6 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
         return rev;
       }
 
-      if (row.agent_id) {
-        const agentRows = await queryFn<{ qa_name: string | null }>(`SELECT qa_name FROM agents WHERE id = $1`, [row.agent_id]);
-        if (agentRows[0]?.qa_name) return agentRows[0].qa_name;
-      }
-
       if (row.disposition) {
         const config = await readConfigFn();
         const mapEntry = config.qaDispositionMap?.find((m: any) => m.dispositions?.includes(row.disposition!));
@@ -53,6 +48,11 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
           const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === mapEntry.email.toLowerCase());
           if (u?.agentName) return u.agentName;
         }
+      }
+
+      if (row.agent_id) {
+        const agentRows = await queryFn<{ qa_name: string | null }>(`SELECT qa_name FROM agents WHERE id = $1`, [row.agent_id]);
+        if (agentRows[0]?.qa_name) return agentRows[0].qa_name;
       }
     }
   } catch (err) {
