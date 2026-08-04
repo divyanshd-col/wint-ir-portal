@@ -123,8 +123,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   for (const flag of flags) {
     const db = dbMap.get(flag.chatId);
     if (!db) continue;
-    // Only show disputes for this TL's agents
-    if (!agentNames.includes(db.agent_name ?? '')) continue;
+    // Only show disputes for this TL's agents (supporting prefix/full match)
+    const matchesAgent = (name: string | null) => {
+      if (!name) return false;
+      return agentNames.some(a =>
+        a.toLowerCase() === name.toLowerCase() ||
+        a.toLowerCase().startsWith(name.toLowerCase() + ' ') ||
+        name.toLowerCase().startsWith(a.toLowerCase() + ' ')
+      );
+    };
+    if (!matchesAgent(db.agent_name) && !matchesAgent(flag.agentName)) continue;
 
     let params = db.parameters ?? {};
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
