@@ -161,14 +161,14 @@ function ChatIdCell({ chatId }: { chatId: string }) {
 }
 
 // ─── Section A — Evaluated Chats ──────────────────────────────────────────────
-function EvaluatedChatsSection() {
+function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: number) => void }) {
   const [chats,      setChats]      = useState<TLChatRow[]>([]);
   const [total,      setTotal]      = useState(0);
   const [agents,     setAgents]     = useState<string[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [page,       setPage]       = useState(1);
-  const [limit,      setLimit]      = useState(25);
+  const [limit,      setLimit]      = useState(20);
   const [pageSizeDrop, setPageSizeDrop] = useState(false);
 
   // Filters
@@ -195,12 +195,14 @@ function EvaluatedChatsSection() {
       if (!res.ok) return;
       const data = await res.json();
       setChats(data.chats ?? []);
-      setTotal(data.total ?? 0);
+      const totalCount = data.total ?? 0;
+      setTotal(totalCount);
+      onTotalChange?.(totalCount);
       if (data.agents?.length) setAgents(data.agents);
     } finally {
       setLoading(false);
     }
-  }, [agent, from, to, iqsMin, iqsMax, csat, limit]);
+  }, [agent, from, to, iqsMin, iqsMax, csat, limit, onTotalChange]);
 
   useEffect(() => { fetchChats(page); }, [fetchChats, page]);
 
@@ -275,7 +277,7 @@ function EvaluatedChatsSection() {
                 <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
                   Rows per page
                 </div>
-                {[5, 10, 25, 50].map(n => (
+                {[20, 50, 100].map(n => (
                   <div
                     key={n}
                     style={{
@@ -423,12 +425,15 @@ function EvaluatedChatsSection() {
 // dispute on to QA (TL has no scoring power, so there's no self-resolve option).
 // 'resolved': read-only history of disputes already forwarded or given a final
 // decision by QA.
-function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
+function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resolved'; onTotalChange?: (count: number) => void }) {
   const [disputes,   setDisputes]   = useState<TLDisputeRow[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning,  setActioning]  = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [page,       setPage]       = useState(1);
+  const [limit,      setLimit]      = useState(20);
+  const [pageSizeDrop, setPageSizeDrop] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -437,13 +442,19 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         const res = await fetch(`/api/cx/tl/disputes?status=${status}`);
         if (!res.ok) return;
         const data = await res.json();
-        if (!cancelled) setDisputes(data.disputes ?? []);
+        if (!cancelled) {
+          const list = data.disputes ?? [];
+          setDisputes(list);
+          onTotalChange?.(list.length);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [status]);
+  }, [status, onTotalChange]);
+
+  useEffect(() => { setPage(1); }, [status, disputes.length]);
 
   async function forwardToQA(flagId: string) {
     setActioning(flagId);
@@ -455,11 +466,12 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         body: JSON.stringify({ flagId }),
       });
       if (res.ok) {
-        // Row leaves this queue immediately; it reappears under "Disputes
-        // Reviewed" as tl_forwarded on the next load.
-        setDisputes(prev => prev.filter(d => d.flagId !== flagId));
+        setDisputes(prev => {
+          const next = prev.filter(d => d.flagId !== flagId);
+          onTotalChange?.(next.length);
+          return next;
+        });
       } else {
-        // Don't fail silently — the TL would think the dispute moved on to QA.
         setActionError('Could not forward that dispute — please retry.');
       }
     } catch {
@@ -471,7 +483,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
 
   async function resolveAtTLLevel(flagId: string) {
     const note = prompt('Enter a note explaining why this query was resolved at TL level:');
-    if (note === null) return; // User cancelled prompt
+    if (note === null) return;
     setActioning(flagId);
     setActionError(null);
     try {
@@ -481,7 +493,11 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         body: JSON.stringify({ flagId, reviewNote: note || 'Resolved query at TL level' }),
       });
       if (res.ok) {
-        setDisputes(prev => prev.filter(d => d.flagId !== flagId));
+        setDisputes(prev => {
+          const next = prev.filter(d => d.flagId !== flagId);
+          onTotalChange?.(next.length);
+          return next;
+        });
       } else {
         setActionError('Could not resolve that dispute — please retry.');
       }
@@ -493,6 +509,8 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
   }
 
   const colCount = 9;
+  const totalPages = Math.max(1, Math.ceil(disputes.length / limit));
+  const pagedDisputes = disputes.slice((page - 1) * limit, page * limit);
 
   return (
     <>
@@ -502,6 +520,62 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         background: '#fef2f2', borderBottom: '1px solid var(--qa-border)',
       }}>{actionError}</div>
     )}
+
+    {/* Header / Rows per page bar */}
+    <div style={{
+      display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'flex-end',
+      padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
+    }}>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
+          {loading ? 'Loading…' : `Showing ${pagedDisputes.length} of ${disputes.length}`}
+        </span>
+        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+          <button
+            title="Rows per page"
+            onClick={() => setPageSizeDrop(p => !p)}
+            style={{
+              width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+          </button>
+          {pageSizeDrop && (
+            <div style={{
+              position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50,
+              background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.08)', minWidth: 130, overflow: 'hidden',
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                Rows per page
+              </div>
+              {[20, 50, 100].map(n => (
+                <div
+                  key={n}
+                  style={{
+                    padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--qa-text)',
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    fontWeight: limit === n ? 600 : 400,
+                    background: limit === n ? 'var(--qa-gray-50)' : 'transparent',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = limit === n ? 'var(--qa-gray-50)' : 'transparent')}
+                  onClick={() => { setLimit(n); setPage(1); setPageSizeDrop(false); }}
+                >
+                  {limit === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+
     <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
         <col style={{ width: 90 }} />
@@ -538,14 +612,14 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
               ))}
             </tr>
           ))
-        ) : disputes.length === 0 ? (
+        ) : pagedDisputes.length === 0 ? (
           <tr>
             <td colSpan={colCount} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
               {status === 'pending' ? 'No disputes pending' : 'No resolved disputes yet'}
             </td>
           </tr>
         ) : (
-          disputes.map(d => {
+          pagedDisputes.map(d => {
             const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
             return (
             <React.Fragment key={d.flagId}>
@@ -711,51 +785,108 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
       )}
       </tbody>
     </table>
+
+    {/* Pagination Footer */}
+    {totalPages > 1 && (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
+        <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{ ...chip, opacity: page === 1 ? 0.4 : 1 }}>
+          ← Prev
+        </button>
+        <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>Page {page} of {totalPages}</span>
+        <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{ ...chip, opacity: page === totalPages ? 0.4 : 1 }}>
+          Next →
+        </button>
+      </div>
+    )}
     </>
   );
 }
 
-// ─── Section wrapper with count badge ─────────────────────────────────────────
-function Section({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+type Tab = 'evaluated' | 'disputes' | 'reviewed';
+
+function CountBadge({ count, active }: { count: number; active: boolean }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 10 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--qa-text)', margin: 0 }}>{title}</h2>
-        {subtitle && <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>{subtitle}</span>}
-      </div>
-      <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
-        {children}
-      </div>
-    </div>
+    <span style={{
+      fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px',
+      background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100)',
+      color: active ? '#fff' : 'var(--qa-text-2)',
+    }}>
+      {count}
+    </span>
   );
 }
 
 // ─── Root page ────────────────────────────────────────────────────────────────
 export default function QualityChatsPage() {
+  const [tab, setTab] = useState<Tab>('evaluated');
+  const [evaluatedCount, setEvaluatedCount] = useState<number | null>(null);
+  const [disputeCount,   setDisputeCount]   = useState<number | null>(null);
+  const [reviewedCount,  setReviewedCount]  = useState<number | null>(null);
+
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    height: 36, padding: '0 16px', border: 'none', borderRadius: 8,
+    background: active ? 'var(--qa-gray-700)' : 'transparent',
+    color: active ? '#fff' : 'var(--qa-text-2)',
+    fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 500 : 400,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 32, padding: '24px 0' }}>
+    <div>
+      {/* Page Header */}
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
+          Quality Chats
+        </h1>
+      </div>
 
-      <Section
-        title="Evaluated Chats"
-        subtitle="Your team's recently evaluated chats"
-      >
-        <EvaluatedChatsSection />
-      </Section>
+      {/* Tab Bar */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 20,
+        flexWrap: 'wrap',
+        gap: 16
+      }}>
+        <div style={{
+          display: 'flex', gap: 4,
+          background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
+          borderRadius: 10, padding: 4, width: 'fit-content',
+        }}>
+          <button style={tabStyle(tab === 'evaluated')} onClick={() => setTab('evaluated')}>
+            Evaluated Chats
+            {evaluatedCount !== null && <CountBadge count={evaluatedCount} active={tab === 'evaluated'} />}
+          </button>
+          <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
+            Disputes Raised
+            {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
+          </button>
+          <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>
+            Reviewed Disputes
+            {reviewedCount !== null && <CountBadge count={reviewedCount} active={tab === 'reviewed'} />}
+          </button>
+        </div>
+      </div>
 
-      <Section
-        title="Disputes Raised"
-        subtitle="Disputes your team raised — review and forward to QA for a final decision"
-      >
-        <DisputesSection status="pending" />
-      </Section>
+      {/* Tab Contents */}
+      <div style={{ display: tab === 'evaluated' ? 'block' : 'none' }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+          <EvaluatedChatsSection onTotalChange={setEvaluatedCount} />
+        </div>
+      </div>
 
-      <Section
-        title="Disputes Reviewed"
-        subtitle="Disputes you've forwarded, and QA's final decisions"
-      >
-        <DisputesSection status="resolved" />
-      </Section>
+      <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+          <DisputesSection status="pending" onTotalChange={setDisputeCount} />
+        </div>
+      </div>
 
+      <div style={{ display: tab === 'reviewed' ? 'block' : 'none' }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+          <DisputesSection status="resolved" onTotalChange={setReviewedCount} />
+        </div>
+      </div>
     </div>
   );
 }
