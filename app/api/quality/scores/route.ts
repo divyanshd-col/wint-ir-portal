@@ -90,6 +90,8 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const page          = Math.max(0, parseInt(searchParams.get('page') || '0'));
+  const limitParam    = parseInt(searchParams.get('limit') || searchParams.get('pageSize') || '50', 10);
+  const requestedPageSize = Math.min(100, Math.max(1, isNaN(limitParam) ? 50 : limitParam));
   const skipStats     = searchParams.get('skipStats') === '1';
   const agentFilter   = searchParams.get('agent') || '';
   const minScore      = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) : 0;
@@ -132,7 +134,12 @@ export async function GET(req: NextRequest) {
   }
 
   if (role === 'agent' && selfAgentName) {
-    scopedAgentNames = [selfAgentName];
+    const { query: dbQuery } = await import('@/lib/cx/db');
+    const matchedRows = await dbQuery<{ name: string }>(
+      `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %'`,
+      [selfAgentName]
+    );
+    scopedAgentNames = matchedRows.length ? matchedRows.map(r => r.name) : [selfAgentName];
   } else if (role === 'tl' && selfAgentName) {
     scopedAgentNames = await getAgentNamesByTL(selfAgentName);
   } else if (role === 'quality' && selfAgentName) {
@@ -180,7 +187,7 @@ export async function GET(req: NextRequest) {
   if (minScore)      dbOpts.iqsMin      = minScore;
   if (maxScore !== 100) dbOpts.iqsMax   = maxScore;
   dbOpts.page = page;
-  dbOpts.pageSize = PAGE_SIZE;
+  dbOpts.pageSize = requestedPageSize;
 
   let displayEntries: IQSScoreEntry[] = [];
   let totalFiltered = 0;

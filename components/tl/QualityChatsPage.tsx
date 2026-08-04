@@ -572,7 +572,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
 
     {/* Header / Filter & Rows per page bar */}
     <div style={{
-      display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
+      display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'center', overflowX: 'auto',
       padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
     }}>
       {agents.length > 0 && (
@@ -620,7 +620,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
-          {loading ? 'Loading…' : `Showing ${pagedDisputes.length} of ${filteredDisputes.length}`}
+          {loading ? 'Loading…' : `Showing ${filteredDisputes.length === 0 ? 0 : `${(page - 1) * limit + 1}–${Math.min(page * limit, filteredDisputes.length)}`} of ${filteredDisputes.length}`}
         </span>
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button
