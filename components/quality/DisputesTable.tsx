@@ -41,10 +41,16 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [openDrop,     setOpenDrop]     = useState<string | null>(null);
+  const [page,         setPage]         = useState(1);
+  const [pageSize,     setPageSize]     = useState(20);
 
   useEffect(() => {
     setCallsFilter(hasCallsFilter);
   }, [hasCallsFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [agentFilter, callsFilter, chatIdSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -102,9 +108,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flagId, content: newComment.trim() }),
       });
-      const data = await res.json();
-      if (data.comment) {
-        setThreads(prev => ({ ...prev, [flagId]: [...(prev[flagId] ?? []), data.comment] }));
+      if (res.ok) {
+        const data = await res.json();
+        setThreads(prev => ({ ...prev, [flagId]: [...(prev[flagId] || []), data.comment] }));
         setNewComment('');
       }
     } finally {
@@ -123,6 +129,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     const term = chatIdSearch.toLowerCase().trim();
     visibleDisputes = visibleDisputes.filter(d => d.chatId.toLowerCase().startsWith(term));
   }
+
+  const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
+  const pagedDisputes = visibleDisputes.slice((page - 1) * pageSize, page * pageSize);
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -194,6 +203,56 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         >
           Reset Filters
         </button>
+
+        {/* Rows per page selector + count */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
+            {loading ? 'Loading…' : `Showing ${pagedDisputes.length} of ${visibleDisputes.length}`}
+          </span>
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button
+              title="Rows per page"
+              onClick={() => setOpenDrop(openDrop === 'pagesize' ? null : 'pagesize')}
+              style={{
+                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            {openDrop === 'pagesize' && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50,
+                background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.08)', minWidth: 130, overflow: 'hidden',
+              }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                  Rows per page
+                </div>
+                {[20, 50, 100].map(n => (
+                  <div
+                    key={n}
+                    style={{
+                      padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--qa-text)',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontWeight: pageSize === n ? 600 : 400,
+                      background: pageSize === n ? 'var(--qa-gray-50)' : 'transparent',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = pageSize === n ? 'var(--qa-gray-50)' : 'transparent')}
+                    onClick={() => { setPageSize(n); setPage(1); setOpenDrop(null); }}
+                  >
+                    {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -220,14 +279,14 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 ))}
               </tr>
             ))
-          ) : visibleDisputes.length === 0 ? (
+          ) : pagedDisputes.length === 0 ? (
             <tr>
               <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                 {disputes.length === 0 ? 'No disputes pending' : 'No disputes match the filter'}
               </td>
             </tr>
           ) : (
-            visibleDisputes.map(d => {
+            pagedDisputes.map(d => {
               const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
               return (
               <React.Fragment key={d.chatId}>
@@ -418,6 +477,25 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         )}
         </tbody>
       </table>
+
+      {/* Pagination Footer */}
+      {totalPages > 1 && !loading && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Page {page} of {totalPages}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page <= 1 ? 'not-allowed' : 'pointer',
+              color: page <= 1 ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>← Prev</button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+              color: page >= totalPages ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>Next →</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
