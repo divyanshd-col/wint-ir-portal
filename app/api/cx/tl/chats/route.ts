@@ -42,7 +42,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (role === 'admin' || role === 'quality') {
     const explicit = searchParams.get('agent');
     if (explicit) {
-      agentNames = [explicit];
+      const rows = await query<{ name: string }>(
+        `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %'`,
+        [explicit]
+      );
+      agentNames = rows.length ? rows.map(r => r.name) : [explicit];
     } else {
       const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`);
       agentNames = rows.map(r => r.name);
@@ -53,7 +57,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const tlAgentName = configUser?.agentName ?? email;
     agentNames = await getAgentNamesByTL(tlAgentName);
     const agentFilter = searchParams.get('agent');
-    if (agentFilter) agentNames = agentNames.filter(n => n === agentFilter);
+    if (agentFilter) {
+      agentNames = agentNames.filter(n =>
+        n.toLowerCase() === agentFilter.toLowerCase() ||
+        n.toLowerCase().startsWith(agentFilter.toLowerCase() + ' ') ||
+        agentFilter.toLowerCase().startsWith(n.toLowerCase() + ' ')
+      );
+    }
   }
 
   if (!agentNames.length) {
