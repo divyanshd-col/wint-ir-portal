@@ -237,11 +237,9 @@ export async function GET(req: NextRequest) {
   let weeklyParamData: any[] = [];
 
   try {
-    // We compute summary using the same search filters but without page limits
-    const statsOpts = { ...dbOpts, page: undefined, pageSize: undefined, limit: undefined };
-    summary = await getScoredConversationsSummary(statsOpts);
-
     if (!skipStats) {
+      const statsOpts = { ...dbOpts, page: undefined, pageSize: undefined, limit: undefined };
+      summary = await getScoredConversationsSummary(statsOpts);
       [agentStats, paramFails, weeklyParamData] = await Promise.all([
         getScoredConversationsAgentStats(statsOpts),
         getScoredConversationsParamFails(statsOpts),

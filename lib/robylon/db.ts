@@ -615,7 +615,7 @@ export async function getScoredConversationsSummary(opts: GetScoredConversations
       COUNT(*) FILTER (WHERE c.bot_to_team_seconds <= 180)::int AS "slaOk",
       COUNT(c.bot_to_team_seconds)::int AS "slaTotal",
       AVG(c.resolution_seconds) AS "avgResolution",
-      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS "parameters",
+      AVG(s.iqs_score) AS "avgIqs",
       COUNT(s.iqs_score)::int AS "iqsSampleSize"
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
@@ -630,28 +630,7 @@ export async function getScoredConversationsSummary(opts: GetScoredConversations
   const slaOk = r.slaOk || 0;
   const iqsSampleSize = r.iqsSampleSize || 0;
 
-  // Compute pooled parameter overall IQS
-  let avgIqs: number | null = null;
-  if (Array.isArray(r.parameters) && r.parameters.length > 0) {
-    const pooled: Record<string, { yes: number; half: number; total: number }> = {};
-    for (const pObj of r.parameters) {
-      if (!pObj) continue;
-      const target = pObj.__agent_parameters || pObj;
-      for (const [rk, val] of Object.entries(target as Record<string, any>)) {
-        if (rk.startsWith('__')) continue;
-        if (!pooled[rk]) pooled[rk] = { yes: 0, half: 0, total: 0 };
-        const score = val?.score;
-        if (score === true || score === 'Yes' || score === 1 || score === '1') {
-          pooled[rk].yes++; pooled[rk].total++;
-        } else if (score === 0.5 || score === 'Half') {
-          pooled[rk].half++; pooled[rk].total++;
-        } else if (score === false || score === 'No' || score === 0 || score === '0') {
-          pooled[rk].total++;
-        }
-      }
-    }
-    avgIqs = calculateWeightedOverallIQS(pooled, 'human');
-  }
+  const avgIqs: number | null = r.avgIqs != null ? Math.round(Number(r.avgIqs)) : null;
 
   return {
     totalConvos: totalFiltered,

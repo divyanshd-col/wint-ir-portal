@@ -68,27 +68,13 @@ test('Tier 1: Reviewed QA - returns plain name directly when not an email', asyn
   assert.equal(result, 'Dipti');
 });
 
-test('Tier 2: Assigned Agent QA - resolves from agents table when unreviewed', async () => {
+test('Tier 2: Disposition Map - resolves via qaDispositionMap before checking assigned agent QA', async () => {
   const mockQuery: any = async (sql: string) => {
     if (sql.includes('COALESCE')) {
       return [{ reviewed_by: null, agent_id: 23, disposition: 'KYC' }];
     }
     if (sql.includes('FROM agents')) {
       return [{ qa_name: 'Arjun' }];
-    }
-    return [];
-  };
-
-  const mockReadConfig: any = async () => ({ users: [] });
-
-  const result = await resolveQANameForChat('105', { query: mockQuery, readConfig: mockReadConfig });
-  assert.equal(result, 'Arjun');
-});
-
-test('Tier 3: Disposition Map - resolves via qaDispositionMap when unreviewed & unassigned agent', async () => {
-  const mockQuery: any = async (sql: string) => {
-    if (sql.includes('COALESCE')) {
-      return [{ reviewed_by: null, agent_id: null, disposition: 'KYC' }];
     }
     return [];
   };
@@ -100,6 +86,23 @@ test('Tier 3: Disposition Map - resolves via qaDispositionMap when unreviewed & 
 
   const result = await resolveQANameForChat('106', { query: mockQuery, readConfig: mockReadConfig });
   assert.equal(result, 'Sindhu');
+});
+
+test('Tier 3: Assigned Agent QA - resolves from agents table when unreviewed & no disposition match', async () => {
+  const mockQuery: any = async (sql: string) => {
+    if (sql.includes('COALESCE')) {
+      return [{ reviewed_by: null, agent_id: 23, disposition: 'UnmappedDisposition' }];
+    }
+    if (sql.includes('FROM agents')) {
+      return [{ qa_name: 'Arjun' }];
+    }
+    return [];
+  };
+
+  const mockReadConfig: any = async () => ({ users: [] });
+
+  const result = await resolveQANameForChat('105', { query: mockQuery, readConfig: mockReadConfig });
+  assert.equal(result, 'Arjun');
 });
 
 test('Tier 4: Fallback - returns Manorathi when no match found', async () => {
