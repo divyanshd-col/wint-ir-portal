@@ -23,7 +23,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
   const [total,         setTotal]         = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
   const [page,          setPage]          = useState(1);
-  const [pageSize]                        = useState(50);
+  const [pageSize,      setPageSize]      = useState(20);
   const [loading,       setLoading]       = useState(true);
   const [expandedId,    setExpandedId]    = useState<string | null>(null);
   const [reopeningId,   setReopeningId]   = useState<string | null>(null);
@@ -41,10 +41,10 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
     setCallsFilter(hasCallsFilter);
   }, [hasCallsFilter]);
 
-  const fetchData = useCallback(async (pg = 1) => {
+  const fetchData = useCallback(async (pg = 1, ps = pageSize) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ reviewed: 'true', page: String(pg), limit: String(pageSize) });
+      const params = new URLSearchParams({ reviewed: 'true', page: String(pg), limit: String(ps) });
       params.set('agent_filter', agentFilter);
       if (chatIdSearch) params.set('chat_id', chatIdSearch);
       if (callsFilter !== 'all') params.set('has_calls', callsFilter);
@@ -164,9 +164,54 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
         >
           Reset Filters
         </button>
-        <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--qa-text-3)' }}>
-          {loading ? 'Loading…' : agentSearch ? `${filteredCount} of ${total} reviewed` : `${total} reviewed`}
-        </span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
+            {loading ? 'Loading…' : agentSearch ? `${filteredCount} of ${total} reviewed` : `${total} reviewed`}
+          </span>
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button
+              title="Rows per page"
+              onClick={() => setOpenDrop(openDrop === 'pagesize' ? null : 'pagesize')}
+              style={{
+                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            {openDrop === 'pagesize' && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50,
+                background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 130, overflow: 'hidden',
+              }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                  Rows per page
+                </div>
+                {[20, 50, 100].map(n => (
+                  <div
+                    key={n}
+                    style={{
+                      padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--qa-text)',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontWeight: pageSize === n ? 600 : 400,
+                      background: pageSize === n ? 'var(--qa-gray-50)' : 'transparent',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = pageSize === n ? 'var(--qa-gray-50)' : 'transparent')}
+                    onClick={() => { setPageSize(n); fetchData(1, n); setOpenDrop(null); }}
+                  >
+                    {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Table */}
