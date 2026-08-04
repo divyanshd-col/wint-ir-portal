@@ -204,7 +204,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
   // Pagination state
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(20);
   const [totalEntries, setTotalEntries] = useState(0);
 
   // Disputes state
@@ -214,6 +214,12 @@ export default function MyQualityChatsPage({ agentName }: Props) {
   const [loadingReviewed, setLoadingReviewed] = useState(true);
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  // Disputes tabs pagination state
+  const [pendingPage, setPendingPage] = useState(0);
+  const [pendingPageSize, setPendingPageSize] = useState(20);
+  const [reviewedPage, setReviewedPage] = useState(0);
+  const [reviewedPageSize, setReviewedPageSize] = useState(20);
 
   // ── Fetch Evaluated Chats ──────────────────────────────────────────────────
 
@@ -547,6 +553,19 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
             {/* Right side actions */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(0);
+                }}
+                style={chipInputStyle}
+                title="Rows per page"
+              >
+                <option value={20}>20 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+              </select>
               <span style={{ fontSize: 13, color: '#A1A1AA' }}>
                 Showing {entries.length} of {totalEntries}
               </span>
@@ -774,6 +793,37 @@ export default function MyQualityChatsPage({ agentName }: Props) {
       {/* ── TAB 2: DISPUTES RAISED (PENDING) ────────────────────────────────── */}
       {activeTab === 'disputes' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+          {/* Header / Rows per page bar */}
+          <div
+            style={{
+              minHeight: 50,
+              background: '#FFFFFF',
+              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 10,
+              padding: '10px 16px',
+            }}
+          >
+            <select
+              value={pendingPageSize}
+              onChange={(e) => {
+                setPendingPageSize(Number(e.target.value));
+                setPendingPage(0);
+              }}
+              style={chipInputStyle}
+              title="Rows per page"
+            >
+              <option value={20}>20 / page</option>
+              <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+            </select>
+            <span style={{ fontSize: 13, color: '#A1A1AA' }}>
+              Showing {pendingDisputes.slice(pendingPage * pendingPageSize, (pendingPage + 1) * pendingPageSize).length} of {pendingDisputes.length}
+            </span>
+          </div>
+
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 180 }} />
@@ -811,9 +861,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   </td>
                 </tr>
               ) : (
-                pendingDisputes.map((row, idx) => {
+                pendingDisputes.slice(pendingPage * pendingPageSize, (pendingPage + 1) * pendingPageSize).map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
-                  const isLast = idx === pendingDisputes.length - 1 && !isOpen;
+                  const isLast = idx === pendingDisputes.slice(pendingPage * pendingPageSize, (pendingPage + 1) * pendingPageSize).length - 1 && !isOpen;
                   const targetInfo = getDisputeClassification(row.challengedParams);
                   const statusText = row.status === 'pending' || row.status === 'ir_pending_tl'
                     ? 'Raised'
@@ -970,12 +1020,94 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               )}
             </tbody>
           </table>
+
+          {/* Pagination Footer */}
+          {pendingDisputes.length > pendingPageSize && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderTop: '1px solid var(--qa-border, #E4E4E7)',
+              }}
+            >
+              <div style={{ fontSize: 13, color: '#6B6B6B' }}>
+                Page {pendingPage + 1} of {Math.max(1, Math.ceil(pendingDisputes.length / pendingPageSize))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  disabled={pendingPage === 0}
+                  onClick={() => setPendingPage((p) => Math.max(0, p - 1))}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: pendingPage === 0 ? 'default' : 'pointer',
+                    opacity: pendingPage === 0 ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={(pendingPage + 1) * pendingPageSize >= pendingDisputes.length}
+                  onClick={() => setPendingPage((p) => p + 1)}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: (pendingPage + 1) * pendingPageSize >= pendingDisputes.length ? 'default' : 'pointer',
+                    opacity: (pendingPage + 1) * pendingPageSize >= pendingDisputes.length ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+          {/* Header / Rows per page bar */}
+          <div
+            style={{
+              minHeight: 50,
+              background: '#FFFFFF',
+              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 10,
+              padding: '10px 16px',
+            }}
+          >
+            <select
+              value={reviewedPageSize}
+              onChange={(e) => {
+                setReviewedPageSize(Number(e.target.value));
+                setReviewedPage(0);
+              }}
+              style={chipInputStyle}
+              title="Rows per page"
+            >
+              <option value={20}>20 / page</option>
+              <option value={50}>50 / page</option>
+              <option value={100}>100 / page</option>
+            </select>
+            <span style={{ fontSize: 13, color: '#A1A1AA' }}>
+              Showing {reviewedDisputes.slice(reviewedPage * reviewedPageSize, (reviewedPage + 1) * reviewedPageSize).length} of {reviewedDisputes.length}
+            </span>
+          </div>
+
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 180 }} />
@@ -1015,9 +1147,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   </td>
                 </tr>
               ) : (
-                reviewedDisputes.map((row, idx) => {
+                reviewedDisputes.slice(reviewedPage * reviewedPageSize, (reviewedPage + 1) * reviewedPageSize).map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
-                  const isLast = idx === reviewedDisputes.length - 1 && !isOpen;
+                  const isLast = idx === reviewedDisputes.slice(reviewedPage * reviewedPageSize, (reviewedPage + 1) * reviewedPageSize).length - 1 && !isOpen;
                   const targetInfo = getDisputeClassification(row.challengedParams);
                   const isRejected = row.reviewNote?.toLowerCase().includes('reject');
                   const outcomeText = isRejected ? 'Rejected' : 'Accepted';
@@ -1158,6 +1290,57 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               )}
             </tbody>
           </table>
+
+          {/* Pagination Footer */}
+          {reviewedDisputes.length > reviewedPageSize && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderTop: '1px solid var(--qa-border, #E4E4E7)',
+              }}
+            >
+              <div style={{ fontSize: 13, color: '#6B6B6B' }}>
+                Page {reviewedPage + 1} of {Math.max(1, Math.ceil(reviewedDisputes.length / reviewedPageSize))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  disabled={reviewedPage === 0}
+                  onClick={() => setReviewedPage((p) => Math.max(0, p - 1))}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: reviewedPage === 0 ? 'default' : 'pointer',
+                    opacity: reviewedPage === 0 ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={(reviewedPage + 1) * reviewedPageSize >= reviewedDisputes.length}
+                  onClick={() => setReviewedPage((p) => p + 1)}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: (reviewedPage + 1) * reviewedPageSize >= reviewedDisputes.length ? 'default' : 'pointer',
+                    opacity: (reviewedPage + 1) * reviewedPageSize >= reviewedDisputes.length ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
