@@ -573,7 +573,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <colgroup>
               <col style={{ width: 170 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 85 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 85 }} />
               <col style={{ width: 90 }} />
@@ -585,7 +584,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Bot)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
@@ -597,13 +595,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingEntries ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading evaluated chats…
                   </td>
                 </tr>
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No evaluated chats found
                   </td>
                 </tr>
@@ -622,9 +620,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {e.agentName || agentName}
-                        </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          <IQSBadge score={e.botIqsScore ?? null} />
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={e.iqs ?? null} />
@@ -708,7 +703,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           parameters={buildParams(e)}
                           mode="evaluated"
                           flagStatus={pendingFlag?.status}
-                          colSpan={9}
+                          colSpan={8}
                           onClose={() => setExpandedEvalId(null)}
                           onDisputeRaised={() => {
                             fetchDisputes();
@@ -783,7 +778,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <colgroup>
               <col style={{ width: 180 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 85 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 85 }} />
               <col style={{ width: 90 }} />
@@ -795,7 +789,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Bot)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
@@ -807,13 +800,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingPending ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading raised disputes…
                   </td>
                 </tr>
               ) : pendingDisputes.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No pending disputes raised
                   </td>
                 </tr>
@@ -837,9 +830,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {agentName}
-                        </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          <IQSBadge score={row.botIqsScore ?? null} />
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.iqsScore} />
@@ -917,7 +907,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       {isOpen && (
                         <>
                           <tr>
-                            <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                            <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
                               {row.challengedParams.length > 0 && (() => {
                                 const targetInfo = getDisputeClassification(row.challengedParams);
                                 return (
@@ -969,7 +959,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             flaggedAt={row.flaggedAt}
                             flagId={row.flagId}
                             flagStatus={row.status}
-                            colSpan={9}
+                            colSpan={8}
                             onClose={() => setExpandedDisputeId(null)}
                           />
                         </>
@@ -990,7 +980,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <colgroup>
               <col style={{ width: 180 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 85 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 85 }} />
               <col style={{ width: 90 }} />
@@ -1003,7 +992,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Bot)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
@@ -1016,13 +1004,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingReviewed ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading reviewed disputes…
                   </td>
                 </tr>
               ) : reviewedDisputes.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No reviewed disputes found
                   </td>
                 </tr>
@@ -1048,9 +1036,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {agentName}
-                        </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          <IQSBadge score={row.botIqsScore ?? null} />
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.iqsScore} />
@@ -1108,7 +1093,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       {isOpen && (
                         <>
                           <tr>
-                            <td colSpan={10} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                            <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
                               {row.challengedParams.length > 0 && (() => {
                                 const targetInfo = getDisputeClassification(row.challengedParams);
                                 return (
@@ -1162,7 +1147,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             reviewedAt={row.reviewedAt}
                             flagId={row.flagId}
                             flagStatus={row.status}
-                            colSpan={10}
+                            colSpan={9}
                             onClose={() => setExpandedDisputeId(null)}
                           />
                         </>

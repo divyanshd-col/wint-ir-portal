@@ -303,7 +303,6 @@ function EvaluatedChatsSection() {
           <col />
           <col style={{ width: 90 }} />
           <col style={{ width: 90 }} />
-          <col style={{ width: 90 }} />
           <col style={{ width: 65 }} />
           <col style={{ width: 80 }} />
         </colgroup>
@@ -311,7 +310,6 @@ function EvaluatedChatsSection() {
           <tr>
             <th style={th}>Chat ID</th>
             <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
             <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
             <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
             <th style={th}>CSAT</th>
@@ -322,7 +320,7 @@ function EvaluatedChatsSection() {
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => (
               <tr key={i}>
-                {Array.from({ length: 7 }).map((_, j) => (
+                {Array.from({ length: 6 }).map((_, j) => (
                   <td key={j} style={td}>
                     <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '30%' : '60%' }} />
                   </td>
@@ -331,7 +329,7 @@ function EvaluatedChatsSection() {
             ))
           ) : chats.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+              <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                 No evaluated chats found for your team
               </td>
             </tr>
@@ -345,9 +343,6 @@ function EvaluatedChatsSection() {
                 >
                   <td style={tdMono}><ChatIdCell chatId={chat.chatId} /></td>
                   <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
-                  <td style={tdNum}>
-                    {chat.botIqsScore != null ? <IQSBadge score={chat.botIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
-                  </td>
                   <td style={tdNum}>
                     {chat.iqsScore != null ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                   </td>
@@ -397,7 +392,7 @@ function EvaluatedChatsSection() {
                     onDisputeRaised={() => fetchChats(page)}
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
-                    colSpan={7}
+                    colSpan={6}
                     conversationType={chat.conversationType}
                   />
                 )}
@@ -497,7 +492,7 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
     }
   }
 
-  const colCount = 10;
+  const colCount = 9;
 
   return (
     <>
@@ -513,7 +508,6 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
         <col />
         <col style={{ width: 130 }} />
         <col style={{ width: 85 }} />
-        <col style={{ width: 85 }} />
         <col style={{ width: 75 }} />
         <col style={{ width: 65 }} />
         <col style={{ width: 110 }} />
@@ -525,7 +519,6 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
           <th style={th}>Chat ID</th>
           <th style={th}>Agent</th>
           <th style={th}>Raised By</th>
-          <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
           <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
           <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
           <th style={th}>CSAT</th>
@@ -571,9 +564,6 @@ function DisputesSection({ status }: { status: 'pending' | 'resolved' }) {
                     borderRadius: 4, padding: '1px 5px', marginRight: 6, color: 'var(--qa-text-2)',
                   }}>{d.raisedBy}</span>
                   {d.raisedByName}
-                </td>
-                <td style={tdNum}>
-                  {d.botIqsScore != null ? <IQSBadge score={d.botIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
                 </td>
                 <td style={tdNum}>
                   {d.iqsScore != null ? <IQSBadge score={d.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
