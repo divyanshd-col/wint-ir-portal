@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
   const config = await readConfig();
   const email = (session.user as any)?.email || '';
   const role  = (session.user as any)?.role  || '';
-  const configUser = config.users.find(u => (u.email || u.username) === email);
+  const configUser = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
   const agentName = configUser?.agentName || email.split('@')[0];
 
   const params: IQSChallengedParam[] = Array.isArray(challengedParams) ? challengedParams : [];
