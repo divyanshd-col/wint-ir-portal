@@ -24,7 +24,11 @@ function LoginForm() {
     try {
       const result = await signIn('credentials', { email, password, callbackUrl, redirect: false });
       if (result?.error) {
-        setLoginError('Invalid email or password.');
+        if (result.error !== 'CredentialsSignin') {
+          setLoginError(result.error);
+        } else {
+          setLoginError('Invalid email or password.');
+        }
       } else if (result?.url) {
         window.location.href = result.url;
       }

@@ -25,7 +25,9 @@ export const authOptions: NextAuthOptions = {
           (req as any)?.headers?.['x-forwarded-for']?.split(',')[0]?.trim() ||
           (req as any)?.socket?.remoteAddress ||
           'unknown';
-        if (await isRateLimited(`login:${ip}`, 10, 900)) return null;
+        if (await isRateLimited(`login:${ip}`, 10, 900)) {
+          throw new Error('Too many requests. Please try again later.');
+        }
 
         const { readConfig } = await import('./lib/config');
         const config = await readConfig();
