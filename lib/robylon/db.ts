@@ -619,7 +619,8 @@ export async function getScoredConversationsSummary(opts: GetScoredConversations
       COUNT(c.bot_to_team_seconds)::int AS "slaTotal",
       AVG(c.resolution_seconds) AS "avgResolution",
       AVG(s.iqs_score) AS "avgIqs",
-      COUNT(s.iqs_score)::int AS "iqsSampleSize"
+      COUNT(s.iqs_score)::int AS "iqsSampleSize",
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
     FROM conversations c
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
@@ -633,7 +634,9 @@ export async function getScoredConversationsSummary(opts: GetScoredConversations
   const slaOk = r.slaOk || 0;
   const iqsSampleSize = r.iqsSampleSize || 0;
 
-  const avgIqs: number | null = r.avgIqs != null ? Math.round(Number(r.avgIqs)) : null;
+  const pooled = extractPooledParams(r.parameters);
+  const weightedIqs = calculateWeightedOverallIQS(pooled, 'human');
+  const avgIqs: number | null = weightedIqs ?? (r.avgIqs != null ? Math.round(Number(r.avgIqs)) : null);
 
   return {
     totalConvos: totalFiltered,
@@ -651,7 +654,7 @@ export async function getScoredConversationsSummary(opts: GetScoredConversations
     slaThresholdSecs: 180,
     avgResolution: r.avgResolution != null ? Math.round(Number(r.avgResolution)) : null,
     avgClosure: null,
-    avgIqs: avgIqs ?? (r.avgIqs != null ? Math.round(Number(r.avgIqs)) : null),
+    avgIqs: avgIqs,
     iqsSampleSize,
     samplingPct: totalFiltered > 0 ? Math.round((iqsSampleSize / totalFiltered) * 100) : 0,
   };
