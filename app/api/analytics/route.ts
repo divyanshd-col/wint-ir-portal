@@ -7,7 +7,7 @@ import { readConfig } from '@/lib/config';
 import { geminiGenerate, getOrderedGeminiKeys } from '@/lib/gemini';
 import { getAllScoredConversations, type GetScoredConversationsOptions } from '@/lib/robylon/db';
 import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
-import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry } from '@/lib/quality';
+import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
 function toIQSScoreEntry(row: any): IQSScoreEntry {
@@ -31,6 +31,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     agentName:       row.agentName || '',
     date:            row.date ? String(row.date).slice(0, 10) : '',
     iqs:             row.iqs,
+    rawParams:       params,
     csat:            csatStr,
     scores,
     reasoning,
@@ -174,23 +175,28 @@ function computeQualitySummary(entries: IQSScoreEntry[]) {
   const slaMet = b2tNums.filter(s => s <= 180).length;
 
   // Per-agent stats
-  const agentMap: Record<string, { chats: number; iqsSum: number; csatNums: number[]; frtNums: number[] }> = {};
+  const agentMap: Record<string, { chats: number; iqsSum: number; rawParamsList: any[]; csatNums: number[]; frtNums: number[] }> = {};
   for (const e of entries) {
     const a = e.agentName || 'Unknown';
-    if (!agentMap[a]) agentMap[a] = { chats: 0, iqsSum: 0, csatNums: [], frtNums: [] };
+    if (!agentMap[a]) agentMap[a] = { chats: 0, iqsSum: 0, rawParamsList: [], csatNums: [], frtNums: [] };
     agentMap[a].chats++;
     agentMap[a].iqsSum += e.iqs;
+    if ((e as any).rawParams) agentMap[a].rawParamsList.push((e as any).rawParams);
     const cs = csatScore(e.csat);
     if (cs !== null) agentMap[a].csatNums.push(cs);
     if (e.frt !== undefined) agentMap[a].frtNums.push(e.frt);
   }
-  const agentStats = Object.entries(agentMap).map(([agent, d]) => ({
-    agent,
-    chats: d.chats,
-    avgIqs: Math.round(d.iqsSum / d.chats),
-    avgCsat: avgOrNull(d.csatNums),
-    avgFrtSecs: avgOrNull(d.frtNums),
-  })).sort((a, b) => b.chats - a.chats);
+  const agentStats = Object.entries(agentMap).map(([agent, d]) => {
+    const pooled = extractPooledParams(d.rawParamsList);
+    const weighted = calculateWeightedOverallIQS(pooled, 'human');
+    return {
+      agent,
+      chats: d.chats,
+      avgIqs: weighted ?? Math.round(d.iqsSum / d.chats),
+      avgCsat: avgOrNull(d.csatNums),
+      avgFrtSecs: avgOrNull(d.frtNums),
+    };
+  }).sort((a, b) => b.chats - a.chats);
 
   // Parameter fail rates
   const paramFails: Record<string, number> = {};
@@ -211,15 +217,27 @@ function computeQualitySummary(entries: IQSScoreEntry[]) {
   const topTags = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 10);
 
   // Daily IQS trend (last 30 days)
-  const dailyIqs: Record<string, number[]> = {};
+  const dailyIqs: Record<string, { scores: number[]; rawParamsList: any[] }> = {};
   for (const e of entries) {
     const d = (e.date || e.scoredAt?.slice(0, 10) || '');
-    if (d) { if (!dailyIqs[d]) dailyIqs[d] = []; dailyIqs[d].push(e.iqs); }
+    if (d) {
+      if (!dailyIqs[d]) dailyIqs[d] = { scores: [], rawParamsList: [] };
+      dailyIqs[d].scores.push(e.iqs);
+      if ((e as any).rawParams) dailyIqs[d].rawParamsList.push((e as any).rawParams);
+    }
   }
   const dailyIqsTrend = Object.entries(dailyIqs)
     .sort((a, b) => a[0].localeCompare(b[0]))
     .slice(-30)
-    .map(([date, scores]) => ({ date, avgIqs: Math.round(scores.reduce((s, n) => s + n, 0) / scores.length), count: scores.length }));
+    .map(([date, data]) => {
+      const pooled = extractPooledParams(data.rawParamsList);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human');
+      const meanIqs = Math.round(data.scores.reduce((s, n) => s + n, 0) / data.scores.length);
+      return { date, avgIqs: weighted ?? meanIqs, count: data.scores.length };
+    });
+
+  const overallPooled = extractPooledParams(entries.map(e => (e as any).rawParams).filter(Boolean));
+  const overallWeightedIqs = calculateWeightedOverallIQS(overallPooled, 'human');
 
   return {
     totalConvos: entries.length,
@@ -236,7 +254,7 @@ function computeQualitySummary(entries: IQSScoreEntry[]) {
     slaPercent: b2tNums.length ? Math.round((slaMet / b2tNums.length) * 100) : null,
     avgResolution: avgOrNull(resNums),
     avgClosure: avgOrNull(closNums),
-    avgIqs: avgOrNull(iqsNums),
+    avgIqs: overallWeightedIqs ?? avgOrNull(iqsNums),
     iqsSampleSize: entries.length,
     agentStats,
     paramFails,
