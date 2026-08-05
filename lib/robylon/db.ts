@@ -365,7 +365,8 @@ export async function insertIQSScore(data: {
       iqs_score         = EXCLUDED.iqs_score,
       parameters        = EXCLUDED.parameters,
       model_version     = EXCLUDED.model_version,
-      scored_at         = NOW()
+      scored_at         = NOW(),
+      status            = 'pending'
   `, [
     data.chatId, 
     primaryScore, 
@@ -782,7 +783,7 @@ export async function getScoredConversationsWeeklyParams(opts: GetScoredConversa
   });
 }
 
-/** Get conversations ready to score (have transcript + tags but no iqs_scores row) */
+/** Get conversations ready to score (have transcript but no iqs_scores row or text leg unscored) */
 export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fromDate?: string): Promise<ConversationRow[]> {
   const params: any[] = [minHoursOld, limit];
   const fromClause = fromDate ? `AND c.closed_at >= $3::timestamptz` : '';
@@ -792,13 +793,12 @@ export async function getUnscoredConversations(minHoursOld = 12, limit = 50, fro
     SELECT c.*
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
-    WHERE s.chat_id IS NULL
+    WHERE (s.chat_id IS NULL OR (s.iqs_score IS NULL AND s.status = 'skipped'))
       AND c.transcript IS NOT NULL
-      AND jsonb_typeof(c.transcript) = 'array'
-      AND jsonb_array_length(c.transcript) > 0
-      AND c.tags IS NOT NULL
-      AND (c.tags->>'disposition') IS NOT NULL
-      AND (c.tags->>'disposition') != ''
+      AND (
+        (jsonb_typeof(c.transcript) = 'array' AND jsonb_array_length(c.transcript) > 0)
+        OR (jsonb_typeof(c.transcript->'messages') = 'array' AND jsonb_array_length(c.transcript->'messages') > 0)
+      )
       AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
       ${fromClause}
     ORDER BY c.closed_at ASC
@@ -825,9 +825,12 @@ export async function countUnscoredConversations(minHoursOld = 0): Promise<numbe
     SELECT COUNT(*) AS count
     FROM conversations c
     LEFT JOIN iqs_scores s ON s.chat_id = c.id
-    WHERE s.chat_id IS NULL
+    WHERE (s.chat_id IS NULL OR (s.iqs_score IS NULL AND s.status = 'skipped'))
       AND c.transcript IS NOT NULL
-      AND c.tags IS NOT NULL
+      AND (
+        (jsonb_typeof(c.transcript) = 'array' AND jsonb_array_length(c.transcript) > 0)
+        OR (jsonb_typeof(c.transcript->'messages') = 'array' AND jsonb_array_length(c.transcript->'messages') > 0)
+      )
       AND c.closed_at < NOW() - ($1 * INTERVAL '1 hour')
   `, [minHoursOld]);
   return parseInt(rows[0]?.count ?? '0', 10);
