@@ -117,6 +117,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     sqlParams.push(csatValues.map(Number));
   }
 
+  if (role === 'tl' || role === 'agent') {
+    extraWhere += ` AND i.iqs_score IS NOT NULL`;
+  }
   const statusFilter = searchParams.get('status');
   if (statusFilter === 'reviewed') {
     extraWhere += ` AND i.status = 'reviewed'`;
