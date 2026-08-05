@@ -295,7 +295,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                           {chat.iqsScore}
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                       )}
                     </td>
                     <td style={td}>

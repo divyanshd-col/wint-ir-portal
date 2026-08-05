@@ -110,7 +110,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const iqsMin = searchParams.get('iqs_min');
   if (iqsMin) { extraWhere += ` AND i.iqs_score >= $${paramIdx++}`; sqlParams.push(parseInt(iqsMin)); }
   const iqsMax = searchParams.get('iqs_max');
-  if (iqsMax) { extraWhere += ` AND i.iqs_score <= $${paramIdx++}`; sqlParams.push(parseInt(iqsMax)); }
+  if (iqsMax) { extraWhere += ` AND (i.iqs_score <= $${paramIdx++} OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters'))`; sqlParams.push(parseInt(iqsMax)); }
   const csatValues = searchParams.getAll('csat');
   if (csatValues.length) {
     extraWhere += ` AND c.csat_score = ANY($${paramIdx++})`;
@@ -122,7 +122,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     extraWhere += ` AND i.status = 'reviewed'`;
   } else if (['admin', 'quality'].includes(role)) {
     // Exclude chats that are in the pending review section of Chat Evaluation for QA and Admin views
-    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85)`;
+    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND (i.iqs_score <= 85 OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters')))`;
   }
 
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));

@@ -83,7 +83,7 @@ function fmtDuration(secs: number | null | undefined): string {
 }
 
 function IqsPill({ val }: { val: number | null | undefined }) {
-  if (val == null) return <span className="text-gray-400 text-xs">—</span>;
+  if (val == null) return <span className="text-gray-400 text-xs font-medium">NIL</span>;
   const color =
     val >= 85 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
     val >= 70 ? 'bg-orange-50 text-orange-600 border border-orange-200' :

@@ -142,7 +142,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     // admin and quality both see all pending chats across all dispositions
     const dispIdx = paramIdx++;
     sqlParams.push(safeDispositions);
-    baseWhere = `c.tags->>'disposition' = ANY($${dispIdx}::text[]) AND i.status IN ('pending', 'reopened') AND i.iqs_score IS NOT NULL AND i.iqs_score <= 85`;
+    baseWhere = `c.tags->>'disposition' = ANY($${dispIdx}::text[]) AND i.status IN ('pending', 'reopened') AND (i.iqs_score <= 85 OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters'))`;
   }
 
   let extraWhere = '';
@@ -200,7 +200,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const iqsMax = searchParams.get('iqs_max');
   if (iqsMax !== null && iqsMax !== '') {
-    extraWhere += ` AND i.iqs_score <= $${paramIdx++}`;
+    extraWhere += ` AND (i.iqs_score <= $${paramIdx++} OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters'))`;
     sqlParams.push(parseInt(iqsMax));
     filters.iqsMax = parseInt(iqsMax);
   }
