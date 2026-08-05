@@ -52,7 +52,7 @@ const TD_NUM: CSSProperties = {
 // ─── Badges ──────────────────────────────────────────────────────────────────
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   const bg = score >= 85 ? '#f0fdf4' : score >= 70 ? '#fefce8' : '#fef2f2';
   const color = score >= 85 ? '#166534' : score >= 70 ? '#854d0e' : '#991b1b';
   const border = score >= 85 ? '#bbf7d0' : score >= 70 ? '#fef08a' : '#fecaca';

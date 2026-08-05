@@ -388,7 +388,7 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
       total += weight * 0.5;
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : 0;
+  return possible > 0 ? Math.round((total / possible) * 100) : null as any;
 }
 
 export type PooledParamInput =
