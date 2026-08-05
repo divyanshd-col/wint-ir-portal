@@ -354,7 +354,8 @@ export async function insertIQSScore(data: {
   if (data.botParameters) stored.__bot_parameters = data.botParameters;
   if (data.botModelVersion) stored.__bot_model_version = data.botModelVersion;
 
-  const primaryScore = data.botIqsScore ?? data.iqsScore ?? 0;
+  const isBotOnlyMode = Boolean(data.botParameters && (!data.parameters || Object.keys(data.parameters).length === 0));
+  const primaryScore = data.iqsScore ?? (isBotOnlyMode ? data.botIqsScore : null) ?? null;
 
   await query(`
     INSERT INTO iqs_scores (
@@ -423,9 +424,9 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
     if (opts.includeUncertain) {
-      conditions.push(`(s.iqs_score <= $${params.length} OR s.parameters ? '__uncertain')`);
+      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND s.parameters ? '__agent_parameters') OR s.parameters ? '__uncertain')`);
     } else {
-      conditions.push(`s.iqs_score <= $${params.length}`);
+      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND s.parameters ? '__agent_parameters'))`);
     }
   } else if (opts.includeUncertain) {
     conditions.push(`s.parameters ? '__uncertain'`);
@@ -673,7 +674,7 @@ export async function getScoredConversationsAgentStats(opts: GetScoredConversati
       MIN(s.iqs_score)::int AS "minIqs",
       MAX(s.iqs_score)::int AS "maxIqs",
       COUNT(*) FILTER (WHERE s.iqs_score >= 90)::int AS "high",
-      COUNT(*) FILTER (WHERE s.iqs_score < 70)::int AS "atRisk",
+      COUNT(*) FILTER (WHERE s.iqs_score IS NOT NULL AND s.iqs_score < 70)::int AS "atRisk",
       AVG(c.frt_seconds) AS "avgFrt",
       AVG(c.resolution_seconds) AS "avgResolution",
       AVG(c.bot_to_team_seconds) AS "avgBotToTeam",

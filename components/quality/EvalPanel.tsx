@@ -64,7 +64,18 @@ interface TMessage {
 
 // ── SVG Score Ring ────────────────────────────────────────────────────────────
 
-function ScoreRing({ score }: { score: number }) {
+function ScoreRing({ score }: { score: number | null }) {
+  if (score == null) {
+    return (
+      <svg width="64" height="64" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+        <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-fill-med)" strokeWidth="5" />
+        <text x="32" y="33" textAnchor="middle" dominantBaseline="central"
+          fontSize="14" fontWeight="700" fill="var(--qa-text-3)" fontFamily="inherit">
+          NIL
+        </text>
+      </svg>
+    );
+  }
   const RING_C   = 169.6;
   const offset   = ((100 - Math.max(0, Math.min(100, score))) / 100 * RING_C).toFixed(1);
   return (

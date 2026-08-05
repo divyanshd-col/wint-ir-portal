@@ -572,7 +572,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                           {chat.iqsScore}
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12, fontWeight: 500 }}>NIL</span>
                       )}
                     </td>
                     <td style={td}>

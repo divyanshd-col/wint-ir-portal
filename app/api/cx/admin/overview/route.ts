@@ -25,9 +25,9 @@ export async function GET(req: NextRequest) {
 
       -- IQS overall + tier distribution
       ROUND(AVG(s.iqs_score)::numeric,1)::float                          AS avg_iqs,
-      COUNT(CASE WHEN s.iqs_score >= 85 THEN 1 END)::int                 AS iqs_excellent,
-      COUNT(CASE WHEN s.iqs_score >= 70 AND s.iqs_score < 85 THEN 1 END)::int AS iqs_warn,
-      COUNT(CASE WHEN s.iqs_score < 70 AND s.iqs_score IS NOT NULL THEN 1 END)::int AS iqs_risk,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score >= 85 THEN 1 END)::int AS iqs_excellent,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score >= 70 AND s.iqs_score < 85 THEN 1 END)::int AS iqs_warn,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score < 70 THEN 1 END)::int AS iqs_risk,
       COUNT(CASE WHEN s.iqs_score IS NOT NULL THEN 1 END)::int            AS with_iqs,
       jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL)     AS parameters,
 

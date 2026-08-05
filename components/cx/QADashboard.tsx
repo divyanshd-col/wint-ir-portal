@@ -57,7 +57,7 @@ function CsatBadge({ pct }: { pct: number | null }) {
 }
 
 function IqsBadge({ iqs }: { iqs: number | null }) {
-  if (iqs == null) return <span className="text-stone-400">—</span>;
+  if (iqs == null) return <span className="text-stone-400 font-medium">NIL</span>;
   const color =
     iqs >= 85 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
     iqs >= 70 ? 'bg-amber-50 text-amber-700 border border-amber-200' :

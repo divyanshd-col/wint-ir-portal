@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       COUNT(c.id)::int AS total_convs,
       COUNT(s.chat_id)::int AS scored_count,
       ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs,
-      COUNT(CASE WHEN s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
       COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::int AS bad_csat_count,
       ROUND(
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
       COUNT(c.id)::int AS conv_count,
       COUNT(s.chat_id)::int AS scored_count,
       ROUND(AVG(s.iqs_score)::numeric, 1)::float AS avg_iqs,
-      COUNT(CASE WHEN s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score < 60 THEN 1 END)::int AS low_iqs_count,
       ROUND(
         COUNT(CASE WHEN c.csat_label IN ('bad','could_be_better') THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
@@ -138,7 +138,7 @@ export async function GET(req: NextRequest) {
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
-      AND (s.iqs_score < 60 OR c.csat_label IN ('bad','could_be_better'))
+      AND ((s.iqs_score IS NOT NULL AND s.iqs_score < 60) OR c.csat_label IN ('bad','could_be_better'))
     ORDER BY s.iqs_score ASC NULLS LAST
     LIMIT 20
   `, [dateFrom, dateTo]);

@@ -36,7 +36,8 @@ const chipActive: React.CSSProperties = {
 };
 
 // ─── IQS score badge ──────────────────────────────────────────────────────────
-function IQSBadge({ score }: { score: number }) {
+function IQSBadge({ score }: { score: number | null }) {
+  if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -346,7 +347,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                   <td style={tdMono}><ChatIdCell chatId={chat.chatId} /></td>
                   <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                   <td style={tdNum}>
-                    {chat.iqsScore != null ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                    {chat.iqsScore != null ? <IQSBadge score={chat.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>}
                   </td>
                   <td style={tdNum}>
                     {chat.callIqsScore != null ? (

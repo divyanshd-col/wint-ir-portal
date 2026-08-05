@@ -350,7 +350,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                         {d.iqsScore}
                       </span>
                     ) : (
-                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                     )}
                   </td>
                   <td style={td}>

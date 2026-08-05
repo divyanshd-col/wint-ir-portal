@@ -316,13 +316,17 @@ export async function executeScoring(
     question: primaryPass.parameters[p]?.comment || '' 
   })) || [];
 
+  const noGradeableLeg =
+    Object.keys(parameters).length === 0 ||
+    Object.values(parameters).every(p => p.score === null);
+
   await insertIQSScore({
     chatId,
-    iqsScore: isBotOnly ? null : (humanPass?.iqs_score || primaryPass.iqs_score || 0),
+    iqsScore: (isBotOnly || noGradeableLeg) ? null : (humanPass?.iqs_score ?? primaryPass.iqs_score ?? 0),
     parameters,
     modelVersion,
     uncertainParameters,
-    botIqsScore: botPass ? (botPass.iqs_score || 0) : undefined,
+    botIqsScore: botPass ? (botPass.iqs_score ?? 0) : undefined,
     botParameters,
     botModelVersion: botPass ? modelVersion : undefined,
     breaches: primaryPass.breaches?.map((b: any) => `${b.type}: ${b.quote}`),
