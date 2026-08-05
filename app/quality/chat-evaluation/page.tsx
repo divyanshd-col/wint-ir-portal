@@ -9,8 +9,10 @@ export default async function Page() {
   // itself — otherwise a tl/agent hitting the URL directly renders the QA scoring UI.
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
-  const role = ((session.user as any)?.role as string) || '';
+  const userAny = session.user as any;
+  const rawRole = userAny?.role as string | undefined;
+  const role = rawRole || (userAny?.isAdmin ? 'admin' : '');
   if (!['admin', 'quality'].includes(role)) redirect('/quality');
 
-  return <ChatEvaluationPage />;
+  return <ChatEvaluationPage role={role} />;
 }

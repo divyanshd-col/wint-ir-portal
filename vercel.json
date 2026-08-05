@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/process-pending-scores",
-      "schedule": "0 2 * * *"
+      "schedule": "0 * * * *"
     }
   ]
 }
