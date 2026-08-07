@@ -218,6 +218,9 @@ export async function POST(req: NextRequest) {
   const subDisposition = tags.sub_disposition || '';
   const agentName = conv.agent_id ? await getAgentName(conv.agent_id) : '';
 
+  const { storeDeleteScoringLock } = await import('@/lib/store');
+  await storeDeleteScoringLock(chatId);
+
   const scored = await executeScoring(conv, agentName, disposition, subDisposition);
   if (!scored) {
     return NextResponse.json({ ok: false, message: 'Scoring lock held or unscoreable content' });
