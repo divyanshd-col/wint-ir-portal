@@ -8,6 +8,7 @@ interface Props {
   username: string;
   role: string;
   isAdmin: boolean;
+  flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
 }
 
 type Phase = 'idle' | 'uploading' | 'pass1' | 'pass2' | 'done' | 'error';
@@ -40,7 +41,7 @@ function SummaryCard({ label, value, sub }: { label: string; value: string | num
   );
 }
 
-export default function CallAnalysisClient({ username, role, isAdmin }: Props) {
+export default function CallAnalysisClient({ username, role, isAdmin, flags }: Props) {
   const [phase, setPhase]       = useState<Phase>('idle');
   const [logs, setLogs]         = useState<string[]>([]);
   const [result, setResult]     = useState<CallAnalysisResult | null>(null);
@@ -214,7 +215,7 @@ export default function CallAnalysisClient({ username, role, isAdmin }: Props) {
 
   return (
     <div className="flex h-screen bg-[#f5f3ee]">
-      <PageNav username={username} role={role} isAdmin={isAdmin} />
+      <PageNav username={username} role={role} isAdmin={isAdmin} flags={flags} />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Header */}

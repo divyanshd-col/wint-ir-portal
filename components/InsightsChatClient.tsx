@@ -617,9 +617,10 @@ interface InsightsChatClientProps {
   username?: string;
   role?: string;
   isAdmin?: boolean;
+  flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
 }
 
-export default function InsightsChatClient({ username = 'admin', role = 'admin', isAdmin = true }: InsightsChatClientProps) {
+export default function InsightsChatClient({ username = 'admin', role = 'admin', isAdmin = true, flags }: InsightsChatClientProps) {
   // Filter bar state
   const [dateRange, setDateRange] = useState<'7d' | '15d' | 'this_month' | 'last_month' | 'custom'>('7d');
   const [customFrom, setCustomFrom] = useState('');
@@ -1077,7 +1078,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     <>
     <div className="flex h-screen bg-[#1a1a1a]">
       {/* Sidebar */}
-      <PageNav username={username} role={role} isAdmin={isAdmin} />
+      <PageNav username={username} role={role} isAdmin={isAdmin} flags={flags} />
 
       {/* Main */}
       <div className="flex flex-col flex-1 min-w-0 bg-[#f5f3ee]">

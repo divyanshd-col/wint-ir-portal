@@ -8,6 +8,7 @@ interface PageNavProps {
   username: string;
   role?: string;
   isAdmin?: boolean;
+  flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
 }
 
 function NavLink({
@@ -36,10 +37,9 @@ function NavLink({
   );
 }
 
-export default function PageNav({ username, role, isAdmin }: PageNavProps) {
+export default function PageNav({ username, role, isAdmin, flags }: PageNavProps) {
   const canSeeQuality         = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
   const canSeeAnalytics       = isAdmin || role === 'tl';
-  const canSeeMemberAnalytics = isAdmin || role === 'tl' || role === 'agent';
 
   return (
     <aside className="w-64 bg-[#1a1a1a] flex-col shrink-0 hidden lg:flex h-screen sticky top-0">
@@ -89,7 +89,7 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
             }
           />
         )}
-        {role !== 'agent' && (
+        {flags?.cxDashboard && role !== 'agent' && (
           <NavLink
             href="/cx"
             label="CX Dashboard"
@@ -102,27 +102,13 @@ export default function PageNav({ username, role, isAdmin }: PageNavProps) {
             }
           />
         )}
-        {canSeeAnalytics && (
+        {flags?.callAnalysis && canSeeAnalytics && (
           <NavLink
             href="/call-analysis"
             label="Call Analysis"
             icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
-              </svg>
-            }
-          />
-        )}
-        {canSeeMemberAnalytics && (
-          <NavLink
-            href="/tl/member-analytics"
-            label={role === 'agent' ? 'My Analytics' : 'Member Analytics'}
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="6" cy="5" r="2.5" />
-                <path d="M1 14c0-2.8 2.2-5 5-5" />
-                <circle cx="11.5" cy="9" r="2" />
-                <path d="M8.5 14c0-1.7 1.3-3 3-3s3 1.3 3 3" />
               </svg>
             }
           />

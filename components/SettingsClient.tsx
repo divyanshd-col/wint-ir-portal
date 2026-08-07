@@ -25,6 +25,8 @@ interface SafeConfig {
   defaultAnalyticsPlannerPrompt?: string;
   defaultAnalyticsSynthesizerPrompt?: string;
   conversationHistoryEnabled?: boolean;
+  callAnalysisEnabled?: boolean;
+  cxDashboardEnabled?: boolean;
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
   hasPyannoteKey?: boolean;
@@ -102,6 +104,8 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [savingIqsKeys, setSavingIqsKeys] = useState(false);
 
   const [historyEnabled, setHistoryEnabled] = useState(!!config.conversationHistoryEnabled);
+  const [callAnalysisEnabled, setCallAnalysisEnabled] = useState(!!config.callAnalysisEnabled);
+  const [cxDashboardEnabled, setCxDashboardEnabled] = useState(!!config.cxDashboardEnabled);
 
   // ── KB state ───────────────────────────────────────────────────────────────
   const [docs, setDocs] = useState<string[]>(config.knowledgeBaseUrls || []);
@@ -331,6 +335,18 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     const next = !historyEnabled;
     setHistoryEnabled(next);
     await patchConfig({ conversationHistoryEnabled: next });
+  };
+
+  const toggleCallAnalysis = async () => {
+    const next = !callAnalysisEnabled;
+    setCallAnalysisEnabled(next);
+    await patchConfig({ callAnalysisEnabled: next });
+  };
+
+  const toggleCxDashboard = async () => {
+    const next = !cxDashboardEnabled;
+    setCxDashboardEnabled(next);
+    await patchConfig({ cxDashboardEnabled: next });
   };
 
   const addDoc = async () => {
@@ -854,6 +870,38 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   className={`relative w-12 h-6 rounded-full transition-colors ${historyEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
                 >
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${historyEnabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Call Analysis (feature flag) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Call Analysis</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Show the Call Analysis page &amp; nav link</p>
+                </div>
+                <button
+                  onClick={toggleCallAnalysis}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${callAnalysisEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${callAnalysisEnabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* CX Dashboard (feature flag) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">CX Dashboard</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Show the CX Dashboard page &amp; nav link</p>
+                </div>
+                <button
+                  onClick={toggleCxDashboard}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${cxDashboardEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${cxDashboardEnabled ? 'left-7' : 'left-1'}`} />
                 </button>
               </div>
             </div>
