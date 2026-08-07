@@ -57,6 +57,9 @@ export async function GET(req: NextRequest) {
 
   // Base opts shared by all queries
   const baseOpts: GetScoredConversationsOptions = { iqsMax: 79, includeUncertain: true };
+  if (role === 'tl' || role === 'agent') {
+    baseOpts.excludeNil = true;
+  }
   if (scopedAgentNames !== null) {
     if (agentFilter) baseOpts.agentName = agentFilter;
     else baseOpts.agentNames = scopedAgentNames;

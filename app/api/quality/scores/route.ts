@@ -147,6 +147,9 @@ export async function GET(req: NextRequest) {
   }
 
   const dbOpts: GetScoredConversationsOptions = {};
+  if (role === 'agent' || role === 'tl') {
+    dbOpts.excludeNil = true;
+  }
   if (!chatIdSearch) {
     if (dateFrom) dbOpts.dateFrom = dateFrom;
     if (dateTo)   dbOpts.dateTo   = dateTo;

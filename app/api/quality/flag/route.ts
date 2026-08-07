@@ -116,16 +116,23 @@ export async function GET() {
         const chatReviewer = reviewerMap.get(f.chatId)?.trim();
         if (chatReviewer) {
           const revLower = chatReviewer.toLowerCase();
-          const emailLower = email.toLowerCase();
-          const qaNameLower = (myQAName || '').toLowerCase();
-          const usernameLower = (me?.username || '').toLowerCase();
-
-          return (
-            revLower === emailLower ||
-            (qaNameLower && revLower === qaNameLower) ||
-            (usernameLower && revLower === usernameLower) ||
-            (emailLower.includes('@') && revLower === emailLower.split('@')[0])
+          const reviewerUser = config.users?.find((u: any) =>
+            (u.email || u.username)?.toLowerCase() === revLower ||
+            u.agentName?.toLowerCase() === revLower
           );
+
+          if (reviewerUser?.role === 'quality') {
+            const emailLower = email.toLowerCase();
+            const qaNameLower = (myQAName || '').toLowerCase();
+            const usernameLower = (me?.username || '').toLowerCase();
+
+            return (
+              revLower === emailLower ||
+              (qaNameLower && revLower === qaNameLower) ||
+              (usernameLower && revLower === usernameLower) ||
+              (emailLower.includes('@') && revLower === emailLower.split('@')[0])
+            );
+          }
         }
         return myAgents.has((f.agentName || '').toLowerCase());
       });

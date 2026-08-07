@@ -219,26 +219,36 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     const chatReviewer = (db.chat_reviewed_by || db.call_reviewed_by || '').trim();
 
-    // Scope-check: disputes forwarded by TL should be sent to the person who reviewed that chat instead of assigned QA
+    // Scope-check: disputes should be sent to the QA who reviewed it; otherwise based on disposition
     if (role === 'quality' || (role === 'admin' && dispositions.length > 0)) {
+      let isReviewedByQA = false;
       if (chatReviewer) {
-        // Chat was reviewed by a specific QA. Route to the reviewer instead of assigned QA.
         const revLower = chatReviewer.toLowerCase();
-        const emailLower = email.toLowerCase();
-        const qaNameLower = (myQAName || '').toLowerCase();
-        const usernameLower = (me?.username || '').toLowerCase();
+        const reviewerUser = config.users?.find((u: any) =>
+          (u.email || u.username)?.toLowerCase() === revLower ||
+          u.agentName?.toLowerCase() === revLower
+        );
 
-        const isReviewer =
-          revLower === emailLower ||
-          (qaNameLower && revLower === qaNameLower) ||
-          (usernameLower && revLower === usernameLower) ||
-          (emailLower.includes('@') && revLower === emailLower.split('@')[0]);
+        if (reviewerUser?.role === 'quality') {
+          isReviewedByQA = true;
+          const emailLower = email.toLowerCase();
+          const qaNameLower = (myQAName || '').toLowerCase();
+          const usernameLower = (me?.username || '').toLowerCase();
 
-        if (!isReviewer) {
-          continue;
+          const isReviewer =
+            revLower === emailLower ||
+            (qaNameLower && revLower === qaNameLower) ||
+            (usernameLower && revLower === usernameLower) ||
+            (emailLower.includes('@') && revLower === emailLower.split('@')[0]);
+
+          if (!isReviewer) {
+            continue;
+          }
         }
-      } else {
-        // Chat was not reviewed by a specific QA yet — fallback to assigned QA or mapped dispositions
+      }
+
+      if (!isReviewedByQA) {
+        // Chat was not reviewed by a specific QA — fallback to mapped dispositions or assigned agents
         const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
         const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
 

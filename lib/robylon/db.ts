@@ -403,6 +403,7 @@ export interface GetScoredConversationsOptions {
   hasCalls?: boolean;
   minUserMessages?: number;
   chatIdSearch?: string;
+  excludeNil?: boolean;
 }
 
 function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: string[]; params: any[] } {
@@ -485,6 +486,9 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   if (opts.chatIdSearch) {
     params.push(`%${opts.chatIdSearch.trim()}%`);
     conditions.push(`c.id LIKE $${params.length}`);
+  }
+  if (opts.excludeNil) {
+    conditions.push(`s.iqs_score IS NOT NULL`);
   }
 
   return { conditions, params };
