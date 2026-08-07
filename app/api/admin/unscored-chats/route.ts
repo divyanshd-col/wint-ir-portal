@@ -187,10 +187,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const cronSecret = process.env.CRON_SECRET;
+  const auth = req.headers.get('authorization') || '';
+  const { searchParams } = new URL(req.url);
+  const isSecretAuth = cronSecret && (auth === `Bearer ${cronSecret}` || searchParams.get('secret') === cronSecret);
+
   const session = await getServerSession(authOptions);
   const userAny = session?.user as any;
   const role = userAny?.role || (userAny?.isAdmin ? 'admin' : '');
-  if (role !== 'admin') {
+
+  if (role !== 'admin' && !isSecretAuth) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
