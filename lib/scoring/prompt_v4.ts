@@ -14,8 +14,8 @@
  *    IssueResolution "NA" (not a failure, resolution does not apply). Bot hallucination
  *    or failure to follow the handover logic scores 0. CorrectEscalation is judged
  *    against the criteria. Auto-followups after transfer are plumbing, never scored.
- *  - Internal notes: stripped COMPLETELY. Not scored, not even context. The pipeline
- *    strips them before scoring; the prompt ignores any that slip through.
+ *  - Internal notes / Private notes: treated as background context to understand internal
+ *    actions, but EXCLUDED from quality evaluation and scoring. Never evaluated as customer-facing.
  *  - Answer changes: changing our answer/process/definition is NOT an Accuracy failure.
  *    Accuracy judges the FINAL answer per KB. Every change is recorded in the
  *    ANSWER CHANGE GATE (visibility-only list: topic, first answer + where, revised
@@ -161,7 +161,7 @@ Documents may be shared over WhatsApp only if they carry no personal and no inte
 
 ## SCORING GUARDRAILS (how to handle what you see, applies to Accuracy and IssueResolution)
 - Internal checks (Finder, order status, account or SIP state) are not visible to you and agents do not narrate them to customers. Do NOT assume a check was skipped, and do NOT lower Accuracy just because the agent did not say "I checked and confirmed X". The fact that a response could have been improved by a tool check is NOT enough to fail anything. Example: if the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP", that is NOT an error, the check is internal. Only lower Accuracy if the visible answer or action is provably wrong, for example the agent says a repayment was not processed but the transcript shows it was credited, or the agent gives a wrong fact or wrong process step.
-- Internal notes, Slack links, internal tool URLs, and any internal system references that appear in the transcript are NOT part of the conversation. Ignore them COMPLETELY. Do not use them as context, do not use them to explain or justify an agent's action, and never score anything based on them. Evaluate only what was communicated to the customer. (The pipeline should strip internal notes before scoring; if any slip through, treat them as if they do not exist.)
+- Private Notes / Internal notes (indicated in the transcript as "Internal Note: ..." or "Private Note: ..."), Slack links, and internal tool URLs in the transcript are internal working notes and system entries. TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or status updates, but EXCLUDE them while judging/scoring the chat. Do NOT evaluate their tone, language, grammar, or response quality as customer-facing communications, and NEVER score or penalize the agent on any parameter based on private notes. Evaluate only what was communicated to the customer.
 - If the chat references a prior conversation (phrases such as "previous chat", "previous conversation", "previous text", "last time", "last conversation", "earlier ticket", "as discussed before", "as discussed earlier", "as mentioned earlier", "referred earlier", "as per our last chat", "continuing from before"), note it in summary and be lenient on Accuracy and IssueResolution. Missing context may live in that earlier chat. Do not fail for information gaps a prior chat could explain.
 
 ## MEDIA IN CHAT
@@ -441,8 +441,8 @@ export function detectChannel(transcriptJson: string): 'human' | 'bot' {
  * v1 cut the middle out of any chat over 5000 chars, which hid a third of long
  * conversations from the scorer. With no cost cap we keep the whole conversation.
  * We only dedupe consecutive identical lines and cap absurdly long single lines.
- * NOTE: the pipeline must strip internal notes BEFORE calling this. Internal notes
- * are never passed to the model, not even as context.
+ * NOTE: Private notes and internal notes are included in the transcript as background
+ * context for the evaluator, but are excluded from quality evaluation and scoring.
  */
 export function prepTranscript(transcript: string, maxChars = 40000): string {
   const lines = transcript.split('\n')
