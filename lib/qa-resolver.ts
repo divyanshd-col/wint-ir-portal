@@ -27,32 +27,43 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
 
     const row = revRows[0];
     if (row) {
+      const config = await readConfigFn();
+
+      // 1. Priority 1: Forward to the QA who reviewed it (if not an admin)
       if (row.reviewed_by && row.reviewed_by.trim()) {
         const rev = row.reviewed_by.trim();
-        const config = await readConfigFn();
-        const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === rev.toLowerCase() || user.agentName?.toLowerCase() === rev.toLowerCase());
-        if (u?.agentName) return u.agentName;
+        const u = config.users?.find((user: any) =>
+          (user.email || user.username)?.toLowerCase() === rev.toLowerCase() ||
+          user.agentName?.toLowerCase() === rev.toLowerCase()
+        );
+        if (u?.agentName && u.role !== 'admin') return u.agentName;
+
         if (rev.includes('@')) {
-          const userRows = await queryFn<{ name: string }>(`SELECT name FROM cx_users WHERE LOWER(email) = LOWER($1)`, [rev]);
-          if (userRows[0]?.name) return userRows[0].name;
-          const parts = rev.split('@')[0].split('.');
-          return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+          const configUser = config.users?.find((user: any) => user.email?.toLowerCase() === rev.toLowerCase());
+          if (!configUser || configUser.role !== 'admin') {
+            const userRows = await queryFn<{ name: string }>(`SELECT name FROM cx_users WHERE LOWER(email) = LOWER($1)`, [rev]);
+            if (userRows[0]?.name) return userRows[0].name;
+            const parts = rev.split('@')[0].split('.');
+            return parts.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+          }
+        } else if (!u || u.role !== 'admin') {
+          return rev;
         }
-        return rev;
       }
 
+      // 2. Priority 2: Forward based on disposition if not reviewed by a QA
       if (row.disposition) {
-        const config = await readConfigFn();
         const mapEntry = config.qaDispositionMap?.find((m: any) => m.dispositions?.includes(row.disposition!));
         if (mapEntry?.email) {
           const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === mapEntry.email.toLowerCase());
-          if (u?.agentName) return u.agentName;
+          if (u?.agentName && u.role !== 'admin') return u.agentName;
         }
       }
 
+      // 3. Priority 3: Fall back to agent's assigned QA
       if (row.agent_id) {
         const agentRows = await queryFn<{ qa_name: string | null }>(`SELECT qa_name FROM agents WHERE id = $1`, [row.agent_id]);
-        if (agentRows[0]?.qa_name) return agentRows[0].qa_name;
+        if (agentRows[0]?.qa_name && agentRows[0].qa_name.trim()) return agentRows[0].qa_name.trim();
       }
     }
   } catch (err) {
