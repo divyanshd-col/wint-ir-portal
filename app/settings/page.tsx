@@ -38,6 +38,8 @@ export default async function SettingsPage() {
     defaultAnalyticsPlannerPrompt: PLANNER_PROMPT,
     defaultAnalyticsSynthesizerPrompt: SYNTHESIZER_PROMPT,
     conversationHistoryEnabled: !!config.conversationHistoryEnabled,
+    callAnalysisEnabled: !!config.callAnalysisEnabled,
+    cxDashboardEnabled: !!config.cxDashboardEnabled,
     hasSlackToken: !!config.slackUserToken,
     qualityAlertSheetUrl: config.qualityAlertSheetUrl || '',
     hasPyannoteKey: !!config.pyannoteApiKey,

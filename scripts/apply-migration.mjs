@@ -26,10 +26,10 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false },
 });
 
-const sql = readFileSync(join(ROOT, 'db/migrations/012_call_evaluations_schema.sql'), 'utf-8');
+const sql = readFileSync(join(ROOT, 'db/migrations/013_users_and_identity.sql'), 'utf-8');
 
 try {
-  console.log('Running 012 call evaluations schema migration…');
+  console.log('Running 013 users and identity schema migration…');
   await pool.query(sql);
   console.log('✅ Migration complete.');
 } catch (err) {

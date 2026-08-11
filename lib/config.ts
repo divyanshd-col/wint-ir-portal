@@ -26,6 +26,9 @@ export interface PortalConfig {
   users: PortalUser[];
   systemPrompt?: string;
   conversationHistoryEnabled?: boolean;
+  // ── Feature flags (absent/false = hidden) ──────────────────────────────────
+  callAnalysisEnabled?: boolean;
+  cxDashboardEnabled?: boolean;
   slackUserToken?: string;
   qualityAlertSheetUrl?: string; // Apps Script web app URL for quality alert sheet
   isConfigured: boolean;

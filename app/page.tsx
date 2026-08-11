@@ -18,10 +18,14 @@ export default async function Home() {
   const username = (session.user?.name || session.user?.email || 'Investor') as string;
   const role = (session.user as any)?.role ?? 'agent';
   const historyEnabled = config.conversationHistoryEnabled ?? false;
+  const flags = {
+    callAnalysis: config.callAnalysisEnabled ?? false,
+    cxDashboard: config.cxDashboardEnabled ?? false,
+  };
 
   return (
     <div className="flex h-screen bg-[#f5f5f0] overflow-hidden">
-      <HomeClient username={username} isAdmin={isAdmin} role={role} historyEnabled={historyEnabled} />
+      <HomeClient username={username} isAdmin={isAdmin} role={role} historyEnabled={historyEnabled} flags={flags} />
     </div>
   );
 }

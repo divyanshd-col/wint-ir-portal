@@ -467,159 +467,16 @@ const EXAMPLE_QUERIES = [
   'Which IQS parameters are failing most often?',
 ];
 
-// ── Multi-select dropdown ─────────────────────────────────────────────────────
-
-function MultiSelect({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: { value: string; label: string }[];
-  value: string[];
-  onChange: (v: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (v: string) => {
-    onChange(value.includes(v) ? value.filter(x => x !== v) : [...value, v]);
-  };
-
-  const displayLabel = value.length === 0 ? `All ${label}` :
-    value.length === 1 ? options.find(o => o.value === value[0])?.label ?? value[0] :
-    `${value.length} ${label}`;
-
-  const isActive = value.length > 0;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={`h-7 px-2.5 text-xs rounded-lg flex items-center gap-1 whitespace-nowrap transition-colors border ${
-          isActive
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-medium'
-            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-        }`}
-      >
-        {displayLabel}
-        <svg className="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute top-8 left-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[160px] max-h-52 overflow-y-auto py-1">
-          {options.map(opt => (
-            <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs">
-              <input
-                type="checkbox"
-                checked={value.includes(opt.value)}
-                onChange={() => toggle(opt.value)}
-                className="accent-emerald-600"
-              />
-              {opt.label}
-            </label>
-          ))}
-          {value.length > 0 && (
-            <button
-              onClick={() => onChange([])}
-              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Disposition multi-select ──────────────────────────────────────────────────
-
-function DispositionSelect({
-  trees,
-  value,
-  onChange,
-}: {
-  trees: DispositionTree[];
-  value: string[];
-  onChange: (v: string[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const toggle = (d: string) => onChange(value.includes(d) ? value.filter(x => x !== d) : [...value, d]);
-
-  const label = value.length === 0 ? 'All Dispositions' :
-    value.length === 1 ? value[0] : `${value.length} Dispositions`;
-
-  const isActive = value.length > 0;
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={`h-7 px-2.5 text-xs rounded-lg flex items-center gap-1 whitespace-nowrap max-w-[160px] truncate transition-colors border ${
-          isActive
-            ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-medium'
-            : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-        }`}
-      >
-        <span className="truncate">{label}</span>
-        <svg className="w-3 h-3 opacity-60 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {open && (
-        <div className="absolute top-8 left-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg w-52 max-h-64 overflow-y-auto py-1">
-          {trees.map(t => (
-            <label key={t.disposition} className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 cursor-pointer text-xs font-medium">
-              <input
-                type="checkbox"
-                checked={value.includes(t.disposition)}
-                onChange={() => toggle(t.disposition)}
-                className="accent-emerald-600"
-              />
-              {t.disposition}
-            </label>
-          ))}
-          {value.length > 0 && (
-            <button onClick={() => onChange([])} className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-600 border-t border-gray-100 mt-1">
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface InsightsChatClientProps {
   username?: string;
   role?: string;
   isAdmin?: boolean;
+  flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
 }
 
-export default function InsightsChatClient({ username = 'admin', role = 'admin', isAdmin = true }: InsightsChatClientProps) {
+export default function InsightsChatClient({ username = 'admin', role = 'admin', isAdmin = true, flags }: InsightsChatClientProps) {
   // Filter bar state
   const [dateRange, setDateRange] = useState<'7d' | '15d' | 'this_month' | 'last_month' | 'custom'>('7d');
   const [customFrom, setCustomFrom] = useState('');
@@ -628,7 +485,16 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [csatLabels, setCsatLabels]     = useState<string[]>(['good', 'bad', 'could_be_better']);
   const [convTypes, setConvTypes]       = useState<string[]>([]);
   const [minUserMsgs, setMinUserMsgs]   = useState<number | null>(null);
-  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) setFiltersOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [filtersOpen]);
 
   const [dispTrees, setDispTrees] = useState<DispositionTree[]>([]);
 
@@ -642,7 +508,7 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const [chatSessions, setChatSessions] = useState<Array<{ id: string; title: string }>>([]);
   const [activeId, setActiveId] = useState('');
   const [allMessages, setAllMessages] = useState<Record<string, ChatMessage[]>>({});
-  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [, setSessionsLoaded] = useState(false);
   const activeIdRef = useRef('');
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
 
@@ -669,15 +535,8 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
   const inputRef      = useRef<HTMLTextAreaElement>(null);
   const isInitialLoad = useRef(true);
 
-  // Derived: non-default filters active
+  // Default CSAT selection (used by filter chips + reset)
   const defaultCsat = ['good', 'bad', 'could_be_better'];
-  const hasNonDefaultFilters =
-    dateRange !== '7d' ||
-    dispositions.length > 0 ||
-    convTypes.length > 0 ||
-    minUserMsgs != null ||
-    csatLabels.length !== defaultCsat.length ||
-    !csatLabels.every(c => defaultCsat.includes(c));
 
   const resetFilters = () => {
     setDateRange('7d');
@@ -1073,152 +932,181 @@ export default function InsightsChatClient({ username = 'admin', role = 'admin',
     filterChips.push({ label: `>=${minUserMsgs} user msgs`, onRemove: () => setMinUserMsgs(null) });
   }
 
+  const chipCls = (active: boolean) =>
+    `h-7 px-2.5 text-xs rounded-lg border transition-colors ${
+      active
+        ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-medium'
+        : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+    }`;
+
   return (
     <>
     <div className="flex h-screen bg-[#1a1a1a]">
       {/* Sidebar */}
-      <PageNav username={username} role={role} isAdmin={isAdmin} />
+      <PageNav
+        username={username}
+        role={role}
+        isAdmin={isAdmin}
+        flags={flags}
+        analytics={{
+          sessions: chatSessions,
+          activeId,
+          streaming,
+          onSelect: (id) => { if (!streaming) { setActiveId(id); activeIdRef.current = id; } },
+          onNew: newChat,
+          onClose: closeChat,
+        }}
+      />
 
       {/* Main */}
       <div className="flex flex-col flex-1 min-w-0 bg-[#f5f3ee]">
 
-        {/* Header */}
-        <div className="bg-white border-b border-gray-100 px-6 py-3 flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-sm font-semibold text-gray-900">Insight Chat</h1>
-            <p className="text-xs text-gray-400">Ask questions about CX conversation data</p>
-          </div>
-          {hasNonDefaultFilters && (
-            <button
-              onClick={resetFilters}
-              className="text-xs text-gray-400 hover:text-red-500 transition-colors flex items-center gap-1"
-            >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-              Reset filters
-            </button>
-          )}
-        </div>
-
-        {/* Chat tabs */}
-        <div className="bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-1.5 overflow-x-auto shrink-0">
-          {!sessionsLoaded && (
-            <span className="text-xs text-gray-400 animate-pulse px-1">Loading sessions…</span>
-          )}
-          {chatSessions.map(session => (
-            <button
-              key={session.id}
-              onClick={() => { if (!streaming) { setActiveId(session.id); activeIdRef.current = session.id; } }}
-              className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all max-w-[180px] ${
-                session.id === activeId
-                  ? 'bg-emerald-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              <span className="truncate">{session.title}</span>
-              {chatSessions.length > 1 && (
-                <span
-                  onClick={e => { e.stopPropagation(); closeChat(session.id); }}
-                  className={`shrink-0 ml-0.5 text-[14px] leading-none ${session.id === activeId ? 'opacity-60 hover:opacity-100' : 'opacity-30 hover:opacity-60'}`}
-                >×</span>
-              )}
-            </button>
-          ))}
-          <button
-            onClick={newChat}
-            disabled={streaming}
-            title="New chat"
-            className="shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:opacity-40 transition"
-          >
-            + New
-          </button>
-        </div>
-
         {/* Filter bar */}
         <div className="bg-white border-b border-gray-100 px-6 py-2.5 shrink-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Time Range dropdown */}
-            <div className="relative">
+          <div className="flex items-center justify-between gap-2">
+            {/* Filters dropdown */}
+            <div className="relative" ref={filtersRef}>
               <button
-                onClick={() => setShowTimeDropdown(v => !v)}
-                className={`flex items-center gap-1.5 h-7 px-3 text-[11px] border rounded-lg transition font-medium ${
-                  showTimeDropdown ? 'border-emerald-400 bg-emerald-50 text-emerald-700' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                onClick={() => setFiltersOpen(o => !o)}
+                className={`flex items-center gap-1.5 h-8 px-3 text-xs border rounded-lg transition font-medium ${
+                  filtersOpen || filterChips.length > 0
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                 }`}
               >
-                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="2" y="3" width="12" height="11" rx="1.5"/>
-                  <path d="M5 1v3M11 1v3M2 7h12"/>
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M2.5 3.5h11M4.5 8h7M6.5 12.5h3" strokeLinecap="round" />
                 </svg>
-                {({ '7d': '7 days', '15d': '15 days', 'this_month': 'This month', 'last_month': 'Last month', 'custom': customFrom && customTo ? `${customFrom} → ${customTo}` : 'Custom' } as Record<string, string>)[dateRange]}
-                <svg width="9" height="9" viewBox="0 0 10 10" fill="currentColor"><path d="M2 3l3 3 3-3" stroke="currentColor" strokeWidth="1.2" fill="none"/></svg>
+                Filters
+                {filterChips.length > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-semibold">
+                    {filterChips.length}
+                  </span>
+                )}
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
+                  className={`transition-transform ${filtersOpen ? 'rotate-180' : ''}`}>
+                  <path d="M4 6l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
-              {showTimeDropdown && (
-                <div className="absolute top-full left-0 mt-1 bg-white border border-gray-100 rounded-xl shadow-lg z-50 p-1.5 min-w-[160px]">
-                  {([
-                    { id: '7d',         label: '7 days' },
-                    { id: '15d',        label: '15 days' },
-                    { id: 'this_month', label: 'This month' },
-                    { id: 'last_month', label: 'Last month' },
-                    { id: 'custom',     label: 'Custom range' },
-                  ] as const).map(opt => (
-                    <button
-                      key={opt.id}
-                      onClick={() => { setDateRange(opt.id); if (opt.id !== 'custom') setShowTimeDropdown(false); }}
-                      className={`w-full text-left px-3 py-1.5 text-xs rounded-lg transition ${
-                        dateRange === opt.id ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'text-gray-600 hover:bg-gray-50'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                  {dateRange === 'custom' && (
-                    <div className="px-2 pt-2 pb-1 border-t border-gray-100 mt-1 space-y-1.5">
-                      <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                        className="w-full h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300" />
-                      <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
-                        className="w-full h-7 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300" />
-                      <button onClick={() => setShowTimeDropdown(false)}
-                        className="w-full py-1.5 bg-emerald-600 text-white text-xs rounded-lg font-semibold mt-0.5 hover:bg-emerald-700 transition">
-                        Apply
-                      </button>
+
+              {filtersOpen && (
+                <div className="absolute top-full left-0 mt-2 w-[360px] max-h-[70vh] overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 flex flex-col gap-4">
+                  {/* Date range */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Date range</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {([
+                        { id: '7d',         label: '7 days' },
+                        { id: '15d',        label: '15 days' },
+                        { id: 'this_month', label: 'This month' },
+                        { id: 'last_month', label: 'Last month' },
+                        { id: 'custom',     label: 'Custom' },
+                      ] as const).map(opt => (
+                        <button key={opt.id} onClick={() => setDateRange(opt.id)} className={chipCls(dateRange === opt.id)}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                    {dateRange === 'custom' && (
+                      <div className="flex gap-2 mt-2">
+                        <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                          className="flex-1 h-8 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300" />
+                        <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                          className="flex-1 h-8 px-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-emerald-300" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Disposition */}
+                  {dispTrees.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Disposition</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {dispTrees.map(t => (
+                          <button
+                            key={t.disposition}
+                            onClick={() => setDispositions(prev => prev.includes(t.disposition) ? prev.filter(x => x !== t.disposition) : [...prev, t.disposition])}
+                            className={chipCls(dispositions.includes(t.disposition))}
+                          >
+                            {t.disposition}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
+
+                  {/* CSAT */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">CSAT</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {csatOptions.map(o => (
+                        <button
+                          key={o.value}
+                          onClick={() => setCsatLabels(prev => prev.includes(o.value) ? prev.filter(x => x !== o.value) : [...prev, o.value])}
+                          className={chipCls(csatLabels.includes(o.value))}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Conversation type */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Conversation type</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {typeOptions.map(o => (
+                        <button
+                          key={o.value}
+                          onClick={() => setConvTypes(prev => prev.includes(o.value) ? prev.filter(x => x !== o.value) : [...prev, o.value])}
+                          className={chipCls(convTypes.includes(o.value))}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Min user messages */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">Messages sent by customer</p>
+                    <label className="inline-flex items-center gap-1.5 h-8 px-2.5 border border-gray-200 rounded-lg text-xs text-gray-600">
+                      ≥
+                      <input
+                        type="number"
+                        min={1}
+                        max={200}
+                        value={minUserMsgs ?? ''}
+                        onChange={e => setMinUserMsgs(e.target.value ? parseInt(e.target.value) : null)}
+                        placeholder="7"
+                        aria-label="Minimum user messages"
+                        className="w-12 border-none outline-none text-center bg-transparent"
+                      />
+                      msgs
+                    </label>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex justify-end gap-2 border-t border-gray-100 pt-3">
+                    <button onClick={resetFilters}
+                      className="h-8 px-3 text-xs font-medium text-gray-500 hover:text-gray-800 rounded-lg transition">
+                      Clear
+                    </button>
+                    <button onClick={() => setFiltersOpen(false)}
+                      className="h-8 px-4 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition">
+                      Apply
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
-
-            <div className="w-px h-5 bg-gray-200 mx-0.5" />
-
-            <DispositionSelect trees={dispTrees} value={dispositions} onChange={setDispositions} />
-
-            <MultiSelect label="CSAT" options={csatOptions} value={csatLabels} onChange={setCsatLabels} />
-            <MultiSelect label="Types" options={typeOptions} value={convTypes} onChange={setConvTypes} />
-
-            {/* Min user messages filter */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              <span className="text-[11px] text-gray-500 font-semibold whitespace-nowrap">≥</span>
-              <input
-                type="number"
-                min={1}
-                max={200}
-                value={minUserMsgs ?? ''}
-                onChange={e => setMinUserMsgs(e.target.value ? parseInt(e.target.value) : null)}
-                placeholder="7"
-                title="Minimum user messages"
-                className="w-12 text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-center bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-              />
-              <span className="text-[11px] text-gray-400 whitespace-nowrap">user msgs</span>
-            </div>
-
-            <div className="w-px h-5 bg-gray-200 mx-0.5" />
 
             {/* Download transcripts */}
             <button
               onClick={downloadTranscripts}
               disabled={exporting}
               title="Download transcripts matching current filters as Excel"
-              className="flex items-center gap-1.5 h-7 px-3 text-[11px] border border-gray-200 rounded-lg bg-white text-gray-600 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors font-medium shrink-0"
+              className="flex items-center gap-1.5 h-8 px-3 text-xs border border-gray-200 rounded-lg bg-white text-gray-600 hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 transition-colors font-medium shrink-0"
             >
               {exporting ? (
                 <>
