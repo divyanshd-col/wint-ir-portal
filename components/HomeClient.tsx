@@ -10,9 +10,10 @@ interface HomeClientProps {
   isAdmin: boolean;
   role?: string;
   historyEnabled: boolean;
+  flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
 }
 
-export default function HomeClient({ username, isAdmin, role, historyEnabled }: HomeClientProps) {
+export default function HomeClient({ username, isAdmin, role, historyEnabled, flags }: HomeClientProps) {
   // chatKey causes ChatInterface to fully remount (clean slate) on new chat or restore
   const [chatKey, setChatKey] = useState(0);
   const [pendingRestore, setPendingRestore] = useState<SavedConversation | null>(null);
@@ -34,6 +35,7 @@ export default function HomeClient({ username, isAdmin, role, historyEnabled }: 
         isAdmin={isAdmin}
         role={role}
         historyEnabled={historyEnabled}
+        flags={flags}
         onRestoreConversation={handleRestore}
         onNewChat={handleNewChat}
       />

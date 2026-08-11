@@ -1,51 +1,33 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-type Step = 'email' | 'password' | 'done';
 
 export default function SetPasswordPage() {
   const router = useRouter();
-  const [step, setStep]         = useState<Step>('email');
-  const [email, setEmail]       = useState('');
+  const [token, setToken]       = useState<string | null>(null);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+  const [done, setDone]         = useState(false);
 
-  const checkEmail = async (e: React.FormEvent) => {
+  // Read the token from the URL, then strip it from the address bar / history
+  // so it doesn't leak via browser history or a Referer header.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const t = params.get('token');
+    setToken(t);
+    if (t) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!email.toLowerCase().endsWith('@wintwealth.com')) {
-      setError('Only @wintwealth.com email addresses are permitted.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch('/api/auth/check-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Something went wrong.');
-      } else {
-        setStep('password');
-      }
-    } catch {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const setNewPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
       return;
     }
     if (password !== confirm) {
@@ -54,16 +36,16 @@ export default function SetPasswordPage() {
     }
     setLoading(true);
     try {
-      const res = await fetch('/api/register', {
+      const res = await fetch('/api/auth/complete-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ token, password }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Failed to set password.');
       } else {
-        setStep('done');
+        setDone(true);
         setTimeout(() => router.push('/login'), 2500);
       }
     } catch {
@@ -90,7 +72,7 @@ export default function SetPasswordPage() {
           </div>
 
           <div className="px-8 py-8">
-            {step === 'done' ? (
+            {done ? (
               <div className="text-center py-4">
                 <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2d9e4f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -100,62 +82,18 @@ export default function SetPasswordPage() {
                 <h2 className="text-[#1a1a1a] text-lg font-semibold mb-1">Password set!</h2>
                 <p className="text-gray-500 text-sm">Redirecting you to sign in…</p>
               </div>
-            ) : step === 'email' ? (
-              <>
-                <h2 className="text-[#1a1a1a] text-xl font-semibold mb-1">Set your password</h2>
-                <p className="text-gray-500 text-sm mb-6">
-                  Enter your <span className="font-medium text-gray-600">@wintwealth.com</span> email to get started.
-                  Your account and data will be preserved.
+            ) : token === null ? (
+              <div className="text-center py-4">
+                <h2 className="text-[#1a1a1a] text-lg font-semibold mb-1">Invalid link</h2>
+                <p className="text-gray-500 text-sm">
+                  This page needs a valid signup link. Ask your admin to send (or resend) your invite.
                 </p>
-
-                {error && (
-                  <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg mb-4">
-                    {error}
-                  </div>
-                )}
-
-                <form onSubmit={checkEmail} className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={e => setEmail(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
-                      placeholder="you@wintwealth.com"
-                      required
-                      autoComplete="email"
-                      autoFocus
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full bg-[#2d9e4f] hover:bg-[#27883f] text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-60 text-sm"
-                  >
-                    {loading ? 'Checking…' : 'Continue'}
-                  </button>
-                </form>
-
-                <p className="mt-5 text-center text-xs text-gray-400">
-                  Already have a password?{' '}
-                  <a href="/login" className="text-[#2d9e4f] hover:underline font-medium">Sign in</a>
-                </p>
-              </>
+                <a href="/login" className="inline-block mt-4 text-[#2d9e4f] hover:underline font-medium text-sm">Back to sign in</a>
+              </div>
             ) : (
               <>
-                <div className="flex items-center gap-2 mb-5">
-                  <button onClick={() => { setStep('email'); setError(''); }}
-                    className="text-gray-400 hover:text-gray-600 transition">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="15 18 9 12 15 6" />
-                    </svg>
-                  </button>
-                  <div>
-                    <h2 className="text-[#1a1a1a] text-xl font-semibold leading-tight">Choose a password</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">{email}</p>
-                  </div>
-                </div>
+                <h2 className="text-[#1a1a1a] text-xl font-semibold mb-1">Choose a password</h2>
+                <p className="text-gray-500 text-sm mb-6">Set a password to finish signing up.</p>
 
                 {error && (
                   <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-3 rounded-lg mb-4">
@@ -163,7 +101,7 @@ export default function SetPasswordPage() {
                   </div>
                 )}
 
-                <form onSubmit={setNewPassword} className="space-y-4">
+                <form onSubmit={submit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
                     <input
@@ -171,7 +109,7 @@ export default function SetPasswordPage() {
                       value={password}
                       onChange={e => setPassword(e.target.value)}
                       className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
-                      placeholder="Min. 6 characters"
+                      placeholder="Min. 8 characters"
                       required
                       autoComplete="new-password"
                       autoFocus
@@ -197,6 +135,11 @@ export default function SetPasswordPage() {
                     {loading ? 'Saving…' : 'Save Password'}
                   </button>
                 </form>
+
+                <p className="mt-5 text-center text-xs text-gray-400">
+                  Already have a password?{' '}
+                  <a href="/login" className="text-[#2d9e4f] hover:underline font-medium">Sign in</a>
+                </p>
               </>
             )}
           </div>

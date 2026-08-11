@@ -25,17 +25,24 @@ interface SafeConfig {
   defaultAnalyticsPlannerPrompt?: string;
   defaultAnalyticsSynthesizerPrompt?: string;
   conversationHistoryEnabled?: boolean;
+  callAnalysisEnabled?: boolean;
+  cxDashboardEnabled?: boolean;
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
   hasPyannoteKey?: boolean;
 }
 
 interface User {
+  userId?: number;
   email: string;
   username?: string;
+  name?: string;
   agentName?: string;
   role: string;
   isAdmin?: boolean;
+  status?: 'invited' | 'active' | 'disabled';
+  lastLogin?: string | null;
+  dormant?: boolean;
 }
 
 const ADMIN_SECTIONS = [
@@ -102,6 +109,8 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [savingIqsKeys, setSavingIqsKeys] = useState(false);
 
   const [historyEnabled, setHistoryEnabled] = useState(!!config.conversationHistoryEnabled);
+  const [callAnalysisEnabled, setCallAnalysisEnabled] = useState(!!config.callAnalysisEnabled);
+  const [cxDashboardEnabled, setCxDashboardEnabled] = useState(!!config.cxDashboardEnabled);
 
   // ── KB state ───────────────────────────────────────────────────────────────
   const [docs, setDocs] = useState<string[]>(config.knowledgeBaseUrls || []);
@@ -149,7 +158,6 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [newDispositions, setNewDispositions] = useState('');
   const [addingUser, setAddingUser] = useState(false);
   const [userError, setUserError] = useState('');
-  const [editingAgentName, setEditingAgentName] = useState<Record<string, string>>({});
   const [userPage, setUserPage] = useState(0);
   const [userSearch, setUserSearch] = useState('');
   const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
@@ -333,6 +341,18 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     await patchConfig({ conversationHistoryEnabled: next });
   };
 
+  const toggleCallAnalysis = async () => {
+    const next = !callAnalysisEnabled;
+    setCallAnalysisEnabled(next);
+    await patchConfig({ callAnalysisEnabled: next });
+  };
+
+  const toggleCxDashboard = async () => {
+    const next = !cxDashboardEnabled;
+    setCxDashboardEnabled(next);
+    await patchConfig({ cxDashboardEnabled: next });
+  };
+
   const addDoc = async () => {
     if (!newUrl.trim()) return;
     setAddingDoc(true);
@@ -484,7 +504,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   };
 
   const addUser = async () => {
-    if (!newEmail.trim()) return;
+    if (!newEmail.trim() || !newAgentName.trim()) return;
     setAddingUser(true);
     setUserError('');
     try {
@@ -493,8 +513,8 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: newEmail.trim(),
+          name: newAgentName.trim(),
           role: newRole,
-          agentName: newAgentName.trim() || undefined,
           assignedDispositions: newDispositions.trim()
             ? newDispositions.split(',').map(d => d.trim()).filter(Boolean)
             : [],
@@ -507,34 +527,49 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       setNewAgentName('');
       setNewDispositions('');
       setNewRole('agent');
-      showToast('User added');
+      showToast(data.emailed ? 'Invite sent' : 'User created — email not sent, use Resend');
     } finally { setAddingUser(false); }
   };
 
-  const updateUserRole = async (email: string, role: string) => {
+  const updateUserRole = async (userId: number | undefined, role: string) => {
+    if (userId == null) return;
     const res = await fetch('/api/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, role }),
+      body: JSON.stringify({ userId, role }),
     });
     if (res.ok) {
       setUsers(prev => prev.map(u =>
-        u.email === email ? { ...u, role: role as any, isAdmin: role === 'admin' } : u
+        u.userId === userId ? { ...u, role: role as any, isAdmin: role === 'admin' } : u
       ));
     }
   };
 
-  const updateAgentName = async (email: string, agentName: string) => {
+  const setUserStatus = async (userId: number | undefined, status: 'active' | 'disabled') => {
+    if (userId == null) return;
     const res = await fetch('/api/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, agentName }),
+      body: JSON.stringify({ userId, status }),
     });
     if (res.ok) {
-      setUsers(prev => prev.map(u => u.email === email ? { ...u, agentName } : u));
-      setEditingAgentName(prev => { const n = { ...prev }; delete n[email]; return n; });
-      showToast('Agent name updated');
+      setUsers(prev => prev.map(u => u.userId === userId ? { ...u, status } : u));
+      showToast(status === 'disabled' ? 'User disabled' : 'User reactivated');
+    } else {
+      const data = await res.json().catch(() => ({}));
+      showToast(data.error || 'Failed');
     }
+  };
+
+  const resendInvite = async (userId: number | undefined) => {
+    if (userId == null) return;
+    const res = await fetch('/api/users', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, action: 'resend' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    showToast(res.ok && data.emailed ? 'Invite resent' : (data.error || 'Failed to resend'));
   };
 
   const saveAssignments = async () => {
@@ -584,14 +619,6 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     setResetting(false);
   };
 
-  const deleteUser = async (email: string) => {
-    const res = await fetch('/api/users', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    if (res.ok) { setUsers(prev => prev.filter(u => u.email !== email)); showToast('User removed'); }
-  };
 
   const saveSlackToken = async () => {
     if (!slackToken.trim()) return;
@@ -854,6 +881,38 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   className={`relative w-12 h-6 rounded-full transition-colors ${historyEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
                 >
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${historyEnabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Call Analysis (feature flag) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Call Analysis</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Show the Call Analysis page &amp; nav link</p>
+                </div>
+                <button
+                  onClick={toggleCallAnalysis}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${callAnalysisEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${callAnalysisEnabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* CX Dashboard (feature flag) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">CX Dashboard</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Show the CX Dashboard page &amp; nav link</p>
+                </div>
+                <button
+                  onClick={toggleCxDashboard}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${cxDashboardEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${cxDashboardEnabled ? 'left-7' : 'left-1'}`} />
                 </button>
               </div>
             </div>
@@ -1140,34 +1199,35 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 <thead>
                   <tr className="border-b border-gray-100 bg-gray-50/60">
                     <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Role</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">TL</th>
                     <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">QA</th>
-                    <th className="px-4 py-3 w-12" />
+                    <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pagedUsers.map(u => (
                     <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
                       <td className="px-5 py-3 text-gray-700 text-sm truncate max-w-[220px]">{u.email}</td>
+                      <td className="px-4 py-3 text-gray-700 text-sm">
+                        {u.agentName || u.name || '—'}
+                        {u.dormant && <span className="ml-1.5 text-[10px] text-amber-500" title="No login in 60+ days">dormant</span>}
+                      </td>
                       <td className="px-4 py-3">
-                        <input
-                          type="text"
-                          value={editingAgentName[u.email] ?? (u.agentName || '')}
-                          onChange={e => setEditingAgentName(prev => ({ ...prev, [u.email]: e.target.value }))}
-                          onBlur={e => {
-                            const val = e.target.value;
-                            if (val !== (u.agentName || '')) updateAgentName(u.email, val);
-                          }}
-                          placeholder="Agent name…"
-                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
-                        />
+                        {(() => {
+                          const s = u.status || 'active';
+                          const cls = s === 'active' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : s === 'invited' ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-gray-100 text-gray-500 border-gray-200';
+                          return <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-medium border capitalize ${cls}`}>{s}</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         <select
                           value={u.role}
-                          onChange={e => updateUserRole(u.email, e.target.value)}
+                          onChange={e => updateUserRole(u.userId, e.target.value)}
                           className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
                         >
                           <option value="agent">Agent</option>
@@ -1230,12 +1290,26 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                           );
                         })()}
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => deleteUser(u.email)} className="text-gray-300 hover:text-red-500 transition" title="Remove user">
-                          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path d="M2 4h12M5 4V2h6v2M6 7v6M10 7v6M3 4l1 10h8l1-10" />
-                          </svg>
-                        </button>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                          {u.status === 'invited' && (
+                            <button onClick={() => resendInvite(u.userId)}
+                              className="text-xs font-medium text-[#2d9e4f] hover:underline" title="Resend the signup invite email">
+                              Resend
+                            </button>
+                          )}
+                          {u.status === 'disabled' ? (
+                            <button onClick={() => setUserStatus(u.userId, 'active')}
+                              className="text-xs font-medium text-emerald-600 hover:underline" title="Reactivate user">
+                              Reactivate
+                            </button>
+                          ) : (
+                            <button onClick={() => setUserStatus(u.userId, 'disabled')}
+                              className="text-xs font-medium text-gray-400 hover:text-red-500" title="Disable user (retains data)">
+                              Disable
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1288,9 +1362,9 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               </div>
             )}
 
-            {/* Add user */}
+            {/* Invite user */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-              <h3 className="text-sm font-bold text-gray-900">Add / Update User</h3>
+              <h3 className="text-sm font-bold text-gray-900">Invite User</h3>
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
                   <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
@@ -1309,9 +1383,10 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Name (optional)</label>
-                <input type="text" value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Display name for quality reports…"
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Name (must match Robylon exactly)</label>
+                <input type="text" value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Exact name as it appears in call/chat data…"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                <p className="text-[11px] text-gray-400 mt-1">This is the attribution key for their calls &amp; chats — enter it exactly as the source system sends it.</p>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Assigned Dispositions (QA only, comma-separated)</label>
@@ -1320,11 +1395,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               </div>
               {userError && <p className="text-xs text-red-500">{userError}</p>}
               <div className="flex items-center gap-3">
-                <button onClick={addUser} disabled={addingUser || !newEmail.trim()}
+                <button onClick={addUser} disabled={addingUser || !newEmail.trim() || !newAgentName.trim()}
                   className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
-                  {addingUser ? 'Adding…' : '+ Add / Update User'}
+                  {addingUser ? 'Sending…' : 'Send Invite'}
                 </button>
-                <span className="text-xs text-gray-400">After adding, use "Reset Password" below to set their initial password.</span>
+                <span className="text-xs text-gray-400">Creates the account and emails them a single-use signup link (valid 15 days).</span>
               </div>
             </div>
           </div>
@@ -1349,7 +1424,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
                 <input type="password" value={resetPassword} onChange={e => setResetPassword(e.target.value)}
-                  placeholder="Min. 6 characters"
+                  placeholder="Min. 8 characters"
                   className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
               </div>
             </div>
