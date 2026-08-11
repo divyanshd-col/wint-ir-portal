@@ -163,6 +163,12 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
   const [pendingAssignments, setPendingAssignments] = useState<Record<string, { tl_name?: string | null; qa_name?: string | null }>>({});
   const [savingAssignments, setSavingAssignments] = useState(false);
+  // Edit-user modal (correct Name / email)
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
   // Password reset
   const [resetEmail, setResetEmail]       = useState('');
   const [resetPassword, setResetPassword] = useState('');
@@ -570,6 +576,40 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     });
     const data = await res.json().catch(() => ({}));
     showToast(res.ok && data.emailed ? 'Invite resent' : (data.error || 'Failed to resend'));
+  };
+
+  const openEditUser = (u: User) => {
+    setEditUser(u);
+    setEditName(u.agentName || u.name || '');
+    setEditEmail(u.email);
+    setEditError('');
+  };
+
+  const saveUserEdit = async () => {
+    if (!editUser?.userId) return;
+    const name = editName.trim();
+    const email = editEmail.trim().toLowerCase();
+    if (!name) { setEditError('Name cannot be empty.'); return; }
+    if (!email.endsWith('@wintwealth.com')) { setEditError('Email must be a @wintwealth.com address.'); return; }
+    setSavingEdit(true);
+    setEditError('');
+    try {
+      const res = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: editUser.userId, name, email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setEditError(data.error || 'Failed to update user.'); return; }
+      setEditUser(null);
+      await loadUsers();
+      const emailChanged = email !== editUser.email.toLowerCase();
+      showToast(emailChanged ? 'User updated — any pending invite link was invalidated' : 'User updated');
+    } catch {
+      setEditError('Network error — try again.');
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   const saveAssignments = async () => {
@@ -1292,6 +1332,10 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                          <button onClick={() => openEditUser(u)}
+                            className="text-xs font-medium text-gray-500 hover:text-gray-800 hover:underline" title="Edit name or email">
+                            Edit
+                          </button>
                           {u.status === 'invited' && (
                             <button onClick={() => resendInvite(u.userId)}
                               className="text-xs font-medium text-[#2d9e4f] hover:underline" title="Resend the signup invite email">
@@ -1406,6 +1450,43 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
 
           );
         })()}
+
+        {/* Edit user modal — correct Name (attribution key) / email */}
+        {editUser && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !savingEdit && setEditUser(null)}>
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Edit user</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{editUser.email}</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Name (must match Robylon exactly)</label>
+                <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                <p className="text-[11px] text-gray-400 mt-1">Changing this re-links their call/chat attribution to the new name.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
+                <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                {editUser.status === 'invited' && (
+                  <p className="text-[11px] text-amber-600 mt-1">This user hasn&apos;t signed up yet — changing the email invalidates their current invite link. Use Resend afterward.</p>
+                )}
+              </div>
+              {editError && <p className="text-xs text-red-500">{editError}</p>}
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button onClick={() => setEditUser(null)} disabled={savingEdit}
+                  className="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-800 rounded-xl disabled:opacity-50 transition">
+                  Cancel
+                </button>
+                <button onClick={saveUserEdit} disabled={savingEdit || !editName.trim() || !editEmail.trim()}
+                  className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                  {savingEdit ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Reset Password — admin only */}
         {activeSection === 'users' && (

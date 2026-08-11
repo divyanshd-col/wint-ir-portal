@@ -76,7 +76,8 @@ export async function resolveUserIdByName(agentName: string): Promise<number | n
 export type AuditAction =
   | 'invite' | 'resend_invite' | 'signup_completed'
   | 'login_success' | 'login_fail'
-  | 'role_change' | 'status_change' | 'signup_link_expired';
+  | 'role_change' | 'status_change' | 'signup_link_expired'
+  | 'name_change' | 'email_change';
 
 export async function audit(
   action: AuditAction,
@@ -184,6 +185,51 @@ export async function changeStatus(userId: number, status: UserStatus, actorEmai
       `UPDATE users SET status = $1, status_changed_at = NOW(), status_changed_by = $2 WHERE user_id = $3`,
       [status, normalizeEmail(actorEmail), userId]);
     await audit('status_change', { actorEmail, targetEmail: cur.email, detail: { from: cur.status, to: status } }, tx);
+  });
+}
+
+export interface UpdateProfileInput { name?: string; email?: string; }
+
+/** Admin edit of a user's Name and/or email. Normalizes, enforces uniqueness
+ *  (throws 23505 → route maps to 409), and keeps side effects consistent:
+ *   - email change → invalidates any outstanding signup token (it was bound to
+ *     the old email), and audits `email_change`.
+ *   - name change  → re-points agent attribution to follow the corrected name
+ *     (unlink the old agent, link the agent whose name now matches), and audits
+ *     `name_change`.
+ *  Returns the updated row. */
+export async function updateUserProfile(
+  userId: number,
+  input: UpdateProfileInput,
+  actorEmail: string,
+): Promise<DbUser> {
+  return withTransaction(async (tx) => {
+    const rows = await tx.query<DbUser>(`SELECT ${USER_COLS} FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
+    const cur = rows[0];
+    if (!cur) throw new Error('User not found');
+
+    const newEmail = input.email !== undefined ? normalizeEmail(input.email) : cur.email;
+    const newName = input.name !== undefined ? normalizeName(input.name) : cur.name;
+    const emailChanged = newEmail !== cur.email;
+    const nameChanged = newName !== cur.name;
+    if (!emailChanged && !nameChanged) return cur;
+
+    await tx.query(`UPDATE users SET email = $1, name = $2 WHERE user_id = $3`, [newEmail, newName, userId]);
+
+    if (emailChanged) {
+      await tx.query(`UPDATE signup_tokens SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL`, [userId]);
+      await audit('email_change', { actorEmail, targetEmail: newEmail, detail: { from: cur.email, to: newEmail } }, tx);
+    }
+    if (nameChanged) {
+      // Re-point agent attribution: drop the old link, attach the agent (if any)
+      // whose name now matches the corrected Name.
+      await tx.query(`UPDATE agents SET user_id = NULL WHERE user_id = $1`, [userId]);
+      await tx.query(`UPDATE agents SET user_id = $1 WHERE user_id IS NULL AND name = $2`, [userId, newName]);
+      await audit('name_change', { actorEmail, targetEmail: newEmail, detail: { from: cur.name, to: newName } }, tx);
+    }
+
+    const updated = await tx.query<DbUser>(`SELECT ${USER_COLS} FROM users WHERE user_id = $1`, [userId]);
+    return updated[0];
   });
 }
 
