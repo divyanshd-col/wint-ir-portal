@@ -94,8 +94,10 @@ function buildWow(
   return weeks.map(w => {
     const s = sumMap.get(w);
     const pm = paramMap.get(w) ?? {};
-    const weightedIqs = isChat ? calculateWeightedOverallIQS(pm, 'human', { roundDecimals: 1 }) : null;
-    return { week_start: w, csat_pct: s?.csat_pct ?? null, iqs: weightedIqs ?? (s?.iqs ?? null), volume: s?.volume ?? 0, params: pm };
+    const weightedIqs = isChat
+      ? (s?.iqs ?? calculateWeightedOverallIQS(pm, 'human', { roundDecimals: 1 }))
+      : null;
+    return { week_start: w, csat_pct: s?.csat_pct ?? null, iqs: weightedIqs, volume: s?.volume ?? 0, params: pm };
   });
 }
 
@@ -232,8 +234,12 @@ export async function GET(req: NextRequest) {
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([
     Promise.all([
-      query<{ csat_pct: number|null; iqs: number|null; volume: number }>(`
-        SELECT ${CHAT_SUMMARY_SELECT}
+      query<{ csat_pct: number|null; iqs: number|null; volume: number; parameters?: any }>(`
+        SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
+                     / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
+               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               COUNT(c.id)::int AS volume,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -415,7 +421,8 @@ export async function GET(req: NextRequest) {
     const k = normKey(r.param_key);
     if (chatPeriodParamMap[k] == null) chatPeriodParamMap[k] = r.pass_rate;
   }
-  const chatWeightedIqs = calculateWeightedOverallIQS(chatPeriodParamMap, 'human', { roundDecimals: 1 }) ?? (chatStatRows[0]?.iqs ?? null);
+  const chatPeriodPooled = extractPooledParams(chatStatRows[0]?.parameters || []);
+  const chatWeightedIqs = calculateWeightedOverallIQS(chatPeriodPooled, 'human', { roundDecimals: 1 }) ?? (chatStatRows[0]?.iqs ?? null);
 
   return NextResponse.json({
     agentName,
