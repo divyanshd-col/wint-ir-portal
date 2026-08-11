@@ -48,4 +48,33 @@ export async function query<T = any>(sql: string, params?: any[]): Promise<T[]> 
     client.release();
   }
 }
+
+// A client bound to a single transaction — same query(sql, params) shape as
+// the module-level `query()`, but scoped to the caller's BEGIN/COMMIT.
+export interface TxClient {
+  query<T = any>(sql: string, params?: any[]): Promise<T[]>;
+}
+
+/**
+ * Runs `fn` inside a BEGIN/COMMIT transaction on a single dedicated client.
+ * Rolls back and rethrows on any error. Use for multi-statement mutations
+ * that must not partially apply (e.g. user creation + audit write).
+ */
+export async function withTransaction<T>(fn: (tx: TxClient) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const tx: TxClient = {
+      query: async (sql, params) => (await client.query(sql, params)).rows,
+    };
+    const result = await fn(tx);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 // Hot-reload trigger.
