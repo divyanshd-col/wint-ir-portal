@@ -1333,23 +1333,23 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                           <button onClick={() => openEditUser(u)}
-                            className="text-xs font-medium text-gray-500 hover:text-gray-800 hover:underline" title="Edit name or email">
+                            className="text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors" title="Edit name or email">
                             Edit
                           </button>
                           {u.status === 'invited' && (
                             <button onClick={() => resendInvite(u.userId)}
-                              className="text-xs font-medium text-[#2d9e4f] hover:underline" title="Resend the signup invite email">
+                              className="text-xs font-medium text-gray-500 hover:text-[#2d9e4f] transition-colors" title="Resend the signup invite email">
                               Resend
                             </button>
                           )}
                           {u.status === 'disabled' ? (
                             <button onClick={() => setUserStatus(u.userId, 'active')}
-                              className="text-xs font-medium text-emerald-600 hover:underline" title="Reactivate user">
+                              className="text-xs font-medium text-gray-500 hover:text-[#2d9e4f] transition-colors" title="Reactivate user">
                               Reactivate
                             </button>
                           ) : (
                             <button onClick={() => setUserStatus(u.userId, 'disabled')}
-                              className="text-xs font-medium text-gray-400 hover:text-red-500" title="Disable user (retains data)">
+                              className="text-xs font-medium text-gray-500 hover:text-red-500 transition-colors" title="Disable user (retains data)">
                               Disable
                             </button>
                           )}
