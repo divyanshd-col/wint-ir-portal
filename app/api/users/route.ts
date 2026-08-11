@@ -19,23 +19,43 @@ async function adminOnly() {
 
 const DORMANT_DAYS = 60;
 
-// GET — list users (no password hashes)
+// GET — list users (no password hashes). Reads the DB; if the users table
+// isn't there yet (pre-migration dual-read window), falls back to the legacy
+// config.users blob so the admin page never 500s during rollout.
 export async function GET() {
   if (!await adminOnly()) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const users = await listUsers();
   const now = Date.now();
-  return NextResponse.json(users.map(u => ({
-    userId: u.user_id,
-    email: u.email,
-    name: u.name,
-    role: u.role,
-    status: u.status,
-    isAdmin: u.role === 'admin',
-    agentName: u.name,
-    assignedDispositions: u.assigned_dispositions || [],
-    lastLogin: u.last_login,
-    dormant: !!u.last_login && (now - new Date(u.last_login).getTime()) > DORMANT_DAYS * 864e5,
-  })));
+  try {
+    const users = await listUsers();
+    return NextResponse.json(users.map(u => ({
+      userId: u.user_id,
+      email: u.email,
+      name: u.name,
+      role: u.role,
+      status: u.status,
+      isAdmin: u.role === 'admin',
+      agentName: u.name,
+      assignedDispositions: u.assigned_dispositions || [],
+      lastLogin: u.last_login,
+      dormant: !!u.last_login && (now - new Date(u.last_login).getTime()) > DORMANT_DAYS * 864e5,
+    })));
+  } catch (err) {
+    console.error('[users] DB list failed, falling back to blob:', (err as Error)?.message);
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig();
+    return NextResponse.json((config.users || []).map(u => ({
+      userId: undefined,
+      email: u.email || u.username,
+      name: u.agentName || '',
+      role: u.role || (u.isAdmin ? 'admin' : 'agent'),
+      status: 'active' as const,
+      isAdmin: u.role === 'admin' || !!u.isAdmin,
+      agentName: u.agentName || '',
+      assignedDispositions: u.assignedDispositions || [],
+      lastLogin: null,
+      dormant: false,
+    })));
+  }
 }
 
 // POST — invite a user (email + name + role) → creates invited user, emails link
