@@ -56,6 +56,11 @@ export async function getUserByName(name: string): Promise<DbUser | null> {
   return rows[0] ?? null;
 }
 
+export async function getUserById(userId: number): Promise<DbUser | null> {
+  const rows = await query<DbUser>(`SELECT ${USER_COLS} FROM users WHERE user_id = $1`, [userId]);
+  return rows[0] ?? null;
+}
+
 export async function listUsers(): Promise<DbUser[]> {
   return query<DbUser>(`SELECT ${USER_COLS} FROM users ORDER BY name ASC`);
 }
@@ -196,4 +201,15 @@ export async function changeRole(userId: number, role: UserRole, actorEmail: str
 
 export async function recordLogin(userId: number): Promise<void> {
   await query(`UPDATE users SET last_login = NOW() WHERE user_id = $1`, [userId]);
+}
+
+/** Admin-initiated password set. Returns true if a DB user row was updated
+ *  (false → caller should fall back to the legacy blob during dual-read). */
+export async function setPasswordByEmail(email: string, password: string): Promise<boolean> {
+  const passwordHash = await bcrypt.hash(password, 10);
+  const rows = await query<{ user_id: number }>(
+    `UPDATE users SET password_hash = $1 WHERE email = $2 RETURNING user_id`,
+    [passwordHash, normalizeEmail(email)],
+  );
+  return rows.length > 0;
 }
