@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import UsersManager, { type User } from './settings/UsersManager';
 
 interface SafeConfig {
@@ -38,8 +38,6 @@ const ADMIN_SECTIONS = [
   { id: 'kb', label: 'Knowledge Base' },
   { id: 'prompt', label: 'Prompts' },
   { id: 'users', label: 'Users' },
-  { id: 'tl', label: 'Team Leads' },
-  { id: 'qa', label: 'QA Assignments' },
   { id: 'integrations', label: 'Integrations' },
 ];
 const SECURITY_SECTION = { id: 'security', label: 'Security' };
@@ -137,7 +135,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
 
   const [activePromptTab, setActivePromptTab] = useState('chat');
 
-  // ── Users state (shared with the Team Leads section; Users UI lives in UsersManager) ──
+  // ── Users state (Users / Teams / QA Dispositions UI lives in UsersManager) ──
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
@@ -156,47 +154,6 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [qualitySheetUrl, setQualitySheetUrl] = useState(config.qualityAlertSheetUrl || '');
   const [savingSheet, setSavingSheet] = useState(false);
   const [sheetSaved, setSheetSaved] = useState(false);
-
-  // ── QA Assignments state ───────────────────────────────────────────────────
-  const [qaMap, setQaMap] = useState<{ email: string; dispositions: string[] }[]>([]);
-  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
-  const [loadingQA, setLoadingQA] = useState(false);
-  const [editingQA, setEditingQA] = useState<string | null>(null); // email being edited
-  const [editingDispositions, setEditingDispositions] = useState<string[]>([]);
-  const [savingQA, setSavingQA] = useState(false);
-  const [newQAEmail, setNewQAEmail] = useState('');
-
-  const loadQAAssignments = async () => {
-    setLoadingQA(true);
-    try {
-      const data = await fetch('/api/cx/qa/disposition-config').then(r => r.json());
-      setQaMap(data.map ?? []);
-      setAvailableDispositions(data.availableDispositions ?? []);
-    } catch {} finally { setLoadingQA(false); }
-  };
-
-  const saveQAAssignment = async (email: string, dispositions: string[]) => {
-    setSavingQA(true);
-    try {
-      const res = await fetch('/api/cx/qa/disposition-config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, dispositions }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setQaMap(data.map ?? []);
-        setEditingQA(null);
-        showToast('Dispositions saved');
-      }
-    } finally { setSavingQA(false); }
-  };
-
-  const toggleDisposition = (d: string) => {
-    setEditingDispositions(prev =>
-      prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
-    );
-  };
 
   // ── Password change state ──────────────────────────────────────────────────
   const [currentPassword, setCurrentPassword] = useState('');
@@ -243,7 +200,6 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   };
 
   useEffect(() => { loadUsers(); }, []);
-  useEffect(() => { if (activeSection === 'qa') loadQAAssignments(); }, [activeSection]);
   useEffect(() => { if (activeSection === 'kb') loadDocNamesFromDrive(); }, [activeSection]);
 
 
@@ -588,7 +544,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 max-w-3xl mx-auto px-8 py-10 space-y-10">
+      <main className={`flex-1 w-full mx-auto px-8 py-10 space-y-10 ${activeSection === 'users' ? 'max-w-6xl' : 'max-w-3xl'}`}>
 
         {/* ── GENERAL ── */}
         {activeSection === 'general' && (
@@ -1040,203 +996,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
         )}
 
 
-        {/* ── TEAM LEADS ── */}
-        {activeSection === 'tl' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Team Leads</h2>
-                <p className="text-sm text-gray-500 mt-1">Users with the TL role and their agent assignments</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/60">
-                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agents Managed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.filter(u => u.role === 'tl').map(u => {
-                    const count = Object.values(agentAssignments).filter(a => a.tl_name === u.agentName).length;
-                    return (
-                      <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
-                        <td className="px-5 py-3 text-gray-700">{u.email}</td>
-                        <td className="px-4 py-3 text-gray-600">{u.agentName || <span className="text-gray-400 italic">No agent name set</span>}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-medium text-gray-700">{count}</span>
-                          <span className="text-gray-400 text-xs ml-1">agent{count !== 1 ? 's' : ''}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {users.filter(u => u.role === 'tl').length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-8">No Team Leads yet. Add a user with role &quot;TL&quot; in the Users section.</p>
-              )}
-            </div>
-            <p className="text-xs text-gray-400">To add a new Team Lead, go to the Users section and set their role to &quot;TL&quot;. Then assign agents to them using the TL column in the users table.</p>
-          </div>
-        )}
-
         {/* ── INTEGRATIONS ── */}
-        {/* ── QA ASSIGNMENTS ── */}
-        {activeSection === 'qa' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">QA Assignments</h2>
-              <p className="text-sm text-gray-400 mt-1">Map QA analysts to the dispositions they are responsible for scoring.</p>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              {/* Add new assignment row */}
-              <div className="p-4 border-b border-gray-100 flex items-center gap-3">
-                <input
-                  type="email"
-                  value={newQAEmail}
-                  onChange={e => setNewQAEmail(e.target.value)}
-                  placeholder="qa@wintwealth.com"
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 max-w-xs"
-                />
-                <button
-                  onClick={() => {
-                    if (!newQAEmail.trim()) return;
-                    const existing = qaMap.find(e => e.email.toLowerCase() === newQAEmail.trim().toLowerCase());
-                    setEditingQA(newQAEmail.trim());
-                    setEditingDispositions(existing?.dispositions ?? []);
-                    setNewQAEmail('');
-                  }}
-                  disabled={!newQAEmail.trim()}
-                  className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-40 transition"
-                >
-                  + Add / Edit
-                </button>
-              </div>
-
-              {loadingQA ? (
-                <div className="p-8 text-center text-sm text-gray-400">Loading…</div>
-              ) : qaMap.length === 0 ? (
-                <div className="p-8 text-center text-sm text-gray-400">No QA assignments yet. Enter an email above to get started.</div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase text-gray-400 tracking-wide">
-                      <th className="px-4 py-3 text-left font-medium">QA Email</th>
-                      <th className="px-4 py-3 text-left font-medium">Assigned Dispositions</th>
-                      <th className="px-4 py-3 text-right font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {qaMap.map(entry => (
-                      <React.Fragment key={entry.email}>
-                        <tr className="border-b border-gray-50 hover:bg-gray-50 transition">
-                          <td className="px-4 py-3 font-mono text-xs text-gray-600 align-top pt-4">{entry.email}</td>
-                          <td className="px-4 py-3 align-top">
-                            {entry.dispositions.length === 0 ? (
-                              <span className="text-gray-300 text-xs">None assigned</span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1.5">
-                                {entry.dispositions.map(d => (
-                                  <span key={d} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                    {d}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right align-top">
-                            <button
-                              onClick={() => {
-                                setEditingQA(entry.email);
-                                setEditingDispositions([...entry.dispositions]);
-                              }}
-                              className="text-xs text-[#2d9e4f] hover:underline font-semibold"
-                            >
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                        {editingQA === entry.email && (
-                          <tr className="border-b border-gray-100 bg-emerald-50/40">
-                            <td colSpan={3} className="px-4 py-4">
-                              <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Select dispositions for {entry.email}</p>
-                              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 max-h-64 overflow-y-auto mb-4">
-                                {availableDispositions.map(d => (
-                                  <label key={d} className="flex items-center gap-2 cursor-pointer group">
-                                    <input
-                                      type="checkbox"
-                                      checked={editingDispositions.includes(d)}
-                                      onChange={() => toggleDisposition(d)}
-                                      className="accent-[#2d9e4f] w-3.5 h-3.5"
-                                    />
-                                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{d}</span>
-                                  </label>
-                                ))}
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <button
-                                  onClick={() => saveQAAssignment(entry.email, editingDispositions)}
-                                  disabled={savingQA}
-                                  className="px-4 py-1.5 bg-[#2d9e4f] text-white rounded-lg text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
-                                >
-                                  {savingQA ? 'Saving…' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={() => setEditingQA(null)}
-                                  className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
-                                >
-                                  Cancel
-                                </button>
-                                <span className="text-xs text-gray-400">{editingDispositions.length} selected</span>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            {/* Inline editor for new email (not yet in map) */}
-            {editingQA && !qaMap.find(e => e.email === editingQA) && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Select dispositions for {editingQA}</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 max-h-64 overflow-y-auto mb-4">
-                  {availableDispositions.map(d => (
-                    <label key={d} className="flex items-center gap-2 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={editingDispositions.includes(d)}
-                        onChange={() => toggleDisposition(d)}
-                        className="accent-[#2d9e4f] w-3.5 h-3.5"
-                      />
-                      <span className="text-sm text-gray-700 group-hover:text-gray-900">{d}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => saveQAAssignment(editingQA, editingDispositions)}
-                    disabled={savingQA}
-                    className="px-4 py-1.5 bg-[#2d9e4f] text-white rounded-lg text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
-                  >
-                    {savingQA ? 'Saving…' : 'Save'}
-                  </button>
-                  <button onClick={() => setEditingQA(null)} className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">
-                    Cancel
-                  </button>
-                  <span className="text-xs text-gray-400">{editingDispositions.length} selected</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {activeSection === 'integrations' && (
           <div className="space-y-8">
             <h2 className="text-xl font-bold text-gray-900">Integrations</h2>
