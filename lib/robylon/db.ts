@@ -425,9 +425,9 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
     if (opts.includeUncertain) {
-      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND s.parameters ? '__agent_parameters') OR s.parameters ? '__uncertain')`);
+      conditions.push(`(s.iqs_score <= $${params.length} OR s.parameters ? '__uncertain' OR (s.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad')))`);
     } else {
-      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND s.parameters ? '__agent_parameters'))`);
+      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad')))`);
     }
   } else if (opts.includeUncertain) {
     conditions.push(`s.parameters ? '__uncertain'`);
@@ -446,10 +446,10 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   }
   if (opts.disposition) {
     params.push(opts.disposition);
-    conditions.push(`(c.tags->>'disposition') = $${params.length}`);
+    conditions.push(`((c.tags->>'disposition') = $${params.length} OR (c.csat_score = 1 OR c.csat_label = 'bad'))`);
   } else if (opts.dispositions && opts.dispositions.length > 0) {
     params.push(opts.dispositions);
-    conditions.push(`(c.tags->>'disposition') = ANY($${params.length})`);
+    conditions.push(`((c.tags->>'disposition') = ANY($${params.length}) OR (c.csat_score = 1 OR c.csat_label = 'bad'))`);
   }
   if (opts.subDisposition) {
     params.push(opts.subDisposition);

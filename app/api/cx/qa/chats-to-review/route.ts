@@ -139,10 +139,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
   } else {
-    // admin and quality both see all pending chats across all dispositions
+    // admin and quality both see pending chats across assigned dispositions (plus NIL IQS chats with bad CSAT)
     const dispIdx = paramIdx++;
     sqlParams.push(safeDispositions);
-    baseWhere = `c.tags->>'disposition' = ANY($${dispIdx}::text[]) AND i.status IN ('pending', 'reopened') AND (i.iqs_score <= 85 OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters'))`;
+    baseWhere = `(
+      c.tags->>'disposition' = ANY($${dispIdx}::text[])
+      OR (c.csat_score = 1 OR c.csat_label = 'bad')
+    ) AND i.status IN ('pending', 'reopened') AND (
+      (i.iqs_score IS NOT NULL AND (i.iqs_score <= 85 OR c.csat_score = 1 OR c.csat_label = 'bad'))
+      OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
+    )`;
   }
 
   let extraWhere = '';
@@ -289,6 +295,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
+
 
   log.info(ROUTE, 'query-plan', {
     role, email,
