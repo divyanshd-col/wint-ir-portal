@@ -174,12 +174,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      JOIN conversations c ON c.id = i.chat_id
      WHERE (
        c.tags->>'disposition' = ANY($1)
-       OR (c.csat_score = 1 OR c.csat_label = 'bad')
+       OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
      )
        AND c.closed_at >= $2 AND c.closed_at <= $3
        AND (
          (i.call_iqs_score IS NULL AND (
-           (i.iqs_score IS NOT NULL AND (i.iqs_score < 80 OR c.csat_score = 1 OR c.csat_label = 'bad'))
+           (i.iqs_score IS NOT NULL AND i.iqs_score < 80)
            OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
          ))
          OR (i.call_iqs_score IS NOT NULL AND i.call_iqs_score < 80)
