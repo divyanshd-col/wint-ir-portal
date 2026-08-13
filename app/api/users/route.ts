@@ -4,7 +4,7 @@ import { authOptions } from '@/auth';
 import type { UserRole } from '@/next-auth';
 import {
   listUsers, createInvite, createSignupToken, changeRole, changeStatus,
-  getUserById, isUniqueViolation, audit,
+  updateUserProfile, getUserById, isUniqueViolation, audit,
   type UserStatus,
 } from '@/lib/users';
 import { sendInviteEmail, mailerConfigured } from '@/lib/mailer';
@@ -123,6 +123,32 @@ export async function PATCH(req: NextRequest) {
     const emailed = await sendInviteEmail({ to: target.email, name: target.name, token, expiresAt });
     await audit('resend_invite', { actorEmail: actor, targetEmail: target.email }).catch(() => {});
     return NextResponse.json({ success: true, emailed });
+  }
+
+  // Edit Name and/or email (typo recovery + correcting the Robylon attribution key)
+  if (body.name !== undefined || body.email !== undefined) {
+    const patch: { name?: string; email?: string } = {};
+    if (body.name !== undefined) {
+      const nm = normalizeName(body.name || '');
+      if (!nm) return NextResponse.json({ error: 'Name cannot be empty.' }, { status: 400 });
+      patch.name = nm;
+    }
+    if (body.email !== undefined) {
+      const em = normalizeEmail(body.email || '');
+      if (!em || !isAllowedEmail(em)) {
+        return NextResponse.json({ error: 'A valid @wintwealth.com email is required.' }, { status: 400 });
+      }
+      patch.email = em;
+    }
+    try {
+      await updateUserProfile(userId, patch, actor);
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        return NextResponse.json({ error: 'That email or name is already used by another user.' }, { status: 409 });
+      }
+      console.error('[users] profile update failed:', (err as Error)?.message);
+      return NextResponse.json({ error: 'Failed to update user.' }, { status: 500 });
+    }
   }
 
   if (body.role !== undefined) {
