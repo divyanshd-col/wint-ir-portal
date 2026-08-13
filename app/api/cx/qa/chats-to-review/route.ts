@@ -144,9 +144,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     sqlParams.push(safeDispositions);
     baseWhere = `(
       c.tags->>'disposition' = ANY($${dispIdx}::text[])
-      OR (c.csat_score = 1 OR c.csat_label = 'bad')
+      OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
     ) AND i.status IN ('pending', 'reopened') AND (
-      (i.iqs_score IS NOT NULL AND (i.iqs_score <= 85 OR c.csat_score = 1 OR c.csat_label = 'bad'))
+      (i.iqs_score IS NOT NULL AND i.iqs_score <= 85)
       OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
     )`;
   }
