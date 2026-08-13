@@ -449,7 +449,17 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
     conditions.push(`(c.tags->>'disposition') = $${params.length}`);
   } else if (opts.dispositions && opts.dispositions.length > 0) {
     params.push(opts.dispositions);
-    conditions.push(`(c.tags->>'disposition') = ANY($${params.length})`);
+    conditions.push(`(
+      (c.tags->>'disposition') = ANY($${params.length})
+      OR (
+        (
+          LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+          OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+          OR c.tags->>'sub_disposition' = 'No query asked'
+        )
+        AND (c.csat_score = 1 OR c.csat_label = 'bad')
+      )
+    )`);
   }
   if (opts.subDisposition) {
     params.push(opts.subDisposition);

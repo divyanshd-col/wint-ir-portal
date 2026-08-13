@@ -172,7 +172,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
        COUNT(*)::text AS cnt
      FROM iqs_scores i
      JOIN conversations c ON c.id = i.chat_id
-     WHERE c.tags->>'disposition' = ANY($1)
+     WHERE (
+       c.tags->>'disposition' = ANY($1)
+       OR (
+         (
+           LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+           OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+           OR c.tags->>'sub_disposition' = 'No query asked'
+         )
+         AND (c.csat_score = 1 OR c.csat_label = 'bad')
+       )
+     )
        AND c.closed_at >= $2 AND c.closed_at <= $3
        AND (
          (i.call_iqs_score IS NULL AND i.iqs_score < 80)
@@ -194,7 +204,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
        jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL) AS parameters
      FROM iqs_scores i
      JOIN conversations c ON c.id = i.chat_id
-     WHERE c.tags->>'disposition' = ANY($1)
+     WHERE (
+       c.tags->>'disposition' = ANY($1)
+       OR (
+         (
+           LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+           OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+           OR c.tags->>'sub_disposition' = 'No query asked'
+         )
+         AND (c.csat_score = 1 OR c.csat_label = 'bad')
+       )
+     )
        AND c.closed_at >= $2 AND c.closed_at <= $3`,
     [dispositions, fromISO, toISO]
   );

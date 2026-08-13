@@ -83,7 +83,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const configUser = config.users.find(u => (u.email || u.username) === email);
     const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
     if (strictDispositions.length > 0) {
-      extraWhere += ` AND c.tags->>'disposition' = ANY($${paramIdx++})`;
+      extraWhere += ` AND (
+        c.tags->>'disposition' = ANY($${paramIdx++})
+        OR (
+          (
+            LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+            OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+            OR c.tags->>'sub_disposition' = 'No query asked'
+          )
+          AND (c.csat_score = 1 OR c.csat_label = 'bad')
+        )
+      )`;
       sqlParams.push(strictDispositions);
     } else {
       // If no dispositions assigned, show nothing

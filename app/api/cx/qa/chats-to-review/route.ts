@@ -106,7 +106,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       if (dispositionFilters.length > 0) {
         const dispIdx = paramIdx++;
         sqlParams.push(safeDispositions);
-        baseWhere = `i.status = 'reviewed' AND c.tags->>'disposition' = ANY($${dispIdx}::text[])`;
+        baseWhere = `i.status = 'reviewed' AND (
+          c.tags->>'disposition' = ANY($${dispIdx}::text[])
+          OR (
+            (
+              LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+              OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+              OR c.tags->>'sub_disposition' = 'No query asked'
+            )
+            AND (c.csat_score = 1 OR c.csat_label = 'bad')
+          )
+        )`;
       } else {
         baseWhere = `i.status = 'reviewed'`;
       }
@@ -114,7 +124,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       if (dispositionFilters.length > 0) {
         const dispIdx = paramIdx++;
         sqlParams.push(safeDispositions);
-        baseWhere = `i.status = 'reviewed' AND c.tags->>'disposition' = ANY($${dispIdx}::text[])`;
+        baseWhere = `i.status = 'reviewed' AND (
+          c.tags->>'disposition' = ANY($${dispIdx}::text[])
+          OR (
+            (
+              LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+              OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+              OR c.tags->>'sub_disposition' = 'No query asked'
+            )
+            AND (c.csat_score = 1 OR c.csat_label = 'bad')
+          )
+        )`;
       } else {
         baseWhere = `i.status = 'reviewed'`;
       }
@@ -127,6 +147,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         sqlParams.push(safeDispositions);
         baseWhere = `i.status = 'reviewed' AND (
           c.tags->>'disposition' = ANY($${dispIdx}::text[])
+          OR (
+            (
+              LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+              OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+              OR c.tags->>'sub_disposition' = 'No query asked'
+            )
+            AND (c.csat_score = 1 OR c.csat_label = 'bad')
+          )
           OR LOWER(COALESCE(i.reviewed_by, '')) = $${emailIdx}
         )`;
       } else {
@@ -139,10 +167,25 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
   } else {
-    // admin and quality both see all pending chats across all dispositions
+    // admin and quality both see pending chats across assigned dispositions (plus Junk chats with bad CSAT)
     const dispIdx = paramIdx++;
     sqlParams.push(safeDispositions);
-    baseWhere = `c.tags->>'disposition' = ANY($${dispIdx}::text[]) AND i.status IN ('pending', 'reopened') AND (i.iqs_score <= 85 OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters'))`;
+    baseWhere = `(
+      c.tags->>'disposition' = ANY($${dispIdx}::text[])
+      OR (
+        (
+          LOWER(COALESCE(c.tags->>'disposition', '')) LIKE '%junk%'
+          OR LOWER(COALESCE(c.tags->>'sub_disposition', '')) LIKE '%junk%'
+          OR c.tags->>'sub_disposition' = 'No query asked'
+        )
+        AND (c.csat_score = 1 OR c.csat_label = 'bad')
+      )
+    ) AND i.status IN ('pending', 'reopened') AND (
+      i.iqs_score <= 85
+      OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters')
+      OR c.csat_score = 1
+      OR c.csat_label = 'bad'
+    )`;
   }
 
   let extraWhere = '';
