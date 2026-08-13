@@ -190,7 +190,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 - **Documents via WhatsApp** — Always incorrect. Redirecting to email is correct behavior.
 - **Form 15G/H vs Form 121** — Form 121 has replaced 15G/H. Directing customers to submit directly with the entity is correct.
 - **Settlement timelines** — T+3 for first investment; T+1 for subsequent (Mon–Fri only). Never penalise for these.
-- **Internal notes / Slack links** — Evaluate only what was communicated to the customer, not internal notes.
+- **Private Notes / Internal Notes** — Treat private/internal notes as background context to understand internal actions, but do NOT include or evaluate them while judging customer-facing chat quality.
 - **Robylon AI / bot messages** — Treat as internal system entries; do not evaluate.
 - **Finder checks** — Cannot assume a check was skipped unless the agent's response directly contradicts what a check would have shown.
 - **Calls** — Score NA and flag `uncertain_parameters` when a call happened but you cannot evaluate it.
