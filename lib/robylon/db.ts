@@ -446,10 +446,10 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   }
   if (opts.disposition) {
     params.push(opts.disposition);
-    conditions.push(`((c.tags->>'disposition') = $${params.length} OR (c.csat_score = 1 OR c.csat_label = 'bad'))`);
+    conditions.push(`((c.tags->>'disposition') = $${params.length} OR (s.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad')))`);
   } else if (opts.dispositions && opts.dispositions.length > 0) {
     params.push(opts.dispositions);
-    conditions.push(`((c.tags->>'disposition') = ANY($${params.length}) OR (c.csat_score = 1 OR c.csat_label = 'bad'))`);
+    conditions.push(`((c.tags->>'disposition') = ANY($${params.length}) OR (s.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad')))`);
   }
   if (opts.subDisposition) {
     params.push(opts.subDisposition);
