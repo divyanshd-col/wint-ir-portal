@@ -142,10 +142,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     // admin and quality both see pending chats across assigned dispositions (plus NIL IQS chats with bad CSAT)
     const dispIdx = paramIdx++;
     sqlParams.push(safeDispositions);
-    baseWhere = `(
-      c.tags->>'disposition' = ANY($${dispIdx}::text[])
-      OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
-    ) AND i.status IN ('pending', 'reopened') AND (
+    baseWhere = `c.tags->>'disposition' = ANY($${dispIdx}::text[]) AND i.status IN ('pending', 'reopened') AND (
       (i.iqs_score IS NOT NULL AND i.iqs_score <= 85)
       OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
     )`;
