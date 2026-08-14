@@ -325,9 +325,10 @@ Does not cover: correctness (Accuracy) or readability (Clarity).
 ### ExpectationSetting (conditional, graded 0 / 0.5 / 1, else "NA")
 When something is pending, did the bot tell the customer what happens next and by when.
 - 1: a clear next step or timeline was given (for example "being processed today, will be credited to account ...").
-- 0.5: implied but vague ("please allow some time" with no sense of how long or for what).
+- 0.5: implied but vague on an ongoing issue handled by the bot where a specific timeframe could be given.
 - 0: left the customer not knowing what happens next on a pending item.
 - "NA" (unsure false): the query was fully resolved on the spot with nothing pending.
+- **TRANSFER / HANDOVER**: When transferring a chat to a human executive, standard transfer phrasing (e.g. "I'm transferring your chat to an executive", "please allow them some time to connect", "connecting you at the earliest", "an executive will assist you shortly") is FULLY ACCEPTABLE expectation setting for a bot handover. Do NOT penalize or score 0.5 for vague timeline on bot transfer messages. A bot cannot predict human agent queue wait times; informing the user of the transfer is sufficient (score 1).
 Does not cover: whether the timeline quoted was correct (Accuracy).
 
 ### Clarity (binary 0 / 1)
