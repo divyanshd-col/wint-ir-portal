@@ -62,8 +62,13 @@ export async function GET(req: NextRequest) {
   if (['agent', 'tl', 'quality', 'admin'].includes(role)) {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username) === email);
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     selfAgentName = configUser?.agentName || '';
+    if (!selfAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) selfAgentName = dbUser.name;
+    }
     
     const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
     const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
