@@ -34,7 +34,7 @@ export function CallTranscriptCard({
   const [open, setOpen] = useState(defaultOpen ?? index === 0);
 
   const callDate = rec.calledAt
-    ? new Date(rec.calledAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+    ? new Date(rec.calledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
     : null;
 
   const speechSegs = rec.segments.filter((s: any) => s.type === 'speech');

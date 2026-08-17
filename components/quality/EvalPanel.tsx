@@ -470,6 +470,20 @@ export default function EvalPanel({
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  function formatTranscriptDate(ts?: string | number | null): string {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return String(ts);
+    return d.toLocaleString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
   // ── Transcript helpers ────────────────────────────────────────────────────
   const BOT_NAMES  = new Set(['bot', 'myra', 'wint bot', 'wintbot', 'robylon', 'robylon ai']);
   const USER_NAMES = new Set(['user', 'customer', 'visitor']);
@@ -1066,7 +1080,7 @@ export default function EvalPanel({
 
                     if (type === 'system') {
                       const systemTime = msg.timestamp
-                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        ? '  •  ' + formatTranscriptDate(msg.timestamp)
                         : '';
                       return (
                         <div key={idx} style={{ marginTop: gap + 'px', textAlign: 'center' }}>
@@ -1085,7 +1099,7 @@ export default function EvalPanel({
 
                     if (type === 'internal_note') {
                       const noteTime = msg.timestamp
-                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        ? '  •  ' + formatTranscriptDate(msg.timestamp)
                         : '';
                       return (
                         <div key={idx} style={{
@@ -1116,7 +1130,7 @@ export default function EvalPanel({
 
                     const isRight = type === 'agent' || type === 'bot';
                     const label   = (msg.sender_name ?? msg.sender) + (msg.timestamp
-                      ? ' · ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                      ? ' · ' + formatTranscriptDate(msg.timestamp)
                       : '');
                     return (
                       <div key={idx} style={{

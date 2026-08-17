@@ -198,12 +198,16 @@ export default function CallEvalPanel({
 
   const isReadOnly = mode === 'view';
 
+  const callDateStr = calledAt
+    ? new Date(calledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
+    : '';
+
   return (
     <tr>
       <td colSpan={colSpan} style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid var(--qa-border)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--qa-text)' }}>
-            Call Evaluation Panel — ID: {callId} ({agentName})
+            Call Evaluation Panel — ID: {callId} ({agentName}){callDateStr ? ` · ${callDateStr}` : ''}
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button

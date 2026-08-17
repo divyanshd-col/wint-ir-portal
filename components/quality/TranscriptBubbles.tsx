@@ -52,6 +52,20 @@ interface CallRec {
   deadAirCount: number;
 }
 
+export function formatTranscriptDate(ts?: string | number | null): string {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts);
+  return d.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 export default function TranscriptBubbles({
   messages,
   callRecordings = [],
@@ -107,7 +121,7 @@ export default function TranscriptBubbles({
         const isCustomer = CUSTOMER_LABELS.has(senderLc);
         const isBot = BOT_NAMES.has(senderLc);
         const isActivity = senderLc === 'activity' || senderLc === 'system';
-        const timeStr = m.timestamp ? new Date(m.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+        const timeStr = m.timestamp ? formatTranscriptDate(m.timestamp) : '';
 
         if (isActivity) {
           return (
