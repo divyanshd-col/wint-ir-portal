@@ -102,15 +102,38 @@ export async function getAgentName(agentId: number): Promise<string> {
   return rows[0]?.name ?? '';
 }
 
-/** Returns agent names whose tl_name matches (case-insensitive). */
-export async function getAgentNamesByTL(tlName: string): Promise<string[]> {
+/** Returns agent names whose tl_name matches (case-insensitive, handles email or user name). */
+export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]> {
+  if (!tlIdentifier) return [];
+  const normalized = tlIdentifier.trim().toLowerCase();
+  
+  const prefix = normalized.includes('@') ? normalized.split('@')[0] : normalized;
+  const firstName = prefix.split('.')[0];
+  
+  let dbUserName = '';
+  if (normalized.includes('@')) {
+    const userRows = await query<{ name: string }>(`SELECT name FROM users WHERE email = $1`, [normalized]);
+    dbUserName = userRows[0]?.name?.toLowerCase() || '';
+  }
+
+  const tokens = Array.from(new Set([normalized, prefix, firstName, dbUserName].filter(Boolean)));
+
   const rows = await query<{ name: string }>(
     `SELECT a.name
      FROM agents a
      LEFT JOIN conversations c ON c.agent_id = a.id AND c.closed_at >= NOW() - INTERVAL '60 days'
-     WHERE LOWER(a.tl_name) = LOWER($1)
+     WHERE a.status = 'active'
+       AND (
+         LOWER(TRIM(a.tl_name)) = ANY($1::text[])
+         OR EXISTS (
+           SELECT 1 FROM unnest($1::text[]) t
+           WHERE LOWER(a.tl_name) LIKE LOWER(t || '%')
+              OR LOWER(t) LIKE LOWER(TRIM(a.tl_name) || '%')
+         )
+       )
      GROUP BY a.name
-     ORDER BY COUNT(c.id) DESC, a.name ASC`, [tlName]
+     ORDER BY COUNT(c.id) DESC, a.name ASC`,
+    [tokens]
   );
   return rows.map(r => r.name);
 }

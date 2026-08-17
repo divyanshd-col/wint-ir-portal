@@ -13,7 +13,7 @@ export default async function TLReportsPage() {
   const role = rawRole || (userAny?.isAdmin ? 'admin' : 'agent');
   const email = userAny?.email || '';
 
-  if (role !== 'admin') redirect('/quality');
+  if (role !== 'admin' && role !== 'tl') redirect('/quality');
 
   const config = await readConfig();
   const configUser = config.users.find((u: any) => (u.email || u.username).toLowerCase() === email.toLowerCase());

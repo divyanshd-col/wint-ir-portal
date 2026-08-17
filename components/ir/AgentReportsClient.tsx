@@ -17,6 +17,13 @@ interface ReportComment {
   createdAt: string;
 }
 
+interface TLNote {
+  id: string;
+  author: string;
+  text: string;
+  createdAt: string;
+}
+
 interface Report {
   id: string;
   agent_id: number;
@@ -25,6 +32,7 @@ interface Report {
   status: string;
   generated: any; // The GeneratedScorecard JSON
   comments: ReportComment[];
+  tl_notes?: TLNote[];
   viewed_at: string | null;
   generated_at: string;
   agent_name?: string;
@@ -38,33 +46,45 @@ interface Props {
 
 export default function AgentReportsClient({ agentName, role = 'agent' }: Props) {
   const [reports, setReports] = useState<Report[]>([]);
+  const [assignedAgents, setAssignedAgents] = useState<{ id: number; name: string }[]>([]);
   const [activeReportId, setActiveReportId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Comment Modal/Form State
+  // Comment Modal/Form State (Agent)
   const [commentTarget, setCommentTarget] = useState<{ key: string; label: string } | null>(null);
   const [commentText, setCommentText] = useState('');
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
 
+  // TL 1-on-1 Note State
+  const [showTLNoteModal, setShowTLNoteModal] = useState(false);
+  const [tlNoteText, setTLNoteText] = useState('');
+  const [editingTLNoteId, setEditingTLNoteId] = useState<string | null>(null);
+
   // Copy Feedback State
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Search Filter State
+  // Search & Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAgentFilter, setSelectedAgentFilter] = useState('all');
+  const [selectedWeekFilter, setSelectedWeekFilter] = useState('all');
   const [latestSystemWeek, setLatestSystemWeek] = useState<string | null>(null);
 
   const fetchReports = async () => {
     try {
       const res = await fetch('/api/ir/reports');
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to fetch reports.');
+      let data: any = {};
+      try {
+        data = await res.json();
+      } catch (e) {
+        throw new Error(`Server returned status ${res.status} ${res.statusText}`);
       }
-      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || `Error ${res.status}: Failed to fetch reports.`);
+      }
       setReports(data.reports || []);
+      setAssignedAgents(data.assignedAgents || []);
       setLatestSystemWeek(data.latestSystemWeek || null);
       if (data.reports && data.reports.length > 0 && !activeReportId) {
         setActiveReportId(data.reports[0].id);
@@ -82,7 +102,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
 
   const activeReport = reports.find(r => r.id === activeReportId);
 
-  // Mark as read when report is opened
+  // Mark as read when report is opened by agent
   useEffect(() => {
     if (activeReport && !activeReport.viewed_at && role === 'agent') {
       fetch('/api/ir/reports', {
@@ -92,7 +112,6 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
       })
       .then(res => {
         if (res.ok) {
-          // Update local status
           setReports(prev => prev.map(r => r.id === activeReport.id ? { ...r, viewed_at: new Date().toISOString() } : r));
         }
       })
@@ -107,7 +126,6 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   };
 
   const handleOpenComment = (targetKey: string, label: string, existing?: ReportComment) => {
-    // Only agents can edit/add comments
     if (role !== 'agent') return;
     setCommentTarget({ key: targetKey, label });
     if (existing) {
@@ -127,14 +145,12 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
     let updatedComments = [...(activeReport.comments || [])];
 
     if (editingCommentId) {
-      // Edit existing
       updatedComments = updatedComments.map(c => c.id === editingCommentId ? {
         ...c,
         text: commentText,
         highlighted: isHighlighted,
       } : c);
     } else {
-      // Add new
       const newComment: ReportComment = {
         id: Math.random().toString(36).substring(2, 9),
         targetKey: commentTarget.key,
@@ -159,7 +175,6 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         throw new Error('Failed to save comment.');
       }
 
-      // Update local state
       setReports(prev => prev.map(r => r.id === activeReport.id ? { ...r, comments: updatedComments } : r));
       setCommentTarget(null);
       setCommentText('');
@@ -190,6 +205,87 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
       }
 
       setReports(prev => prev.map(r => r.id === activeReport.id ? { ...r, comments: updatedComments } : r));
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  // TL 1-on-1 Meeting Note handlers
+  const handleOpenTLNoteModal = (existingNote?: TLNote) => {
+    if (role !== 'tl' && role !== 'admin') return;
+    if (existingNote) {
+      setTLNoteText(existingNote.text);
+      setEditingTLNoteId(existingNote.id);
+    } else {
+      setTLNoteText('');
+      setEditingTLNoteId(null);
+    }
+    setShowTLNoteModal(true);
+  };
+
+  const handleSaveTLNote = async () => {
+    if (!activeReport || !tlNoteText.trim()) return;
+
+    let updatedTLNotes = [...(activeReport.tl_notes || [])];
+
+    if (editingTLNoteId) {
+      updatedTLNotes = updatedTLNotes.map(n => n.id === editingTLNoteId ? {
+        ...n,
+        text: tlNoteText,
+      } : n);
+    } else {
+      const newTLNote: TLNote = {
+        id: Math.random().toString(36).substring(2, 9),
+        author: agentName || 'Team Lead',
+        text: tlNoteText,
+        createdAt: new Date().toISOString()
+      };
+      updatedTLNotes.push(newTLNote);
+    }
+
+    try {
+      const res = await fetch('/api/ir/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportId: activeReport.id,
+          tl_notes: updatedTLNotes
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to save 1-on-1 meeting note.');
+      }
+
+      setReports(prev => prev.map(r => r.id === activeReport.id ? { ...r, tl_notes: updatedTLNotes } : r));
+      setShowTLNoteModal(false);
+      setTLNoteText('');
+      setEditingTLNoteId(null);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
+  const handleDeleteTLNote = async (noteId: string) => {
+    if (!activeReport || !window.confirm('Are you sure you want to delete this 1-on-1 meeting note?')) return;
+
+    const updatedTLNotes = (activeReport.tl_notes || []).filter(n => n.id !== noteId);
+
+    try {
+      const res = await fetch('/api/ir/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reportId: activeReport.id,
+          tl_notes: updatedTLNotes
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete 1-on-1 meeting note.');
+      }
+
+      setReports(prev => prev.map(r => r.id === activeReport.id ? { ...r, tl_notes: updatedTLNotes } : r));
     } catch (err: any) {
       alert(err.message);
     }
@@ -227,19 +323,32 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         </svg>
         <h3 className="text-lg font-bold text-gray-800">No Scorecards Available</h3>
         <p className="text-gray-500 mt-2 max-w-md font-medium text-sm leading-relaxed">
-          No scorecard was generated for <strong>{agentName}</strong> because you did not handle any evaluated chats in the recent evaluation periods.
+          {role === 'tl' 
+            ? `No published scorecards available for your assigned agents.`
+            : `No scorecard was generated for ${agentName} because there were no evaluated chats in recent periods.`}
         </p>
       </div>
     );
   }
 
-  const uniqueAgents = Array.from(new Set(reports.map(r => r.agent_name).filter(Boolean))) as string[];
+  // Determine lists of available agents & available dates/weeks
+  const uniqueAgentNames = Array.from(new Set([
+    ...assignedAgents.map(a => a.name),
+    ...reports.map(r => r.agent_name).filter(Boolean) as string[]
+  ])).sort();
+
+  const uniqueWeeks = Array.from(new Set(reports.map(r => r.week_start))).sort().reverse();
 
   const filteredReports = reports.filter(r => {
     const weekRange = `${formatDate(r.week_start)} - ${formatDate(r.week_end)}`.toLowerCase();
-    const agentMatch = role !== 'agent' && r.agent_name ? r.agent_name.toLowerCase().includes(searchTerm.toLowerCase()) : true;
+    const searchMatch = !searchTerm || 
+      weekRange.includes(searchTerm.toLowerCase()) || 
+      (r.agent_name && r.agent_name.toLowerCase().includes(searchTerm.toLowerCase()));
+    
     const agentFilterMatch = selectedAgentFilter === 'all' || r.agent_name === selectedAgentFilter;
-    return (weekRange.includes(searchTerm.toLowerCase()) || agentMatch) && agentFilterMatch;
+    const weekFilterMatch = selectedWeekFilter === 'all' || r.week_start === selectedWeekFilter;
+
+    return searchMatch && agentFilterMatch && weekFilterMatch;
   });
 
   // Check if there is a missing report alert to display
@@ -274,27 +383,58 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   return (
     <div className="flex h-[calc(100dvh-64px)] overflow-hidden bg-[#F7F7F8]">
       {/* Sidebar List */}
-      <aside className="w-72 border-r border-[#E4E4E7] bg-white flex flex-col overflow-y-auto">
+      <aside className="w-80 border-r border-[#E4E4E7] bg-white flex flex-col overflow-y-auto shrink-0">
         <div className="p-4 border-b border-[#E4E4E7] bg-gray-50 flex items-center justify-between">
-          <span className="font-bold text-gray-800 text-sm tracking-wide uppercase">Scorecard History</span>
+          <span className="font-bold text-gray-800 text-sm tracking-wide uppercase">
+            {role === 'tl' ? 'Team Scorecards' : role === 'admin' ? 'All Scorecards' : 'My Scorecards'}
+          </span>
           <span className="bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full text-xs">
             {filteredReports.length}
           </span>
         </div>
 
-        {/* Agents Dropdown Filter (Admin View) */}
-        {role !== 'agent' && uniqueAgents.length > 0 && (
-          <div className="p-2 border-b border-[#E4E4E7] bg-white">
-            <select
-              value={selectedAgentFilter}
-              onChange={(e) => setSelectedAgentFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
-            >
-              <option value="all">All Agents</option>
-              {uniqueAgents.map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+        {/* Filters Section (TL / Admin View) */}
+        {role !== 'agent' && (
+          <div className="p-3 border-b border-[#E4E4E7] bg-gray-50/50 space-y-2">
+            {/* Agent-wise Filter */}
+            <div>
+              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block mb-1">
+                Filter by Agent
+              </label>
+              <select
+                value={selectedAgentFilter}
+                onChange={(e) => setSelectedAgentFilter(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold bg-white text-gray-800 cursor-pointer shadow-sm"
+              >
+                <option value="all">All Mapped Agents ({uniqueAgentNames.length})</option>
+                {uniqueAgentNames.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date / Week-wise Filter */}
+            <div>
+              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block mb-1">
+                Filter by Week / Date
+              </label>
+              <select
+                value={selectedWeekFilter}
+                onChange={(e) => setSelectedWeekFilter(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold bg-white text-gray-800 cursor-pointer shadow-sm"
+              >
+                <option value="all">All Weeks ({uniqueWeeks.length})</option>
+                {uniqueWeeks.map(wStart => {
+                  const wEnd = new Date(wStart);
+                  wEnd.setDate(wEnd.getDate() + 6);
+                  return (
+                    <option key={wStart} value={wStart}>
+                      Week of {formatDate(wStart)}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
           </div>
         )}
 
@@ -302,13 +442,14 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         <div className="p-2 border-b border-[#E4E4E7] bg-white">
           <input
             type="text"
-            placeholder={role === 'agent' ? "Search by date (e.g. Jul, 2026)..." : "Search by name or date..."}
+            placeholder={role === 'agent' ? "Search by date..." : "Search by name or date..."}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-medium bg-gray-50 hover:bg-gray-100/50 transition-all text-gray-700 placeholder-gray-400"
+            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium bg-gray-50 hover:bg-gray-100/50 transition-all text-gray-700 placeholder-gray-400"
           />
         </div>
 
+        {/* List of Scorecards */}
         <nav className="flex-1 p-2 space-y-1">
           {filteredReports.length === 0 ? (
             <div className="text-center py-8 text-xs text-gray-400 font-medium">
@@ -339,7 +480,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                         </span>
                       )}
                       {isUnread && role === 'agent' && (
-                        <span className="w-2 height-2 min-w-[8px] h-2 rounded-full bg-indigo-600 inline-block animate-pulse" title="New unread report" />
+                        <span className="w-2 h-2 min-w-[8px] rounded-full bg-indigo-600 inline-block animate-pulse" title="New unread report" />
                       )}
                     </div>
                     <span className="text-xs text-gray-500 font-medium block mt-0.5 truncate">{weekRange}</span>
@@ -393,8 +534,8 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                   Week of {formatDate(activeReport.week_start)} to {formatDate(activeReport.week_end)}
                 </p>
                 {role !== 'agent' && activeReport.agent_name && (
-                  <p className="text-sm font-semibold text-indigo-700 mt-0.5">
-                    Agent Name: {activeReport.agent_name}
+                  <p className="text-sm font-semibold text-indigo-700 mt-0.5 flex items-center gap-2">
+                    <span>Agent: <strong>{activeReport.agent_name}</strong></span>
                   </p>
                 )}
               </div>
@@ -402,7 +543,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 <span className="text-xs text-gray-400 font-medium font-mono">
                   Generated at {new Date(activeReport.generated_at).toLocaleString()}
                 </span>
-                {role === 'agent' && (
+                {role === 'agent' ? (
                   <button
                     onClick={() => handleOpenComment('general', 'General Feedback')}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-indigo-500 hover:text-indigo-600 bg-white text-gray-600 text-xs font-semibold shadow-sm transition-all"
@@ -410,14 +551,85 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
                     </svg>
-                    General Notes
+                    Add General Note
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleOpenTLNoteModal()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-sm transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add 1-on-1 Meeting Note
                   </button>
                 )}
               </div>
             </div>
 
+            {/* TL 1-on-1 Meeting Notes Section */}
+            {(role !== 'agent' || (activeReport.tl_notes && activeReport.tl_notes.length > 0)) && (
+              <div className="bg-indigo-50/40 border border-indigo-200/70 rounded-2xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-extrabold text-indigo-900 uppercase tracking-wider flex items-center gap-2">
+                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.414-9.414a2 2 0 1 1 2.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                    1-on-1 Meeting Notes (TL Coaching Log)
+                  </h3>
+                  {role !== 'agent' && (
+                    <button
+                      onClick={() => handleOpenTLNoteModal()}
+                      className="text-xs font-bold text-indigo-700 hover:text-indigo-900 hover:underline"
+                    >
+                      + Add Note
+                    </button>
+                  )}
+                </div>
+
+                {activeReport.tl_notes && activeReport.tl_notes.length > 0 ? (
+                  <div className="space-y-3">
+                    {activeReport.tl_notes.map((n) => (
+                      <div key={n.id} className="bg-white p-4 rounded-xl border border-indigo-100 shadow-sm flex items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs text-indigo-800">{n.author || 'Team Lead'}</span>
+                            <span className="text-[10px] text-gray-400 font-mono">
+                              {new Date(n.createdAt).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-800 font-medium leading-relaxed whitespace-pre-wrap">{n.text}</p>
+                        </div>
+                        {role !== 'agent' && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleOpenTLNoteModal(n)}
+                              className="text-gray-400 hover:text-indigo-600 text-xs font-semibold"
+                            >
+                              Edit
+                            </button>
+                            <span className="text-gray-300">|</span>
+                            <button
+                              onClick={() => handleDeleteTLNote(n.id)}
+                              className="text-gray-400 hover:text-red-600 text-xs font-semibold"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-indigo-700/80 font-medium italic">
+                    No 1-on-1 meeting notes recorded yet for this report.
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* General Report Comments */}
-            {renderCommentsForTarget('general', 'General Notes & Feedback')}
+            {renderCommentsForTarget('general', 'Agent Notes & Feedback')}
 
             {/* 1. Numbers Section */}
             <div>
@@ -505,9 +717,6 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
               {scorecard?.themes && scorecard.themes.length > 0 ? (
                 <div className="space-y-4">
                   {scorecard.themes.map((theme: any, index: number) => {
-                    const commentKey = `theme:${index}`;
-                    const hasActiveComment = activeReport.comments?.some(c => c.targetKey === commentKey);
-
                     return (
                       <div
                         key={index}
@@ -701,7 +910,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
         )}
       </main>
 
-      {/* Floating Comment Modal Dialog */}
+      {/* Floating Comment Modal Dialog (Agent Notes) */}
       {commentTarget && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
           <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-xl w-full max-w-md p-6 space-y-4">
@@ -771,6 +980,67 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 text-xs font-bold rounded-lg shadow-sm transition-all"
               >
                 Save Note
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating TL 1-on-1 Meeting Note Modal */}
+      {showTLNoteModal && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="font-extrabold text-indigo-900 text-sm tracking-wide uppercase">
+                {editingTLNoteId ? 'Edit 1-on-1 Meeting Note' : 'Add 1-on-1 Meeting Note'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowTLNoteModal(false);
+                  setTLNoteText('');
+                  setEditingTLNoteId(null);
+                }}
+                className="text-gray-400 hover:text-gray-700 text-lg font-bold"
+              >
+                ×
+              </button>
+            </div>
+
+            <div>
+              <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider block">Agent</span>
+              <span className="text-xs font-semibold text-gray-800 mt-0.5 block">
+                {activeReport?.agent_name} (Week of {activeReport ? formatDate(activeReport.week_start) : ''})
+              </span>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">TL 1-on-1 Meeting Notes / Action Items</label>
+              <textarea
+                value={tlNoteText}
+                onChange={(e) => setTLNoteText(e.target.value)}
+                placeholder="Log discussion points, feedback given, goals set, or action items for next week's 1-on-1 meeting..."
+                rows={5}
+                className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-sm text-gray-700 focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => {
+                  setShowTLNoteModal(false);
+                  setTLNoteText('');
+                  setEditingTLNoteId(null);
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 text-xs font-bold rounded-lg transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveTLNote}
+                disabled={!tlNoteText.trim()}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 text-xs font-bold rounded-lg shadow-sm transition-all"
+              >
+                Save 1-on-1 Note
               </button>
             </div>
           </div>
