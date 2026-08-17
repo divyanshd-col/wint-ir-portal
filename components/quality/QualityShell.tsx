@@ -67,7 +67,7 @@ export const NAV_ALL = [
   { label: 'My Quality Chats', href: '/agent/quality-chats',    icon: ChatIcon,       roles: ['agent'] },
   { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['admin', 'tl'] },
   { label: 'My Reports',       href: '/agent/reports',          icon: DocumentIcon,   roles: ['agent'] },
-  { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin', 'tl'] },
+  { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin'] },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
