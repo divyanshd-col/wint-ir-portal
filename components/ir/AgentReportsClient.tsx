@@ -54,6 +54,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   // Search Filter State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedAgentFilter, setSelectedAgentFilter] = useState('all');
+  const [selectedWeekFilter, setSelectedWeekFilter] = useState('all');
   const [latestSystemWeek, setLatestSystemWeek] = useState<string | null>(null);
 
   const fetchReports = async () => {
@@ -235,11 +236,21 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
 
   const uniqueAgents = Array.from(new Set(reports.map(r => r.agent_name).filter(Boolean))) as string[];
 
+  // Build unique list of weeks sorted descending
+  const uniqueWeeksMap = new Map<string, string>();
+  reports.forEach(r => {
+    if (r.week_start && !uniqueWeeksMap.has(r.week_start)) {
+      uniqueWeeksMap.set(r.week_start, `${formatDate(r.week_start)} - ${formatDate(r.week_end)}`);
+    }
+  });
+  const uniqueWeeks = Array.from(uniqueWeeksMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+
   const filteredReports = reports.filter(r => {
     const weekRange = `${formatDate(r.week_start)} - ${formatDate(r.week_end)}`.toLowerCase();
     const agentMatch = role !== 'agent' && r.agent_name ? r.agent_name.toLowerCase().includes(searchTerm.toLowerCase()) : true;
     const agentFilterMatch = selectedAgentFilter === 'all' || r.agent_name === selectedAgentFilter;
-    return (weekRange.includes(searchTerm.toLowerCase()) || agentMatch) && agentFilterMatch;
+    const weekFilterMatch = selectedWeekFilter === 'all' || r.week_start === selectedWeekFilter;
+    return (weekRange.includes(searchTerm.toLowerCase()) || agentMatch) && agentFilterMatch && weekFilterMatch;
   });
 
   // Check if there is a missing report alert to display
@@ -277,12 +288,9 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
       <aside className="w-72 border-r border-[#E4E4E7] bg-white flex flex-col overflow-y-auto">
         <div className="p-4 border-b border-[#E4E4E7] bg-gray-50 flex items-center justify-between">
           <span className="font-bold text-gray-800 text-sm tracking-wide uppercase">Scorecard History</span>
-          <span className="bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full text-xs">
-            {filteredReports.length}
-          </span>
         </div>
 
-        {/* Agents Dropdown Filter (Admin View) */}
+        {/* Agents Dropdown Filter (Admin/TL View) */}
         {role !== 'agent' && uniqueAgents.length > 0 && (
           <div className="p-2 border-b border-[#E4E4E7] bg-white">
             <select
@@ -293,6 +301,22 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
               <option value="all">All Agents</option>
               {uniqueAgents.map(name => (
                 <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Week Dropdown Filter */}
+        {uniqueWeeks.length > 0 && (
+          <div className="p-2 border-b border-[#E4E4E7] bg-white">
+            <select
+              value={selectedWeekFilter}
+              onChange={(e) => setSelectedWeekFilter(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
+            >
+              <option value="all">All Weeks</option>
+              {uniqueWeeks.map(([weekStart, label]) => (
+                <option key={weekStart} value={weekStart}>{label}</option>
               ))}
             </select>
           </div>
