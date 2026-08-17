@@ -131,7 +131,8 @@ export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]>
               OR LOWER(t) LIKE LOWER(TRIM(a.tl_name) || '%')
          )
        )
-     GROUP BY a.name
+     GROUP BY a.id, a.name
+     HAVING COUNT(c.id) > 0 OR EXISTS (SELECT 1 FROM ir_reports r WHERE r.agent_id = a.id)
      ORDER BY COUNT(c.id) DESC, a.name ASC`,
     [tokens]
   );
