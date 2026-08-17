@@ -11,8 +11,8 @@ export function getPool(): Pool {
   if (!pool) {
     // Prefer non-pooling URL for serverless (avoids PgBouncer transaction-mode issues)
     const connectionString =
-      process.env.POSTGRES_URL ||
-      process.env.POSTGRES_URL_NON_POOLING;
+      process.env.POSTGRES_URL_NON_POOLING ||
+      process.env.POSTGRES_URL;
 
     if (!connectionString) {
       throw new Error('Missing POSTGRES_URL or POSTGRES_URL_NON_POOLING environment variable');
