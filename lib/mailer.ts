@@ -7,22 +7,21 @@
 // goes through the single sendMail() below, so swapping to a service account
 // or a transactional provider later is an adapter change, not a rewrite.
 
-import nodemailer, { type Transporter } from 'nodemailer';
-
 const SMTP_HOST = process.env.EMAIL_SMTP_HOST || 'smtp.gmail.com';
 const SMTP_PORT = Number(process.env.EMAIL_SMTP_PORT || 465);
 const EMAIL_USER = process.env.EMAIL_USER || '';
 const EMAIL_PASSWORD = process.env.EMAIL_APP_PASSWORD || '';
 const EMAIL_FROM = process.env.EMAIL_FROM || EMAIL_USER;
 
-let transporter: Transporter | null = null;
+let transporter: any = null;
 
 export function mailerConfigured(): boolean {
   return !!(EMAIL_USER && EMAIL_PASSWORD);
 }
 
-function getTransporter(): Transporter {
+async function getTransporter(): Promise<any> {
   if (!transporter) {
+    const nodemailer = (await import('nodemailer')).default;
     transporter = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
@@ -51,7 +50,8 @@ export async function sendMail(input: SendMailInput): Promise<boolean> {
     throw new Error('Email is not configured (EMAIL_USER / EMAIL_APP_PASSWORD missing).');
   }
   try {
-    await getTransporter().sendMail({
+    const t = await getTransporter();
+    await t.sendMail({
       from: EMAIL_FROM,
       to: input.to,
       subject: input.subject,

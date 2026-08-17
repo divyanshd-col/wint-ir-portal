@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS ir_reports (
 
   generated       JSONB NOT NULL,                    -- original output; NEVER mutated
   comments        JSONB NOT NULL DEFAULT '[]'::jsonb, -- Agent comments/highlights and feedback
+  tl_notes        JSONB NOT NULL DEFAULT '[]'::jsonb, -- TL 1-on-1 meeting notes
 
   model_version   VARCHAR(50),
   generated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
