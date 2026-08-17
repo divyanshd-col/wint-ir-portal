@@ -13,12 +13,16 @@ export default async function TLReportsPage() {
   const role = rawRole || (userAny?.isAdmin ? 'admin' : 'agent');
   const email = userAny?.email || '';
 
-  if (role !== 'admin') redirect('/quality');
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = await getUserByEmail(email).catch(() => null);
+  const resolvedRole = dbUser?.role || role;
+
+  if (resolvedRole !== 'admin' && resolvedRole !== 'tl') redirect('/quality');
 
   const config = await readConfig();
   const configUser = config.users.find((u: any) => (u.email || u.username).toLowerCase() === email.toLowerCase());
-  const name = configUser?.agentName || email.split('@')[0];
+  const name = dbUser?.name || configUser?.agentName || email.split('@')[0];
 
   // Render the same report client component but with TL/Admin role so it runs in read-only mode for comments
-  return <AgentReportsClient agentName={name} role={role} />;
+  return <AgentReportsClient agentName={name} role={resolvedRole} />;
 }
