@@ -88,8 +88,15 @@ export async function GET(req: NextRequest) {
   // Resolve agent name from config
   const config = await readConfig();
   const email = session.user.email || '';
-  const configUser = config.users.find(u => (u.email || u.username) === email);
-  const agentName = configUser?.agentName || '';
+  const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  let agentName = configUser?.agentName;
+  if (!agentName && email) {
+    const { getUserByEmail } = await import('@/lib/users');
+    const dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser?.name) {
+      agentName = dbUser.name;
+    }
+  }
   if (!agentName) {
     return NextResponse.json({ error: 'Agent not configured' }, { status: 404 });
   }

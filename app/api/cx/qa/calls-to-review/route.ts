@@ -60,7 +60,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     );
     dispositions = rows.map(r => r.d);
   } else if (role === 'quality') {
-    const configUser = config.users.find((u: any) => (u.email || u.username) === email);
+    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     dispositions = (configUser as any)?.assignedCallDispositions ?? [];
   } else {
     return NextResponse.json({ calls: [], total: 0 });

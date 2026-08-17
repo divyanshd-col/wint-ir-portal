@@ -3,8 +3,17 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
+
   --background: #ffffff;
   --foreground: #171717;
+
+  /* ── Brand accent (Wint green) — governed, single source ───────────── */
+  --accent:         #2d9e4f;
+  --accent-hover:   #25883f;
+  --accent-active:  #1f7436;
+  --accent-weak:    #eaf6ee;  /* tinted surface for accent backgrounds */
+  --accent-on:      #ffffff;  /* text/icon on top of --accent */
 
   /* ── QA Analytics design tokens (wireframe) ─────────────────────────── */
   --qa-bg:           #F7F7F8;
@@ -23,23 +32,23 @@
 
   /* ── Design system tokens ─────────────────────────────────────────── */
   --color-background-primary:   #ffffff;
-  --color-background-secondary: #f8fafc;
-  --color-background-tertiary:  #f1f5f9;
+  --color-background-secondary: #fafafa;  /* zinc-50 (was slate #f8fafc) */
+  --color-background-tertiary:  #f4f4f5;  /* zinc-100 (was slate #f1f5f9) */
   --color-background-danger:    #fee2e2;
   --color-background-warning:   #fef3c7;
   --color-background-success:   #dcfce7;
   --color-background-info:      #dbeafe;
 
-  --color-text-primary:   #111827;
-  --color-text-secondary: #6b7280;
-  --color-text-tertiary:  #9ca3af;
+  --color-text-primary:   #18181b;  /* zinc-900 (was gray #111827) */
+  --color-text-secondary: #71717a;  /* zinc-500 (was gray #6b7280) */
+  --color-text-tertiary:  #a1a1aa;  /* zinc-400 (was gray #9ca3af) */
   --color-text-danger:    #b91c1c;
   --color-text-warning:   #b45309;
   --color-text-success:   #15803d;
   --color-text-info:      #1d4ed8;
 
-  --color-border-tertiary:  #e5e7eb;
-  --color-border-secondary: #d1d5db;
+  --color-border-tertiary:  #e4e4e7;  /* zinc-200 (was gray #e5e7eb) */
+  --color-border-secondary: #d4d4d8;  /* zinc-300 (was gray #d1d5db) */
   --color-border-danger:    #ef4444;
   --color-border-warning:   #f59e0b;
   --color-border-success:   #22c55e;
@@ -47,33 +56,6 @@
 
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background-primary:   #111827;
-    --color-background-secondary: #1f2937;
-    --color-background-tertiary:  #374151;
-    --color-background-danger:    #450a0a;
-    --color-background-warning:   #451a03;
-    --color-background-success:   #052e16;
-    --color-background-info:      #1e3a5f;
-
-    --color-text-primary:   #f9fafb;
-    --color-text-secondary: #9ca3af;
-    --color-text-tertiary:  #6b7280;
-    --color-text-danger:    #f87171;
-    --color-text-warning:   #fbbf24;
-    --color-text-success:   #4ade80;
-    --color-text-info:      #60a5fa;
-
-    --color-border-tertiary:  #374151;
-    --color-border-secondary: #4b5563;
-    --color-border-danger:    #ef4444;
-    --color-border-warning:   #f59e0b;
-    --color-border-success:   #22c55e;
-    --color-border-info:      #3b82f6;
-  }
 }
 
 body {

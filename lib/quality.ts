@@ -652,7 +652,7 @@ Documents may be shared over WhatsApp only if they carry no personal and no inte
 
 ## SCORING GUARDRAILS (how to handle what you see, applies to Accuracy and IssueResolution)
 - Internal checks (Finder, order status, account or SIP state) are not visible to you and agents do not narrate them to customers. Do NOT assume a check was skipped, and do NOT lower Accuracy just because the agent did not say "I checked and confirmed X". The fact that a response could have been improved by a tool check is NOT enough to fail anything. Example: if the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP", that is NOT an error, the check is internal. Only lower Accuracy if the visible answer or action is provably wrong, for example the agent says a repayment was not processed but the transcript shows it was credited, or the agent gives a wrong fact or wrong process step.
-- Internal notes, Slack links, and internal tool URLs in the transcript are working notes, never sent to the customer. Use them only for context. Never score the agent on their presence.
+- Private Notes / Internal notes (indicated in the transcript as "Internal Note: [content]" or "Private Note: [content]"), Slack links, and internal tool URLs in the transcript are internal working notes and were never sent to the customer. TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or status updates, but EXCLUDE them while judging/scoring the customer chat. Do NOT evaluate their tone, grammar, or language as customer-facing messages, and NEVER score or penalize the agent on any quality parameter based on private notes.
 - If the chat references a prior conversation (phrases such as "previous chat", "previous conversation", "previous text", "last time", "last conversation", "earlier ticket", "as discussed before", "as discussed earlier", "as mentioned earlier", "referred earlier", "as per our last chat", "continuing from before"), note it in summary and be lenient on Accuracy and IssueResolution. Missing context may live in that earlier chat. Do not fail for information gaps a prior chat could explain.
 
 ## MEDIA IN CHAT
@@ -711,9 +711,10 @@ Does not cover: correctness (Accuracy) or readability (Clarity).
 ### ExpectationSetting (conditional, graded 0 / 0.5 / 1, else "NA")
 When something is pending, did the bot tell the customer what happens next and by when.
 - 1: a clear next step or timeline was given (for example "being processed today, will be credited to account...").
-- 0.5: implied but vague ("please allow some time" with no sense of how long or for what).
+- 0.5: implied but vague on an ongoing issue handled by the bot where a specific timeframe could be given.
 - 0: left the customer not knowing what happens next on a pending item.
 - "NA" (unsure false): the query was fully resolved on the spot with nothing pending.
+- **TRANSFER / HANDOVER**: When transferring a chat to a human executive, standard transfer phrasing (e.g. "I'm transferring your chat to an executive", "please allow them some time to connect", "connecting you at the earliest", "an executive will assist you shortly") is FULLY ACCEPTABLE expectation setting for a bot handover. Do NOT penalize or score 0.5 for vague timeline on bot transfer messages. A bot cannot predict human agent queue wait times; informing the user of the transfer is sufficient (score 1).
 Does not cover: whether the timeline quoted was correct (Accuracy).
 
 ### Clarity (binary 0 / 1)
@@ -802,11 +803,11 @@ The KB mentions "Skip Instalment" as an option before cancellation, but this is 
 - If the customer never requested a call AND the agent calls without any business reason → this IS a process violation (score Process No and note it clearly).
 - When you cannot determine whether a call happened at all, score Call as NA and add to \`uncertain_parameters\`.
 
-### Internal Notes, Slack Links, and Internal References
-Transcripts sometimes contain internal Slack links, internal tool URLs, internal notes (indicated as "Internal Note: [content]"), or references to internal systems.
-- These are **internal working notes** — they are NOT sent to the customer and are not part of the customer-facing response.
-- Do NOT judge, penalize, or evaluate the agent on any parameter based on the presence of these internal links, references, or internal notes. Use internal notes only for context.
-- Evaluate the agent only on what they communicated to the customer, not on internal working notes visible in the transcript.
+### Private Notes, Internal Notes, Slack Links, and Internal References
+Transcripts sometimes contain internal Slack links, internal tool URLs, internal notes / private notes (indicated as "Internal Note: [content]" or "Private Note: [content]"), or references to internal systems.
+- These are internal working notes — they are NOT sent to the customer and are not part of customer-facing responses.
+- TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or workflow status.
+- Do NOT include, judge, penalize, or evaluate the agent on any quality parameter based on private notes or internal notes. Evaluate only what was communicated directly to the customer.
 
 ### Screenshots and Media Shared in Chat
 When images are provided alongside the transcript, they are screenshots or other media shared by the customer or agent during the chat.
@@ -875,7 +876,7 @@ Score based on whether the agent's information is factually correct per Wint Wea
 
 ### 3. Expectation Setting (10%)
 Score whether the agent set a clear, specific expectation about timeline, next steps, or resolution path.
-- **Yes**: Agent gave a specific timeline, commitment, or next step (e.g. "credited within 7 working days", "our team will contact you by 3rd Feb"). "Please allow me some time" counts.
+- **Yes**: Agent gave a specific timeline, commitment, or next step (e.g. "credited within 7 working days", "our team will contact you by 3rd Feb"). "Please allow me/them some time" or informing the customer about a team transfer or escalation ("at the earliest") counts.
 - **No** — mark No if ANY of these are visible:
   - **Exp – TAT missing**: Customer asked "how long?", "when?", or showed impatience about timing — and got no specific timeline or even a ballpark.
   - **Exp – No education**: Agent resolved an issue but did not explain what happened or what the customer should expect next — leaving the customer without context on the outcome.

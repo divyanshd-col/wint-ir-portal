@@ -175,7 +175,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      WHERE c.tags->>'disposition' = ANY($1)
        AND c.closed_at >= $2 AND c.closed_at <= $3
        AND (
-         (i.call_iqs_score IS NULL AND i.iqs_score < 80)
+         (i.call_iqs_score IS NULL AND (
+           (i.iqs_score IS NOT NULL AND i.iqs_score < 80)
+           OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
+         ))
          OR (i.call_iqs_score IS NOT NULL AND i.call_iqs_score < 80)
        )
        AND i.reviewed_by IS NULL

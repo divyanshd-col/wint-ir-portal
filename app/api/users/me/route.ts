@@ -9,7 +9,7 @@ export async function GET() {
 
   const email  = session.user.email;
   const config = await readConfig();
-  const user   = config.users.find(u => (u.email || u.username) === email);
+  const user   = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
 
   return NextResponse.json({
     email,

@@ -448,9 +448,9 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   if (opts.iqsMax !== undefined) {
     params.push(opts.iqsMax);
     if (opts.includeUncertain) {
-      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND s.parameters ? '__agent_parameters') OR s.parameters ? '__uncertain')`);
+      conditions.push(`(s.iqs_score <= $${params.length} OR s.parameters ? '__uncertain' OR (s.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad')))`);
     } else {
-      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND s.parameters ? '__agent_parameters'))`);
+      conditions.push(`(s.iqs_score <= $${params.length} OR (s.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad')))`);
     }
   } else if (opts.includeUncertain) {
     conditions.push(`s.parameters ? '__uncertain'`);

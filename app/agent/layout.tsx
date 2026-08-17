@@ -13,8 +13,18 @@ export default async function AgentLayout({ children }: { children: React.ReactN
 
   const email = (session.user as any)?.email || '';
   const config = await readConfig();
-  const configUser = config.users.find((u: any) => (u.email || u.username) === email);
-  const name = configUser?.agentName || email.split('@')[0];
+  const configUser = config.users.find((u: any) => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
+  let name: string = configUser?.agentName || '';
+  if (!name && email) {
+    const { getUserByEmail } = await import('@/lib/users');
+    const dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser?.name) {
+      name = dbUser.name;
+    }
+  }
+  if (!name) {
+    name = email.split('@')[0] || 'Agent';
+  }
 
   return (
     <IRShell role={role} name={name}>

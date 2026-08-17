@@ -8,6 +8,25 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });
 export const metadata: Metadata = {
   title: 'Wint Wealth – IR Portal',
   description: 'Investor Relations knowledge base and Q&A portal',
+  applicationName: 'Wint IR Portal',
+  icons: { icon: '/favicon.ico' },
+  openGraph: {
+    title: 'Wint Wealth – IR Portal',
+    description: 'Investor Relations knowledge base and Q&A portal',
+    siteName: 'Wint IR Portal',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Wint Wealth – IR Portal',
+    description: 'Investor Relations knowledge base and Q&A portal',
+  },
+  robots: { index: false, follow: false }, // internal tool — keep out of search
+};
+
+export const viewport = {
+  colorScheme: 'light' as const,
+  themeColor: '#2d9e4f',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

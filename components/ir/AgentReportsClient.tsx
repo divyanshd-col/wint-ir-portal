@@ -381,7 +381,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
   const numbers = scorecard?.numbers;
 
   return (
-    <div className="flex h-[calc(100vh-64px)] overflow-hidden bg-[#F7F7F8]">
+    <div className="flex h-[calc(100dvh-64px)] overflow-hidden bg-[#F7F7F8]">
       {/* Sidebar List */}
       <aside className="w-80 border-r border-[#E4E4E7] bg-white flex flex-col overflow-y-auto shrink-0">
         <div className="p-4 border-b border-[#E4E4E7] bg-gray-50 flex items-center justify-between">

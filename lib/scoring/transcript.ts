@@ -63,12 +63,24 @@ export function normalizeRobylonMessages(messages: any[], year?: number): {
       }
     }
 
+    const senderLow = sender.toLowerCase();
+    const isCustomer = senderLow === 'user' || senderLow === 'customer' || m.sender_type === 'customer';
+    const isBot = BOT_NAMES.has(senderLow) || m.sender_type === 'bot';
+
     const isInternalNote =
       m.is_private === true ||
       m.is_internal === true ||
+      m.is_note === true ||
+      m.type === 'note' ||
+      m.sender_type === 'note' ||
+      m.sender_type === 'internal' ||
       (sender || '').toLowerCase().includes('robylon') ||
       (m.sender_name || '').toLowerCase().includes('robylon') ||
-      (m.agent_name || '').toLowerCase().includes('robylon');
+      (m.agent_name || '').toLowerCase().includes('robylon') ||
+      content.includes('slack.com/') ||
+      content.startsWith('Internal Note:') ||
+      content.startsWith('[Internal Note]') ||
+      (/^\+?\d{10,12}$/.test(content.trim()) && !isCustomer && !isBot);
 
     if (isInternalNote) {
       lines.push(`Internal Note: ${content}`);
@@ -106,10 +118,6 @@ export function normalizeRobylonMessages(messages: any[], year?: number): {
     if (m.sender_name === 'Robylon AI' && m.sender_type === 'agent') {
       continue;
     }
-
-    const senderLow = sender.toLowerCase();
-    const isCustomer = senderLow === 'user' || senderLow === 'customer' || m.sender_type === 'customer';
-    const isBot = BOT_NAMES.has(senderLow) || m.sender_type === 'bot';
 
     const role = isCustomer ? 'Customer' : isBot ? 'Bot' : 'Agent';
     const senderType = isCustomer ? 'customer' : isBot ? 'bot' : 'agent';
