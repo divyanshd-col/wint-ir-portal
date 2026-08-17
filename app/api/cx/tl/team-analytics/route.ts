@@ -139,10 +139,8 @@ export async function GET(req: NextRequest) {
       agentNames = rows.map(r => r.name);
     }
   } else {
-    const configUser = config.users.find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
-    selectedTL = tlAgentName;
-    agentNames = await getAgentNamesByTL(tlAgentName);
+    agentNames = await getAgentNamesByTL(email);
+    selectedTL = email;
   }
 
   if (agentNames.length === 0) {

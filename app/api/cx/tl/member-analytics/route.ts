@@ -194,10 +194,7 @@ export async function GET(req: NextRequest) {
 
   let tlAgentNames: string[];
   if (role === 'tl') {
-    const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
-    tlAgentNames = await getAgentNamesByTL(tlAgentName);
+    tlAgentNames = await getAgentNamesByTL(email);
   } else {
     const rows = await query<{ name: string }>(`
       SELECT a.name
