@@ -121,7 +121,7 @@ export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]>
   const rows = await query<{ name: string }>(
     `SELECT a.name
      FROM agents a
-     LEFT JOIN conversations c ON c.agent_id = a.id AND c.closed_at >= NOW() - INTERVAL '60 days'
+     JOIN conversations c ON c.agent_id = a.id AND c.closed_at >= NOW() - INTERVAL '14 days'
      WHERE a.status = 'active'
        AND (
          LOWER(TRIM(a.tl_name)) = ANY($1::text[])
@@ -132,7 +132,7 @@ export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]>
          )
        )
      GROUP BY a.id, a.name
-     HAVING COUNT(c.id) > 0 OR EXISTS (SELECT 1 FROM ir_reports r WHERE r.agent_id = a.id)
+     HAVING COUNT(c.id) > 0
      ORDER BY COUNT(c.id) DESC, a.name ASC`,
     [tokens]
   );
