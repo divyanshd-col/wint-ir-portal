@@ -10,10 +10,12 @@ export async function GET(req: NextRequest) {
   if (!session?.user?.email) return NextResponse.json({ error: 'Unauthenticated' }, { status: 401 });
 
   const email = session.user.email;
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = await getUserByEmail(email).catch(() => null);
   const config = await readConfig();
   const user = config.users.find(u => (u.email || u.username).toLowerCase() === email.toLowerCase());
-  const role = user?.role || (session.user as any)?.role || 'agent';
-  let agentName = user?.agentName || '';
+  const role = dbUser?.role || user?.role || (session.user as any)?.role || 'agent';
+  let agentName = dbUser?.name || user?.agentName || '';
   if (email.toLowerCase() === 'pooja.hb@wintwealth.com') {
     agentName = 'Pooja';
   }
@@ -45,12 +47,57 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ reports, latestSystemWeek });
     }
 
-    if (role === 'tl' || role === 'quality') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (role === 'tl') {
+      const tlIdentifier = dbUser?.name || user?.agentName || email;
+      const normalizedEmail = email.toLowerCase().trim();
+      const emailPrefix = normalizedEmail.includes('@') ? normalizedEmail.split('@')[0] : normalizedEmail;
+      const firstName = emailPrefix.split('.')[0];
+      const dbUserName = dbUser?.name?.toLowerCase() || '';
+      const configName = user?.agentName?.toLowerCase() || '';
+
+      const tokens = Array.from(
+        new Set([normalizedEmail, emailPrefix, firstName, dbUserName, configName, tlIdentifier.toLowerCase()].filter(Boolean))
+      );
+
+      // Fetch agent IDs mapped via tl_name in agents table
+      const mappedAgentsFromDb = await query<any>(
+        `SELECT id, name FROM agents
+         WHERE (
+           LOWER(TRIM(tl_name)) = ANY($1::text[])
+           OR EXISTS (
+             SELECT 1 FROM unnest($1::text[]) t
+             WHERE LOWER(tl_name) LIKE LOWER(t || '%')
+                OR LOWER(t) LIKE LOWER(TRIM(tl_name) || '%')
+           )
+         )`,
+        [tokens]
+      );
+
+      // Also fetch agent names from getAgentNamesByTL helper
+      const { getAgentNamesByTL } = await import('@/lib/robylon/db');
+      const extraAgentNames = await getAgentNamesByTL(tlIdentifier).catch(() => []);
+
+      const allMappedNames = Array.from(
+        new Set([...mappedAgentsFromDb.map((a: any) => a.name), ...extraAgentNames])
+      );
+
+      if (allMappedNames.length === 0) {
+        return NextResponse.json({ reports: [], latestSystemWeek });
+      }
+
+      const reports = await query<any>(
+        `SELECT r.id, r.agent_id, a.name AS agent_name, r.week_start::date::text AS week_start, r.week_end::date::text AS week_end, r.status, r.generated, r.comments, r.viewed_at, r.generated_at
+         FROM ir_reports r
+         JOIN agents a ON a.id = r.agent_id
+         WHERE r.status = 'published' AND a.name = ANY($1::text[])
+         ORDER BY r.week_start DESC, a.name ASC`,
+        [allMappedNames]
+      );
+      return NextResponse.json({ reports, latestSystemWeek });
     }
 
-    if (role === 'admin') {
-      // Admins see all reports
+    if (role === 'admin' || role === 'quality') {
+      // Admins and Quality see all published reports
       const reports = await query<any>(
         `SELECT r.id, r.agent_id, a.name AS agent_name, r.week_start::date::text AS week_start, r.week_end::date::text AS week_end, r.status, r.generated, r.comments, r.viewed_at, r.generated_at
          FROM ir_reports r
@@ -79,16 +126,18 @@ export async function POST(req: NextRequest) {
   }
 
   const email = session.user.email;
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = await getUserByEmail(email).catch(() => null);
   const config = await readConfig();
   const user = config.users.find(u => (u.email || u.username).toLowerCase() === email.toLowerCase());
-  const role = user?.role || (session.user as any)?.role || 'agent';
-  let agentName = user?.agentName || '';
+  const role = dbUser?.role || user?.role || (session.user as any)?.role || 'agent';
+  let agentName = dbUser?.name || user?.agentName || '';
   if (email.toLowerCase() === 'pooja.hb@wintwealth.com') {
     agentName = 'Pooja';
   }
 
   try {
-    // Only agents can comment on their own reports (and admin for safety/verification)
+    // Only agents can comment on their own reports (and admin/tl for safety/verification)
     if (role === 'agent') {
       if (!agentName) {
         return NextResponse.json({ error: 'Agent profile name is not mapped in your user account.' }, { status: 403 });
@@ -107,7 +156,7 @@ export async function POST(req: NextRequest) {
       if (reportRows[0].agent_id !== agentId) {
         return NextResponse.json({ error: 'Forbidden: Cannot comment on another agent\'s scorecard.' }, { status: 403 });
       }
-    } else if (role !== 'admin') {
+    } else if (role !== 'admin' && role !== 'tl') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -135,10 +184,12 @@ export async function PATCH(req: NextRequest) {
   }
 
   const email = session.user.email;
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = await getUserByEmail(email).catch(() => null);
   const config = await readConfig();
   const user = config.users.find(u => (u.email || u.username).toLowerCase() === email.toLowerCase());
-  const role = user?.role || (session.user as any)?.role || 'agent';
-  let agentName = user?.agentName || '';
+  const role = dbUser?.role || user?.role || (session.user as any)?.role || 'agent';
+  let agentName = dbUser?.name || user?.agentName || '';
   if (email.toLowerCase() === 'pooja.hb@wintwealth.com') {
     agentName = 'Pooja';
   }
