@@ -38,12 +38,12 @@ export async function GET(req: NextRequest) {
 
   if (role === 'tl') {
     const config = await readConfig();
-    const configUser = config.users.find((u: any) => (u.email || u.username) === email);
+    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const selfAgentName = configUser?.agentName || '';
     if (selfAgentName) scopedAgentNames = await getAgentNamesByTL(selfAgentName);
   } else if (role === 'quality' || role === 'admin') {
     const config = await readConfig();
-    const configUser = config.users.find((u: any) => (u.email || u.username) === email);
+    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const selfAgentName = configUser?.agentName || '';
     if (selfAgentName && role === 'quality') scopedAgentNames = await getAgentNamesByQA(selfAgentName);
     

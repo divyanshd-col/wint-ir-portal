@@ -68,7 +68,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     dispositions = rows.map(r => r.d);
   } else if (role === 'quality') {
     // Quality users not in mapping get nothing (or we could fetch from assignedDispositions as fallback)
-    const configUser = config.users.find((u: any) => (u.email || u.username) === email);
+    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     dispositions = configUser?.assignedDispositions ?? [];
   } else {
     return NextResponse.json({ chats: [], total: 0 });
@@ -80,7 +80,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     dispositions = explicit.filter(d => dispositions.includes(d));
   }
 
-  const me = config.users.find(u => (u.email || u.username) === email);
+  const me = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
   const myQAName = me?.agentName || email.split('@')[0] || '';
 
   if (!['admin', 'quality'].includes(role) && !dispositions.length && !myQAName) {

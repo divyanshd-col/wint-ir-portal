@@ -55,8 +55,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     agentNames = rows.map(r => r.name);
   } else {
     const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let tlAgentName = configUser?.agentName;
+    if (!tlAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = email;
     agentNames = await getAgentNamesByTL(tlAgentName);
   }
 
