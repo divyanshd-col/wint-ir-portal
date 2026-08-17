@@ -522,9 +522,23 @@ export default function IRScorePanel({
                     const isUser = msg.role === 'user';
                     const isSystem = msg.role === 'system';
 
+                    const formatTs = (ts?: string) => {
+                      if (!ts) return '';
+                      const d = new Date(ts);
+                      if (isNaN(d.getTime())) return String(ts);
+                      return d.toLocaleString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
+                    };
+
                     if (isSystem) {
                       const systemTime = msg.timestamp
-                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        ? '  •  ' + formatTs(msg.timestamp)
                         : '';
                       return (
                         <div key={i} style={{ marginTop: i === 0 ? 0 : 8 }}>
@@ -539,13 +553,14 @@ export default function IRScorePanel({
                       );
                     }
 
+                    const timeStr = msg.timestamp ? formatTs(msg.timestamp) : '';
+                    const roleLabel = isUser ? 'User' : isAgent ? 'Agent' : 'Bot';
+
                     return (
                       <div key={i} style={{ marginTop: i === 0 ? 0 : 8, display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-start' : 'flex-end' }}>
-                        {!isUser && (
-                          <div style={{ fontSize: 11, color: '#A1A1AA', marginBottom: 4 }}>
-                            {isAgent ? 'Agent' : 'Bot'}
-                          </div>
-                        )}
+                        <div style={{ fontSize: 11, color: '#A1A1AA', marginBottom: 4 }}>
+                          {roleLabel}{timeStr ? ` · ${timeStr}` : ''}
+                        </div>
                         <div style={{
                           background: isUser ? '#FFFFFF' : isAgent ? '#2D2D31' : '#F4F4F5',
                           color: isUser ? '#111111' : isAgent ? '#fff' : '#111111',
