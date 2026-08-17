@@ -18,7 +18,7 @@ export async function PATCH(req: NextRequest) {
 
   const email = session.user.email;
   const config = await readConfig();
-  const user = config.users.find(u => (u.email || u.username) === email);
+  const user = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
 
   if (!user?.password) {
     return NextResponse.json({ error: 'No password set for this account' }, { status: 400 });

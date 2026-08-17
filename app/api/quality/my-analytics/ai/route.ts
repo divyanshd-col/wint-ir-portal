@@ -28,8 +28,15 @@ export async function POST(req: NextRequest) {
 
   const config = await readConfig();
   const email = session.user.email || '';
-  const configUser = config.users.find((u: any) => (u.email || u.username) === email);
-  const agentName = configUser?.agentName || '';
+  const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  let agentName = configUser?.agentName;
+  if (!agentName && email) {
+    const { getUserByEmail } = await import('@/lib/users');
+    const dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser?.name) {
+      agentName = dbUser.name;
+    }
+  }
   if (!agentName) return NextResponse.json({ error: 'Agent not configured' }, { status: 404 });
 
   const apiKey = config.iqsAnthropicApiKey || (config as any).anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';

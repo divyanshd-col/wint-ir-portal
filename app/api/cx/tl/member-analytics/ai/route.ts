@@ -40,13 +40,25 @@ export async function GET(req: NextRequest) {
   let tlAgentNames: string[];
   if (role === 'tl') {
     const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
+    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let tlAgentName = configUser?.agentName;
+    if (!tlAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
   } else if (role === 'agent') {
     const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
-    const selfAgentName = configUser?.agentName || email.split('@')[0];
+    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let selfAgentName = configUser?.agentName;
+    if (!selfAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) selfAgentName = dbUser.name;
+    }
+    if (!selfAgentName) selfAgentName = email.split('@')[0];
     tlAgentNames = [selfAgentName];
   } else {
     const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`, []);
