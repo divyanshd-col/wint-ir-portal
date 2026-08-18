@@ -11,6 +11,9 @@ function getMonday(d: Date): string {
   return monday.toISOString().split('T')[0];
 }
 
+export const maxDuration = 300; // 5 minutes max duration on Vercel Pro
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   // 1. Authorisation check using CRON_SECRET if present
   const cronSecret = process.env.CRON_SECRET;
@@ -75,63 +78,68 @@ export async function GET(req: NextRequest) {
     .filter(a => !activeAgentIds.has(a.id))
     .map(a => a.name);
 
-  // 4. Batch generation loop
+  // 4. Concurrent batch generation loop (batch size: 4)
   let generatedCount = 0;
   let failedCount = 0;
   const failures: Array<{ name: string; reason: string }> = [];
 
-  for (const agent of targetAgents) {
-    let success = false;
-    let errorMsg = '';
-    const reportId = `${agent.id}:${weekStart}`;
+  const BATCH_SIZE = 4;
+  for (let i = 0; i < targetAgents.length; i += BATCH_SIZE) {
+    const batch = targetAgents.slice(i, i + BATCH_SIZE);
 
-    // Retry once on failure as per spec (§87)
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        const scorecard = await generateScorecard({
-          agentId: agent.id,
-          agentName: agent.name,
-          weekStart,
-          weekEnd
-        });
+    await Promise.all(
+      batch.map(async (agent) => {
+        let success = false;
+        let errorMsg = '';
+        const reportId = `${agent.id}:${weekStart}`;
 
-        // Insert / Update in database
-        // Status defaults to 'published' for Direct-to-Agent flow
-        await query(
-          `INSERT INTO ir_reports (id, agent_id, week_start, week_end, status, generated, model_version, error_note)
-           VALUES ($1, $2, $3, $4, 'published', $5, 'gemini-3.5-flash', NULL)
-           ON CONFLICT (agent_id, week_start)
-           DO UPDATE SET status = EXCLUDED.status, generated = EXCLUDED.generated, 
-                         model_version = EXCLUDED.model_version, error_note = NULL, generated_at = NOW()`,
-          [reportId, agent.id, weekStart, weekEnd, JSON.stringify(scorecard)]
-        );
+        // Retry once on failure as per spec (§87)
+        for (let attempt = 1; attempt <= 2; attempt++) {
+          try {
+            const scorecard = await generateScorecard({
+              agentId: agent.id,
+              agentName: agent.name,
+              weekStart,
+              weekEnd
+            });
 
-        success = true;
-        generatedCount++;
-        break; // break retry loop
-      } catch (err: any) {
-        errorMsg = err.message || 'Unknown error';
-        console.error(`[generate-scorecards] Attempt ${attempt} failed for ${agent.name}:`, errorMsg);
-      }
-    }
+            // Insert / Update in database
+            await query(
+              `INSERT INTO ir_reports (id, agent_id, week_start, week_end, status, generated, model_version, error_note)
+               VALUES ($1, $2, $3, $4, 'published', $5, 'gemini-3.5-flash', NULL)
+               ON CONFLICT (agent_id, week_start)
+               DO UPDATE SET status = EXCLUDED.status, generated = EXCLUDED.generated, 
+                             model_version = EXCLUDED.model_version, error_note = NULL, generated_at = NOW()`,
+              [reportId, agent.id, weekStart, weekEnd, JSON.stringify(scorecard)]
+            );
 
-    if (!success) {
-      failedCount++;
-      failures.push({ name: agent.name, reason: errorMsg });
+            success = true;
+            generatedCount++;
+            break;
+          } catch (err: any) {
+            errorMsg = err.message || 'Unknown error';
+            console.error(`[generate-scorecards] Attempt ${attempt} failed for ${agent.name}:`, errorMsg);
+          }
+        }
 
-      // Save as failed so the generation state is persistent and audited
-      try {
-        await query(
-          `INSERT INTO ir_reports (id, agent_id, week_start, week_end, status, generated, model_version, error_note)
-           VALUES ($1, $2, $3, $4, 'failed', '{}'::jsonb, 'gemini-3.5-flash', $5)
-           ON CONFLICT (agent_id, week_start)
-           DO UPDATE SET status = EXCLUDED.status, error_note = EXCLUDED.error_note, generated_at = NOW()`,
-          [reportId, agent.id, weekStart, weekEnd, errorMsg]
-        );
-      } catch (saveErr: any) {
-        console.error(`[generate-scorecards] Failed to save failed state for ${agent.name}:`, saveErr.message);
-      }
-    }
+        if (!success) {
+          failedCount++;
+          failures.push({ name: agent.name, reason: errorMsg });
+
+          try {
+            await query(
+              `INSERT INTO ir_reports (id, agent_id, week_start, week_end, status, generated, model_version, error_note)
+               VALUES ($1, $2, $3, $4, 'failed', '{}'::jsonb, 'gemini-3.5-flash', $5)
+               ON CONFLICT (agent_id, week_start)
+               DO UPDATE SET status = EXCLUDED.status, error_note = EXCLUDED.error_note, generated_at = NOW()`,
+              [reportId, agent.id, weekStart, weekEnd, errorMsg]
+            );
+          } catch (saveErr: any) {
+            console.error(`[generate-scorecards] Failed to save failed state for ${agent.name}:`, saveErr.message);
+          }
+        }
+      })
+    );
   }
 
   // 5. Construct run summary

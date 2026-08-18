@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "app/api/cron/generate-scorecards/route.ts": {
+      "maxDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/sync-logs",
