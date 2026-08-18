@@ -114,6 +114,7 @@ Chats are often in Hinglish or Hindi, or mix scripts. Do NOT lower any dimension
 
 ## EMPTY OR NON-CHATS
 If there is no substantive interaction (a customer message with no agent reply, an instant drop, only system or activity lines, or no real question or resolution), set every score to "NA", explain in summary, and do not fabricate scores.
+- EXCEPTION FOR ESCALATED / TRANSFERRED CHATS: Customer messages or queries sent during the bot phase prior to transfer ARE active, substantive context for the human leg. If a chat is transferred to a human agent after the customer states a query, and the human agent joins but fails to acknowledge, address, or answer that query, this is NOT an empty/non-chat or NA. It MUST be scored as an agent failure (score 0) on applicable dimensions (GreetingHandover, Personalization, IssueResolution).
 
 ## HOW TO GRADE THE SOFT DIMENSIONS (0 / 0.5 / 1)
 Decide in this order for each graded dimension:
@@ -187,7 +188,7 @@ UNRELATED-CALL FLAG: if a call transcript is about something unrelated to the ch
 Did the agent address every question the customer raised (including questions raised during the bot phase and left unanswered) and either resolve the issue or correctly move it forward.
 - 1: all questions handled, issue resolved or correctly progressed (ticket raised, escalated, call arranged).
 - 0.5: main issue handled but a secondary question dropped, or progressed with no clear next step.
-- 0: the core question went unanswered, or an open issue was closed without resolving or escalating it.
+- 0: the core question went unanswered, an open issue was closed without resolving or escalating it, or failing to acknowledge/address a query stated by the customer in the bot phase prior to transfer.
 - CRITICAL: if resolution moved to a call or an offline step, that is a valid resolution. Do NOT lower this because the outcome is not fully visible in the chat text.
 
 ### Accuracy (graded 0 / 0.5 / 1)
@@ -210,7 +211,7 @@ Does the customer leave knowing what happens next, and does the closing fit the 
 Was the response built around this customer's situation.
 - 1: references the customer's actual bond, amounts, dates, or account state, and on escalated chats uses what the bot already gathered instead of asking the customer to repeat it.
 - 0.5: mostly relevant but leans generic where specifics were available.
-- 0: a template answer that could be pasted to any customer, or an answer that does not fit this customer.
+- 0: a template answer that could be pasted to any customer, an answer that does not fit this customer, or on escalated chats asking the customer to repeat what was already stated to the bot / ignoring the pre-transfer query.
 - Guardrail: if the agent named the specific bond, order, or figure, it IS personalised. A standard explanation of a concept anchored to the customer's case is personalised. Do not mark it generic.
 
 ### DissatisfactionHandling (conditional, graded 0 / 0.5 / 1, else "NA")
@@ -236,8 +237,9 @@ Could the customer easily read and understand the messages on a phone.
 
 ### GreetingHandover (binary 0 / 1)
 On taking over, did the human introduce themselves and pick up the thread.
-- 1: a greeting that identifies the agent and Wint Wealth, and picks up the escalated context rather than restarting cold.
-- 0: no greeting or no self identification.
+- 1: a greeting that identifies the agent and Wint Wealth, AND picks up/acknowledges the escalated context and customer query stated in the bot phase rather than restarting cold.
+- 0: no greeting, no self identification, OR restarting cold without acknowledging/picking up the customer's query already stated during the bot phase (e.g. asking "How can I help you?" or giving a generic greeting that ignores the user's stated query).
+- NEVER score NA for GreetingHandover on an escalated/transferred chat when a human agent joins. Failing to acknowledge the pre-transfer query is a failure (score 0), not NA.
 - NEVER flag a greeting that is present and complete but rendered as one block instead of a separate message. WhatsApp collapses newlines.
 
 ### EscalationDecision (conditional, binary 0 / 1, else "NA")
