@@ -48,7 +48,11 @@ export async function GET(req: NextRequest) {
 
   if (agentParam) {
     const matched = await query<any>(
-      `SELECT id, name FROM agents WHERE LOWER(name) = LOWER($1)`,
+      `SELECT id, name FROM agents 
+       WHERE LOWER(name) = LOWER($1) 
+          OR LOWER($1) LIKE LOWER(name || ' %') 
+          OR LOWER(name) LIKE LOWER($1 || ' %')
+       LIMIT 1`,
       [agentParam.trim()]
     );
     if (matched.length === 0) {
