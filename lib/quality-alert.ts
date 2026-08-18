@@ -260,3 +260,49 @@ export async function fireCallSkipAlert(opts: {
 
   sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
 }
+
+// ── KB Change Alert ──────────────────────────────────────────────────────────
+
+export async function fireKbChangeAlert(opts: {
+  chatId: string;
+  reviewerEmail: string;
+  reviewNote?: string;
+  agentName?: string;
+  disposition?: string;
+  subDisposition?: string;
+}): Promise<void> {
+  let token = process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      token = config.slackUserToken || '';
+    } catch {}
+  }
+  const channel = process.env.KB_CHANGE_SLACK_CHANNEL || 'C0BRLHR1KCY';
+  if (!token || !channel) {
+    console.warn(`[quality-alert] Cannot send KB change alert for chat ${opts.chatId}: token=${!!token}, channel=${channel}`);
+    return;
+  }
+
+  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+    : opts.chatId;
+
+  const lines = [
+    `📖 *Knowledge Base (KB) Change Noted by QA*`,
+    `*Chat ID:* ${chatLink}`,
+    `*QA Reviewer:* ${opts.reviewerEmail || 'Unknown'}`,
+    opts.agentName ? `*Agent:* ${opts.agentName}` : null,
+    opts.disposition ? `*Disposition:* ${opts.disposition}${opts.subDisposition ? ` (${opts.subDisposition})` : ''}` : null,
+    `*QA Review Note:*`,
+    `> ${opts.reviewNote?.trim() ? opts.reviewNote.trim().replace(/\n/g, '\n> ') : '_No note provided_'}`,
+  ].filter((l): l is string => l !== null);
+
+  const sent = await sendSlackMessage(channel, lines.join('\n'), token, undefined, {
+    username: 'QA KB Change Notifier',
+    icon_emoji: ':books:',
+  });
+  console.log(`[quality-alert] KB change Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+}
+
