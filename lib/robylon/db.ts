@@ -102,6 +102,23 @@ export async function getAgentName(agentId: number): Promise<string> {
   return rows[0]?.name ?? '';
 }
 
+/** Returns the TL name (tl_name) for a given agent name. */
+export async function getAgentTLByName(agentName: string): Promise<string | null> {
+  if (!agentName?.trim()) return null;
+  const trimmed = agentName.trim();
+  try {
+    const rows = await query<{ tl_name: string | null }>(
+      `SELECT tl_name FROM agents WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($1 || ' %') OR LOWER($1) LIKE LOWER(name || ' %') LIMIT 1`,
+      [trimmed]
+    );
+    return rows[0]?.tl_name || null;
+  } catch (err) {
+    console.error('[db] getAgentTLByName failed:', err);
+    return null;
+  }
+}
+
+
 /** Returns agent names whose tl_name matches (case-insensitive, handles email or user name). */
 export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]> {
   if (!tlIdentifier) return [];

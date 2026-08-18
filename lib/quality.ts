@@ -1265,6 +1265,9 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     ? data.kbCitation
     : null;
 
+  const breaches = (data.compliance && data.compliance.breaches) || data.breaches || [];
+  const complianceFlag = !!(data.compliance && (data.compliance.breach || (data.compliance.breaches || []).length > 0)) || !!data.compliance_flag || breaches.length > 0;
+
   return {
     chatId,
     scores,
@@ -1273,6 +1276,8 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
     conversationType: conversationType as 'bot' | 'agent' | 'hybrid' | undefined,
+    breaches,
+    complianceFlag,
     ...(uncertainParameters && { uncertainParameters }),
     ...(kbCitation && { kbCitation }),
   };

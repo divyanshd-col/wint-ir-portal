@@ -8,9 +8,32 @@ export async function sendSlackMessage(
   text: string,
   token: string,
   blocks?: any[],
+  username: string = 'cx-agent',
 ): Promise<boolean> {
   try {
-    const body: any = { channel, text };
+    const webhookUrl = process.env.COMPLIANCE_SLACK_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL || (channel.startsWith('https://') ? channel : (token.startsWith('https://') ? token : ''));
+
+    if (webhookUrl) {
+      const payload: any = { text, username: username || 'cx-agent' };
+      if (blocks?.length) payload.blocks = blocks;
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        console.error(`[slack] Webhook error ${res.status}: ${await res.text()}`);
+        return false;
+      }
+      console.log(`[slack] Posted alert via Webhook to ${channel}`);
+      return true;
+    }
+
+    const body: any = {
+      channel,
+      text,
+      username: username || 'cx-agent',
+    };
     if (blocks?.length) body.blocks = blocks;
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
