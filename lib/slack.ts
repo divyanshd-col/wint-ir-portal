@@ -8,13 +8,21 @@ export async function sendSlackMessage(
   text: string,
   token: string,
   blocks?: any[],
-  username: string = 'cx-agent',
+  options?: string | { username?: string; icon_emoji?: string },
 ): Promise<boolean> {
   try {
+    const opts = typeof options === 'object' && options !== null
+      ? options
+      : { username: typeof options === 'string' ? options : 'cx-agent' };
+
+    const username = opts.username || 'cx-agent';
+    const icon_emoji = opts.icon_emoji;
+
     const webhookUrl = process.env.COMPLIANCE_SLACK_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL || (channel.startsWith('https://') ? channel : (token.startsWith('https://') ? token : ''));
 
     if (webhookUrl) {
-      const payload: any = { text, username: username || 'cx-agent' };
+      const payload: any = { text, username };
+      if (icon_emoji) payload.icon_emoji = icon_emoji;
       if (blocks?.length) payload.blocks = blocks;
       const res = await fetch(webhookUrl, {
         method: 'POST',
@@ -32,8 +40,9 @@ export async function sendSlackMessage(
     const body: any = {
       channel,
       text,
-      username: username || 'cx-agent',
+      username,
     };
+    if (icon_emoji) body.icon_emoji = icon_emoji;
     if (blocks?.length) body.blocks = blocks;
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
