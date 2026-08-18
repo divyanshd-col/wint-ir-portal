@@ -43,7 +43,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const explicit = searchParams.get('agent');
     if (explicit) {
       const rows = await query<{ name: string }>(
-        `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %'`,
+        `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %' OR name ILIKE SPLIT_PART($1, ' ', 1) || ' %'`,
         [explicit]
       );
       agentNames = rows.length ? rows.map(r => r.name) : [explicit];

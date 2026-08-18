@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
   if (role === 'agent' && selfAgentName) {
     const { query: dbQuery } = await import('@/lib/cx/db');
     const matchedRows = await dbQuery<{ name: string }>(
-      `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %'`,
+      `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %' OR name ILIKE SPLIT_PART($1, ' ', 1) || ' %'`,
       [selfAgentName]
     );
     scopedAgentNames = matchedRows.length ? matchedRows.map(r => r.name) : [selfAgentName];
