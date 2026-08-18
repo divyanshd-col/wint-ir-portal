@@ -368,6 +368,8 @@ export async function executeScoring(
     disposition,
     subDisposition,
     uncertainParameters,
+    breaches:            primaryPass.breaches,
+    complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
   }).catch(() => {});
 
   return { 

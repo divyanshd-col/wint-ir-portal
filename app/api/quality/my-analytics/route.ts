@@ -88,15 +88,30 @@ export async function GET(req: NextRequest) {
   // Resolve agent name from config
   const config = await readConfig();
   const email = session.user.email || '';
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = await getUserByEmail(email).catch(() => null);
   const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-  let agentName = configUser?.agentName;
-  if (!agentName && email) {
-    const { getUserByEmail } = await import('@/lib/users');
-    const dbUser = await getUserByEmail(email).catch(() => null);
-    if (dbUser?.name) {
-      agentName = dbUser.name;
-    }
+  const rawName = dbUser?.name || configUser?.agentName || email.split('@')[0];
+
+  let matchedAgent: { id: number; name: string } | null = null;
+  if (dbUser?.user_id) {
+    const byUserId = await query<{ id: number; name: string }>(
+      `SELECT id, name FROM agents WHERE user_id = $1 LIMIT 1`, [dbUser.user_id]
+    );
+    if (byUserId.length > 0) matchedAgent = byUserId[0];
   }
+  if (!matchedAgent && rawName) {
+    const byName = await query<{ id: number; name: string }>(
+      `SELECT id, name FROM agents 
+       WHERE LOWER(name) = LOWER($1) 
+          OR LOWER($1) LIKE LOWER(name || ' %') 
+          OR LOWER(name) LIKE LOWER($1 || ' %') 
+       LIMIT 1`,
+      [rawName.trim()]
+    );
+    if (byName.length > 0) matchedAgent = byName[0];
+  }
+  const agentName = matchedAgent?.name || rawName;
   if (!agentName) {
     return NextResponse.json({ error: 'Agent not configured' }, { status: 404 });
   }
