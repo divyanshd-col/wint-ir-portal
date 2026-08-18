@@ -4,6 +4,25 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
 
+async function resolveAgentId(dbUser: any, agentName: string): Promise<number | null> {
+  if (dbUser?.user_id) {
+    const byUserId = await query<any>(`SELECT id FROM agents WHERE user_id = $1 LIMIT 1`, [dbUser.user_id]);
+    if (byUserId.length > 0) return byUserId[0].id;
+  }
+  if (!agentName) return null;
+  const nameTrimmed = agentName.trim();
+  const byName = await query<any>(
+    `SELECT id FROM agents 
+     WHERE LOWER(name) = LOWER($1) 
+        OR LOWER($1) LIKE LOWER(name || ' %') 
+        OR LOWER(name) LIKE LOWER($1 || ' %')
+     LIMIT 1`,
+    [nameTrimmed]
+  );
+  if (byName.length > 0) return byName[0].id;
+  return null;
+}
+
 // GET: Fetch reports depending on user role
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -29,12 +48,10 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ error: 'Agent profile name is not mapped in your user account.' }, { status: 400 });
       }
 
-      // Find agent id in DB
-      const matched = await query<any>(`SELECT id FROM agents WHERE LOWER(name) = LOWER($1)`, [agentName]);
-      if (matched.length === 0) {
+      const agentId = await resolveAgentId(dbUser, agentName);
+      if (!agentId) {
         return NextResponse.json({ reports: [], latestSystemWeek });
       }
-      const agentId = matched[0].id;
 
       // Fetch published scorecards for this agent
       const reports = await query<any>(
@@ -143,11 +160,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Agent profile name is not mapped in your user account.' }, { status: 403 });
       }
 
-      const matchedAgent = await query<any>(`SELECT id FROM agents WHERE LOWER(name) = LOWER($1)`, [agentName]);
-      if (matchedAgent.length === 0) {
+      const agentId = await resolveAgentId(dbUser, agentName);
+      if (!agentId) {
         return NextResponse.json({ error: 'Agent profile not found in DB.' }, { status: 403 });
       }
-      const agentId = matchedAgent[0].id;
 
       const reportRows = await query<any>(`SELECT agent_id FROM ir_reports WHERE id = $1`, [reportId]);
       if (reportRows.length === 0) {
@@ -200,11 +216,10 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: 'Agent profile name is not mapped.' }, { status: 403 });
       }
 
-      const matchedAgent = await query<any>(`SELECT id FROM agents WHERE LOWER(name) = LOWER($1)`, [agentName]);
-      if (matchedAgent.length === 0) {
+      const agentId = await resolveAgentId(dbUser, agentName);
+      if (!agentId) {
         return NextResponse.json({ error: 'Agent profile not found.' }, { status: 403 });
       }
-      const agentId = matchedAgent[0].id;
 
       const reportRows = await query<any>(`SELECT agent_id, viewed_at FROM ir_reports WHERE id = $1`, [reportId]);
       if (reportRows.length === 0) {
