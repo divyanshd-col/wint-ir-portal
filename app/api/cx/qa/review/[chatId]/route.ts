@@ -9,6 +9,7 @@ import type { IQSAuditEntry } from '@/lib/store';
 import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
 import { ALL_DB_KEY_TO_PASCAL as DB_TO_PASCAL } from '@/lib/param-keys';
+import { fireKbChangeAlert } from '@/lib/quality-alert';
 
 // Bot-distinctive DB keys — parameters that appear ONLY in the bot rubric, never
 // the human one. IssueResolution/Accuracy/Personalization are shared between both
@@ -70,17 +71,9 @@ export async function PATCH(
       return Object.keys(safeParams).some(k => BOT_ONLY_DB_KEYS.includes(k));
     })());
 
-    if (action === 'submit') {
-      await query(
-        `UPDATE iqs_scores
-         SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = 'reviewed'
-         WHERE chat_id = $3`,
-        [email, note ?? null, chatId]
-      );
-      log.info(ROUTE, 'submit', { chatId, reviewer: email });
-      await storeAppendAuditEntry({ id: randomUUID(), action: 'review_submitted', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { note: note ?? null } } as IQSAuditEntry);
+    let finalMergedParams: Record<string, any> | null = null;
 
-    } else if (action === 'override' || action === 'resolve') {
+    if (action === 'submit' || action === 'override' || action === 'resolve') {
       let isScoreUpdated = false;
       if (parameters) {
         // Fetch existing to merge
@@ -115,7 +108,9 @@ export async function PATCH(
         }
 
         for (const [key, val] of Object.entries(parameters) as [string, any][]) {
-          if (!key.startsWith('__')) {
+          if (key === '__needs_kb_update') {
+            merged['__needs_kb_update'] = val;
+          } else if (!key.startsWith('__')) {
             const prev = existingParams[key];
             if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
             const cell = { score: val.score, reasoning: val.reasoning };
@@ -129,6 +124,7 @@ export async function PATCH(
           }
         }
         if (note) merged['__review_note'] = note;
+        finalMergedParams = merged;
 
         const pascalScores: Record<string, ParamScore> = {};
         const safeAgentParams = {
@@ -183,9 +179,9 @@ export async function PATCH(
         );
 
         log.info(ROUTE, action, { chatId, reviewer: email, oldIqs, newIqs, paramChanges });
-        await storeAppendAuditEntry({ id: randomUUID(), action: 'score_overridden', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { oldIqs, newIqs, paramChanges, note: note ?? null } } as IQSAuditEntry);
+        await storeAppendAuditEntry({ id: randomUUID(), action: action === 'submit' ? 'review_submitted' : 'score_overridden', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { oldIqs, newIqs, paramChanges, note: note ?? null } } as IQSAuditEntry);
       } else {
-        // resolve without parameter changes — just mark reviewed
+        // action without parameter changes — just mark reviewed
         await query(
           `UPDATE iqs_scores
            SET reviewed_by = $1, reviewed_at = NOW(), review_note = $2, status = 'reviewed'
@@ -210,7 +206,36 @@ export async function PATCH(
         log.info(ROUTE, 'flag resolved', { chatId, flagId, reviewer: email, isScoreUpdated });
         await storeAppendAuditEntry({ id: randomUUID(), action: 'dispute_resolved', chatId, actorEmail: email, actorRole: role, ts: new Date().toISOString(), meta: { flagId, note: finalNote } } as IQSAuditEntry);
       }
+
+      // Fire Slack alert for KB Change if __needs_kb_update is marked
+      const checkKbMarked = finalMergedParams?.__needs_kb_update?.score === true ||
+        finalMergedParams?.__needs_kb_update?.score === 'true' ||
+        finalMergedParams?.__needs_kb_update === true;
+
+      if (checkKbMarked) {
+        try {
+          const convRows = await query<{ assigned_agent: string; disposition: string; sub_disposition: string }>(
+            `SELECT tags->>'assigned_agent' AS assigned_agent,
+                    tags->>'disposition' AS disposition,
+                    tags->>'sub_disposition' AS sub_disposition
+             FROM conversations WHERE id = $1`,
+            [chatId]
+          );
+          const convInfo = convRows[0];
+          await fireKbChangeAlert({
+            chatId,
+            reviewerEmail: email,
+            reviewNote: note,
+            agentName: convInfo?.assigned_agent,
+            disposition: convInfo?.disposition,
+            subDisposition: convInfo?.sub_disposition,
+          });
+        } catch (err: any) {
+          log.error(ROUTE, 'fireKbChangeAlert error', { chatId, err: err?.message });
+        }
+      }
     } else if (action === 'reopen') {
+
       await query(
         `UPDATE iqs_scores
          SET status = 'reopened', reviewed_by = NULL, reviewed_at = NULL, review_note = NULL, scored_at = NOW()
