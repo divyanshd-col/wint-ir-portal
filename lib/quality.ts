@@ -870,7 +870,7 @@ Score based on whether the agent's information is factually correct per Wint Wea
 ### 2. All Questions Answered (10%)
 - **Yes**: Every explicit customer question was answered or deliberately deferred with a reason.
 - **No** — mark No if ANY of these are visible:
-  - **AQ – Missed question with Bot**: A question the customer raised (even during bot phase) was never picked up and answered by the agent.
+  - **AQ – Missed question with Bot**: A question the customer raised (even during bot phase prior to transfer) was never picked up, acknowledged, or answered by the agent.
   - **AQ – Multiple queries**: Customer asked several questions in one message and the agent answered only some of them, leaving one or more unanswered.
 - **NA**: Very rare.
 
@@ -889,6 +889,7 @@ Score whether the agent set a clear, specific expectation about timeline, next s
 - **No** — mark No if ANY of these are visible:
   - **CP – Irrelevant answer**: Agent's response does not address the customer's actual situation or problem.
   - **CP – Copy-paste answer**: Generic template answer that could apply to any customer. Test: could this exact answer be copy-pasted to a completely different customer's chat? If yes → No.
+  - **CP – Ignoring bot-transferred query**: Customer stated their query during the bot phase, and the human agent ignored that context or asked the customer to repeat what was already stated.
   - **CP – Missing info for easy understanding**: Agent did not share links, screenshots, or docs that were clearly needed for the customer to understand or act — leaving the response incomplete.
 - **NA**: Very rare.
 
@@ -923,9 +924,9 @@ Score whether the agent followed Wint Wealth's operational process correctly.
 - **CRITICAL**: Never assume a Finder check was skipped unless the agent's response directly contradicts what that check would have shown.
 
 ### 8. First Response & Opening (5%)
-- **Yes**: Greeting is a SEPARATE message containing: (1) Hi/Hello, (2) agent name + Wint Wealth, (3) offer to help OR acknowledgment of the specific query.
-- **No**: Greeting merged with the answer. OR purely generic opener. OR no greeting at all. OR agent name missing.
-- **NA**: Very rare.
+- **Yes**: Greeting is a SEPARATE message containing: (1) Hi/Hello, (2) agent name + Wint Wealth, (3) offer to help OR acknowledgment of the specific query. On bot-transferred chats, the greeting MUST acknowledge the customer's query already stated in the bot phase.
+- **No**: Greeting merged with the answer. OR purely generic opener (e.g. asking "How can I help you?" when the query was already stated to the bot). OR failing to acknowledge the customer's query already stated during the bot phase before transfer. OR no greeting at all. OR agent name missing.
+- **NA**: Very rare. Never mark NA for Opening on a bot-transferred chat when an agent joins.
 
 ### 9. Call (when required) (5%)
 Score whether the agent correctly decided on a call — made one when needed, and didn't make one when not needed.
@@ -957,7 +958,7 @@ Score whether the agent correctly decided on a call — made one when needed, an
 Score whether the agent acknowledged the customer's emotional state and communicated with warmth.
 - **Yes**: Chat contains at least ONE genuine empathy acknowledgment — e.g. "I understand your concern", "I can see why this is frustrating", "I apologise for the inconvenience" — that addresses the customer's situation.
 - **No** — mark No if ANY of these are visible:
-  - **EP – Did not acknowledge the query**: Agent gave a purely transactional reply with no personalisation or acknowledgment of the customer's situation.
+  - **EP – Did not acknowledge the query**: Agent gave a purely transactional reply or generic greeting with no personalisation or acknowledgment of the customer's situation/query (especially queries stated in the bot phase prior to transfer).
   - **EP – Robotic / too formal**: Excessive use of "sir/ma'am" at the start or end of every statement; tone feels scripted and impersonal throughout.
   - **EP – Hollow fillers overused**: Phrases like "Please", "I can understand your concern", "I can empathise with you", "Please do not worry" used repeatedly with no real personalisation — filler without feeling.
   - **EP – Requesting user without proper tone**: Asking the user to retry, re-send, or take an action without a polite, properly framed request.
