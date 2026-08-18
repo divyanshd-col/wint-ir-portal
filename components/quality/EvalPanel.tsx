@@ -227,7 +227,23 @@ export default function EvalPanel({
   const [historyOpen,    setHistoryOpen]    = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
+  const initialNeedsKbUpdate = Boolean(
+    (parameters as any)?.__needs_kb_update?.score === true ||
+    (parameters as any)?.__needs_kb_update?.score === 'true' ||
+    (parameters as any)?.__needs_kb_update === true ||
+    (parameters as any)?.needs_kb_update?.score === true
+  );
+  const [needsKbUpdate, setNeedsKbUpdate] = useState(initialNeedsKbUpdate);
+
+  useEffect(() => {
+    setNeedsKbUpdate(Boolean(
+      (parameters as any)?.__needs_kb_update?.score === true ||
+      (parameters as any)?.__needs_kb_update?.score === 'true' ||
+      (parameters as any)?.__needs_kb_update === true ||
+      (parameters as any)?.needs_kb_update?.score === true
+    ));
+  }, [chatId, parameters]);
+
 
   // Dispute creation state (for TL)
   const [disputing, setDisputing] = useState(false);
@@ -419,7 +435,7 @@ export default function EvalPanel({
       const body: any = { action, flagId };
       if (noteToUse) body.note = noteToUse;
 
-      if (isModified) {
+      if (isModified || needsKbUpdate !== initialNeedsKbUpdate || needsKbUpdate) {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
         
         const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
@@ -447,7 +463,7 @@ export default function EvalPanel({
           }
         }
         
-        if (needsKbUpdate) params['__needs_kb_update'] = { score: true, reasoning: '' } as any;
+        params['__needs_kb_update'] = { score: needsKbUpdate, reasoning: '' } as any;
         body.parameters = params;
       }
 
