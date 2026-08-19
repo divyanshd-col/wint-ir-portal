@@ -244,6 +244,20 @@ export default function EvalPanel({
     ));
   }, [chatId, parameters]);
 
+  const [userRole, setUserRole] = useState<string>(reviewerRole || '');
+
+  useEffect(() => {
+    if (!userRole) {
+      fetch('/api/users/me')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.role) setUserRole(d.role); })
+        .catch(() => {});
+    }
+  }, [userRole]);
+
+  const canMarkKb = ['admin', 'quality'].includes((userRole || reviewerRole || '').toLowerCase());
+
+
 
   // Dispute creation state (for TL)
   const [disputing, setDisputing] = useState(false);
@@ -922,22 +936,24 @@ export default function EvalPanel({
                   </button>
                 ) : null
               )}
-              {/* Mark for KB change checkbox (always visible) */}
-              <label style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500,
-                color: needsKbUpdate ? '#92400e' : 'var(--qa-text-2)', cursor: 'pointer',
-                background: needsKbUpdate ? '#fef3c7' : 'var(--qa-card)',
-                border: needsKbUpdate ? '1px solid #f59e0b' : '1px solid var(--qa-border)',
-                padding: '4px 10px', borderRadius: 8, transition: 'all 0.15s ease',
-              }}>
-                <input
-                  type="checkbox"
-                  checked={needsKbUpdate}
-                  onChange={e => setNeedsKbUpdate(e.target.checked)}
-                  style={{ cursor: 'pointer', accentColor: '#d97706' }}
-                />
-                Mark for KB change
-              </label>
+              {/* Mark for KB change checkbox (only visible to admins and QA) */}
+              {canMarkKb && (
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500,
+                  color: needsKbUpdate ? '#92400e' : 'var(--qa-text-2)', cursor: 'pointer',
+                  background: needsKbUpdate ? '#fef3c7' : 'var(--qa-card)',
+                  border: needsKbUpdate ? '1px solid #f59e0b' : '1px solid var(--qa-border)',
+                  padding: '4px 10px', borderRadius: 8, transition: 'all 0.15s ease',
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={needsKbUpdate}
+                    onChange={e => setNeedsKbUpdate(e.target.checked)}
+                    style={{ cursor: 'pointer', accentColor: '#d97706' }}
+                  />
+                  Mark for KB change
+                </label>
+              )}
 
               {/* Primary action (submit/resolve/override modes) */}
               {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (

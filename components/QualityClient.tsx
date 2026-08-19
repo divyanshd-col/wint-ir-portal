@@ -2994,18 +2994,20 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                 </div>
               </div>
 
-              {/* Mark for KB change option */}
-              <div>
-                <label className="flex items-center gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200/80 px-3.5 py-2.5 rounded-xl cursor-pointer hover:bg-amber-100/70 transition">
-                  <input
-                    type="checkbox"
-                    checked={editForm.needsKbUpdate || false}
-                    onChange={e => setEditForm(f => f ? { ...f, needsKbUpdate: e.target.checked } : f)}
-                    className="accent-amber-600 rounded cursor-pointer w-4 h-4"
-                  />
-                  <span>Mark for KB change (notify QA Slack channel C0BRLHR1KCY)</span>
-                </label>
-              </div>
+              {/* Mark for KB change option (only visible to admins and QA) */}
+              {['admin', 'quality'].includes((userRole || '').toLowerCase()) && (
+                <div>
+                  <label className="flex items-center gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200/80 px-3.5 py-2.5 rounded-xl cursor-pointer hover:bg-amber-100/70 transition">
+                    <input
+                      type="checkbox"
+                      checked={editForm.needsKbUpdate || false}
+                      onChange={e => setEditForm(f => f ? { ...f, needsKbUpdate: e.target.checked } : f)}
+                      className="accent-amber-600 rounded cursor-pointer w-4 h-4"
+                    />
+                    <span>Mark for KB change (notify QA Slack channel C0BRLHR1KCY)</span>
+                  </label>
+                </div>
+              )}
 
               {/* Reviewer note */}
               <div>
