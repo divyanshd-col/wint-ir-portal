@@ -136,10 +136,11 @@ export async function PATCH(req: NextRequest) {
             [chatId]
           );
           const convInfo = convRows[0];
+          const kbCommentNote = params['__needs_kb_update']?.reasoning || note;
           await fireKbChangeAlert({
             chatId,
             reviewerEmail: updatedBy,
-            reviewNote: note,
+            reviewNote: kbCommentNote,
             agentName: agentName || convInfo?.assigned_agent,
             disposition: disposition || convInfo?.disposition,
             subDisposition: subDisposition || convInfo?.sub_disposition,

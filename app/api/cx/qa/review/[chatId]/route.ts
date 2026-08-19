@@ -222,10 +222,11 @@ export async function PATCH(
             [chatId]
           );
           const convInfo = convRows[0];
+          const kbCommentNote = finalMergedParams?.__needs_kb_update?.reasoning || note || finalMergedParams?.__review_note;
           await fireKbChangeAlert({
             chatId,
             reviewerEmail: email,
-            reviewNote: note,
+            reviewNote: kbCommentNote,
             agentName: convInfo?.assigned_agent,
             disposition: convInfo?.disposition,
             subDisposition: convInfo?.sub_disposition,
