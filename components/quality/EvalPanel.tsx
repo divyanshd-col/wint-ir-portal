@@ -340,6 +340,7 @@ export default function EvalPanel({
 
   const isModified = (() => {
     let mod = false;
+    if (needsKbUpdate !== initialNeedsKbUpdate) mod = true;
     const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
     if (checkAgent) {
       const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
@@ -362,7 +363,10 @@ export default function EvalPanel({
     return mod;
   })();
 
-  const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve') : (isModified ? 'Override' : 'Submit');
+  const primaryLabel = mode === 'resolve'
+    ? (isModified ? 'Override & Resolve' : 'Resolve')
+    : (isModified ? 'Save / Override' : 'Submit');
+
 
   // Fetch transcript on mount
   useEffect(() => {

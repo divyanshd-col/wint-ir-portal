@@ -2355,6 +2355,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
   const [editForm, setEditForm] = useState<{
     agentName: string; csat: string; disposition: string; subDisposition: string;
     summary: string; scores: Record<string, string>; reasoning: Record<string, string>; note: string;
+    needsKbUpdate?: boolean;
   } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -2662,6 +2663,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       scores: { ...entry.scores },
       reasoning: { ...entry.reasoning },
       note: '',
+      needsKbUpdate: Boolean((entry.parameters as any)?.__needs_kb_update?.score || (entry.parameters as any)?.__needs_kb_update || false),
     });
 
   };
@@ -2679,6 +2681,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
           reasoning: editForm.reasoning, disposition: editForm.disposition,
           subDisposition: editForm.subDisposition, csat: editForm.csat,
           summary: editForm.summary, note: editForm.note,
+          needsKbUpdate: editForm.needsKbUpdate,
         }),
       });
       if (!res.ok) {
@@ -2989,6 +2992,19 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Mark for KB change option */}
+              <div>
+                <label className="flex items-center gap-2 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200/80 px-3.5 py-2.5 rounded-xl cursor-pointer hover:bg-amber-100/70 transition">
+                  <input
+                    type="checkbox"
+                    checked={editForm.needsKbUpdate || false}
+                    onChange={e => setEditForm(f => f ? { ...f, needsKbUpdate: e.target.checked } : f)}
+                    className="accent-amber-600 rounded cursor-pointer w-4 h-4"
+                  />
+                  <span>Mark for KB change (notify QA Slack channel C0BRLHR1KCY)</span>
+                </label>
               </div>
 
               {/* Reviewer note */}
