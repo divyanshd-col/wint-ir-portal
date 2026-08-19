@@ -922,37 +922,41 @@ export default function EvalPanel({
                   </button>
                 ) : null
               )}
-              {/* Primary action (submit/resolve modes) */}
-              {(mode === 'submit' || mode === 'resolve') && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  {isModified && (
-                    <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={needsKbUpdate}
-                        onChange={e => setNeedsKbUpdate(e.target.checked)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                      Mark KB Update
-                    </label>
-                  )}
-                  <button
-                    onClick={submit}
-                    disabled={submitting}
-                    style={{
-                      height: 36, padding: '0 16px', borderRadius: 8,
-                      fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                      cursor: submitting ? 'not-allowed' : 'pointer',
-                      display: 'inline-flex', alignItems: 'center',
-                      border: '1px solid var(--qa-gray-700)',
-                      background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
-                      color: '#fff',
-                      opacity: submitting ? 0.7 : 1,
-                    }}
-                  >
-                    {submitting ? 'Saving…' : primaryLabel}
-                  </button>
-                </div>
+              {/* Mark for KB change checkbox (always visible) */}
+              <label style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500,
+                color: needsKbUpdate ? '#92400e' : 'var(--qa-text-2)', cursor: 'pointer',
+                background: needsKbUpdate ? '#fef3c7' : 'var(--qa-card)',
+                border: needsKbUpdate ? '1px solid #f59e0b' : '1px solid var(--qa-border)',
+                padding: '4px 10px', borderRadius: 8, transition: 'all 0.15s ease',
+              }}>
+                <input
+                  type="checkbox"
+                  checked={needsKbUpdate}
+                  onChange={e => setNeedsKbUpdate(e.target.checked)}
+                  style={{ cursor: 'pointer', accentColor: '#d97706' }}
+                />
+                Mark for KB change
+              </label>
+
+              {/* Primary action (submit/resolve/override modes) */}
+              {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (
+                <button
+                  onClick={submit}
+                  disabled={submitting}
+                  style={{
+                    height: 36, padding: '0 16px', borderRadius: 8,
+                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
+                    cursor: submitting ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex', alignItems: 'center',
+                    border: '1px solid var(--qa-gray-700)',
+                    background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
+                    color: '#fff',
+                    opacity: submitting ? 0.7 : 1,
+                  }}
+                >
+                  {submitting ? 'Saving…' : primaryLabel}
+                </button>
               )}
               {/* Close */}
               <button onClick={onClose} style={{
