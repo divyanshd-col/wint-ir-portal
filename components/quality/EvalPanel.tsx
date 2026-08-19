@@ -233,7 +233,8 @@ export default function EvalPanel({
     (parameters as any)?.__needs_kb_update === true ||
     (parameters as any)?.needs_kb_update?.score === true
   );
-  const [needsKbUpdate, setNeedsKbUpdate] = useState(initialNeedsKbUpdate);
+  const initialKbComment = (parameters as any)?.__needs_kb_update?.reasoning || '';
+  const [kbComment, setKbComment] = useState<string>(initialKbComment);
 
   useEffect(() => {
     setNeedsKbUpdate(Boolean(
@@ -242,6 +243,7 @@ export default function EvalPanel({
       (parameters as any)?.__needs_kb_update === true ||
       (parameters as any)?.needs_kb_update?.score === true
     ));
+    setKbComment((parameters as any)?.__needs_kb_update?.reasoning || '');
   }, [chatId, parameters]);
 
   const [userRole, setUserRole] = useState<string>(reviewerRole || '');
@@ -354,7 +356,7 @@ export default function EvalPanel({
 
   const isModified = (() => {
     let mod = false;
-    if (needsKbUpdate !== initialNeedsKbUpdate) mod = true;
+    if (needsKbUpdate !== initialNeedsKbUpdate || (needsKbUpdate && kbComment.trim() !== initialKbComment.trim())) mod = true;
     const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
     if (checkAgent) {
       const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
@@ -481,7 +483,7 @@ export default function EvalPanel({
           }
         }
         
-        params['__needs_kb_update'] = { score: needsKbUpdate, reasoning: '' } as any;
+        params['__needs_kb_update'] = { score: needsKbUpdate, reasoning: kbComment.trim() || noteToUse || '' } as any;
         body.parameters = params;
       }
 
@@ -936,23 +938,39 @@ export default function EvalPanel({
                   </button>
                 ) : null
               )}
-              {/* Mark for KB change checkbox (only visible to admins and QA) */}
+              {/* Mark for KB change checkbox + comment field (only visible to admins and QA) */}
               {canMarkKb && (
-                <label style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500,
-                  color: needsKbUpdate ? '#92400e' : 'var(--qa-text-2)', cursor: 'pointer',
-                  background: needsKbUpdate ? '#fef3c7' : 'var(--qa-card)',
-                  border: needsKbUpdate ? '1px solid #f59e0b' : '1px solid var(--qa-border)',
-                  padding: '4px 10px', borderRadius: 8, transition: 'all 0.15s ease',
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={needsKbUpdate}
-                    onChange={e => setNeedsKbUpdate(e.target.checked)}
-                    style={{ cursor: 'pointer', accentColor: '#d97706' }}
-                  />
-                  Mark for KB change
-                </label>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500,
+                    color: needsKbUpdate ? '#92400e' : 'var(--qa-text-2)', cursor: 'pointer',
+                    background: needsKbUpdate ? '#fef3c7' : 'var(--qa-card)',
+                    border: needsKbUpdate ? '1px solid #f59e0b' : '1px solid var(--qa-border)',
+                    padding: '4px 10px', borderRadius: 8, transition: 'all 0.15s ease',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={needsKbUpdate}
+                      onChange={e => setNeedsKbUpdate(e.target.checked)}
+                      style={{ cursor: 'pointer', accentColor: '#d97706' }}
+                    />
+                    Mark for KB change
+                  </label>
+                  {needsKbUpdate && (
+                    <input
+                      type="text"
+                      placeholder="Comment on KB update needed..."
+                      value={kbComment}
+                      onChange={e => setKbComment(e.target.value)}
+                      style={{
+                        height: 32, padding: '0 10px', borderRadius: 8,
+                        fontSize: 12, border: '1px solid #f59e0b',
+                        background: '#fffbe6', color: '#78350f',
+                        fontFamily: 'inherit', outline: 'none', width: 230,
+                      }}
+                    />
+                  )}
+                </div>
               )}
 
               {/* Primary action (submit/resolve/override modes) */}

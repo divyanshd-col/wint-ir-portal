@@ -295,8 +295,8 @@ export async function fireKbChangeAlert(opts: {
     `*QA Reviewer:* ${opts.reviewerEmail || 'Unknown'}`,
     opts.agentName ? `*Agent:* ${opts.agentName}` : null,
     opts.disposition ? `*Disposition:* ${opts.disposition}${opts.subDisposition ? ` (${opts.subDisposition})` : ''}` : null,
-    `*QA Review Note:*`,
-    `> ${opts.reviewNote?.trim() ? opts.reviewNote.trim().replace(/\n/g, '\n> ') : '_No note provided_'}`,
+    `*KB Change Comment / Details:*`,
+    `> ${opts.reviewNote?.trim() ? opts.reviewNote.trim().replace(/\n/g, '\n> ') : '_No specific comment provided_'}`,
   ].filter((l): l is string => l !== null);
 
   const sent = await sendSlackMessage(channel, lines.join('\n'), token, undefined, {
