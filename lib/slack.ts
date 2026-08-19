@@ -18,7 +18,10 @@ export async function sendSlackMessage(
     const username = opts.username || 'cx-agent';
     const icon_emoji = opts.icon_emoji;
 
-    const webhookUrl = process.env.COMPLIANCE_SLACK_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL || (channel.startsWith('https://') ? channel : (token.startsWith('https://') ? token : ''));
+    const isWebhookChannel = channel.startsWith('https://');
+    const webhookUrl = isWebhookChannel
+      ? channel
+      : (!token ? (process.env.COMPLIANCE_SLACK_WEBHOOK_URL || process.env.SLACK_WEBHOOK_URL) : '');
 
     if (webhookUrl) {
       const payload: any = { text, username };
