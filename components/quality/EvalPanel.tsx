@@ -233,6 +233,7 @@ export default function EvalPanel({
     (parameters as any)?.__needs_kb_update === true ||
     (parameters as any)?.needs_kb_update?.score === true
   );
+  const [needsKbUpdate, setNeedsKbUpdate] = useState(initialNeedsKbUpdate);
   const initialKbComment = (parameters as any)?.__needs_kb_update?.reasoning || '';
   const [kbComment, setKbComment] = useState<string>(initialKbComment);
 
