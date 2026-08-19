@@ -48,9 +48,7 @@ function hashToken(token: string): string {
 
 export async function getUserByEmail(email: string): Promise<DbUser | null> {
   const norm = normalizeEmail(email);
-  const alt = norm.includes('.mondal@')
-    ? norm.replace('.mondal@', '@')
-    : (norm.startsWith('anwesha@') ? norm.replace('anwesha@', 'anwesha.mondal@') : norm);
+  const alt = norm === 'anwesha@wintwealth.com' ? 'anwesha.mandal@wintwealth.com' : norm;
   const rows = await query<DbUser>(`SELECT ${USER_COLS} FROM users WHERE email = $1 OR email = $2`, [norm, alt]);
   return rows[0] ?? null;
 }
