@@ -34,7 +34,8 @@ export async function GET(req: NextRequest) {
 
   // Resolve scoped agent names and assigned call dispositions
   let scopedAgentNames: string[] | null = null;
-  let assignedCallDispositions: string[] | null = null;
+  let assignedDispositions: string[] | null = null;
+  let strictDispositions: string[] | null = null;
 
   if (role === 'tl') {
     const config = await readConfig();
@@ -49,10 +50,12 @@ export async function GET(req: NextRequest) {
     
     const map = config.qaDispositionMap ?? [];
     const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
+    const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions;
 
-    if ((role === 'quality' || qaEntry) && (configUser as any)?.assignedCallDispositions?.length) {
+    if (userDisps?.length) {
+      assignedDispositions = userDisps;
       if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-        assignedCallDispositions = (configUser as any).assignedCallDispositions as string[];
+        strictDispositions = userDisps;
       }
     }
   }
@@ -61,7 +64,7 @@ export async function GET(req: NextRequest) {
   const dateFrom      = url.searchParams.get('dateFrom') || '';
   const dateTo        = url.searchParams.get('dateTo') || '';
   const agentFilter   = url.searchParams.get('agent') || '';
-  const dispositionFilter = url.searchParams.get('disposition') || '';
+  const dispositionFilter = url.searchParams.get('disposition') || url.searchParams.get('tag') || '';
   const minScore      = url.searchParams.get('minScore') ? parseInt(url.searchParams.get('minScore')!, 10) : undefined;
   const maxScore      = url.searchParams.get('maxScore') ? parseInt(url.searchParams.get('maxScore')!, 10) : undefined;
 
@@ -76,9 +79,31 @@ export async function GET(req: NextRequest) {
   }
 
   // QA disposition scoping: apply assigned dispositions as default when no explicit filter
-  const effectiveDispositions = assignedCallDispositions && !dispositionFilter
-    ? assignedCallDispositions
-    : dispositionFilter ? [dispositionFilter] : undefined;
+  let effectiveDispositions: string[] | undefined;
+  if (strictDispositions) {
+    if (dispositionFilter) {
+      if (strictDispositions.includes(dispositionFilter)) {
+        effectiveDispositions = [dispositionFilter];
+      } else {
+        return NextResponse.json({
+          discussions: [],
+          total: 0,
+          pendingCount: 0,
+          reviewedCount: 0,
+          agents: [],
+          ...(assignedDispositions && { assignedDispositions }),
+        });
+      }
+    } else {
+      effectiveDispositions = strictDispositions;
+    }
+  } else {
+    if (dispositionFilter) {
+      effectiveDispositions = [dispositionFilter];
+    } else if (assignedDispositions) {
+      effectiveDispositions = assignedDispositions;
+    }
+  }
 
   const baseOpts = {
     agentName:      (!scopedAgentNames && agentFilter) ? agentFilter : undefined,
@@ -135,7 +160,8 @@ export async function GET(req: NextRequest) {
     items,
     reviewedItems,
     availableAgents,
-    assignedCallDispositions: assignedCallDispositions || [],
+    assignedDispositions: assignedDispositions || [],
+    assignedCallDispositions: assignedDispositions || [],
   });
 }
 

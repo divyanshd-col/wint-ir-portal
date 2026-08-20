@@ -79,6 +79,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const dateFrom    = url.searchParams.get('dateFrom') || '';
   const dateTo      = url.searchParams.get('dateTo') || '';
   const agentFilter = url.searchParams.get('agent') || '';
+  const tagFilter   = url.searchParams.get('disposition') || url.searchParams.get('tag') || '';
   const minScore    = url.searchParams.get('minScore') ? parseInt(url.searchParams.get('minScore')!, 10) : undefined;
   const maxScore    = url.searchParams.get('maxScore') ? parseInt(url.searchParams.get('maxScore')!, 10) : undefined;
 
@@ -86,11 +87,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let agentNames: string[] | undefined;
   let availableAgents: string[] = [];
   let dispositions: string[] | undefined;
+  let assignedDispositions: string[] | null = null;
+  let strictDispositions: string[] | null = null;
 
   const { readConfig } = await import('@/lib/config');
   const config = await readConfig();
-  const map = config.qaDispositionMap ?? [];
-  const qaEntry = map.find(e => e.email.toLowerCase() === userEmail.toLowerCase());
 
   if (role === 'agent') {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === userEmail.toLowerCase());
@@ -118,7 +119,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     } else {
       agentNames = tlAgents;
     }
+    if (tagFilter) dispositions = [tagFilter];
   } else if (role === 'quality' || role === 'admin') {
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === userEmail.toLowerCase());
+    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === userEmail.toLowerCase());
+    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+
+    if (userDisps?.length) {
+      assignedDispositions = userDisps;
+      if (userEmail.toLowerCase() !== 'manorathi@wintwealth.com' && userEmail.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+        strictDispositions = userDisps;
+      }
+    }
+
     if (role === 'quality') {
       const qaAgents = await getAgentNamesByQA(userEmail || '');
       availableAgents = qaAgents;
@@ -146,10 +159,30 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       }
     }
 
-    if (qaEntry && userEmail.toLowerCase() !== 'manorathi@wintwealth.com' && userEmail.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-      dispositions = qaEntry.dispositions;
-      if (dispositions.length === 0) {
-        return NextResponse.json({ ok: true, entries: [], total: 0, page, hasMore: false, agents: availableAgents, stats: { totalCalls: 0 } });
+    if (strictDispositions) {
+      if (tagFilter) {
+        if (strictDispositions.includes(tagFilter)) {
+          dispositions = [tagFilter];
+        } else {
+          return NextResponse.json({
+            ok: true,
+            entries: [],
+            total: 0,
+            page,
+            hasMore: false,
+            agents: availableAgents,
+            stats: { totalCalls: 0, avgIqs: null, avgInterruptions: null, avgDeadAir: null, paramFailRates: {} },
+            ...(assignedDispositions && { assignedDispositions }),
+          });
+        }
+      } else {
+        dispositions = strictDispositions;
+      }
+    } else {
+      if (tagFilter) {
+        dispositions = [tagFilter];
+      } else if (assignedDispositions) {
+        dispositions = assignedDispositions;
       }
     }
   }
@@ -244,6 +277,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     paramOrder: CALL_PARAM_ORDER,
     paramNames: CALL_PARAM_NAMES,
     paramWeights: CALL_WEIGHTS,
+    ...(assignedDispositions && { assignedDispositions }),
   }, {
     headers: {
       'Cache-Control': 'private, max-age=30',
