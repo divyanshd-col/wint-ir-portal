@@ -648,30 +648,32 @@ export default function CallEvalPanel({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
               
-              <button
-                onClick={handleSwapAllSpeakers}
-                disabled={loading || segments.length === 0 || isSavingTranscript || isReevaluating}
-                title="Swap IR Executive and Investor speakers across the entire transcript"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '4px 10px',
-                  borderRadius: 6,
-                  border: '1px solid #cbd5e1',
-                  background: '#f8fafc',
-                  color: '#334155',
-                  fontSize: 12,
-                  fontWeight: 500,
-                  cursor: (loading || segments.length === 0 || isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                ⇄ Swap All Speakers (IR ⇋ Investor)
-              </button>
+              {allowReevaluate && (
+                <button
+                  onClick={handleSwapAllSpeakers}
+                  disabled={loading || segments.length === 0 || isSavingTranscript || isReevaluating}
+                  title="Swap IR Executive and Investor speakers across the entire transcript"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#334155',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    cursor: (loading || segments.length === 0 || isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  ⇄ Swap All Speakers (IR ⇋ Investor)
+                </button>
+              )}
             </div>
 
-            {isTranscriptModified && (
+            {allowReevaluate && isTranscriptModified && (
               <div style={{
                 padding: '10px 14px',
                 background: '#fefce8',
@@ -761,22 +763,24 @@ export default function CallEvalPanel({
                         <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>
                           {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || seg.timestamp || ''}
                         </span>
-                        <button
-                          onClick={() => handleToggleSpeaker(idx)}
-                          title={`Switch speaker to ${isIR ? 'INVESTOR' : 'IR EXECUTIVE'}`}
-                          style={{
-                            border: '1px solid #e2e8f0',
-                            background: '#f8fafc',
-                            color: '#64748b',
-                            borderRadius: 4,
-                            padding: '1px 5px',
-                            fontSize: 10,
-                            cursor: 'pointer',
-                            lineHeight: 1
-                          }}
-                        >
-                          ⇄ Switch
-                        </button>
+                        {allowReevaluate && (
+                          <button
+                            onClick={() => handleToggleSpeaker(idx)}
+                            title={`Switch speaker to ${isIR ? 'INVESTOR' : 'IR EXECUTIVE'}`}
+                            style={{
+                              border: '1px solid #e2e8f0',
+                              background: '#f8fafc',
+                              color: '#64748b',
+                              borderRadius: 4,
+                              padding: '1px 5px',
+                              fontSize: 10,
+                              cursor: 'pointer',
+                              lineHeight: 1
+                            }}
+                          >
+                            ⇄ Switch
+                          </button>
+                        )}
                       </div>
                       <div style={{
                         padding: '10px 14px',
