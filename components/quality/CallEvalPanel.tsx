@@ -573,10 +573,10 @@ export default function CallEvalPanel({
             <DisputeThread
               flagId={dispute.flagId}
               agentNote={dispute.agentNote}
-              reviewNote={dispute.reviewNote}
+              reviewNote={dispute.reviewNote || note}
               agentName={dispute.agentName || agentName}
-              reviewedBy={dispute.reviewedBy}
-              reviewerRole={dispute.reviewerRole || dispute.raisedByRole}
+              reviewedBy={dispute.reviewedBy || dispute.resolvedBy || dispute.qaName}
+              reviewerRole="quality"
               flaggedAt={dispute.flaggedAt || dispute.raisedAt}
               reviewedAt={dispute.reviewedAt}
             />

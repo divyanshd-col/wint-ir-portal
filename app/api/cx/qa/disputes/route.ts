@@ -366,12 +366,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       disposition:      effectiveDisposition,
       subDisposition:   db?.sub_disposition || callDb?.sub_disposition || null,
       agentNote:        flag.agentNote,
+      reviewNote:       flag.reviewNote || null,
+      reviewedBy:       flag.reviewedBy || chatReviewer || null,
+      reviewedAt:       flag.reviewedAt || null,
       challengedParams: flag.challengedParams ?? [],
       parameters:       params,
       gates:            callDb?.gates ?? null,
       tlForwarded:      flag.status === 'tl_forwarded',
       conversationType: (db?.conversation_type ?? null) as any,
-      reviewedBy:       chatReviewer || null,
     } as any);
   }
 
