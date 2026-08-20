@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/api-guard';
 import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
+import { getAuthorizedDispositions } from '@/lib/qa-disposition';
 import { log, withLogging } from '@/lib/log';
 import { readConfig } from '@/lib/config';
 import { computeIqsFromRawParams } from '@/lib/quality';
@@ -84,10 +85,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  // For QA (or mapped admins), restrict by assigned dispositions (except Manorathi)
-  if ((role === 'quality' || qaEntry) && email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
+  // For QA (or mapped admins), restrict by assigned dispositions
+  if (role === 'quality' || qaEntry) {
+    const strictDispositions = await getAuthorizedDispositions(email, role, config);
     if (strictDispositions.length > 0) {
       extraWhere += ` AND c.tags->>'disposition' = ANY($${paramIdx++})`;
       sqlParams.push(strictDispositions);

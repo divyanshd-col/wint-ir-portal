@@ -5,6 +5,7 @@ import { getAllScoredConversations, getScoredConversationsFilterOptions, getAgen
 import { storeGetIQSFlags } from '@/lib/store';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
+import { getAuthorizedDispositions } from '@/lib/qa-disposition';
 
 export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl']);
@@ -28,14 +29,11 @@ export async function GET(req: NextRequest) {
       if (dbUser?.name) selfAgentName = dbUser.name;
     }
     
-    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
-    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+    const userDisps = await getAuthorizedDispositions(email, role, config);
 
     if (['quality', 'admin'].includes(role) && userDisps?.length) {
       assignedDispositions = userDisps;
-      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-        strictDispositions = userDisps;
-      }
+      strictDispositions = userDisps;
     }
   }
 

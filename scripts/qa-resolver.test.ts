@@ -88,21 +88,21 @@ test('Tier 2: Disposition Map - resolves via qaDispositionMap before checking as
   assert.equal(result, 'Sindhu');
 });
 
-test('Tier 3: Assigned Agent QA - resolves from agents table when unreviewed & no disposition match', async () => {
+test('Tier 3: Unassigned disposition - falls back to Manorathi when no QA is assigned to disposition', async () => {
   const mockQuery: any = async (sql: string) => {
     if (sql.includes('COALESCE')) {
       return [{ reviewed_by: null, agent_id: 23, disposition: 'UnmappedDisposition' }];
     }
-    if (sql.includes('FROM agents')) {
-      return [{ qa_name: 'Arjun' }];
-    }
     return [];
   };
 
-  const mockReadConfig: any = async () => ({ users: [] });
+  const mockReadConfig: any = async () => ({
+    users: [{ email: 'sindhu@wintwealth.com', agentName: 'Sindhu' }],
+    qaDispositionMap: [{ email: 'sindhu@wintwealth.com', dispositions: ['KYC', 'SIP'] }],
+  });
 
   const result = await resolveQANameForChat('105', { query: mockQuery, readConfig: mockReadConfig });
-  assert.equal(result, 'Arjun');
+  assert.equal(result, 'Manorathi');
 });
 
 test('Tier 4: Fallback - returns Manorathi when no match found', async () => {
@@ -128,4 +128,41 @@ test('Error Resilience - returns Manorathi fallback on database exception', asyn
 
   const result = await resolveQANameForChat('108', { query: mockQuery, readConfig: mockReadConfig });
   assert.equal(result, 'Manorathi');
+});
+
+test('getAuthorizedDispositions - assigned QA sees only assigned dispositions', async () => {
+  const { getAuthorizedDispositions } = await import('../lib/qa-disposition');
+  const mockConfig: any = {
+    qaDispositionMap: [
+      { email: 'dipti@wintwealth.com', dispositions: ['Taxation', 'FD'] },
+      { email: 'manorathi@wintwealth.com', dispositions: ['Liquidity', 'SGB'] },
+    ],
+    users: [],
+  };
+
+  const dbDispositions = ['Taxation', 'FD', 'Liquidity', 'SGB', 'AIF', 'NewDispo'];
+  const diptiDisps = await getAuthorizedDispositions('dipti@wintwealth.com', 'quality', mockConfig, dbDispositions);
+  assert.deepEqual(diptiDisps, ['Taxation', 'FD']);
+});
+
+test('getAuthorizedDispositions - Manorathi sees assigned + unassigned dispositions, never other assigned', async () => {
+  const { getAuthorizedDispositions } = await import('../lib/qa-disposition');
+  const mockConfig: any = {
+    qaDispositionMap: [
+      { email: 'dipti@wintwealth.com', dispositions: ['Taxation', 'FD'] },
+      { email: 'manorathi@wintwealth.com', dispositions: ['Liquidity', 'SGB'] },
+    ],
+    users: [],
+  };
+
+  const dbDispositions = ['Taxation', 'FD', 'Liquidity', 'SGB', 'AIF', 'NewDispo'];
+  const manorathiDisps = await getAuthorizedDispositions('manorathi@wintwealth.com', 'quality', mockConfig, dbDispositions);
+  
+  // Should have Liquidity, SGB, AIF, NewDispo — and NOT Taxation or FD
+  assert.equal(manorathiDisps.includes('Taxation'), false);
+  assert.equal(manorathiDisps.includes('FD'), false);
+  assert.equal(manorathiDisps.includes('Liquidity'), true);
+  assert.equal(manorathiDisps.includes('SGB'), true);
+  assert.equal(manorathiDisps.includes('AIF'), true);
+  assert.equal(manorathiDisps.includes('NewDispo'), true);
 });

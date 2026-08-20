@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { getAllScoredCalls, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
+import { getAuthorizedCallDispositions } from '@/lib/qa-disposition';
 import { CALL_PARAM_ORDER } from '@/lib/call-quality';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
@@ -47,13 +48,9 @@ export async function GET(req: NextRequest) {
     const selfAgentName = configUser?.agentName || '';
     if (selfAgentName && role === 'quality') scopedAgentNames = await getAgentNamesByQA(selfAgentName);
     
-    const map = config.qaDispositionMap ?? [];
-    const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
-
-    if ((role === 'quality' || qaEntry) && (configUser as any)?.assignedCallDispositions?.length) {
-      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-        assignedCallDispositions = (configUser as any).assignedCallDispositions as string[];
-      }
+    const userDisps = await getAuthorizedCallDispositions(email, role, config);
+    if (userDisps?.length) {
+      assignedCallDispositions = userDisps;
     }
   }
 

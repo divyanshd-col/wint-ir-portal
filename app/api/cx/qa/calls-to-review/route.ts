@@ -3,6 +3,7 @@ import { requireRole } from '@/lib/api-guard';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
+import { getAuthorizedCallDispositions } from '@/lib/qa-disposition';
 
 const ROUTE = 'cx/qa/calls-to-review';
 
@@ -36,39 +37,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   log.info(ROUTE, 'params', { raw: req.url.split('?')[1] ?? '' });
 
-  // Resolve dispositions — admin sees ALL dispositions (unscoped), QA sees assigned (except Manorathi sees all)
+  // Resolve dispositions — admin sees ALL dispositions (unscoped), QA sees assigned, Manorathi gets fallback unassigned
   const config = await readConfig();
-  let dispositions: string[] = [];
-  const map = config.qaDispositionMap ?? [];
-  const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
-
-  if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
-    const explicit = searchParams.getAll('disposition');
-    if (explicit.length) {
-      dispositions = explicit;
-    } else {
-      const rows = await query<{ d: string }>(
-        `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
-      );
-      dispositions = rows.map(r => r.d);
-    }
-  } else if (qaEntry && qaEntry.dispositions.length > 0) {
-    dispositions = qaEntry.dispositions;
-  } else if (role === 'admin') {
-    const rows = await query<{ d: string }>(
-      `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
-    );
-    dispositions = rows.map(r => r.d);
-  } else if (role === 'quality') {
-    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    dispositions = (configUser as any)?.assignedCallDispositions ?? [];
-  } else {
-    return NextResponse.json({ calls: [], total: 0 });
-  }
+  let dispositions = await getAuthorizedCallDispositions(email, role, config);
 
   const explicit = searchParams.getAll('disposition');
   if (explicit.length) {
-    dispositions = explicit.filter(d => dispositions.includes(d));
+    dispositions = explicit.filter(d => dispositions.some(ad => ad.toLowerCase() === d.toLowerCase()));
   }
 
   if (!dispositions.length) {

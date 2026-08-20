@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import { getAllScoredConversations, getAgentNamesByTL, getAgentNamesByQA, type GetScoredConversationsOptions } from '@/lib/robylon/db';
+import { getAuthorizedDispositions } from '@/lib/qa-disposition';
 import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
 import type { IQSScoreEntry } from '@/lib/quality';
 
@@ -70,13 +71,10 @@ export async function GET(req: NextRequest) {
       if (dbUser?.name) selfAgentName = dbUser.name;
     }
     
-    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
-    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+    const userDisps = await getAuthorizedDispositions(email, role, config);
 
     if (['quality', 'admin'].includes(role) && userDisps?.length) {
-      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-        strictDispositions = userDisps;
-      }
+      strictDispositions = userDisps;
     }
   }
 

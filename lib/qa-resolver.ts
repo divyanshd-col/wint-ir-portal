@@ -51,20 +51,24 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
         }
       }
 
-      // 2. Priority 2: Forward based on disposition if not reviewed by a QA
-      if (row.disposition) {
-        const mapEntry = config.qaDispositionMap?.find((m: any) => m.dispositions?.includes(row.disposition!));
+      // 2. Priority 2: Forward based on disposition if assigned in qaDispositionMap
+      if (row.disposition && row.disposition.trim()) {
+        const cleanDisp = row.disposition.trim().toLowerCase();
+        const mapEntry = config.qaDispositionMap?.find((m: any) =>
+          m.dispositions?.some((d: string) => d.trim().toLowerCase() === cleanDisp)
+        );
         if (mapEntry?.email) {
           const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === mapEntry.email.toLowerCase());
           if (u?.agentName && u.role !== 'admin') return u.agentName;
+          const userRows = await queryFn<{ name: string }>(`SELECT name FROM cx_users WHERE LOWER(email) = LOWER($1)`, [mapEntry.email]);
+          if (userRows[0]?.name) return userRows[0].name;
+          const parts = mapEntry.email.split('@')[0].split('.');
+          return parts.map((p: string) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
         }
       }
 
-      // 3. Priority 3: Fall back to agent's assigned QA
-      if (row.agent_id) {
-        const agentRows = await queryFn<{ qa_name: string | null }>(`SELECT qa_name FROM agents WHERE id = $1`, [row.agent_id]);
-        if (agentRows[0]?.qa_name && agentRows[0].qa_name.trim()) return agentRows[0].qa_name.trim();
-      }
+      // 3. Priority 3: If no one is assigned to the disposition, fallback to Manorathi
+      return 'Manorathi';
     }
   } catch (err) {
     console.error('Failed to resolve QA name for chat:', err);

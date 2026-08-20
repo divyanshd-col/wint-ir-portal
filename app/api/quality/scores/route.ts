@@ -13,6 +13,7 @@ import {
   getAgentNamesByQA,
   type GetScoredConversationsOptions
 } from '@/lib/robylon/db';
+import { getAuthorizedDispositions } from '@/lib/qa-disposition';
 import type { IQSScoreEntry } from '@/lib/quality';
 
 const SLA_THRESHOLD_SECS = 180; // 3 minutes handoff SLA
@@ -129,14 +130,11 @@ export async function GET(req: NextRequest) {
       }
     }
     
-    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
-    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+    const userDisps = await getAuthorizedDispositions(email, role, config);
 
     if ((role === 'quality' || role === 'admin') && userDisps?.length) {
       assignedDispositions = userDisps;
-      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-        strictDispositions = userDisps;
-      }
+      strictDispositions = userDisps;
     }
   }
 

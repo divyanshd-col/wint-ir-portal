@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
+import { getAuthorizedDispositions } from '@/lib/qa-disposition';
 import { log, withLogging } from '@/lib/log';
 import { calculateWeightedOverallIQS } from '@/lib/quality';
 import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
@@ -114,25 +115,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   // Resolve dispositions for this QA
   const config = await readConfig();
-  let dispositions: string[];
+  let dispositions = await getAuthorizedDispositions(email, role, config);
 
-  if (role === 'admin' || role === 'tl' || role === 'agent') {
-    // Admin can pass explicit dispositions or see everything
-    const explicit = searchParams.getAll('disposition');
-    if (explicit.length) {
-      dispositions = explicit;
-    } else {
-      // All dispositions
-      const rows = await query<{ d: string }>(
-        `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
-         WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`
-      );
-      dispositions = rows.map(r => r.d);
-    }
-  } else {
-    const map = config.qaDispositionMap ?? [];
-    const entry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
-    dispositions = entry?.dispositions ?? [];
+  const explicit = searchParams.getAll('disposition');
+  if (explicit.length) {
+    dispositions = explicit.filter(d => dispositions.some(ad => ad.toLowerCase() === d.toLowerCase()));
   }
 
   log.info(ROUTE, 'dispositions', { role, email, dispositionCount: dispositions.length, sample: dispositions.slice(0, 3) });

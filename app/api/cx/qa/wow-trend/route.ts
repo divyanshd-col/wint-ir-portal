@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
+import { getAuthorizedDispositions } from '@/lib/qa-disposition';
 import { log, withLogging } from '@/lib/log';
 import { calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 
@@ -66,23 +67,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   // Resolve dispositions for this QA
   const config = await readConfig();
-  let dispositions: string[];
-  if (role === 'admin' || role === 'tl') {
-    const explicit = searchParams.getAll('disposition_filter');
-    if (explicit.length) {
-      dispositions = explicit;
-    } else {
-      const rows = await query<{ d: string }>(
-        `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
-         WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`
-      );
-      dispositions = rows.map(r => r.d);
-    }
-  } else {
-    const map = config.qaDispositionMap ?? [];
-    const entry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
-    dispositions = entry?.dispositions ?? [];
-  }
+  const dispositions = await getAuthorizedDispositions(email, role, config);
 
   if (!dispositions.length) return NextResponse.json([]);
 

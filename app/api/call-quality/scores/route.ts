@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { getAllScoredCalls, getAgentNamesByTL, getAgentNamesByQA } from '@/lib/robylon/db';
+import { getAllScoredCalls, getAgentNamesByQA, getAgentNamesByTL } from '@/lib/robylon/db';
+import { getAuthorizedCallDispositions } from '@/lib/qa-disposition';
 import { CALL_PARAM_ORDER, CALL_PARAM_NAMES, CALL_WEIGHTS } from '@/lib/call-quality';
 
 const PAGE_SIZE = 50;
@@ -69,11 +70,11 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       agentNames = agentFilter ? qaAgents.filter(n => n === agentFilter) : qaAgents;
     }
 
-    if (qaEntry && userEmail.toLowerCase() !== 'manorathi@wintwealth.com' && userEmail.toLowerCase() !== 'manorathi.t@wintwealth.com') {
-      dispositions = qaEntry.dispositions;
-      if (dispositions.length === 0) {
-        return NextResponse.json({ ok: true, entries: [], total: 0, page, hasMore: false, stats: { totalCalls: 0 } });
-      }
+    const userDisps = await getAuthorizedCallDispositions(userEmail, role, config);
+    if (userDisps.length > 0) {
+      dispositions = userDisps;
+    } else if (role === 'quality') {
+      return NextResponse.json({ ok: true, entries: [], total: 0, page, hasMore: false, stats: { totalCalls: 0 } });
     }
   }
 
