@@ -12,9 +12,11 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
     "@google/genai": "^1.44.0",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@vercel/functions": "^3.6.0",
     "bcryptjs": "^3.0.3",
     "googleapis": "^171.4.0",
+    "mcp-handler": "^1.1.0",
     "next": "16.1.6",
     "next-auth": "^4.24.13",
     "nodemailer": "^7.0.13",
@@ -23,7 +25,8 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "^3.8.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
