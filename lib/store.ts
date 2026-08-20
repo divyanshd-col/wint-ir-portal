@@ -141,6 +141,17 @@ export async function storeMarkQualityAlert(chatId: string): Promise<void> {
   } catch {}
 }
 
+export async function storeHasBotQualityAlert(chatId: string): Promise<boolean> {
+  const val = await kv_get(`wint_bot_quality_alerted:${chatId}`);
+  return val === '1';
+}
+
+export async function storeMarkBotQualityAlert(chatId: string): Promise<void> {
+  try {
+    await kv_pipeline([['SET', `wint_bot_quality_alerted:${chatId}`, '1', 'EX', '86400']]);
+  } catch {}
+}
+
 // --- Config ---
 
 export async function storeGetConfig(): Promise<PortalConfig | null> {

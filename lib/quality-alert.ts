@@ -8,7 +8,7 @@
  */
 
 import { sendSlackMessage } from './slack';
-import { storeHasQualityAlert, storeMarkQualityAlert } from './store';
+import { storeHasQualityAlert, storeMarkQualityAlert, storeHasBotQualityAlert, storeMarkBotQualityAlert } from './store';
 import { appendQualityAlertToSheet } from './quality-sheet';
 
 const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
@@ -230,6 +230,20 @@ export async function fireQualityAlert(opts: {
     subDisposition: opts.subDisposition,
     failedParams:   sheetParams,
   }).catch((err) => console.error('[quality-alert] Sheet append failed:', err?.message));
+
+  // ── 3. BOT Parameter Failure Alert (Issue Resolution = NO & Correct Escalation = NO) ──
+  if (opts.scores) {
+    fireBotQualityAlert({
+      chatId: opts.chatId,
+      agentName: opts.agentName,
+      contactPhone: opts.contactPhone,
+      scores: opts.scores,
+      reasoning: opts.reasoning,
+      iqs: opts.iqs,
+      disposition: opts.disposition,
+      subDisposition: opts.subDisposition,
+    }).catch(() => {});
+  }
 }
 
 // ── Call-interaction flag (skip scoring) ────────────────────────────────────
@@ -304,5 +318,92 @@ export async function fireKbChangeAlert(opts: {
     icon_emoji: ':books:',
   });
   console.log(`[quality-alert] KB change Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+}
+
+// ── BOT Parameter Evaluation Failure Alert ─────────────────────────────────
+
+function isParamNoValue(val: any): boolean {
+  if (val === undefined || val === null) return false;
+  if (val === false || val === 0) return true;
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase();
+    return s === 'no' || s === 'false' || s === '0';
+  }
+  if (typeof val === 'object' && val !== null) {
+    return isParamNoValue(val.score);
+  }
+  return false;
+}
+
+export function checkBotFailure(scores: Record<string, any>): {
+  isFailure: boolean;
+  issueResolutionReasoning?: string;
+  correctEscalationReasoning?: string;
+} {
+  if (!scores || typeof scores !== 'object') return { isFailure: false };
+
+  const issueResKey = ['issue_resolution', 'IssueResolution', 'all_questions'].find(k => k in scores);
+  const correctEscKey = ['correct_escalation', 'CorrectEscalation'].find(k => k in scores);
+
+  if (!issueResKey || !correctEscKey) return { isFailure: false };
+
+  const issueResCell = scores[issueResKey];
+  const correctEscCell = scores[correctEscKey];
+
+  if (isParamNoValue(issueResCell) && isParamNoValue(correctEscCell)) {
+    const getReasoning = (cell: any) => typeof cell === 'object' && cell?.reasoning ? cell.reasoning : String(cell);
+    return {
+      isFailure: true,
+      issueResolutionReasoning: getReasoning(issueResCell),
+      correctEscalationReasoning: getReasoning(correctEscCell),
+    };
+  }
+
+  return { isFailure: false };
+}
+
+export async function fireBotQualityAlert(opts: {
+  chatId: string;
+  agentName?: string;
+  contactPhone?: string;
+  scores?: Record<string, any>;
+  reasoning?: Record<string, string>;
+  iqs?: number;
+  disposition?: string;
+  subDisposition?: string;
+}): Promise<boolean> {
+  const botFailure = checkBotFailure(opts.scores || {});
+  if (!botFailure.isFailure) return false;
+
+  let token = process.env.BOT_FAIL_SLACK_BOT_TOKEN || process.env.BOT_SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      token = config.slackUserToken || '';
+    } catch {}
+  }
+
+  const channel = process.env.BOT_FAIL_SLACK_CHANNEL || process.env.BOT_SLACK_CHANNEL || 'C0BRE1U3X62';
+  if (!token || !channel) return false;
+
+  if (await storeHasBotQualityAlert(opts.chatId)) {
+    console.log(`[quality-alert] Skipping duplicate BOT alert for chat ${opts.chatId}`);
+    return false;
+  }
+  await storeMarkBotQualityAlert(opts.chatId);
+
+  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+    : opts.chatId;
+
+  const messageText = `Bot failed to resolve this chat : ${chatLink}`;
+
+  const sent = await sendSlackMessage(channel, messageText, token, undefined, {
+    username: 'Wint BOT Quality Alert',
+    icon_emoji: ':robot_face:',
+  });
+  console.log(`[quality-alert] BOT quality failure Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+  return sent;
 }
 
