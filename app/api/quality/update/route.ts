@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest) {
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
 
-  const { id, chatId, scores, reasoning, agentName, disposition, subDisposition, csat, note } = body;
+  const { id, chatId, scores, reasoning, agentName, disposition, subDisposition, csat, note, isKbChange, needsKbUpdate } = body;
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
   // Validate scores if provided
@@ -46,7 +46,8 @@ export async function PATCH(req: NextRequest) {
     const updatedBy = session.user?.email || session.user?.name || 'unknown';
 
     // ── Upsert iqs_scores (parameters + iqs_score) ────────────────────────────
-    if (scores || reasoning || note) {
+    const hasKbToggle = needsKbUpdate !== undefined || isKbChange !== undefined;
+    if (scores || reasoning || note || hasKbToggle) {
       let params = rowExists ? (existing[0].parameters || {}) : {};
       if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
@@ -89,6 +90,11 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
+      if (hasKbToggle) {
+        const kbVal = Boolean(needsKbUpdate ?? isKbChange);
+        params['__needs_kb_update'] = { score: kbVal, reasoning: '' };
+      }
+
       if (note) params['__review_note'] = note;
 
       const convRow = await query<{ conversation_type: string }>(`SELECT conversation_type FROM conversations WHERE id = $1`, [chatId]);
@@ -118,6 +124,31 @@ export async function PATCH(req: NextRequest) {
         );
       }
       console.log(`[quality/update] Saved override for ${chatId}: iqs=${newIqs}, by=${updatedBy}`);
+
+      if (params['__needs_kb_update']?.score === true) {
+        try {
+          const { fireKbChangeAlert } = await import('@/lib/quality-alert');
+          const convRows = await query<{ assigned_agent: string; disposition: string; sub_disposition: string }>(
+            `SELECT tags->>'assigned_agent' AS assigned_agent,
+                    tags->>'disposition' AS disposition,
+                    tags->>'sub_disposition' AS sub_disposition
+             FROM conversations WHERE id = $1`,
+            [chatId]
+          );
+          const convInfo = convRows[0];
+          const kbCommentNote = params['__needs_kb_update']?.reasoning || note;
+          await fireKbChangeAlert({
+            chatId,
+            reviewerEmail: updatedBy,
+            reviewNote: kbCommentNote,
+            agentName: agentName || convInfo?.assigned_agent,
+            disposition: disposition || convInfo?.disposition,
+            subDisposition: subDisposition || convInfo?.sub_disposition,
+          });
+        } catch (err: any) {
+          console.error('[quality/update] fireKbChangeAlert error:', err?.message);
+        }
+      }
     }
 
     // ── Update conversations (csat, tags, agent) ──────────────────────────────
@@ -173,6 +204,19 @@ export async function PATCH(req: NextRequest) {
     const isBot = convType2 === 'bot' || (convType2 !== 'agent' && convType2 !== 'hybrid' && hasBotParams2);
     const isV4b = rowExists ? isV4Evaluation(existing[0].parameters) : true;
     const finalIqs = scores ? calculateIQS(scores, isBot, isV4b) : (rowExists ? existing[0].iqs_score : 0);
+
+    if (scores) {
+      const { fireBotQualityAlert } = await import('@/lib/quality-alert');
+      fireBotQualityAlert({
+        chatId,
+        agentName,
+        scores,
+        reasoning,
+        iqs: finalIqs,
+        disposition,
+        subDisposition,
+      }).catch(() => {});
+    }
 
     return NextResponse.json({
       ok: true,

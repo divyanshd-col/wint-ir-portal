@@ -5,7 +5,14 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
 import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
-import { PARAM_DEFS, normKey } from '../route';
+import { calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
+import {
+  PARAM_DEFS,
+  normKey,
+  CHAT_PARAM_LATERAL,
+  CALL_PARAM_LATERAL,
+  PASS_RATE_SELECT,
+} from '../route';
 
 function getDateRange(period: string, from?: string | null, to?: string | null) {
   const today = new Date();
@@ -15,12 +22,6 @@ function getDateRange(period: string, from?: string | null, to?: string | null) 
   if (period === 'custom' && from && to) return { dateFrom: from, dateTo: to };
   return { dateFrom: fmt(new Date(today.getTime() - 29 * 86400_000)), dateTo: fmt(today) };
 }
-
-const PASS_RATE_SELECT = `
-  p.key AS param_key,
-  ROUND(COUNT(*) FILTER (WHERE (p.val->>'score')='true')::numeric
-        / NULLIF(COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),0)*100,1)::float AS pass_rate
-`;
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -39,13 +40,25 @@ export async function GET(req: NextRequest) {
   let tlAgentNames: string[];
   if (role === 'tl') {
     const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
+    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let tlAgentName = configUser?.agentName;
+    if (!tlAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
   } else if (role === 'agent') {
     const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
-    const selfAgentName = configUser?.agentName || email.split('@')[0];
+    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let selfAgentName = configUser?.agentName;
+    if (!selfAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) selfAgentName = dbUser.name;
+    }
+    if (!selfAgentName) selfAgentName = email.split('@')[0];
     tlAgentNames = [selfAgentName];
   } else {
     const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`, []);
@@ -61,7 +74,7 @@ export async function GET(req: NextRequest) {
   // ── Fetch data for prompt ─────────────────────────────────────────────────────
   let stats: { csat_pct: number|null; iqs: number|null; volume: number } = { csat_pct: null, iqs: null, volume: 0 };
   let paramRows: { param_key: string; pass_rate: number|null }[] = [];
-  let topCats: { disposition: string; volume: number; iqs: number|null }[] = [];
+  let topCats: { disposition: string; volume: number; iqs: number|null; parameters?: any }[] = [];
 
   if (channel === 'chats') {
     const [statRows, params, cats] = await Promise.all([
@@ -81,18 +94,17 @@ export async function GET(req: NextRequest) {
         FROM iqs_scores s
         JOIN conversations c ON c.id = s.chat_id
         JOIN agents a ON a.id = c.agent_id
-        CROSS JOIN LATERAL jsonb_each(
-          CASE WHEN s.parameters::text LIKE '{%' THEN s.parameters::jsonb ELSE '{}'::jsonb END
-        ) AS p(key, val)
+        ${CHAT_PARAM_LATERAL}
         WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
           AND a.name = $3 AND s.parameters IS NOT NULL
         GROUP BY p.key
       `, [dateFrom, dateTo, agentName]),
 
-      query<{ disposition: string; volume: number; iqs: number|null }>(`
+      query<{ disposition: string; volume: number; iqs: number|null; parameters: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
                COUNT(c.id)::int AS volume,
-               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs
+               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -124,9 +136,7 @@ export async function GET(req: NextRequest) {
         JOIN call_recordings cr ON cr.chat_id = s.chat_id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
-        CROSS JOIN LATERAL jsonb_each(
-          CASE WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb ELSE '{}'::jsonb END
-        ) AS p(key, val)
+        ${CALL_PARAM_LATERAL}
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
           AND a.name = $3 AND s.call_parameters IS NOT NULL
         GROUP BY p.key
@@ -155,6 +165,23 @@ export async function GET(req: NextRequest) {
   for (const r of paramRows) {
     const k = normKey(r.param_key);
     if (paramMap[k] == null) paramMap[k] = r.pass_rate;
+  }
+
+  if (channel === 'chats') {
+    // paramMap holds pass rates on a 0-100 scale — state it rather than letting the
+    // helper infer it, so a period where every rate lands at or below 1% can't be
+    // misread as fractions.
+    const weighted = calculateWeightedOverallIQS(paramMap, 'human', { roundDecimals: 1, scale: '0-100' });
+    if (weighted != null) stats.iqs = weighted;
+
+    // Per-disposition IQS must use the same pooled blend as the headline, otherwise the
+    // prompt hands Gemini a weighted overall alongside mean-of-per-chat category scores.
+    for (const c of topCats) {
+      if (!c.parameters) continue;
+      const pooled = extractPooledParams(c.parameters);
+      const catWeighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (catWeighted != null) c.iqs = catWeighted;
+    }
   }
 
   const paramSummary = PARAM_DEFS

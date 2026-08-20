@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import EvalPanel from './EvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
+import { getDisputeClassification } from '@/lib/quality';
+import { DisputeThread } from './DisputeThread';
 
 interface Props {
   onCountChange?: (count: number) => void;
@@ -39,10 +41,16 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [openDrop,     setOpenDrop]     = useState<string | null>(null);
+  const [page,         setPage]         = useState(1);
+  const [pageSize,     setPageSize]     = useState(20);
 
   useEffect(() => {
     setCallsFilter(hasCallsFilter);
   }, [hasCallsFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [agentFilter, callsFilter, chatIdSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,9 +108,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ flagId, content: newComment.trim() }),
       });
-      const data = await res.json();
-      if (data.comment) {
-        setThreads(prev => ({ ...prev, [flagId]: [...(prev[flagId] ?? []), data.comment] }));
+      if (res.ok) {
+        const data = await res.json();
+        setThreads(prev => ({ ...prev, [flagId]: [...(prev[flagId] || []), data.comment] }));
         setNewComment('');
       }
     } finally {
@@ -121,6 +129,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     const term = chatIdSearch.toLowerCase().trim();
     visibleDisputes = visibleDisputes.filter(d => d.chatId.toLowerCase().startsWith(term));
   }
+
+  const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
+  const pagedDisputes = visibleDisputes.slice((page - 1) * pageSize, page * pageSize);
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -145,7 +156,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   };
 
   return (
-    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
 
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)', flexWrap: 'wrap' }}>
@@ -192,6 +203,56 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         >
           Reset Filters
         </button>
+
+        {/* Rows per page selector + count */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
+            {loading ? 'Loading…' : `Showing ${pagedDisputes.length} of ${visibleDisputes.length}`}
+          </span>
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button
+              title="Rows per page"
+              onClick={() => setOpenDrop(openDrop === 'pagesize' ? null : 'pagesize')}
+              style={{
+                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            {openDrop === 'pagesize' && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50,
+                background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.08)', minWidth: 130, overflow: 'hidden',
+              }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                  Rows per page
+                </div>
+                {[20, 50, 100].map(n => (
+                  <div
+                    key={n}
+                    style={{
+                      padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--qa-text)',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontWeight: pageSize === n ? 600 : 400,
+                      background: pageSize === n ? 'var(--qa-gray-50)' : 'transparent',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = pageSize === n ? 'var(--qa-gray-50)' : 'transparent')}
+                    onClick={() => { setPageSize(n); setPage(1); setOpenDrop(null); }}
+                  >
+                    {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -218,14 +279,16 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 ))}
               </tr>
             ))
-          ) : visibleDisputes.length === 0 ? (
+          ) : pagedDisputes.length === 0 ? (
             <tr>
               <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                 {disputes.length === 0 ? 'No disputes pending' : 'No disputes match the filter'}
               </td>
             </tr>
           ) : (
-            visibleDisputes.map(d => (
+            pagedDisputes.map(d => {
+              const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
+              return (
               <React.Fragment key={d.chatId}>
                 <tr
                   style={{ background: expandedId === d.chatId || threadId === d.flagId ? 'var(--qa-gray-50)' : undefined }}
@@ -287,7 +350,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                         {d.iqsScore}
                       </span>
                     ) : (
-                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                     )}
                   </td>
                   <td style={td}>
@@ -357,108 +420,82 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 {/* Thread panel */}
                 {threadId === d.flagId && (
                   <tr>
-                    <td colSpan={8} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
-                      <div style={{ padding: '16px 20px' }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text-2)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                          Dispute Thread
-                        </div>
-                        {threadLoad === d.flagId ? (
-                          <div style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Loading…</div>
-                        ) : (threads[d.flagId] ?? []).length === 0 ? (
-                          <div style={{ fontSize: 13, color: 'var(--qa-text-3)', marginBottom: 10 }}>No comments yet</div>
-                        ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                            {(threads[d.flagId] ?? []).map(c => (
-                              <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                                <div style={{
-                                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-                                  background: 'var(--qa-fill-med)', display: 'flex', alignItems: 'center',
-                                  justifyContent: 'center', fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)',
-                                }}>
-                                  {c.authorName.slice(0, 2).toUpperCase()}
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 2 }}>
-                                    <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{c.authorName}</span>
-                                    <span style={{
-                                      fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                      background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                                      borderRadius: 4, padding: '1px 5px', color: 'var(--qa-text-2)',
-                                    }}>{c.role}</span>
-                                    <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>{fmtDate(c.createdAt)} {fmtTime(c.createdAt)}</span>
-                                  </div>
-                                  <div style={{ fontSize: 13, color: 'var(--qa-text)', lineHeight: 1.5 }}>{c.content}</div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {/* New comment input */}
-                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-                          <textarea
-                            value={newComment}
-                            onChange={e => setNewComment(e.target.value)}
-                            placeholder="Add a comment…"
-                            rows={2}
-                            onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) postComment(d.flagId); }}
-                            style={{
-                              flex: 1, resize: 'vertical',
-                              border: '1px solid var(--qa-border)', borderRadius: 6,
-                              padding: '6px 8px', fontSize: 13, color: 'var(--qa-text)',
-                              lineHeight: 1.5, fontFamily: 'inherit',
-                              background: 'var(--qa-card)', outline: 'none',
-                            }}
-                          />
-                          <button
-                            onClick={() => postComment(d.flagId)}
-                            disabled={posting || !newComment.trim()}
-                            style={{
-                              height: 36, padding: '0 14px', borderRadius: 6,
-                              fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
-                              cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer',
-                              border: '1px solid var(--qa-gray-700)',
-                              background: 'var(--qa-gray-700)', color: '#fff',
-                              opacity: posting || !newComment.trim() ? 0.5 : 1, flexShrink: 0,
-                            }}
-                          >
-                            {posting ? '…' : 'Post'}
-                          </button>
-                        </div>
-                      </div>
+                    <td colSpan={8} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+                      <DisputeThread
+                        flagId={d.flagId}
+                        agentNote={d.agentNote}
+                        agentName={d.agentName}
+                        flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
+                        compact
+                      />
                     </td>
                   </tr>
                 )}
 
                 {expandedId === d.chatId && (
-                  <ErrorBoundary><EvalPanel
-                    chatId={d.chatId}
-                    agentName={d.agentName}
-                    iqsScore={d.iqsScore ?? 0}
-                    closedAt={d.closedAt}
-                    disposition={d.disposition}
-                    parameters={d.parameters}
-                    gates={(d as any).gates}
-                    mobileNumber={d.mobileNumber}
-                    mode="resolve"
-                    flagId={d.flagId}
-                    dispute={{
-                      raisedBy:        d.raisedBy,
-                      raisedByName:    d.raisedByName,
-                      agentNote:       d.agentNote,
-                      challengedParams: d.challengedParams,
-                    }}
-                    onDone={() => removeDispute(d.chatId)}
-                    onClose={() => setExpandedId(null)}
-                    colSpan={8}
-                    conversationType={d.conversationType}
-                  />
-                  </ErrorBoundary>
+                  <React.Fragment>
+                    <tr>
+                      <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                        <DisputeThread
+                          flagId={d.flagId}
+                          agentNote={d.agentNote}
+                          agentName={d.agentName}
+                          flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
+                          compact
+                        />
+                      </td>
+                    </tr>
+                    <ErrorBoundary>
+                      <EvalPanel
+                        chatId={d.chatId}
+                        agentName={d.agentName}
+                        iqsScore={d.iqsScore ?? 0}
+                        closedAt={d.closedAt}
+                        disposition={d.disposition}
+                        parameters={d.parameters}
+                        gates={(d as any).gates}
+                        mobileNumber={d.mobileNumber}
+                        mode="resolve"
+                        flagId={d.flagId}
+                        dispute={{
+                          raisedBy:        d.raisedBy,
+                          raisedByName:    d.raisedByName,
+                          agentNote:       d.agentNote,
+                          challengedParams: d.challengedParams,
+                        }}
+                        onDone={() => removeDispute(d.chatId)}
+                        onClose={() => setExpandedId(null)}
+                        colSpan={8}
+                        conversationType={d.conversationType}
+                      />
+                    </ErrorBoundary>
+                  </React.Fragment>
                 )}
               </React.Fragment>
-            ))
-          )}
+            );
+          })
+        )}
         </tbody>
       </table>
+
+      {/* Pagination Footer */}
+      {totalPages > 1 && !loading && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Page {page} of {totalPages}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page <= 1 ? 'not-allowed' : 'pointer',
+              color: page <= 1 ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>← Prev</button>
+            <button disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+              color: page >= totalPages ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>Next →</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

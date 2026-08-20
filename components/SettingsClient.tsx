@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
+import UsersManager, { type User } from './settings/UsersManager';
 
 interface SafeConfig {
   llmProvider?: string;
@@ -25,17 +26,11 @@ interface SafeConfig {
   defaultAnalyticsPlannerPrompt?: string;
   defaultAnalyticsSynthesizerPrompt?: string;
   conversationHistoryEnabled?: boolean;
+  callAnalysisEnabled?: boolean;
+  cxDashboardEnabled?: boolean;
   hasSlackToken?: boolean;
   qualityAlertSheetUrl?: string;
   hasPyannoteKey?: boolean;
-}
-
-interface User {
-  email: string;
-  username?: string;
-  agentName?: string;
-  role: string;
-  isAdmin?: boolean;
 }
 
 const ADMIN_SECTIONS = [
@@ -43,8 +38,6 @@ const ADMIN_SECTIONS = [
   { id: 'kb', label: 'Knowledge Base' },
   { id: 'prompt', label: 'Prompts' },
   { id: 'users', label: 'Users' },
-  { id: 'tl', label: 'Team Leads' },
-  { id: 'qa', label: 'QA Assignments' },
   { id: 'integrations', label: 'Integrations' },
 ];
 const SECURITY_SECTION = { id: 'security', label: 'Security' };
@@ -102,6 +95,8 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [savingIqsKeys, setSavingIqsKeys] = useState(false);
 
   const [historyEnabled, setHistoryEnabled] = useState(!!config.conversationHistoryEnabled);
+  const [callAnalysisEnabled, setCallAnalysisEnabled] = useState(!!config.callAnalysisEnabled);
+  const [cxDashboardEnabled, setCxDashboardEnabled] = useState(!!config.cxDashboardEnabled);
 
   // ── KB state ───────────────────────────────────────────────────────────────
   const [docs, setDocs] = useState<string[]>(config.knowledgeBaseUrls || []);
@@ -140,26 +135,10 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
 
   const [activePromptTab, setActivePromptTab] = useState('chat');
 
-  // ── Users state ────────────────────────────────────────────────────────────
+  // ── Users state (Users / Teams / QA Dispositions UI lives in UsersManager) ──
   const [users, setUsers] = useState<User[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [newRole, setNewRole] = useState<'agent' | 'tl' | 'quality' | 'admin'>('agent');
-  const [newAgentName, setNewAgentName] = useState('');
-  const [newDispositions, setNewDispositions] = useState('');
-  const [addingUser, setAddingUser] = useState(false);
-  const [userError, setUserError] = useState('');
-  const [editingAgentName, setEditingAgentName] = useState<Record<string, string>>({});
-  const [userPage, setUserPage] = useState(0);
-  const [userSearch, setUserSearch] = useState('');
   const [agentAssignments, setAgentAssignments] = useState<Record<string, { tl_name: string | null; qa_name: string | null }>>({});
-  const [pendingAssignments, setPendingAssignments] = useState<Record<string, { tl_name?: string | null; qa_name?: string | null }>>({});
-  const [savingAssignments, setSavingAssignments] = useState(false);
-  // Password reset
-  const [resetEmail, setResetEmail]       = useState('');
-  const [resetPassword, setResetPassword] = useState('');
-  const [resetting, setResetting]         = useState(false);
-  const [resetMsg, setResetMsg]           = useState<{ ok: boolean; text: string } | null>(null);
 
   // ── Integrations state ─────────────────────────────────────────────────────
   const [hasSlackToken, setHasSlackToken] = useState(!!config.hasSlackToken);
@@ -175,47 +154,6 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   const [qualitySheetUrl, setQualitySheetUrl] = useState(config.qualityAlertSheetUrl || '');
   const [savingSheet, setSavingSheet] = useState(false);
   const [sheetSaved, setSheetSaved] = useState(false);
-
-  // ── QA Assignments state ───────────────────────────────────────────────────
-  const [qaMap, setQaMap] = useState<{ email: string; dispositions: string[] }[]>([]);
-  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
-  const [loadingQA, setLoadingQA] = useState(false);
-  const [editingQA, setEditingQA] = useState<string | null>(null); // email being edited
-  const [editingDispositions, setEditingDispositions] = useState<string[]>([]);
-  const [savingQA, setSavingQA] = useState(false);
-  const [newQAEmail, setNewQAEmail] = useState('');
-
-  const loadQAAssignments = async () => {
-    setLoadingQA(true);
-    try {
-      const data = await fetch('/api/cx/qa/disposition-config').then(r => r.json());
-      setQaMap(data.map ?? []);
-      setAvailableDispositions(data.availableDispositions ?? []);
-    } catch {} finally { setLoadingQA(false); }
-  };
-
-  const saveQAAssignment = async (email: string, dispositions: string[]) => {
-    setSavingQA(true);
-    try {
-      const res = await fetch('/api/cx/qa/disposition-config', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, dispositions }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setQaMap(data.map ?? []);
-        setEditingQA(null);
-        showToast('Dispositions saved');
-      }
-    } finally { setSavingQA(false); }
-  };
-
-  const toggleDisposition = (d: string) => {
-    setEditingDispositions(prev =>
-      prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d]
-    );
-  };
 
   // ── Password change state ──────────────────────────────────────────────────
   const [currentPassword, setCurrentPassword] = useState('');
@@ -262,7 +200,6 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   };
 
   useEffect(() => { loadUsers(); }, []);
-  useEffect(() => { if (activeSection === 'qa') loadQAAssignments(); }, [activeSection]);
   useEffect(() => { if (activeSection === 'kb') loadDocNamesFromDrive(); }, [activeSection]);
 
 
@@ -331,6 +268,18 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     const next = !historyEnabled;
     setHistoryEnabled(next);
     await patchConfig({ conversationHistoryEnabled: next });
+  };
+
+  const toggleCallAnalysis = async () => {
+    const next = !callAnalysisEnabled;
+    setCallAnalysisEnabled(next);
+    await patchConfig({ callAnalysisEnabled: next });
+  };
+
+  const toggleCxDashboard = async () => {
+    const next = !cxDashboardEnabled;
+    setCxDashboardEnabled(next);
+    await patchConfig({ cxDashboardEnabled: next });
   };
 
   const addDoc = async () => {
@@ -483,116 +432,6 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
     showToast('Synthesizer prompt reset to default');
   };
 
-  const addUser = async () => {
-    if (!newEmail.trim()) return;
-    setAddingUser(true);
-    setUserError('');
-    try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newEmail.trim(),
-          role: newRole,
-          agentName: newAgentName.trim() || undefined,
-          assignedDispositions: newDispositions.trim()
-            ? newDispositions.split(',').map(d => d.trim()).filter(Boolean)
-            : [],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setUserError(data.error || 'Failed'); return; }
-      await loadUsers();
-      setNewEmail('');
-      setNewAgentName('');
-      setNewDispositions('');
-      setNewRole('agent');
-      showToast('User added');
-    } finally { setAddingUser(false); }
-  };
-
-  const updateUserRole = async (email: string, role: string) => {
-    const res = await fetch('/api/users', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, role }),
-    });
-    if (res.ok) {
-      setUsers(prev => prev.map(u =>
-        u.email === email ? { ...u, role: role as any, isAdmin: role === 'admin' } : u
-      ));
-    }
-  };
-
-  const updateAgentName = async (email: string, agentName: string) => {
-    const res = await fetch('/api/users', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, agentName }),
-    });
-    if (res.ok) {
-      setUsers(prev => prev.map(u => u.email === email ? { ...u, agentName } : u));
-      setEditingAgentName(prev => { const n = { ...prev }; delete n[email]; return n; });
-      showToast('Agent name updated');
-    }
-  };
-
-  const saveAssignments = async () => {
-    const entries = Object.entries(pendingAssignments);
-    if (!entries.length) return;
-    setSavingAssignments(true);
-    let failed = 0;
-    await Promise.all(entries.map(async ([agentName, changes]) => {
-      const res = await fetch('/api/cx/admin/agents', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent_name: agentName, ...changes }),
-      });
-      if (res.ok) {
-        const key = agentName.toLowerCase();
-        setAgentAssignments(prev => ({
-          ...prev,
-          [key]: { tl_name: changes.tl_name ?? prev[key]?.tl_name ?? null, qa_name: changes.qa_name ?? prev[key]?.qa_name ?? null },
-        }));
-      } else { failed++; }
-    }));
-    setPendingAssignments({});
-    setSavingAssignments(false);
-    showToast(failed ? `Saved with ${failed} error(s)` : 'Assignments saved');
-  };
-
-  const resetUserPassword = async () => {
-    if (!resetEmail.trim() || !resetPassword.trim()) return;
-    setResetting(true);
-    setResetMsg(null);
-    try {
-      const res = await fetch('/api/admin/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: resetEmail.trim(), newPassword: resetPassword }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setResetMsg({ ok: true, text: 'Password updated successfully.' });
-        setResetEmail(''); setResetPassword('');
-      } else {
-        setResetMsg({ ok: false, text: data.error || 'Failed to reset password.' });
-      }
-    } catch {
-      setResetMsg({ ok: false, text: 'Network error.' });
-    }
-    setResetting(false);
-  };
-
-  const deleteUser = async (email: string) => {
-    const res = await fetch('/api/users', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
-    });
-    if (res.ok) { setUsers(prev => prev.filter(u => u.email !== email)); showToast('User removed'); }
-  };
-
   const saveSlackToken = async () => {
     if (!slackToken.trim()) return;
     setSavingSlack(true);
@@ -705,7 +544,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 max-w-3xl mx-auto px-8 py-10 space-y-10">
+      <main className={`flex-1 w-full mx-auto px-8 py-10 space-y-10 ${activeSection === 'users' ? 'max-w-6xl' : 'max-w-3xl'}`}>
 
         {/* ── GENERAL ── */}
         {activeSection === 'general' && (
@@ -854,6 +693,38 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   className={`relative w-12 h-6 rounded-full transition-colors ${historyEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
                 >
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${historyEnabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* Call Analysis (feature flag) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">Call Analysis</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Show the Call Analysis page &amp; nav link</p>
+                </div>
+                <button
+                  onClick={toggleCallAnalysis}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${callAnalysisEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${callAnalysisEnabled ? 'left-7' : 'left-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* CX Dashboard (feature flag) */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900">CX Dashboard</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Show the CX Dashboard page &amp; nav link</p>
+                </div>
+                <button
+                  onClick={toggleCxDashboard}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${cxDashboardEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                >
+                  <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${cxDashboardEnabled ? 'left-7' : 'left-1'}`} />
                 </button>
               </div>
             </div>
@@ -1112,454 +983,20 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
         )}
 
         {/* ── USERS ── */}
-        {activeSection === 'users' && (() => {
-          const PAGE = 5;
-          const filteredUsers = users.filter(u =>
-            !userSearch ||
-            u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-            (u.agentName || '').toLowerCase().includes(userSearch.toLowerCase())
-          );
-          const pagedUsers = filteredUsers.slice(userPage * PAGE, (userPage + 1) * PAGE);
-          const totalPages = Math.ceil(filteredUsers.length / PAGE);
-          return (
-          <div className="space-y-8">
-            <h2 className="text-xl font-bold text-gray-900">Users</h2>
-
-            {/* Search */}
-            <input
-              type="text"
-              placeholder="Search users..."
-              value={userSearch}
-              onChange={e => { setUserSearch(e.target.value); setUserPage(0); }}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
-            />
-
-            {/* User table */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
-              <table className="w-full text-sm min-w-[760px]">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/60">
-                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Role</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">TL</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">QA</th>
-                    <th className="px-4 py-3 w-12" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedUsers.map(u => (
-                    <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
-                      <td className="px-5 py-3 text-gray-700 text-sm truncate max-w-[220px]">{u.email}</td>
-                      <td className="px-4 py-3">
-                        <input
-                          type="text"
-                          value={editingAgentName[u.email] ?? (u.agentName || '')}
-                          onChange={e => setEditingAgentName(prev => ({ ...prev, [u.email]: e.target.value }))}
-                          onBlur={e => {
-                            const val = e.target.value;
-                            if (val !== (u.agentName || '')) updateAgentName(u.email, val);
-                          }}
-                          placeholder="Agent name…"
-                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32"
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <select
-                          value={u.role}
-                          onChange={e => updateUserRole(u.email, e.target.value)}
-                          className="border border-gray-200 rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
-                        >
-                          <option value="agent">Agent</option>
-                          <option value="tl">TL</option>
-                          <option value="quality">Quality</option>
-                          <option value="admin">Admin</option>
-                        </select>
-                      </td>
-                      <td className="px-4 py-3">
-                        {(() => {
-                          const key = (u.agentName || '').toLowerCase();
-                          const saved = agentAssignments[key]?.tl_name || '';
-                          const pending = pendingAssignments[u.agentName || ''];
-                          const val = pending?.tl_name !== undefined ? (pending.tl_name || '') : saved;
-                          const isDirty = pending?.tl_name !== undefined && (pending.tl_name || '') !== saved;
-                          return (
-                            <select
-                              value={val}
-                              onChange={e => {
-                                if (!u.agentName) { showToast('Set an Agent Name first'); return; }
-                                setPendingAssignments(prev => ({
-                                  ...prev,
-                                  [u.agentName!]: { ...prev[u.agentName!], tl_name: e.target.value || null },
-                                }));
-                              }}
-                              className={`border rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32 ${isDirty ? 'border-amber-400' : 'border-gray-200'}`}
-                            >
-                              <option value="">—</option>
-                              {users.filter(uu => uu.role === 'tl').map(uu => (
-                                <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
-                              ))}
-                            </select>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-4 py-3">
-                        {(() => {
-                          const key = (u.agentName || '').toLowerCase();
-                          const saved = agentAssignments[key]?.qa_name || '';
-                          const pending = pendingAssignments[u.agentName || ''];
-                          const val = pending?.qa_name !== undefined ? (pending.qa_name || '') : saved;
-                          const isDirty = pending?.qa_name !== undefined && (pending.qa_name || '') !== saved;
-                          return (
-                            <select
-                              value={val}
-                              onChange={e => {
-                                if (!u.agentName) { showToast('Set an Agent Name first'); return; }
-                                setPendingAssignments(prev => ({
-                                  ...prev,
-                                  [u.agentName!]: { ...prev[u.agentName!], qa_name: e.target.value || null },
-                                }));
-                              }}
-                              className={`border rounded-lg px-2.5 py-1 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 w-32 ${isDirty ? 'border-amber-400' : 'border-gray-200'}`}
-                            >
-                              <option value="">—</option>
-                              {users.filter(uu => uu.role === 'quality').map(uu => (
-                                <option key={uu.email} value={uu.agentName || ''}>{uu.agentName || uu.email}</option>
-                              ))}
-                            </select>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button onClick={() => deleteUser(u.email)} className="text-gray-300 hover:text-red-500 transition" title="Remove user">
-                          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                            <path d="M2 4h12M5 4V2h6v2M6 7v6M10 7v6M3 4l1 10h8l1-10" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredUsers.length === 0 && !loadingUsers && (
-                <p className="text-sm text-gray-400 text-center py-8">No users found</p>
-              )}
-            </div>
-
-            {/* Save assignments bar */}
-            {Object.keys(pendingAssignments).length > 0 && (
-              <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-2xl px-5 py-3">
-                <p className="text-sm text-amber-700 font-medium">
-                  {Object.keys(pendingAssignments).length} unsaved assignment change{Object.keys(pendingAssignments).length !== 1 ? 's' : ''}
-                </p>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setPendingAssignments({})}
-                    className="text-xs text-amber-600 hover:underline font-medium">
-                    Discard
-                  </button>
-                  <button onClick={saveAssignments} disabled={savingAssignments}
-                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
-                    {savingAssignments ? 'Saving…' : 'Save Assignments'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Pagination */}
-            {filteredUsers.length > PAGE && (
-              <div className="flex items-center justify-between text-sm text-gray-500">
-                <span>Page {userPage + 1} of {totalPages}</span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setUserPage(p => Math.max(0, p - 1))}
-                    disabled={userPage === 0}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  >
-                    Prev
-                  </button>
-                  <button
-                    onClick={() => setUserPage(p => Math.min(totalPages - 1, p + 1))}
-                    disabled={userPage >= totalPages - 1}
-                    className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Add user */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-              <h3 className="text-sm font-bold text-gray-900">Add / Update User</h3>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
-                  <input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="name@wintwealth.com"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role</label>
-                  <select value={newRole} onChange={e => setNewRole(e.target.value as any)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30">
-                    <option value="agent">Agent</option>
-                    <option value="tl">TL</option>
-                    <option value="quality">Quality</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Agent Name (optional)</label>
-                <input type="text" value={newAgentName} onChange={e => setNewAgentName(e.target.value)} placeholder="Display name for quality reports…"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Assigned Dispositions (QA only, comma-separated)</label>
-                <input type="text" value={newDispositions} onChange={e => setNewDispositions(e.target.value)} placeholder="e.g. TAXATION, SGB, LIQUIDITY"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
-              </div>
-              {userError && <p className="text-xs text-red-500">{userError}</p>}
-              <div className="flex items-center gap-3">
-                <button onClick={addUser} disabled={addingUser || !newEmail.trim()}
-                  className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
-                  {addingUser ? 'Adding…' : '+ Add / Update User'}
-                </button>
-                <span className="text-xs text-gray-400">After adding, use "Reset Password" below to set their initial password.</span>
-              </div>
-            </div>
-          </div>
-
-          );
-        })()}
-
-        {/* Reset Password — admin only */}
         {activeSection === 'users' && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Reset User Password</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Set or reset the password for any portal user.</p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">User Email</label>
-                <input type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)}
-                  placeholder="name@wintwealth.com"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
-                <input type="password" value={resetPassword} onChange={e => setResetPassword(e.target.value)}
-                  placeholder="Min. 6 characters"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
-              </div>
-            </div>
-            {resetMsg && (
-              <p className={`text-xs font-medium ${resetMsg.ok ? 'text-emerald-600' : 'text-red-500'}`}>{resetMsg.text}</p>
-            )}
-            <button onClick={resetUserPassword} disabled={resetting || !resetEmail.trim() || !resetPassword.trim()}
-              className="px-6 py-2.5 bg-gray-800 text-white rounded-xl text-sm font-semibold hover:bg-gray-700 disabled:opacity-50 transition">
-              {resetting ? 'Saving…' : 'Set Password'}
-            </button>
-          </div>
+          <UsersManager
+            users={users}
+            setUsers={setUsers}
+            agentAssignments={agentAssignments}
+            setAgentAssignments={setAgentAssignments}
+            loadingUsers={loadingUsers}
+            reloadUsers={loadUsers}
+            showToast={showToast}
+          />
         )}
 
-        {/* ── TEAM LEADS ── */}
-        {activeSection === 'tl' && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">Team Leads</h2>
-                <p className="text-sm text-gray-500 mt-1">Users with the TL role and their agent assignments</p>
-              </div>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100 bg-gray-50/60">
-                    <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Email</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agent Name</th>
-                    <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Agents Managed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {users.filter(u => u.role === 'tl').map(u => {
-                    const count = Object.values(agentAssignments).filter(a => a.tl_name === u.agentName).length;
-                    return (
-                      <tr key={u.email} className="border-b border-gray-50 hover:bg-gray-50/40 transition">
-                        <td className="px-5 py-3 text-gray-700">{u.email}</td>
-                        <td className="px-4 py-3 text-gray-600">{u.agentName || <span className="text-gray-400 italic">No agent name set</span>}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-sm font-medium text-gray-700">{count}</span>
-                          <span className="text-gray-400 text-xs ml-1">agent{count !== 1 ? 's' : ''}</span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {users.filter(u => u.role === 'tl').length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-8">No Team Leads yet. Add a user with role &quot;TL&quot; in the Users section.</p>
-              )}
-            </div>
-            <p className="text-xs text-gray-400">To add a new Team Lead, go to the Users section and set their role to &quot;TL&quot;. Then assign agents to them using the TL column in the users table.</p>
-          </div>
-        )}
 
         {/* ── INTEGRATIONS ── */}
-        {/* ── QA ASSIGNMENTS ── */}
-        {activeSection === 'qa' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">QA Assignments</h2>
-              <p className="text-sm text-gray-400 mt-1">Map QA analysts to the dispositions they are responsible for scoring.</p>
-            </div>
-
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-              {/* Add new assignment row */}
-              <div className="p-4 border-b border-gray-100 flex items-center gap-3">
-                <input
-                  type="email"
-                  value={newQAEmail}
-                  onChange={e => setNewQAEmail(e.target.value)}
-                  placeholder="qa@wintwealth.com"
-                  className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 max-w-xs"
-                />
-                <button
-                  onClick={() => {
-                    if (!newQAEmail.trim()) return;
-                    const existing = qaMap.find(e => e.email.toLowerCase() === newQAEmail.trim().toLowerCase());
-                    setEditingQA(newQAEmail.trim());
-                    setEditingDispositions(existing?.dispositions ?? []);
-                    setNewQAEmail('');
-                  }}
-                  disabled={!newQAEmail.trim()}
-                  className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-40 transition"
-                >
-                  + Add / Edit
-                </button>
-              </div>
-
-              {loadingQA ? (
-                <div className="p-8 text-center text-sm text-gray-400">Loading…</div>
-              ) : qaMap.length === 0 ? (
-                <div className="p-8 text-center text-sm text-gray-400">No QA assignments yet. Enter an email above to get started.</div>
-              ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50 text-xs uppercase text-gray-400 tracking-wide">
-                      <th className="px-4 py-3 text-left font-medium">QA Email</th>
-                      <th className="px-4 py-3 text-left font-medium">Assigned Dispositions</th>
-                      <th className="px-4 py-3 text-right font-medium">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {qaMap.map(entry => (
-                      <React.Fragment key={entry.email}>
-                        <tr className="border-b border-gray-50 hover:bg-gray-50 transition">
-                          <td className="px-4 py-3 font-mono text-xs text-gray-600 align-top pt-4">{entry.email}</td>
-                          <td className="px-4 py-3 align-top">
-                            {entry.dispositions.length === 0 ? (
-                              <span className="text-gray-300 text-xs">None assigned</span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1.5">
-                                {entry.dispositions.map(d => (
-                                  <span key={d} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-emerald-50 text-emerald-700 border border-emerald-100">
-                                    {d}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right align-top">
-                            <button
-                              onClick={() => {
-                                setEditingQA(entry.email);
-                                setEditingDispositions([...entry.dispositions]);
-                              }}
-                              className="text-xs text-[#2d9e4f] hover:underline font-semibold"
-                            >
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                        {editingQA === entry.email && (
-                          <tr className="border-b border-gray-100 bg-emerald-50/40">
-                            <td colSpan={3} className="px-4 py-4">
-                              <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Select dispositions for {entry.email}</p>
-                              <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 max-h-64 overflow-y-auto mb-4">
-                                {availableDispositions.map(d => (
-                                  <label key={d} className="flex items-center gap-2 cursor-pointer group">
-                                    <input
-                                      type="checkbox"
-                                      checked={editingDispositions.includes(d)}
-                                      onChange={() => toggleDisposition(d)}
-                                      className="accent-[#2d9e4f] w-3.5 h-3.5"
-                                    />
-                                    <span className="text-sm text-gray-700 group-hover:text-gray-900">{d}</span>
-                                  </label>
-                                ))}
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <button
-                                  onClick={() => saveQAAssignment(entry.email, editingDispositions)}
-                                  disabled={savingQA}
-                                  className="px-4 py-1.5 bg-[#2d9e4f] text-white rounded-lg text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
-                                >
-                                  {savingQA ? 'Saving…' : 'Save'}
-                                </button>
-                                <button
-                                  onClick={() => setEditingQA(null)}
-                                  className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition"
-                                >
-                                  Cancel
-                                </button>
-                                <span className="text-xs text-gray-400">{editingDispositions.length} selected</span>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            {/* Inline editor for new email (not yet in map) */}
-            {editingQA && !qaMap.find(e => e.email === editingQA) && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Select dispositions for {editingQA}</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 max-h-64 overflow-y-auto mb-4">
-                  {availableDispositions.map(d => (
-                    <label key={d} className="flex items-center gap-2 cursor-pointer group">
-                      <input
-                        type="checkbox"
-                        checked={editingDispositions.includes(d)}
-                        onChange={() => toggleDisposition(d)}
-                        className="accent-[#2d9e4f] w-3.5 h-3.5"
-                      />
-                      <span className="text-sm text-gray-700 group-hover:text-gray-900">{d}</span>
-                    </label>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => saveQAAssignment(editingQA, editingDispositions)}
-                    disabled={savingQA}
-                    className="px-4 py-1.5 bg-[#2d9e4f] text-white rounded-lg text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
-                  >
-                    {savingQA ? 'Saving…' : 'Save'}
-                  </button>
-                  <button onClick={() => setEditingQA(null)} className="px-4 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition">
-                    Cancel
-                  </button>
-                  <span className="text-xs text-gray-400">{editingDispositions.length} selected</span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
         {activeSection === 'integrations' && (
           <div className="space-y-8">
             <h2 className="text-xl font-bold text-gray-900">Integrations</h2>

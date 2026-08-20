@@ -24,7 +24,11 @@ function LoginForm() {
     try {
       const result = await signIn('credentials', { email, password, callbackUrl, redirect: false });
       if (result?.error) {
-        setLoginError('Invalid email or password.');
+        if (result.error !== 'CredentialsSignin') {
+          setLoginError(result.error);
+        } else {
+          setLoginError('Invalid email or password.');
+        }
       } else if (result?.url) {
         window.location.href = result.url;
       }
@@ -97,16 +101,7 @@ function LoginForm() {
             </form>
 
             <p className="mt-5 text-center text-xs text-gray-400">
-              New user?{' '}
-              <a href="/register" className="text-[#2d9e4f] hover:underline font-medium">
-                Create an account
-              </a>
-            </p>
-            <p className="mt-2 text-center text-xs text-gray-400">
-              Already added by an admin?{' '}
-              <a href="/set-password" className="text-[#2d9e4f] hover:underline font-medium">
-                Set your password
-              </a>
+              Need an account? Ask an admin to invite you — you'll get a signup link by email.
             </p>
             <p className="mt-2 text-center text-xs text-gray-400">
               Need help?{' '}

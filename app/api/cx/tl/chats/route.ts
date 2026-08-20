@@ -30,30 +30,46 @@ export interface TLChatRow {
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
-  const { session, response } = await requireRole(['tl', 'admin']);
+  const { session, response } = await requireRole(['tl', 'admin', 'quality']);
   if (response) return response;
   const role  = (session.user as any).role as string;
   const email = ((session.user as any).email || '') as string;
 
   const { searchParams } = new URL(req.url);
 
-  // Resolve TL's agents
+  // Resolve TL / QA / Admin agents
   let agentNames: string[];
-  if (role === 'admin') {
+  if (role === 'admin' || role === 'quality') {
     const explicit = searchParams.get('agent');
     if (explicit) {
-      agentNames = [explicit];
+      const rows = await query<{ name: string }>(
+        `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %'`,
+        [explicit]
+      );
+      agentNames = rows.length ? rows.map(r => r.name) : [explicit];
     } else {
       const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`);
       agentNames = rows.map(r => r.name);
     }
   } else {
     const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let tlAgentName = configUser?.agentName;
+    if (!tlAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = email;
     agentNames = await getAgentNamesByTL(tlAgentName);
     const agentFilter = searchParams.get('agent');
-    if (agentFilter) agentNames = agentNames.filter(n => n === agentFilter);
+    if (agentFilter) {
+      agentNames = agentNames.filter(n =>
+        n.toLowerCase() === agentFilter.toLowerCase() ||
+        n.toLowerCase().startsWith(agentFilter.toLowerCase() + ' ') ||
+        agentFilter.toLowerCase().startsWith(n.toLowerCase() + ' ')
+      );
+    }
   }
 
   if (!agentNames.length) {
@@ -63,6 +79,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const sqlParams: unknown[] = [agentNames];
   let paramIdx = 2;
   let extraWhere = '';
+
+  const config = await readConfig();
+  const map = config.qaDispositionMap ?? [];
+  const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
+
+  // For QA (or mapped admins), restrict by assigned dispositions (except Manorathi)
+  if ((role === 'quality' || qaEntry) && email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
+    if (strictDispositions.length > 0) {
+      extraWhere += ` AND c.tags->>'disposition' = ANY($${paramIdx++})`;
+      sqlParams.push(strictDispositions);
+    } else {
+      // If no dispositions assigned, show nothing
+      extraWhere += ` AND 1 = 0`;
+    }
+  }
 
   const from = searchParams.get('from');
   if (from) {
@@ -83,11 +116,22 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const iqsMin = searchParams.get('iqs_min');
   if (iqsMin) { extraWhere += ` AND i.iqs_score >= $${paramIdx++}`; sqlParams.push(parseInt(iqsMin)); }
   const iqsMax = searchParams.get('iqs_max');
-  if (iqsMax) { extraWhere += ` AND i.iqs_score <= $${paramIdx++}`; sqlParams.push(parseInt(iqsMax)); }
+  if (iqsMax) { extraWhere += ` AND (i.iqs_score <= $${paramIdx++} OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters'))`; sqlParams.push(parseInt(iqsMax)); }
   const csatValues = searchParams.getAll('csat');
   if (csatValues.length) {
     extraWhere += ` AND c.csat_score = ANY($${paramIdx++})`;
     sqlParams.push(csatValues.map(Number));
+  }
+
+  if (role === 'tl' || role === 'agent') {
+    extraWhere += ` AND i.iqs_score IS NOT NULL`;
+  }
+  const statusFilter = searchParams.get('status');
+  if (statusFilter === 'reviewed') {
+    extraWhere += ` AND i.status = 'reviewed'`;
+  } else if (['admin', 'quality'].includes(role)) {
+    // Exclude chats that are in the pending review section of Chat Evaluation for QA and Admin views
+    extraWhere += ` AND NOT (i.status IN ('pending', 'reopened') AND (i.iqs_score <= 85 OR (i.iqs_score IS NULL AND i.parameters ? '__agent_parameters')))`;
   }
 
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
@@ -111,13 +155,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   sqlParams.push(limit, offset);
   const rows = await query<{
-    chat_id: string; agent_name: string | null; iqs_score: string;
+    chat_id: string; agent_id: number | null; agent_name: string | null; iqs_score: string;
     closed_at: string; disposition: string; sub_disposition: string | null;
     csat_score: string | null; parameters: any; mobile_number: string | null;
     reviewed_by: string | null; reviewed_at: string | null;
     conversation_type: string | null;
   }>(
-    `SELECT c.id AS chat_id, a.name AS agent_name,
+    `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name,
             i.iqs_score, c.closed_at,
             c.tags->>'disposition'     AS disposition,
             c.tags->>'sub_disposition' AS sub_disposition,
@@ -156,7 +200,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (iqsScore === null) {
+    const isBotOnly = r.conversation_type === 'bot'
+      || r.agent_name === 'Robylon AI'
+      || r.agent_name === 'Robylon'
+      || r.agent_name === 'Robylon Automation'
+      || (r.agent_id !== null && [15, 447, 784].includes(Number(r.agent_id)));
+
+    if (iqsScore === null && !isBotOnly) {
       iqsScore = computeIqsFromRawParams(params, false);
     }
     if (botIqsScore === null) {
@@ -166,6 +216,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       if (r.conversation_type !== 'agent' || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
         botIqsScore = parseFloat(r.iqs_score);
       }
+    }
+    if (isBotOnly) {
+      iqsScore = null;
     }
 
     return {

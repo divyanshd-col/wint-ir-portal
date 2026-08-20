@@ -5,22 +5,16 @@ import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
 import { getWeekStart, getLast8Weeks } from '@/lib/cx/week';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateWeightedOverallIQS, extractPooledParams } from '@/lib/quality';
 import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 // ── Param definitions (mirrors team-analytics) ─────────────────────────────────
-// Derived from lib/quality.ts so this route can never drift from the rubric again
-// (the previous hand-copied list was v3-keyed and zeroed out the 5 v4-only params).
 export const PARAM_DEFS = PARAM_ORDER.map(p => ({
   key: PASCAL_TO_DB[p] || p.toLowerCase(),
   label: PARAM_NAMES[p] ?? p,
   weight: Math.round((WEIGHTS[p] ?? 0) * 100),
 }));
 
-// Normalize any stored key spelling (canonical snake, old no-underscore v4, or
-// PascalCase) to the canonical v4 db key. Legacy v3-only keys normalize to
-// themselves, don't match a v4 def, and drop out — intentional: blending v3 rows
-// into v4 pass rates would conflate two different rubrics.
 export const normKey = (k: string) => {
   const pascal = ALL_DB_KEY_TO_PASCAL[k] ?? (PASCAL_TO_DB[k] ? k : undefined);
   return pascal ? (PASCAL_TO_DB[pascal] ?? k) : k;
@@ -54,9 +48,12 @@ const CHAT_SUMMARY_SELECT = `
   COUNT(c.id)::int AS volume
 `;
 
-// v4 nests the human-leg params under __agent_parameters; legacy rows keep them at
-// the top level. Iterate whichever container exists so both generations aggregate.
-const CHAT_PARAM_LATERAL = `
+// v4 nests the human-leg params under __agent_parameters; legacy rows keep them at the
+// top level. Iterate whichever container exists so both generations aggregate — without
+// the COALESCE, a v4 row yields only __-prefixed keys and every pass rate comes back null.
+// Exported so the sibling ai/ route reuses the exact same fragment instead of re-declaring
+// a subtly different one (which is how it silently drifted onto v3-only behaviour before).
+export const CHAT_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
     CASE WHEN s.parameters::text LIKE '{%'
          THEN COALESCE(s.parameters::jsonb->'__agent_parameters', s.parameters::jsonb)
@@ -64,15 +61,16 @@ const CHAT_PARAM_LATERAL = `
   ) AS p(key, val)
 `;
 
-const CALL_PARAM_LATERAL = `
+export const CALL_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
     CASE WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb ELSE '{}'::jsonb END
   ) AS p(key, val)
 `;
 
-// Pass rate with half credit: v4 stores 0.5 for partial passes — count it as 0.5
-// toward the numerator instead of an outright fail. Score compared as text only.
-const PASS_RATE_SELECT = `
+// Pass rate with half credit: v4 stores 0.5 for partial passes — count it as 0.5 toward
+// the numerator instead of an outright fail. Score compared as text only, never cast to
+// boolean: that cast raises on v4's 0.5 half-scores and 500s the request.
+export const PASS_RATE_SELECT = `
   p.key AS param_key,
   ROUND(SUM(CASE WHEN p.val->>'score'='true' THEN 1 WHEN p.val->>'score'='0.5' THEN 0.5 ELSE 0 END)::numeric
         / NULLIF(COUNT(*) FILTER (WHERE p.val->>'score' IS NOT NULL AND p.val->>'score' NOT IN ('null','')),0)*100,1)::float AS pass_rate
@@ -83,6 +81,7 @@ function buildWow(
   sumRows:   { week_start: string; csat_pct: number|null; iqs: number|null; volume: number }[],
   paramRows: { week_start: string; param_key: string; pass_rate: number|null }[],
   weeks:     string[],
+  isChat = false,
 ) {
   const sumMap = new Map(sumRows.map(r => [r.week_start, r]));
   const paramMap = new Map<string, Record<string, number|null>>();
@@ -94,7 +93,11 @@ function buildWow(
   }
   return weeks.map(w => {
     const s = sumMap.get(w);
-    return { week_start: w, csat_pct: s?.csat_pct ?? null, iqs: s?.iqs ?? null, volume: s?.volume ?? 0, params: paramMap.get(w) ?? {} };
+    const pm = paramMap.get(w) ?? {};
+    const weightedIqs = isChat
+      ? (s?.iqs ?? calculateWeightedOverallIQS(pm, 'human', { roundDecimals: 1 }))
+      : null;
+    return { week_start: w, csat_pct: s?.csat_pct ?? null, iqs: weightedIqs, volume: s?.volume ?? 0, params: pm };
   });
 }
 
@@ -192,8 +195,14 @@ export async function GET(req: NextRequest) {
   let tlAgentNames: string[];
   if (role === 'tl') {
     const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
+    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let tlAgentName = configUser?.agentName;
+    if (!tlAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
   } else {
     const rows = await query<{ name: string }>(`
@@ -214,8 +223,14 @@ export async function GET(req: NextRequest) {
 
   if (role === 'agent') {
     const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username) === email);
-    const selfAgentName = configUser?.agentName || email.split('@')[0];
+    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let selfAgentName = configUser?.agentName;
+    if (!selfAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) selfAgentName = dbUser.name;
+    }
+    if (!selfAgentName) selfAgentName = email.split('@')[0];
     tlAgentNames = selfAgentName ? [selfAgentName] : tlAgentNames.slice(0, 1);
   }
 
@@ -231,19 +246,24 @@ export async function GET(req: NextRequest) {
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([
     Promise.all([
-      query<{ csat_pct: number|null; iqs: number|null; volume: number }>(`
-        SELECT ${CHAT_SUMMARY_SELECT}
+      query<{ csat_pct: number|null; iqs: number|null; volume: number; parameters?: any }>(`
+        SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
+                     / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
+               ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+               COUNT(c.id)::int AS volume,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
         WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name = $3
       `, [dateFrom, dateTo, agentName]),
 
-      query<FlatCatRow>(`
+      query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
                ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds
+               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -252,12 +272,13 @@ export async function GET(req: NextRequest) {
         GROUP BY 1 ORDER BY COUNT(c.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
-      query<FlatCatRow>(`
+      query<FlatCatRow & { parameters?: any }>(`
         SELECT c.tags->>'disposition' AS disposition,
                c.tags->>'sub_disposition' AS sub_disposition,
                ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
                COUNT(c.id)::int AS volume,
-               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds
+               ROUND(AVG(c.resolution_seconds)::numeric)::int AS resolution_seconds,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -267,12 +288,13 @@ export async function GET(req: NextRequest) {
         GROUP BY 1, 2 ORDER BY 1, COUNT(c.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
-      query<{ week_start: string; csat_pct: number|null; iqs: number|null; volume: number }>(`
+      query<{ week_start: string; csat_pct: number|null; iqs: number|null; volume: number; parameters?: any }>(`
         SELECT date_trunc('week', c.closed_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
                ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
-               COUNT(c.id)::int AS volume
+               COUNT(c.id)::int AS volume,
+               jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL) AS parameters
         FROM conversations c
         JOIN agents a ON a.id = c.agent_id
         LEFT JOIN iqs_scores s ON s.chat_id = c.id
@@ -291,6 +313,17 @@ export async function GET(req: NextRequest) {
           AND a.name = $3 AND s.parameters IS NOT NULL
         GROUP BY 1, 2 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
+
+      query<{ param_key: string; pass_rate: number|null }>(`
+        SELECT ${PASS_RATE_SELECT}
+        FROM iqs_scores s
+        JOIN conversations c ON c.id = s.chat_id
+        JOIN agents a ON a.id = c.agent_id
+        ${CHAT_PARAM_LATERAL}
+        WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2
+          AND a.name = $3 AND s.parameters IS NOT NULL
+        GROUP BY 1
+      `, [dateFrom, dateTo, agentName]),
     ]),
 
     Promise.all([
@@ -363,8 +396,30 @@ export async function GET(req: NextRequest) {
     ]),
   ]);
 
-  const [chatStatRows, chatParents, chatSubs, chatWow, chatWowParams] = chatsRes;
+  const [chatStatRows, chatParents, chatSubs, chatWow, chatWowParams, chatPeriodParams] = chatsRes;
   const [callStatRows, callParents, callSubs, callWow, callWowParams] = callsRes;
+
+  for (const r of (chatParents as any[])) {
+    if (r.parameters) {
+      const pooled = extractPooledParams(r.parameters);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (weighted !== null) r.iqs = weighted;
+    }
+  }
+  for (const r of (chatSubs as any[])) {
+    if (r.parameters) {
+      const pooled = extractPooledParams(r.parameters);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (weighted !== null) r.iqs = weighted;
+    }
+  }
+  for (const r of (chatWow as any[])) {
+    if (r.parameters) {
+      const pooled = extractPooledParams(r.parameters);
+      const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+      if (weighted !== null) r.iqs = weighted;
+    }
+  }
 
   const categories = buildCategories(
     chatParents as FlatCatRow[],
@@ -372,6 +427,14 @@ export async function GET(req: NextRequest) {
     callParents as FlatCatRow[],
     callSubs    as FlatCatRow[],
   );
+
+  const chatPeriodParamMap: Record<string, number | null> = {};
+  for (const r of (chatPeriodParams as any[])) {
+    const k = normKey(r.param_key);
+    if (chatPeriodParamMap[k] == null) chatPeriodParamMap[k] = r.pass_rate;
+  }
+  const chatPeriodPooled = extractPooledParams(chatStatRows[0]?.parameters || []);
+  const chatWeightedIqs = calculateWeightedOverallIQS(chatPeriodPooled, 'human', { roundDecimals: 1 }) ?? (chatStatRows[0]?.iqs ?? null);
 
   return NextResponse.json({
     agentName,
@@ -381,14 +444,14 @@ export async function GET(req: NextRequest) {
     wowWeekStarts: wowWeeks,
     channels: {
       chats: {
-        stats:      { csat_pct: chatStatRows[0]?.csat_pct ?? null, iqs: chatStatRows[0]?.iqs ?? null, volume: chatStatRows[0]?.volume ?? 0 },
+        stats:      { csat_pct: chatStatRows[0]?.csat_pct ?? null, iqs: chatWeightedIqs, volume: chatStatRows[0]?.volume ?? 0 },
         categories,
-        wow:        buildWow(chatWow as any[], chatWowParams as any[], wowWeeks),
+        wow:        buildWow(chatWow as any[], chatWowParams as any[], wowWeeks, true),
       },
       calls: {
         stats:      { csat_pct: callStatRows[0]?.csat_pct ?? null, iqs: callStatRows[0]?.iqs ?? null, volume: callStatRows[0]?.volume ?? 0 },
         categories,
-        wow:        buildWow(callWow as any[], callWowParams as any[], wowWeeks),
+        wow:        buildWow(callWow as any[], callWowParams as any[], wowWeeks, false),
       },
       emails: null,
     },

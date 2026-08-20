@@ -12,6 +12,7 @@ interface SidebarProps {
   isAdmin?: boolean;
   role?: string;
   historyEnabled?: boolean;
+  flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
   onRestoreConversation?: (conv: SavedConversation) => void;
   onNewChat?: () => void;
 }
@@ -19,10 +20,9 @@ interface SidebarProps {
 const STORAGE_KEY = 'wint_sidebar_collapsed';
 
 
-export default function Sidebar({ username, isAdmin, role, historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
+export default function Sidebar({ username, isAdmin, role, historyEnabled = false, flags, onRestoreConversation, onNewChat }: SidebarProps) {
   const canSeeQuality = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
   const canSeeAnalytics = isAdmin || role === 'tl';
-  const canSeeMemberAnalytics = isAdmin || role === 'tl' || role === 'agent';
   const [open, setOpen] = useState(true); // mobile drawer
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -114,7 +114,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         {/* Nav */}
         <nav className={`py-4 flex-1 overflow-y-auto space-y-1 ${isExpanded ? 'px-4' : 'px-2'}`}>
 
-          {canSeeAnalytics && (
+          {flags?.callAnalysis && canSeeAnalytics && (
             <NavLink href="/call-analysis" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
@@ -131,33 +131,23 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
               onClick={() => setAndPersistCollapsed(true)} />
           )}
 
-          {canSeeMemberAnalytics && (
-            <NavLink href="/tl/member-analytics" icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="6" cy="5" r="2.5" />
-                <path d="M1 14c0-2.8 2.2-5 5-5" />
-                <circle cx="11.5" cy="9" r="2" />
-                <path d="M8.5 14c0-1.7 1.3-3 3-3s3 1.3 3 3" />
-              </svg>
-            } label={role === 'agent' ? 'My Analytics' : 'Member Analytics'} active={pathname === '/tl/member-analytics'} expanded={isExpanded}
-              onClick={() => setAndPersistCollapsed(true)} />
-          )}
-
           {canSeeQuality && (
             <NavLink href="/quality" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
               </svg>
-            } label="Analytics" active={pathname === '/quality'} expanded={isExpanded}
+            } label="Quality Tool" active={pathname === '/quality'} expanded={isExpanded}
               onClick={() => setAndPersistCollapsed(true)} />
           )}
 
-          <NavLink href="/cx" icon={
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="1" y="9" width="3" height="6" rx="0.5"/><rect x="6" y="5" width="3" height="10" rx="0.5"/><rect x="11" y="1" width="3" height="14" rx="0.5"/>
-            </svg>
-          } label="CX Dashboard" active={pathname === '/cx'} expanded={isExpanded}
-            onClick={() => setAndPersistCollapsed(true)} />
+          {flags?.cxDashboard && (
+            <NavLink href="/cx" icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="1" y="9" width="3" height="6" rx="0.5"/><rect x="6" y="5" width="3" height="10" rx="0.5"/><rect x="11" y="1" width="3" height="14" rx="0.5"/>
+              </svg>
+            } label="CX Dashboard" active={pathname === '/cx'} expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)} />
+          )}
 
           <div className={isExpanded ? 'mt-3 pt-3 border-t border-white/10' : 'mt-2 pt-2 flex flex-col items-center border-t border-white/10'}>
             <button

@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "app/api/cron/generate-scorecards/route.ts": {
+      "maxDuration": 300
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/sync-logs",
@@ -7,6 +12,14 @@
     {
       "path": "/api/cron/process-pending-scores",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/generate-scorecards",
+      "schedule": "30 2 * * 1"
+    },
+    {
+      "path": "/api/cron/email-cred-reminder",
+      "schedule": "0 9 1 * *"
     }
   ]
 }

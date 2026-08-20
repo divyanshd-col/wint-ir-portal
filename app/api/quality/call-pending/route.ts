@@ -18,8 +18,14 @@ export async function GET() {
   let items = all;
   if (role === 'quality') {
     const config = await readConfig();
-    const me = config.users.find(u => (u.email || u.username) === email);
-    const myQAName = me?.agentName || email.split('@')[0];
+    const me = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let myQAName = me?.agentName;
+    if (!myQAName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) myQAName = dbUser.name;
+    }
+    if (!myQAName) myQAName = email.split('@')[0];
 
     // Get agents assigned to this quality person from CX DB
     try {

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
+import { storeAppendIQSFlag, storeGetIQSFlags, storeUpdateIQSFlag, storeAppendAuditEntry, storeAppendFlagComment } from '@/lib/store';
 import type { IQSFlag, IQSChallengedParam, IQSAuditEntry } from '@/lib/store';
+import { resolveQANameForChat } from '@/lib/qa-resolver';
 import { randomUUID } from 'crypto';
 
 // Only QA/admin can give a dispute its final review decision — TL's only power
@@ -13,10 +14,10 @@ function reviewAccess(session: any) {
 // Every agent-raised dispute goes to the TL first for review/forwarding — no
 // CAT1/CAT2 split, just a single queue the TL forwards on to QA.
 export async function POST(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'agent']);
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
-  const { scoreId, chatId, callId, agentNote, challengedParams } = await req.json();
+  const { scoreId, chatId, callId, agentNote, challengedParams, raisedByRole } = await req.json();
   const effectiveChatId = chatId || callId;
   if (!effectiveChatId) return NextResponse.json({ error: 'chatId or callId required' }, { status: 400 });
 
@@ -24,16 +25,20 @@ export async function POST(req: NextRequest) {
   const config = await readConfig();
   const email = (session.user as any)?.email || '';
   const role  = (session.user as any)?.role  || '';
-  const configUser = config.users.find(u => (u.email || u.username) === email);
+  const configUser = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
   const agentName = configUser?.agentName || email.split('@')[0];
 
   const params: IQSChallengedParam[] = Array.isArray(challengedParams) ? challengedParams : [];
   const now = new Date().toISOString();
 
+  const isTL = role === 'tl' || raisedByRole === 'tl';
+  const effectiveRaisedByRole = isTL ? 'tl' : 'ir';
+  const initialStatus = isTL ? 'tl_forwarded' : 'pending';
+
   const flag: IQSFlag = {
     id: randomUUID(), scoreId, chatId: effectiveChatId, callId: callId || undefined, agentName, agentEmail: email,
     agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
-    raisedByRole: 'ir', paramCategory: 'qa', status: 'pending',
+    raisedByRole: effectiveRaisedByRole, paramCategory: 'qa', status: initialStatus,
   };
   const saved = await storeAppendIQSFlag(flag);
   if (!saved) {
@@ -41,9 +46,25 @@ export async function POST(req: NextRequest) {
     // simply never appear in anyone's queue.
     return NextResponse.json({ error: 'Failed to save dispute — please retry' }, { status: 500 });
   }
-  await storeAppendAuditEntry({ id: randomUUID(), action: 'ir_dispute_raised', chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
+
+  if (isTL) {
+    const qaName = await resolveQANameForChat(effectiveChatId);
+    await storeAppendFlagComment({
+      id: randomUUID(),
+      flagId: flag.id,
+      authorEmail: email,
+      authorName: agentName,
+      role: 'tl',
+      content: `Forwarded to ${qaName}`,
+      createdAt: now,
+    });
+  }
+
+  const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
+  await storeAppendAuditEntry({ id: randomUUID(), action: auditAction, chatId: effectiveChatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
+
 
 // GET — list flags (quality/admin/tl: all; agent: own only)
 export async function GET() {
@@ -63,7 +84,7 @@ export async function GET() {
   if (role === 'quality') {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
-    const me = config.users.find(u => (u.email || u.username) === email);
+    const me = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
     const myQAName = me?.agentName || email.split('@')[0];
     try {
       const { query } = await import('@/lib/cx/db');
@@ -72,7 +93,52 @@ export async function GET() {
         [myQAName],
       );
       const myAgents = new Set(rows.map((r: any) => (r.name || '').toLowerCase()));
-      return NextResponse.json({ flags: flags.filter(f => myAgents.has((f.agentName || '').toLowerCase())) });
+
+      const chatIds = [...new Set(flags.map(f => f.chatId).filter(Boolean))];
+      let reviewerMap = new Map<string, string>();
+      if (chatIds.length > 0) {
+        const revRows = await query<{ chat_id: string; reviewed_by: string }>(
+          `SELECT c.id AS chat_id,
+                  COALESCE(
+                    i.reviewed_by,
+                    (SELECT reviewed_by FROM call_evaluations ce WHERE ce.chat_id = c.id AND reviewed_by IS NOT NULL AND reviewed_by != '' LIMIT 1)
+                  ) AS reviewed_by
+           FROM conversations c
+           LEFT JOIN iqs_scores i ON i.chat_id = c.id
+           WHERE c.id = ANY($1)`,
+          [chatIds]
+        );
+        for (const r of revRows) {
+          if (r.reviewed_by) reviewerMap.set(r.chat_id, r.reviewed_by);
+        }
+      }
+
+      const filteredFlags = flags.filter(f => {
+        const chatReviewer = reviewerMap.get(f.chatId)?.trim();
+        if (chatReviewer) {
+          const revLower = chatReviewer.toLowerCase();
+          const reviewerUser = config.users?.find((u: any) =>
+            (u.email || u.username)?.toLowerCase() === revLower ||
+            u.agentName?.toLowerCase() === revLower
+          );
+
+          if (reviewerUser?.role === 'quality') {
+            const emailLower = email.toLowerCase();
+            const qaNameLower = (myQAName || '').toLowerCase();
+            const usernameLower = (me?.username || '').toLowerCase();
+
+            return (
+              revLower === emailLower ||
+              (qaNameLower && revLower === qaNameLower) ||
+              (usernameLower && revLower === usernameLower) ||
+              (emailLower.includes('@') && revLower === emailLower.split('@')[0])
+            );
+          }
+        }
+        return myAgents.has((f.agentName || '').toLowerCase());
+      });
+
+      return NextResponse.json({ flags: filteredFlags });
     } catch {
       // CX DB unavailable
     }

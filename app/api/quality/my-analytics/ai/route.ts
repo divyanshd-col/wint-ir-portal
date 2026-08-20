@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
-import { PARAM_ORDER, PARAM_NAMES } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, calculateWeightedOverallIQS } from '@/lib/quality';
 import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -28,8 +28,30 @@ export async function POST(req: NextRequest) {
 
   const config = await readConfig();
   const email = session.user.email || '';
-  const configUser = config.users.find((u: any) => (u.email || u.username) === email);
-  const agentName = configUser?.agentName || '';
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = await getUserByEmail(email).catch(() => null);
+  const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  const rawName = dbUser?.name || configUser?.agentName || email.split('@')[0];
+
+  let matchedAgent: { id: number; name: string } | null = null;
+  if (dbUser?.user_id) {
+    const byUserId = await query<{ id: number; name: string }>(
+      `SELECT id, name FROM agents WHERE user_id = $1 LIMIT 1`, [dbUser.user_id]
+    );
+    if (byUserId.length > 0) matchedAgent = byUserId[0];
+  }
+  if (!matchedAgent && rawName) {
+    const byName = await query<{ id: number; name: string }>(
+      `SELECT id, name FROM agents 
+       WHERE LOWER(name) = LOWER($1) 
+          OR LOWER($1) LIKE LOWER(name || ' %') 
+          OR LOWER(name) LIKE LOWER($1 || ' %') 
+       LIMIT 1`,
+      [rawName.trim()]
+    );
+    if (byName.length > 0) matchedAgent = byName[0];
+  }
+  const agentName = matchedAgent?.name || rawName;
   if (!agentName) return NextResponse.json({ error: 'Agent not configured' }, { status: 404 });
 
   const apiKey = config.iqsAnthropicApiKey || (config as any).anthropicApiKey || process.env.ANTHROPIC_API_KEY || '';
@@ -114,7 +136,6 @@ export async function POST(req: NextRequest) {
   `, [agentName, dateFrom, dateTo]);
 
   const r = rows[0];
-  const avgIqs = r?.avg_iqs ? Math.round(parseFloat(r.avg_iqs)) : null;
   const count  = parseInt(r?.total ?? '0');
   const csatPct = r?.csat_total && parseInt(r.csat_total) > 0
     ? Math.round(parseInt(r.csat_good) / parseInt(r.csat_total) * 100)
@@ -124,17 +145,20 @@ export async function POST(req: NextRequest) {
   const paramRates: Record<string, { yes: number; total: number }> = {};
   for (const paramObj of (Array.isArray(r?.parameters) ? r.parameters : [])) {
     if (!paramObj) continue;
-    for (const [rawKey, val] of Object.entries(paramObj as Record<string, any>)) {
+    const targetObj = paramObj.__agent_parameters || paramObj;
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
       if (rawKey.startsWith('__')) continue;
       const pk = normParam(rawKey);
       if (!PARAM_ORDER.includes(pk)) continue;
       if (!paramRates[pk]) paramRates[pk] = { yes: 0, total: 0 };
       const score = val?.score;
-      if (score === true || score === 'Yes') { paramRates[pk].yes++; paramRates[pk].total++; }
+      if (score === true || score === 'Yes' || score === 1 || score === '1') { paramRates[pk].yes++; paramRates[pk].total++; }
       else if (score === 0.5 || score === 'Half') { paramRates[pk].yes += 0.5; paramRates[pk].total++; }
-      else if (score === false || score === 'No') { paramRates[pk].total++; }
+      else if (score === false || score === 'No' || score === 0 || score === '0') { paramRates[pk].total++; }
     }
   }
+
+  const avgIqs = calculateWeightedOverallIQS(paramRates, 'human') ?? (r?.avg_iqs ? Math.round(parseFloat(r.avg_iqs)) : null);
 
   const context = buildChatContext(agentName, count, avgIqs, csatPct, paramRates, r?.top_disp || '', dateFrom, dateTo);
   const result = await callLLM(apiKey, context, 'chats', count);

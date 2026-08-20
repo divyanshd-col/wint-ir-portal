@@ -1,5 +1,5 @@
-import { PASCAL_TO_DB, resolveParamCell } from './param-keys';
-import { HUMAN_WEIGHTS as V4_HUMAN_WEIGHTS_PCT } from './scoring/prompt_v4';
+import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL, LEGACY_V4_FALLBACK_KEY, resolveParamCell } from './param-keys';
+import { HUMAN_WEIGHTS as V4_HUMAN_WEIGHTS_PCT, BOT_WEIGHTS as V4_BOT_WEIGHTS_PCT } from './scoring/prompt_v4';
 
 /**
  * IQS Quality Scoring — types, config, scoring prompt, and KV storage.
@@ -27,6 +27,23 @@ export const PARAM_NAMES: Record<string, string> = {
   Readability:               'Readability & Tone',
   GreetingHandover:          'Greeting & Handover',
   PostCallRecap:             'Post-Call Recap',
+
+  // Lowercase & snake_case aliases
+  issue_resolution:          'Issue Resolution',
+  accuracy:                  'Accuracy',
+  expectation_follow_through:'Expectation Setting & Follow-Through',
+  dissatisfaction_handling:  'Dissatisfaction Handling',
+  personalization:           'Personalization',
+  empathy:                   'Empathy',
+  escalation_decision:       'Call Escalation Decision',
+  readability:               'Readability & Tone',
+  greeting_handover:         'Greeting & Handover',
+  post_call_recap:           'Post-Call Recap',
+  greetinghandover:          'Greeting & Handover',
+  dissatisfactionhandling:   'Dissatisfaction Handling',
+  expectationfollowthrough:  'Expectation Setting & Follow-Through',
+  escalationdecision:        'Call Escalation Decision',
+  postcallrecap:             'Post-Call Recap',
 };
 
 export const PARAM_ORDER = Object.keys(V4_HUMAN_WEIGHTS_PCT);
@@ -68,12 +85,16 @@ export const V3_WEIGHTS: Record<string, number> = {
 
 // Helper function to detect if a chat evaluation is v4 vs legacy v3
 export function isV4Evaluation(parameters: any, modelVersion?: string): boolean {
-  if (!parameters) return false;
+  if (!parameters || Object.keys(parameters).length === 0) return true;
   if (parameters.__scores || parameters.__agent_parameters) return true;
   const mv = (modelVersion || parameters.__bot_model_version || parameters.model_version || '').toLowerCase();
-  if (mv.includes('v4') || mv.includes('gemini-3.5') || mv.includes('gemini-3.6')) return true;
-  if (parameters.dissatisfactionhandling || parameters.expectationfollowthrough || parameters.greetinghandover) return true;
-  return false;
+  if (mv.includes('v4') || mv.includes('gemini') || mv.includes('claude')) return true;
+  if (parameters.dissatisfactionhandling || parameters.expectationfollowthrough || parameters.greetinghandover || parameters.issue_resolution || parameters.accuracy) return true;
+  // Only return false if parameters explicitly contains legacy V3-only keys
+  if (parameters.Technical !== undefined || parameters.AllQuestions !== undefined || parameters.Grammar !== undefined || parameters.Sentences !== undefined) {
+    return false;
+  }
+  return true;
 }
 
 // Bot parameters and weights
@@ -95,12 +116,110 @@ export const BOT_PARAM_NAMES: Record<string, string> = {
   Personalization: 'Personalization',
   ExpectationSetting: 'Expectation Setting',
   Clarity: 'Clarity',
+
+  // Lowercase & snake_case aliases
+  issue_resolution: 'Issue Resolution',
+  accuracy: 'Accuracy',
+  correct_escalation: 'Correct Escalation',
+  no_repetition: 'No Repetition',
+  personalization: 'Personalization',
+  expectation_setting: 'Expectation Setting',
+  clarity: 'Clarity',
+  correctescalation: 'Correct Escalation',
+  norepetition: 'No Repetition',
+  expectationsetting: 'Expectation Setting',
 };
 
 export const BOT_PARAM_ORDER = [
   'IssueResolution', 'Accuracy', 'CorrectEscalation', 'NoRepetition',
   'Personalization', 'ExpectationSetting', 'Clarity',
 ];
+
+export interface DisputeTargetInfo {
+  type: 'agent' | 'bot' | 'hybrid';
+  label: 'AGENT' | 'BOT' | 'AGENT & BOT';
+  badgeBg: string;
+  badgeText: string;
+  badgeBorder: string;
+}
+
+/**
+ * Classifies whether a dispute targets Agent parameters, Bot parameters, or Both (Hybrid).
+ */
+export function getDisputeClassification(
+  challengedParams?: Array<{ param: string; note?: string }> | null,
+  conversationType?: string
+): DisputeTargetInfo {
+  const BOT_ONLY_KEYS = [
+    'correct_escalation', 'no_repetition', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity', 'ExpectationSetting', 'expectation_setting',
+  ];
+
+  if (!challengedParams || challengedParams.length === 0) {
+    if (conversationType === 'bot') {
+      return { type: 'bot', label: 'BOT', badgeBg: '#fef2f2', badgeText: '#991b1b', badgeBorder: '#fecaca' };
+    }
+    return { type: 'agent', label: 'AGENT', badgeBg: '#eff6ff', badgeText: '#1d4ed8', badgeBorder: '#bfdbfe' };
+  }
+
+  let hasBot = false;
+  let hasAgent = false;
+
+  for (const cp of challengedParams) {
+    const p = cp.param || '';
+    if (p.startsWith('bot:')) {
+      hasBot = true;
+    } else if (p.startsWith('agent:')) {
+      hasAgent = true;
+    } else if (BOT_ONLY_KEYS.includes(p)) {
+      hasBot = true;
+    } else {
+      hasAgent = true;
+    }
+  }
+
+  if (hasBot && hasAgent) {
+    return { type: 'hybrid', label: 'AGENT & BOT', badgeBg: '#f3e8ff', badgeText: '#6b21a8', badgeBorder: '#e9d5ff' };
+  }
+  if (hasBot) {
+    return { type: 'bot', label: 'BOT', badgeBg: '#fef2f2', badgeText: '#991b1b', badgeBorder: '#fecaca' };
+  }
+  return { type: 'agent', label: 'AGENT', badgeBg: '#eff6ff', badgeText: '#1d4ed8', badgeBorder: '#bfdbfe' };
+}
+
+/**
+ * Formats a challenged parameter key for UI display (e.g. 'agent:Accuracy' -> 'Agent: Accuracy').
+ */
+export function formatParamLabel(paramKey: string): string {
+  if (!paramKey) return '';
+  let prefix = '';
+  let raw = paramKey;
+  if (paramKey.startsWith('bot:')) {
+    prefix = 'Bot: ';
+    raw = paramKey.slice(4);
+  } else if (paramKey.startsWith('agent:')) {
+    prefix = 'Agent: ';
+    raw = paramKey.slice(6);
+  }
+
+  const label =
+    PARAM_NAMES[raw] ||
+    BOT_PARAM_NAMES[raw] ||
+    V3_PARAM_NAMES[raw] ||
+    raw;
+
+  if (prefix) return `${prefix}${label}`;
+
+  const BOT_ONLY_KEYS = [
+    'correct_escalation', 'no_repetition', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity', 'ExpectationSetting', 'expectation_setting',
+  ];
+  if (BOT_ONLY_KEYS.includes(raw)) {
+    return `Bot: ${label}`;
+  }
+  return `Agent: ${label}`;
+}
+
 
 export type ParamScore = 'Yes' | 'No' | 'NA' | 'Half';
 
@@ -269,15 +388,169 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
       total += weight * 0.5;
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : 0;
+  return possible > 0 ? Math.round((total / possible) * 100) : null as any;
 }
+
+export type PooledParamInput =
+  | { yes?: number; half?: number; total?: number; score?: number | null }
+  | number
+  | null
+  | undefined;
+
+export interface WeightedOverallOptions {
+  roundDecimals?: number; // e.g. 1 for 1 decimal place (85.5), 0 or undefined for integer (86)
+  scale?: '0-1' | '0-100' | 'auto';
+}
+
+/**
+ * Computes a fixed-weight blend of pooled parameter scores for a period/rollup headline.
+ * Formula: overall = Σ(parameter_score × weight) ÷ Σ(weight of parameters present)
+ * Parameter score is pooled across chats (half-credit for 0.5, NA excluded).
+ * Weights sourced from HUMAN_WEIGHTS / BOT_WEIGHTS in prompt_v4.ts.
+ */
+export function calculateWeightedOverallIQS(
+  paramScores: Record<string, PooledParamInput> | null | undefined,
+  channel: 'bot' | 'human' = 'human',
+  options: WeightedOverallOptions = {}
+): number | null {
+  if (!paramScores || typeof paramScores !== 'object') return null;
+
+  const weightsSource = channel === 'bot' ? V4_BOT_WEIGHTS_PCT : V4_HUMAN_WEIGHTS_PCT;
+
+  const weightMap: Record<string, { key: string; weight: number }> = {};
+  for (const [pascalKey, w] of Object.entries(weightsSource)) {
+    weightMap[pascalKey] = { key: pascalKey, weight: w };
+    const dbKey = PASCAL_TO_DB[pascalKey];
+    if (dbKey) weightMap[dbKey] = { key: pascalKey, weight: w };
+    const fallbackKey = LEGACY_V4_FALLBACK_KEY[pascalKey];
+    if (fallbackKey) weightMap[fallbackKey] = { key: pascalKey, weight: w };
+  }
+
+  // Determine numeric scale across the input object to avoid mixing per-parameter scales
+  const userScale = options.scale ?? 'auto';
+  let isPercentScale = userScale === '0-100';
+  if (userScale === 'auto') {
+    for (const rawVal of Object.values(paramScores)) {
+      if (rawVal === undefined || rawVal === null) continue;
+      if (typeof rawVal === 'number' && !isNaN(rawVal) && rawVal > 1) {
+        isPercentScale = true;
+        break;
+      }
+      if (typeof rawVal === 'object' && rawVal !== null && rawVal.score !== undefined) {
+        const sc = typeof rawVal.score === 'number' ? rawVal.score : parseFloat(String(rawVal.score));
+        if (!isNaN(sc) && sc > 1) {
+          isPercentScale = true;
+          break;
+        }
+      }
+    }
+  }
+
+  const canonicalPresent: Record<string, { paramScore: number; weight: number }> = {};
+
+  for (const [rawKey, rawVal] of Object.entries(paramScores)) {
+    if (rawVal === undefined || rawVal === null || rawKey.startsWith('__')) continue;
+
+    const pascalKey = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+    const info = weightMap[rawKey] || weightMap[pascalKey];
+    if (!info) continue;
+
+    let paramScore: number | null = null;
+    let isPresent = false;
+
+    if (typeof rawVal === 'number') {
+      if (!isNaN(rawVal)) {
+        paramScore = isPercentScale ? rawVal / 100 : rawVal;
+        isPresent = true;
+      }
+    } else if (typeof rawVal === 'object') {
+      if (rawVal.total !== undefined && rawVal.total > 0) {
+        const yes = rawVal.yes ?? 0;
+        const half = rawVal.half ?? 0;
+        paramScore = (yes + 0.5 * half) / rawVal.total;
+        isPresent = true;
+      } else if (rawVal.score !== undefined && rawVal.score !== null) {
+        const sc = typeof rawVal.score === 'number' ? rawVal.score : parseFloat(String(rawVal.score));
+        if (!isNaN(sc)) {
+          paramScore = isPercentScale ? sc / 100 : sc;
+          isPresent = true;
+        }
+      }
+    }
+
+    if (isPresent && paramScore !== null && !isNaN(paramScore)) {
+      paramScore = Math.max(0, Math.min(1, paramScore));
+      canonicalPresent[info.key] = { paramScore, weight: info.weight };
+    }
+  }
+
+  let totalWeightedScore = 0;
+  let totalPresentWeight = 0;
+
+  for (const item of Object.values(canonicalPresent)) {
+    totalWeightedScore += item.paramScore * item.weight;
+    totalPresentWeight += item.weight;
+  }
+
+  if (totalPresentWeight === 0) return null;
+
+  const resultPct = (totalWeightedScore / totalPresentWeight) * 100;
+  const decimals = options.roundDecimals ?? 0;
+
+  if (decimals > 0) {
+    const factor = Math.pow(10, decimals);
+    return Math.round(resultPct * factor) / factor;
+  }
+  return Math.round(resultPct);
+}
+
+/**
+ * Pools parameter scores (Yes, Half, No) across an array of parameters objects (e.g. from jsonb_agg(s.parameters)).
+ */
+export function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; half: number; total: number }> {
+  const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+  if (!Array.isArray(paramsArray)) return pooled;
+  for (let paramObj of paramsArray) {
+    if (!paramObj) continue;
+    if (typeof paramObj === 'string') {
+      try { paramObj = JSON.parse(paramObj); } catch { continue; }
+    }
+    const targetObj = (typeof paramObj === 'object' && paramObj !== null)
+      ? (paramObj.__agent_parameters || paramObj)
+      : {};
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+      if (rawKey.startsWith('__')) continue;
+      const pk = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+      if (!pooled[pk]) pooled[pk] = { yes: 0, half: 0, total: 0 };
+      const score = typeof val === 'object' && val !== null ? val.score : val;
+      if (score === true || score === 'Yes' || score === 1 || score === '1') {
+        pooled[pk].yes++; pooled[pk].total++;
+      } else if (score === 0.5 || score === 'Half') {
+        pooled[pk].half++; pooled[pk].total++;
+      } else if (score === false || score === 'No' || score === 0 || score === '0') {
+        pooled[pk].total++;
+      }
+    }
+  }
+  return pooled;
+}
+
 
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
   if (!paramsObj || typeof paramsObj !== 'object') return null;
 
+  const isBotParams = !!(
+    paramsObj.__bot_parameters ||
+    paramsObj.issue_resolution !== undefined ||
+    paramsObj.IssueResolution !== undefined ||
+    paramsObj.bot_handover !== undefined ||
+    paramsObj.BotHandover !== undefined ||
+    (paramsObj.__scores && paramsObj.__scores.bot_iqs !== undefined && paramsObj.__scores.agent_iqs === undefined)
+  );
+
   const targetParams = isBot
     ? (paramsObj.__bot_parameters || (paramsObj.issue_resolution !== undefined || paramsObj.IssueResolution !== undefined ? paramsObj : null))
-    : (paramsObj.__agent_parameters || paramsObj);
+    : (paramsObj.__agent_parameters || (isBotParams ? null : paramsObj));
 
   if (!targetParams || typeof targetParams !== 'object') return null;
 
@@ -379,7 +652,7 @@ Documents may be shared over WhatsApp only if they carry no personal and no inte
 
 ## SCORING GUARDRAILS (how to handle what you see, applies to Accuracy and IssueResolution)
 - Internal checks (Finder, order status, account or SIP state) are not visible to you and agents do not narrate them to customers. Do NOT assume a check was skipped, and do NOT lower Accuracy just because the agent did not say "I checked and confirmed X". The fact that a response could have been improved by a tool check is NOT enough to fail anything. Example: if the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP", that is NOT an error, the check is internal. Only lower Accuracy if the visible answer or action is provably wrong, for example the agent says a repayment was not processed but the transcript shows it was credited, or the agent gives a wrong fact or wrong process step.
-- Internal notes, Slack links, and internal tool URLs in the transcript are working notes, never sent to the customer. Use them only for context. Never score the agent on their presence.
+- Private Notes / Internal notes (indicated in the transcript as "Internal Note: [content]" or "Private Note: [content]"), Slack links, and internal tool URLs in the transcript are internal working notes and were never sent to the customer. TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or status updates, but EXCLUDE them while judging/scoring the customer chat. Do NOT evaluate their tone, grammar, or language as customer-facing messages, and NEVER score or penalize the agent on any quality parameter based on private notes.
 - If the chat references a prior conversation (phrases such as "previous chat", "previous conversation", "previous text", "last time", "last conversation", "earlier ticket", "as discussed before", "as discussed earlier", "as mentioned earlier", "referred earlier", "as per our last chat", "continuing from before"), note it in summary and be lenient on Accuracy and IssueResolution. Missing context may live in that earlier chat. Do not fail for information gaps a prior chat could explain.
 
 ## MEDIA IN CHAT
@@ -438,9 +711,10 @@ Does not cover: correctness (Accuracy) or readability (Clarity).
 ### ExpectationSetting (conditional, graded 0 / 0.5 / 1, else "NA")
 When something is pending, did the bot tell the customer what happens next and by when.
 - 1: a clear next step or timeline was given (for example "being processed today, will be credited to account...").
-- 0.5: implied but vague ("please allow some time" with no sense of how long or for what).
+- 0.5: implied but vague on an ongoing issue handled by the bot where a specific timeframe could be given.
 - 0: left the customer not knowing what happens next on a pending item.
 - "NA" (unsure false): the query was fully resolved on the spot with nothing pending.
+- **TRANSFER / HANDOVER**: When transferring a chat to a human executive, standard transfer phrasing (e.g. "I'm transferring your chat to an executive", "please allow them some time to connect", "connecting you at the earliest", "an executive will assist you shortly") is FULLY ACCEPTABLE expectation setting for a bot handover. Do NOT penalize or score 0.5 for vague timeline on bot transfer messages. A bot cannot predict human agent queue wait times; informing the user of the transfer is sufficient (score 1).
 Does not cover: whether the timeline quoted was correct (Accuracy).
 
 ### Clarity (binary 0 / 1)
@@ -529,11 +803,11 @@ The KB mentions "Skip Instalment" as an option before cancellation, but this is 
 - If the customer never requested a call AND the agent calls without any business reason → this IS a process violation (score Process No and note it clearly).
 - When you cannot determine whether a call happened at all, score Call as NA and add to \`uncertain_parameters\`.
 
-### Internal Notes, Slack Links, and Internal References
-Transcripts sometimes contain internal Slack links, internal tool URLs, internal notes (indicated as "Internal Note: [content]"), or references to internal systems.
-- These are **internal working notes** — they are NOT sent to the customer and are not part of the customer-facing response.
-- Do NOT judge, penalize, or evaluate the agent on any parameter based on the presence of these internal links, references, or internal notes. Use internal notes only for context.
-- Evaluate the agent only on what they communicated to the customer, not on internal working notes visible in the transcript.
+### Private Notes, Internal Notes, Slack Links, and Internal References
+Transcripts sometimes contain internal Slack links, internal tool URLs, internal notes / private notes (indicated as "Internal Note: [content]" or "Private Note: [content]"), or references to internal systems.
+- These are internal working notes — they are NOT sent to the customer and are not part of customer-facing responses.
+- TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or workflow status.
+- Do NOT include, judge, penalize, or evaluate the agent on any quality parameter based on private notes or internal notes. Evaluate only what was communicated directly to the customer.
 
 ### Screenshots and Media Shared in Chat
 When images are provided alongside the transcript, they are screenshots or other media shared by the customer or agent during the chat.
@@ -596,13 +870,13 @@ Score based on whether the agent's information is factually correct per Wint Wea
 ### 2. All Questions Answered (10%)
 - **Yes**: Every explicit customer question was answered or deliberately deferred with a reason.
 - **No** — mark No if ANY of these are visible:
-  - **AQ – Missed question with Bot**: A question the customer raised (even during bot phase) was never picked up and answered by the agent.
+  - **AQ – Missed question with Bot**: A question the customer raised (even during bot phase prior to transfer) was never picked up, acknowledged, or answered by the agent.
   - **AQ – Multiple queries**: Customer asked several questions in one message and the agent answered only some of them, leaving one or more unanswered.
 - **NA**: Very rare.
 
 ### 3. Expectation Setting (10%)
 Score whether the agent set a clear, specific expectation about timeline, next steps, or resolution path.
-- **Yes**: Agent gave a specific timeline, commitment, or next step (e.g. "credited within 7 working days", "our team will contact you by 3rd Feb"). "Please allow me some time" counts.
+- **Yes**: Agent gave a specific timeline, commitment, or next step (e.g. "credited within 7 working days", "our team will contact you by 3rd Feb"). "Please allow me/them some time" or informing the customer about a team transfer or escalation ("at the earliest") counts.
 - **No** — mark No if ANY of these are visible:
   - **Exp – TAT missing**: Customer asked "how long?", "when?", or showed impatience about timing — and got no specific timeline or even a ballpark.
   - **Exp – No education**: Agent resolved an issue but did not explain what happened or what the customer should expect next — leaving the customer without context on the outcome.
@@ -615,6 +889,7 @@ Score whether the agent set a clear, specific expectation about timeline, next s
 - **No** — mark No if ANY of these are visible:
   - **CP – Irrelevant answer**: Agent's response does not address the customer's actual situation or problem.
   - **CP – Copy-paste answer**: Generic template answer that could apply to any customer. Test: could this exact answer be copy-pasted to a completely different customer's chat? If yes → No.
+  - **CP – Ignoring bot-transferred query**: Customer stated their query during the bot phase, and the human agent ignored that context or asked the customer to repeat what was already stated.
   - **CP – Missing info for easy understanding**: Agent did not share links, screenshots, or docs that were clearly needed for the customer to understand or act — leaving the response incomplete.
 - **NA**: Very rare.
 
@@ -649,9 +924,9 @@ Score whether the agent followed Wint Wealth's operational process correctly.
 - **CRITICAL**: Never assume a Finder check was skipped unless the agent's response directly contradicts what that check would have shown.
 
 ### 8. First Response & Opening (5%)
-- **Yes**: Greeting is a SEPARATE message containing: (1) Hi/Hello, (2) agent name + Wint Wealth, (3) offer to help OR acknowledgment of the specific query.
-- **No**: Greeting merged with the answer. OR purely generic opener. OR no greeting at all. OR agent name missing.
-- **NA**: Very rare.
+- **Yes**: Greeting is a SEPARATE message containing: (1) Hi/Hello, (2) agent name + Wint Wealth, (3) offer to help OR acknowledgment of the specific query. On bot-transferred chats, the greeting MUST acknowledge the customer's query already stated in the bot phase.
+- **No**: Greeting merged with the answer. OR purely generic opener (e.g. asking "How can I help you?" when the query was already stated to the bot). OR failing to acknowledge the customer's query already stated during the bot phase before transfer. OR no greeting at all. OR agent name missing.
+- **NA**: Very rare. Never mark NA for Opening on a bot-transferred chat when an agent joins.
 
 ### 9. Call (when required) (5%)
 Score whether the agent correctly decided on a call — made one when needed, and didn't make one when not needed.
@@ -683,7 +958,7 @@ Score whether the agent correctly decided on a call — made one when needed, an
 Score whether the agent acknowledged the customer's emotional state and communicated with warmth.
 - **Yes**: Chat contains at least ONE genuine empathy acknowledgment — e.g. "I understand your concern", "I can see why this is frustrating", "I apologise for the inconvenience" — that addresses the customer's situation.
 - **No** — mark No if ANY of these are visible:
-  - **EP – Did not acknowledge the query**: Agent gave a purely transactional reply with no personalisation or acknowledgment of the customer's situation.
+  - **EP – Did not acknowledge the query**: Agent gave a purely transactional reply or generic greeting with no personalisation or acknowledgment of the customer's situation/query (especially queries stated in the bot phase prior to transfer).
   - **EP – Robotic / too formal**: Excessive use of "sir/ma'am" at the start or end of every statement; tone feels scripted and impersonal throughout.
   - **EP – Hollow fillers overused**: Phrases like "Please", "I can understand your concern", "I can empathise with you", "Please do not worry" used repeatedly with no real personalisation — filler without feeling.
   - **EP – Requesting user without proper tone**: Asking the user to retry, re-send, or take an action without a polite, properly framed request.
@@ -990,6 +1265,9 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     ? data.kbCitation
     : null;
 
+  const breaches = (data.compliance && data.compliance.breaches) || data.breaches || [];
+  const complianceFlag = !!(data.compliance && (data.compliance.breach || (data.compliance.breaches || []).length > 0)) || !!data.compliance_flag || breaches.length > 0;
+
   return {
     chatId,
     scores,
@@ -998,6 +1276,8 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
     conversationType: conversationType as 'bot' | 'agent' | 'hybrid' | undefined,
+    breaches,
+    complianceFlag,
     ...(uncertainParameters && { uncertainParameters }),
     ...(kbCitation && { kbCitation }),
   };
@@ -1020,3 +1300,5 @@ export function iqsTheme(iqs: number) {
   if (iqs >= 70) return { text: '#c2410c', bg: '#ffedd5', bar: '#f97316', label: 'Average' };
   return { text: '#b91c1c', bg: '#fee2e2', bar: '#ef4444', label: 'At Risk' };
 }
+
+

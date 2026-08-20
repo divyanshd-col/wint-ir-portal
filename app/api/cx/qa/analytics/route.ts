@@ -4,8 +4,33 @@ import { authOptions } from '@/auth';
 import { readConfig } from '@/lib/config';
 import { query } from '@/lib/cx/db';
 import { log, withLogging } from '@/lib/log';
+import { calculateWeightedOverallIQS } from '@/lib/quality';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 const ROUTE = 'cx/qa/analytics';
+
+function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; half: number; total: number }> {
+  const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+  if (!Array.isArray(paramsArray)) return pooled;
+  for (const paramObj of paramsArray) {
+    if (!paramObj) continue;
+    const targetObj = paramObj.__agent_parameters || paramObj;
+    for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+      if (rawKey.startsWith('__')) continue;
+      const pk = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+      if (!pooled[pk]) pooled[pk] = { yes: 0, half: 0, total: 0 };
+      const score = val?.score;
+      if (score === true || score === 'Yes' || score === 1 || score === '1') {
+        pooled[pk].yes++; pooled[pk].total++;
+      } else if (score === 0.5 || score === 'Half') {
+        pooled[pk].half++; pooled[pk].total++;
+      } else if (score === false || score === 'No' || score === 0 || score === '0') {
+        pooled[pk].total++;
+      }
+    }
+  }
+  return pooled;
+}
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -150,7 +175,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      WHERE c.tags->>'disposition' = ANY($1)
        AND c.closed_at >= $2 AND c.closed_at <= $3
        AND (
-         (i.call_iqs_score IS NULL AND i.iqs_score < 80)
+         (i.call_iqs_score IS NULL AND (
+           (i.iqs_score IS NOT NULL AND i.iqs_score < 80)
+           OR (i.iqs_score IS NULL AND (c.csat_score = 1 OR c.csat_label = 'bad'))
+         ))
          OR (i.call_iqs_score IS NOT NULL AND i.call_iqs_score < 80)
        )
        AND i.reviewed_by IS NULL
@@ -162,10 +190,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const pendingCalls = parseInt(pendingRows.find(r => r.channel === 'call')?.cnt ?? '0');
 
   // ── 2. Overall IQS by channel (for ring cards) ───────────────────────────
-  const iqsOverview = await query<{ avg_iqs: string | null; avg_call_iqs: string | null }>(
+  const iqsOverview = await query<{ avg_iqs: string | null; avg_call_iqs: string | null; parameters: any }>(
     `SELECT
        AVG(i.iqs_score)      FILTER (WHERE i.iqs_score      IS NOT NULL) AS avg_iqs,
-       AVG(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL) AS avg_call_iqs
+       AVG(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL) AS avg_call_iqs,
+       jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL) AS parameters
      FROM iqs_scores i
      JOIN conversations c ON c.id = i.chat_id
      WHERE c.tags->>'disposition' = ANY($1)
@@ -173,11 +202,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     [dispositions, fromISO, toISO]
   );
 
-  const chatIQS = iqsOverview[0]?.avg_iqs      != null ? Math.round(parseFloat(iqsOverview[0].avg_iqs))      : null;
+  const pooledOverviewParams = extractPooledParams(iqsOverview[0]?.parameters);
+  const chatIQS = calculateWeightedOverallIQS(pooledOverviewParams, 'human') ?? (iqsOverview[0]?.avg_iqs != null ? Math.round(parseFloat(iqsOverview[0].avg_iqs)) : null);
   const callIQS = iqsOverview[0]?.avg_call_iqs != null ? Math.round(parseFloat(iqsOverview[0].avg_call_iqs)) : null;
 
   // ── 3. Per-disposition aggregation ───────────────────────────────────────
-  const aggRows = await query<AggRow>(
+  const aggRows = await query<AggRow & { parameters?: any }>(
     `SELECT
        COALESCE(c.tags->>'disposition', '')                AS disposition,
        c.tags->>'sub_disposition'                          AS sub_disposition,
@@ -191,7 +221,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
        SUM(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL)::text AS sum_call_iqs,
        COUNT(i.call_iqs_score) FILTER (WHERE i.call_iqs_score IS NOT NULL)::text AS call_iqs_count,
        SUM(c.resolution_seconds)   FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS sum_resolution,
-       COUNT(c.resolution_seconds) FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS resolution_count
+       COUNT(c.resolution_seconds) FILTER (WHERE c.resolution_seconds IS NOT NULL)::text AS resolution_count,
+       jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL) AS parameters
      FROM conversations c
      LEFT JOIN iqs_scores i ON c.id = i.chat_id
      LEFT JOIN agents a ON a.id = c.agent_id
@@ -240,6 +271,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const resSum = rows.reduce((s, r) => s + (r.sum_resolution ? parseFloat(r.sum_resolution) : 0), 0);
     const resCnt = rows.reduce((s, r) => s + parseInt(r.resolution_count), 0);
 
+    // Pooled IQS for disposition
+    const dispoParams = extractPooledParams(rows.flatMap((r: any) => r.parameters || []));
+    const pooledIqsChat = calculateWeightedOverallIQS(dispoParams, 'human') ?? avgOrNull(iqsSum, iqsCnt);
+
     // Sub-dispositions
     const subMap = new Map<string, AggRow[]>();
     for (const row of rows) {
@@ -267,6 +302,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       const sresc  = sRows.reduce((s, r) => s + parseInt(r.resolution_count), 0);
       const sbotC  = sbc.reduce((s, r) => s + parseInt(r.total), 0);
 
+      const subParams = extractPooledParams(sRows.flatMap((r: any) => r.parameters || []));
+      const subIqsChat = calculateWeightedOverallIQS(subParams, 'human') ?? avgOrNull(siqs, siqsc);
+
       return {
         subDisposition: sub,
         count:          st,
@@ -276,7 +314,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         csatEmail:      null,
         aiChatCsat:     pct(sbg, sbr),
         pctDeflected:   pct(sbotC, st),
-        iqsChat:        avgOrNull(siqs, siqsc),
+        iqsChat:        subIqsChat,
         iqsCall:        avgOrNull(sciqs, sciqsc),
         iqsEmail:       null,
         resolutionSecs: avgOrNull(sres, sresc),
@@ -297,7 +335,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       csatEmail:      null,
       aiChatCsat:     pct(botCsatGood, botCsatRated),
       pctDeflected:   pct(botCount, totalCount),
-      iqsChat:        avgOrNull(iqsSum, iqsCnt),
+      iqsChat:        pooledIqsChat,
       iqsCall:        avgOrNull(callIqsSum, callIqsCnt),
       iqsEmail:       null,
       resolutionSecs: avgOrNull(resSum, resCnt),

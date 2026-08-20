@@ -741,6 +741,43 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   `, [callId, call.conv_agent_id ?? null]);
 
   log.info('call-pipeline', `Pipeline complete for call ${callId} — IQS ${iqs_percent}% — Verdict: ${finalVer}`);
+
+  // Trigger compliance alert for linked chat if call gate failed
+  if (gateVerdict === 'FAIL' && call.chat_id) {
+    try {
+      const { fireQualityAlert } = await import('@/lib/quality-alert');
+      const { getAgentName } = await import('@/lib/robylon/db');
+      const agentId = call.agent_id ?? call.conv_agent_id;
+      const agentName = agentId ? await getAgentName(agentId) : '';
+
+      const breaches: Array<{ type: string; quote: string; note: string }> = [];
+      const gates = gatesResult.gates || {};
+      for (const [gKey, gObj] of Object.entries<any>(gates)) {
+        if (gObj?.status === 'fail') {
+          const evList = gObj.evidence || [];
+          const quote = evList.map((e: any) => e.quote || e.why).join('; ') || 'Call gate requirement failed';
+          breaches.push({
+            type: gKey,
+            quote,
+            note: gObj.reason_code ? `Reason code: ${gObj.reason_code}` : 'Call gate failure',
+          });
+        }
+      }
+
+      fireQualityAlert({
+        chatId: String(call.chat_id),
+        agentName,
+        scores: {},
+        reasoning: {},
+        iqs: iqs_percent ?? undefined,
+        breaches: breaches.length ? breaches : [{ type: 'CALL_GATE_FAILURE', quote: 'Call compliance gate audit failed' }],
+        complianceFlag: true,
+      }).catch(() => {});
+    } catch (alertErr: any) {
+      log.error('call-pipeline', `Failed to fire compliance alert for call ${callId}: ${alertErr.message}`);
+    }
+  }
+
   return {
     callId,
     iqs: iqs_percent,

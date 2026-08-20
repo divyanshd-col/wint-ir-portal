@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
+import { calculateWeightedOverallIQS } from '@/lib/quality';
+import { ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 export async function GET(req: NextRequest) {
   const { session, response } = await requireRole('admin');
@@ -23,10 +25,11 @@ export async function GET(req: NextRequest) {
 
       -- IQS overall + tier distribution
       ROUND(AVG(s.iqs_score)::numeric,1)::float                          AS avg_iqs,
-      COUNT(CASE WHEN s.iqs_score >= 85 THEN 1 END)::int                 AS iqs_excellent,
-      COUNT(CASE WHEN s.iqs_score >= 70 AND s.iqs_score < 85 THEN 1 END)::int AS iqs_warn,
-      COUNT(CASE WHEN s.iqs_score < 70 AND s.iqs_score IS NOT NULL THEN 1 END)::int AS iqs_risk,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score >= 85 THEN 1 END)::int AS iqs_excellent,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score >= 70 AND s.iqs_score < 85 THEN 1 END)::int AS iqs_warn,
+      COUNT(CASE WHEN s.iqs_score IS NOT NULL AND s.iqs_score < 70 THEN 1 END)::int AS iqs_risk,
       COUNT(CASE WHEN s.iqs_score IS NOT NULL THEN 1 END)::int            AS with_iqs,
+      jsonb_agg(s.parameters) FILTER (WHERE s.parameters IS NOT NULL)     AS parameters,
 
       -- Timing
       ROUND(AVG(c.resolution_seconds)::numeric,0)::int                   AS avg_resolution,
@@ -55,6 +58,30 @@ export async function GET(req: NextRequest) {
     WHERE ($1::date IS NULL OR c.closed_at::date >= $1::date)
       AND ($2::date IS NULL OR c.closed_at::date <= $2::date)
   `, [dateFrom, dateTo]);
+
+  if (row && Array.isArray(row.parameters)) {
+    const pooled: Record<string, { yes: number; half: number; total: number }> = {};
+    for (const pObj of row.parameters) {
+      if (!pObj) continue;
+      const targetObj = pObj.__agent_parameters || pObj;
+      for (const [rawKey, val] of Object.entries(targetObj as Record<string, any>)) {
+        if (rawKey.startsWith('__')) continue;
+        const pk = ALL_DB_KEY_TO_PASCAL[rawKey] ?? rawKey;
+        if (!pooled[pk]) pooled[pk] = { yes: 0, half: 0, total: 0 };
+        const score = val?.score;
+        if (score === true || score === 'Yes' || score === 1 || score === '1') {
+          pooled[pk].yes++; pooled[pk].total++;
+        } else if (score === 0.5 || score === 'Half') {
+          pooled[pk].half++; pooled[pk].total++;
+        } else if (score === false || score === 'No' || score === 0 || score === '0') {
+          pooled[pk].total++;
+        }
+      }
+    }
+    const weighted = calculateWeightedOverallIQS(pooled, 'human', { roundDecimals: 1 });
+    if (weighted != null) row.avg_iqs = weighted;
+    delete row.parameters;
+  }
 
   return NextResponse.json(row ?? {});
 }

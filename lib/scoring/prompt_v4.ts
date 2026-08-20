@@ -14,8 +14,8 @@
  *    IssueResolution "NA" (not a failure, resolution does not apply). Bot hallucination
  *    or failure to follow the handover logic scores 0. CorrectEscalation is judged
  *    against the criteria. Auto-followups after transfer are plumbing, never scored.
- *  - Internal notes: stripped COMPLETELY. Not scored, not even context. The pipeline
- *    strips them before scoring; the prompt ignores any that slip through.
+ *  - Internal notes / Private notes: treated as background context to understand internal
+ *    actions, but EXCLUDED from quality evaluation and scoring. Never evaluated as customer-facing.
  *  - Answer changes: changing our answer/process/definition is NOT an Accuracy failure.
  *    Accuracy judges the FINAL answer per KB. Every change is recorded in the
  *    ANSWER CHANGE GATE (visibility-only list: topic, first answer + where, revised
@@ -114,6 +114,7 @@ Chats are often in Hinglish or Hindi, or mix scripts. Do NOT lower any dimension
 
 ## EMPTY OR NON-CHATS
 If there is no substantive interaction (a customer message with no agent reply, an instant drop, only system or activity lines, or no real question or resolution), set every score to "NA", explain in summary, and do not fabricate scores.
+- EXCEPTION FOR ESCALATED / TRANSFERRED CHATS: Customer messages or queries sent during the bot phase prior to transfer ARE active, substantive context for the human leg. If a chat is transferred to a human agent after the customer states a query, and the human agent joins but fails to acknowledge, address, or answer that query, this is NOT an empty/non-chat or NA. It MUST be scored as an agent failure (score 0) on applicable dimensions (GreetingHandover, Personalization, IssueResolution).
 
 ## HOW TO GRADE THE SOFT DIMENSIONS (0 / 0.5 / 1)
 Decide in this order for each graded dimension:
@@ -151,7 +152,7 @@ Note: a misleading_error breach in the CHAT also lowers Accuracy when it stands 
 
 ### Data handling over WhatsApp
 Documents may be shared over WhatsApp only if they carry no personal and no internal information.
-- BREACH if the agent shares over WhatsApp any document containing a user's personal, investment, or KYC information. Examples: CMR (client master report), holding statement, investment report, taxation report, any KYC or identity proof, account opening or closing forms, or any file or screenshot showing PAN, Aadhaar, or bank details. Also a breach: any internal company material, Slack link, internal policy document, or internal SOP.
+- BREACH if the agent shares over WhatsApp any document containing a user's personal, investment, or KYC information. Examples: CMR (client master report), holding statement, investment report, taxation report, any KYC or identity proof, account opening or closing forms, or any file or screenshot showing PAN, Aadhaar, or bank details. Also a breach: any internal company document, internal SOP document, or internal policy document shared with the customer. (Note: Slack links, internal tool URLs, internal system references, or internal working notes included in the transcript are working/context references — NEVER count them as data-handling breaches or compliance errors.)
 - NOT a breach: informational or how-to documents (how to file taxes, how to set up a SIP, how to raise a request on a website), any purely informational document, a return or reward calculation shared as an Excel file or a Google Sheets link (referral reward, YTM or XIRR calculation, bond pricing sheet, bond issuer document), and website or internet screenshots that do NOT show any personal data.
 - A screenshot is a breach only if PAN, Aadhaar, bank details, or other user information is visible in it.
 - When you cannot tell whether a shared document carried personal or internal information, treat it as a breach and note the ambiguity in compliance.note.
@@ -161,7 +162,7 @@ Documents may be shared over WhatsApp only if they carry no personal and no inte
 
 ## SCORING GUARDRAILS (how to handle what you see, applies to Accuracy and IssueResolution)
 - Internal checks (Finder, order status, account or SIP state) are not visible to you and agents do not narrate them to customers. Do NOT assume a check was skipped, and do NOT lower Accuracy just because the agent did not say "I checked and confirmed X". The fact that a response could have been improved by a tool check is NOT enough to fail anything. Example: if the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP", that is NOT an error, the check is internal. Only lower Accuracy if the visible answer or action is provably wrong, for example the agent says a repayment was not processed but the transcript shows it was credited, or the agent gives a wrong fact or wrong process step.
-- Internal notes, Slack links, internal tool URLs, and any internal system references that appear in the transcript are NOT part of the conversation. Ignore them COMPLETELY. Do not use them as context, do not use them to explain or justify an agent's action, and never score anything based on them. Evaluate only what was communicated to the customer. (The pipeline should strip internal notes before scoring; if any slip through, treat them as if they do not exist.)
+- Private Notes / Internal notes (indicated in the transcript as "Internal Note: ...", "Private Note: ...", or containing internal Slack links/tool URLs like "https://...slack.com/..."), Slack links, and internal tool URLs are internal working notes and context references. TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or status updates, but EXCLUDE them while judging/scoring the chat. Do NOT evaluate their tone, language, grammar, or response quality, and NEVER flag them as compliance breaches or lower/score any quality parameter based on private notes or internal links. Evaluate only what was communicated to the customer.
 - If the chat references a prior conversation (phrases such as "previous chat", "previous conversation", "previous text", "last time", "last conversation", "earlier ticket", "as discussed before", "as discussed earlier", "as mentioned earlier", "referred earlier", "as per our last chat", "continuing from before"), note it in summary and be lenient on Accuracy and IssueResolution. Missing context may live in that earlier chat. Do not fail for information gaps a prior chat could explain.
 
 ## MEDIA IN CHAT
@@ -187,7 +188,7 @@ UNRELATED-CALL FLAG: if a call transcript is about something unrelated to the ch
 Did the agent address every question the customer raised (including questions raised during the bot phase and left unanswered) and either resolve the issue or correctly move it forward.
 - 1: all questions handled, issue resolved or correctly progressed (ticket raised, escalated, call arranged).
 - 0.5: main issue handled but a secondary question dropped, or progressed with no clear next step.
-- 0: the core question went unanswered, or an open issue was closed without resolving or escalating it.
+- 0: the core question went unanswered, an open issue was closed without resolving or escalating it, or failing to acknowledge/address a query stated by the customer in the bot phase prior to transfer.
 - CRITICAL: if resolution moved to a call or an offline step, that is a valid resolution. Do NOT lower this because the outcome is not fully visible in the chat text.
 
 ### Accuracy (graded 0 / 0.5 / 1)
@@ -210,7 +211,7 @@ Does the customer leave knowing what happens next, and does the closing fit the 
 Was the response built around this customer's situation.
 - 1: references the customer's actual bond, amounts, dates, or account state, and on escalated chats uses what the bot already gathered instead of asking the customer to repeat it.
 - 0.5: mostly relevant but leans generic where specifics were available.
-- 0: a template answer that could be pasted to any customer, or an answer that does not fit this customer.
+- 0: a template answer that could be pasted to any customer, an answer that does not fit this customer, or on escalated chats asking the customer to repeat what was already stated to the bot / ignoring the pre-transfer query.
 - Guardrail: if the agent named the specific bond, order, or figure, it IS personalised. A standard explanation of a concept anchored to the customer's case is personalised. Do not mark it generic.
 
 ### DissatisfactionHandling (conditional, graded 0 / 0.5 / 1, else "NA")
@@ -236,8 +237,9 @@ Could the customer easily read and understand the messages on a phone.
 
 ### GreetingHandover (binary 0 / 1)
 On taking over, did the human introduce themselves and pick up the thread.
-- 1: a greeting that identifies the agent and Wint Wealth, and picks up the escalated context rather than restarting cold.
-- 0: no greeting or no self identification.
+- 1: a greeting that identifies the agent and Wint Wealth, AND picks up/acknowledges the escalated context and customer query stated in the bot phase rather than restarting cold.
+- 0: no greeting, no self identification, OR restarting cold without acknowledging/picking up the customer's query already stated during the bot phase (e.g. asking "How can I help you?" or giving a generic greeting that ignores the user's stated query).
+- NEVER score NA for GreetingHandover on an escalated/transferred chat when a human agent joins. Failing to acknowledge the pre-transfer query is a failure (score 0), not NA.
 - NEVER flag a greeting that is present and complete but rendered as one block instead of a separate message. WhatsApp collapses newlines.
 
 ### EscalationDecision (conditional, binary 0 / 1, else "NA")
@@ -325,9 +327,10 @@ Does not cover: correctness (Accuracy) or readability (Clarity).
 ### ExpectationSetting (conditional, graded 0 / 0.5 / 1, else "NA")
 When something is pending, did the bot tell the customer what happens next and by when.
 - 1: a clear next step or timeline was given (for example "being processed today, will be credited to account ...").
-- 0.5: implied but vague ("please allow some time" with no sense of how long or for what).
+- 0.5: implied but vague on an ongoing issue handled by the bot where a specific timeframe could be given.
 - 0: left the customer not knowing what happens next on a pending item.
 - "NA" (unsure false): the query was fully resolved on the spot with nothing pending.
+- **TRANSFER / HANDOVER**: When transferring a chat to a human executive, standard transfer phrasing (e.g. "I'm transferring your chat to an executive", "please allow them some time to connect", "connecting you at the earliest", "an executive will assist you shortly") is FULLY ACCEPTABLE expectation setting for a bot handover. Do NOT penalize or score 0.5 for vague timeline on bot transfer messages. A bot cannot predict human agent queue wait times; informing the user of the transfer is sufficient (score 1).
 Does not cover: whether the timeline quoted was correct (Accuracy).
 
 ### Clarity (binary 0 / 1)
@@ -441,8 +444,8 @@ export function detectChannel(transcriptJson: string): 'human' | 'bot' {
  * v1 cut the middle out of any chat over 5000 chars, which hid a third of long
  * conversations from the scorer. With no cost cap we keep the whole conversation.
  * We only dedupe consecutive identical lines and cap absurdly long single lines.
- * NOTE: the pipeline must strip internal notes BEFORE calling this. Internal notes
- * are never passed to the model, not even as context.
+ * NOTE: Private notes and internal notes are included in the transcript as background
+ * context for the evaluator, but are excluded from quality evaluation and scoring.
  */
 export function prepTranscript(transcript: string, maxChars = 40000): string {
   const lines = transcript.split('\n')

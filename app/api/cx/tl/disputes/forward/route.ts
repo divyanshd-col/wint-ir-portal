@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
-import { storeUpdateIQSFlag, storeAppendAuditEntry } from '@/lib/store';
+import { storeUpdateIQSFlag, storeAppendAuditEntry, storeGetIQSFlags, storeAppendFlagComment } from '@/lib/store';
 import type { IQSAuditEntry } from '@/lib/store';
+import { resolveQANameForChat } from '@/lib/qa-resolver';
+import { readConfig } from '@/lib/config';
 import { log } from '@/lib/log';
 import { randomUUID } from 'crypto';
 
@@ -26,16 +28,40 @@ export async function POST(req: NextRequest) {
   const updated = await storeUpdateIQSFlag(flagId, { status: 'tl_forwarded' });
   if (!updated) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
 
+  // Lookup flag to resolve chatId & target QA
+  const rawFlags = await storeGetIQSFlags();
+  const flag = rawFlags
+    .map(r => { try { return JSON.parse(r); } catch { return null; } })
+    .find((f: any) => f && f.id === flagId);
+
+  const chatId = flag?.chatId || '';
+  const qaName = await resolveQANameForChat(chatId);
+
+  const config = await readConfig();
+  const configUser = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
+  const tlName = configUser?.agentName || email.split('@')[0];
+
+  await storeAppendFlagComment({
+    id: randomUUID(),
+    flagId,
+    authorEmail: email,
+    authorName: tlName,
+    role: 'tl',
+    content: `Forwarded to ${qaName}`,
+    createdAt: new Date().toISOString(),
+  });
+
   await storeAppendAuditEntry({
     id: randomUUID(),
     action: 'tl_forwarded_dispute',
-    chatId: '',
+    chatId,
     actorEmail: email,
     actorRole: role,
     ts: new Date().toISOString(),
-    meta: { flagId },
+    meta: { flagId, targetQA: qaName },
   } as IQSAuditEntry);
 
-  log.info('cx/tl/disputes/forward', 'forwarded', { flagId, actor: email });
+  log.info('cx/tl/disputes/forward', 'forwarded', { flagId, actor: email, targetQA: qaName });
   return NextResponse.json({ ok: true });
 }
+

@@ -4,7 +4,7 @@ import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import { getAgentNamesByTL } from '@/lib/robylon/db';
 import { readConfig } from '@/lib/config';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS } from '@/lib/quality';
+import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateWeightedOverallIQS } from '@/lib/quality';
 import { PASCAL_TO_DB, ALL_DB_KEY_TO_PASCAL } from '@/lib/param-keys';
 
 // Canonical v4 parameter definitions, derived from lib/quality.ts so this route can
@@ -33,10 +33,6 @@ const CALL_PARAM_DEFS = [
   { key: 'simplifying',   label: 'Simplifying Answers',           weight: 15 },
 ];
 
-// Normalize any stored key spelling (canonical snake, old no-underscore v4, or
-// PascalCase) to the canonical v4 db key. Legacy v3-only keys (process, grammar…)
-// normalize to themselves, don't match a v4 PARAM_DEF, and drop out — intentional:
-// blending v3 rows into v4 pass rates would conflate two different rubrics.
 const normKey = (k: string) => {
   const pascal = ALL_DB_KEY_TO_PASCAL[k] ?? (PASCAL_TO_DB[k] ? k : undefined);
   return pascal ? (PASCAL_TO_DB[pascal] ?? k) : k;
@@ -70,8 +66,6 @@ const CHAT_SUMMARY_SELECT = `
   COUNT(c.id)::int AS volume
 `;
 
-// Pass rate with half credit: v4 stores 0.5 for partial passes — count it as 0.5
-// toward the numerator instead of an outright fail. Score compared as text only.
 const CHAT_PARAM_SELECT = `
   p.key AS param_key,
   ROUND(
@@ -88,8 +82,6 @@ const CHAT_PARAM_FROM = `
   JOIN conversations c ON c.id = s.chat_id
 `;
 
-// v4 nests the human-leg params under __agent_parameters; legacy rows keep them at
-// the top level. Iterate whichever container exists so both generations aggregate.
 const CHAT_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
     CASE WHEN s.parameters::text LIKE '{%'
@@ -103,8 +95,6 @@ const CALL_PARAM_LATERAL = `
     CASE WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb ELSE '{}'::jsonb END
   ) AS p(key, val)
 `;
-
-// ── Main handler ───────────────────────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -149,8 +139,14 @@ export async function GET(req: NextRequest) {
       agentNames = rows.map(r => r.name);
     }
   } else {
-    const configUser = config.users.find(u => (u.email || u.username) === email);
-    const tlAgentName = configUser?.agentName ?? email;
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+    let tlAgentName = configUser?.agentName;
+    if (!tlAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = email;
     selectedTL = tlAgentName;
     agentNames = await getAgentNamesByTL(tlAgentName);
   }
@@ -310,7 +306,6 @@ export async function GET(req: NextRequest) {
     const out: Record<string, number | null> = {};
     for (const r of rows) {
       const k = normKey(r.param_key);
-      // keep the first non-null value if both formats appear for the same logical key
       if (out[k] == null) out[k] = r.pass_rate;
     }
     return out;
@@ -339,11 +334,9 @@ export async function GET(req: NextRequest) {
   const chatByAgent = Object.fromEntries(agentChatRows.map(a => [a.agent_name, a]));
   const callByAgent = Object.fromEntries(agentCallRows.map(a => [a.agent_name, a]));
 
-  // Union of all agents (anchored to agentNames list for TL scoping)
   const seenInData = new Set([...agentChatRows.map(a => a.agent_name), ...agentCallRows.map(a => a.agent_name)]);
-  // Include all TL agents even if no data in period; for admin just use what appeared
   const allAgents = role === 'tl'
-    ? agentNames.filter(n => seenInData.has(n) || true) // keep all assigned agents
+    ? agentNames.filter(n => seenInData.has(n) || true)
     : Array.from(seenInData).sort();
 
   const agents = allAgents.map(name => ({
@@ -351,7 +344,7 @@ export async function GET(req: NextRequest) {
     ini: name.split(' ').map((p: string) => p[0] ?? '').slice(0, 2).join('').toUpperCase() || '?',
     chats: {
       csat_pct: chatByAgent[name]?.csat_pct ?? null,
-      iqs:      chatByAgent[name]?.iqs ?? null,
+      iqs:      calculateWeightedOverallIQS(agentChatPM[name], 'human', { roundDecimals: 1 }) ?? (chatByAgent[name]?.iqs ?? null),
       volume:   chatByAgent[name]?.volume ?? 0,
       params:   agentChatPM[name] ?? {},
     },
@@ -367,6 +360,9 @@ export async function GET(req: NextRequest) {
   const paramDefs = (defs: typeof PARAM_DEFS, teamPM: Record<string, number | null>, cxPM: Record<string, number | null>) =>
     defs.map(p => ({ ...p, team_score: teamPM[p.key] ?? null, cx_score: cxPM[p.key] ?? null }));
 
+  const teamChatWeightedIqs = calculateWeightedOverallIQS(teamChatPM, 'human', { roundDecimals: 1 }) ?? (teamChatRow?.iqs ?? null);
+  const cxChatWeightedIqs = calculateWeightedOverallIQS(cxChatPM, 'human', { roundDecimals: 1 }) ?? (cxChatRow?.iqs ?? null);
+
   return NextResponse.json({
     dateFrom,
     dateTo,
@@ -376,8 +372,8 @@ export async function GET(req: NextRequest) {
     agents,
     channels: {
       chats: {
-        team: { csat_pct: teamChatRow?.csat_pct ?? null, iqs: teamChatRow?.iqs ?? null, volume: teamChatRow?.volume ?? 0 },
-        cx:   { csat_pct: cxChatRow?.csat_pct ?? null,   iqs: cxChatRow?.iqs ?? null,   volume: cxChatRow?.volume ?? 0 },
+        team: { csat_pct: teamChatRow?.csat_pct ?? null, iqs: teamChatWeightedIqs, volume: teamChatRow?.volume ?? 0 },
+        cx:   { csat_pct: cxChatRow?.csat_pct ?? null,   iqs: cxChatWeightedIqs,   volume: cxChatRow?.volume ?? 0 },
         params: paramDefs(PARAM_DEFS, teamChatPM, cxChatPM),
       },
       calls: {

@@ -8,7 +8,7 @@
  */
 
 import { sendSlackMessage } from './slack';
-import { storeHasQualityAlert, storeMarkQualityAlert } from './store';
+import { storeHasQualityAlert, storeMarkQualityAlert, storeHasBotQualityAlert, storeMarkBotQualityAlert } from './store';
 import { appendQualityAlertToSheet } from './quality-sheet';
 
 const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
@@ -85,6 +85,7 @@ const FAIL_VALUES = new Set(['No', 'no', 'false', '0']);
 export async function fireQualityAlert(opts: {
   chatId: string;
   agentName: string;
+  tlName?: string;
   contactPhone?: string;
   scores: Record<string, string>;
   reasoning: Record<string, string>;
@@ -93,9 +94,19 @@ export async function fireQualityAlert(opts: {
   disposition?: string;
   subDisposition?: string;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
+  breaches?: Array<{ type?: string; breach_type?: string; quote?: string; note?: string } | string>;
+  complianceFlag?: boolean;
 }): Promise<void> {
-  const token   = process.env.SLACK_BOT_TOKEN   || '';
-  const channel = process.env.QUALITY_SLACK_CHANNEL || '';
+  let token = process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      token = config.slackUserToken || '';
+    } catch {}
+  }
+  const complianceChannel = process.env.COMPLIANCE_SLACK_CHANNEL || process.env.QUALITY_SLACK_CHANNEL || 'C0BRLHDDGQ0';
+  const qualityChannel = process.env.QUALITY_SLACK_CHANNEL || complianceChannel;
 
   const failedParams = CRITICAL_PARAMS
     .map(p => {
@@ -104,10 +115,29 @@ export async function fireQualityAlert(opts: {
     })
     .filter((p): p is { label: string; reasoning: string } => p !== null);
 
+  const breachesList: Array<{ type: string; quote: string; note?: string }> = (opts.breaches || []).map(b => {
+    if (typeof b === 'string') {
+      const idx = b.indexOf(':');
+      if (idx !== -1) {
+        return { type: b.substring(0, idx).trim(), quote: b.substring(idx + 1).trim() };
+      }
+      return { type: 'Compliance Breach', quote: b };
+    }
+    return {
+      type: b.type || b.breach_type || 'Compliance Breach',
+      quote: b.quote || '',
+      note: b.note || '',
+    };
+  });
+
+  const hasComplianceBreaches = !!(opts.complianceFlag || breachesList.length > 0);
+  const accuracyFailure = failedParams.find(p => p.label === 'Technically / Legally Incorrect');
+  const isComplianceFailure = hasComplianceBreaches || !!accuracyFailure;
+
   const hasUncertain = !!(opts.uncertainParameters && opts.uncertainParameters.length > 0);
 
   // Nothing to report at all — skip everything
-  if (!failedParams.length && !hasUncertain) return;
+  if (!failedParams.length && !hasUncertain && !hasComplianceBreaches) return;
 
   // Deduplicate — one alert per chat per 24 h
   if (await storeHasQualityAlert(opts.chatId)) {
@@ -116,8 +146,48 @@ export async function fireQualityAlert(opts: {
   }
   await storeMarkQualityAlert(opts.chatId);
 
-  // ── Slack — critical failures only (uncertain chats surface via Pending tab) ──
-  if (failedParams.length && token && channel) {
+  // ── 1. Slack — Compliance Failure Alert ─────────────────────────────────────
+  if (isComplianceFailure && token && complianceChannel) {
+    const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+      ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+      : opts.chatId;
+
+    let tlName = opts.tlName || '';
+    if (!tlName && opts.agentName) {
+      try {
+        const { getAgentTLByName } = await import('./robylon/db');
+        tlName = (await getAgentTLByName(opts.agentName)) || '';
+      } catch {}
+    }
+
+    const reasons: string[] = [];
+    if (breachesList.length > 0) {
+      for (const b of breachesList) {
+        const noteStr = b.note ? ` (${b.note})` : '';
+        const quoteStr = b.quote ? `: "${b.quote}"` : '';
+        reasons.push(`• *${b.type.toUpperCase()}*${quoteStr}${noteStr}`);
+      }
+    }
+    if (accuracyFailure && !breachesList.some(b => b.type.toLowerCase().includes('accuracy') || b.type.toLowerCase().includes('technical'))) {
+      reasons.push(`• *TECHNICALLY / LEGALLY INCORRECT*: ${accuracyFailure.reasoning}`);
+    }
+
+    const lines = [
+      `Chat ID: ${chatLink}`,
+      `Agent: ${opts.agentName || 'Unknown'}`,
+      `TL: ${tlName || 'N/A'}`,
+      `Reason for Compliance failure:`,
+      reasons.join('\n'),
+    ];
+
+    const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), token, undefined, {
+      username: 'Wint Compliance Alert',
+      icon_emoji: ':warning:',
+    });
+    console.log(`[quality-alert] Compliance failure Slack alert for chat ${opts.chatId}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+  }
+  // ── 2. Slack — Non-compliance Quality Parameter Alert ───────────────────────
+  else if (failedParams.length && token && qualityChannel) {
     const chatLink = /^\d+$/.test((opts.chatId || '').trim())
       ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
       : opts.chatId;
@@ -136,11 +206,17 @@ export async function fireQualityAlert(opts: {
       failLines,
     ].filter((l): l is string => l !== null);
 
-    sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
+    const sent = await sendSlackMessage(qualityChannel, lines.join('\n'), token, undefined, {
+      username: 'Wint Quality Alert',
+      icon_emoji: ':warning:',
+    });
+    console.log(`[quality-alert] Quality parameter Slack alert for chat ${opts.chatId}: ${sent ? 'SUCCESS' : 'FAILED'}`);
   }
 
-  // ── Google Sheet — critical failures + uncertain chats ────────────────────
-  const sheetParams = failedParams.length
+  // ── Google Sheet — critical failures + compliance breaches + uncertain chats ─
+  const sheetParams = breachesList.length
+    ? breachesList.map(b => ({ label: `Compliance Breach (${b.type})`, reasoning: b.quote || b.note || 'Compliance breach' }))
+    : failedParams.length
     ? failedParams
     : (opts.uncertainParameters ?? []).map(u => ({ label: u.parameter, reasoning: `Needs QA review: ${u.question}` }));
 
@@ -154,6 +230,20 @@ export async function fireQualityAlert(opts: {
     subDisposition: opts.subDisposition,
     failedParams:   sheetParams,
   }).catch((err) => console.error('[quality-alert] Sheet append failed:', err?.message));
+
+  // ── 3. BOT Parameter Failure Alert (Issue Resolution = NO & Correct Escalation = NO) ──
+  if (opts.scores) {
+    fireBotQualityAlert({
+      chatId: opts.chatId,
+      agentName: opts.agentName,
+      contactPhone: opts.contactPhone,
+      scores: opts.scores,
+      reasoning: opts.reasoning,
+      iqs: opts.iqs,
+      disposition: opts.disposition,
+      subDisposition: opts.subDisposition,
+    }).catch(() => {});
+  }
 }
 
 // ── Call-interaction flag (skip scoring) ────────────────────────────────────
@@ -184,3 +274,136 @@ export async function fireCallSkipAlert(opts: {
 
   sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
 }
+
+// ── KB Change Alert ──────────────────────────────────────────────────────────
+
+export async function fireKbChangeAlert(opts: {
+  chatId: string;
+  reviewerEmail: string;
+  reviewNote?: string;
+  agentName?: string;
+  disposition?: string;
+  subDisposition?: string;
+}): Promise<void> {
+  let token = process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      token = config.slackUserToken || '';
+    } catch {}
+  }
+  const channel = process.env.KB_CHANGE_SLACK_CHANNEL || 'C0BRLHR1KCY';
+  if (!token || !channel) {
+    console.warn(`[quality-alert] Cannot send KB change alert for chat ${opts.chatId}: token=${!!token}, channel=${channel}`);
+    return;
+  }
+
+  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+    : opts.chatId;
+
+  const lines = [
+    `📖 *Knowledge Base (KB) Change Noted by QA*`,
+    `*Chat ID:* ${chatLink}`,
+    `*QA Reviewer:* ${opts.reviewerEmail || 'Unknown'}`,
+    opts.agentName ? `*Agent:* ${opts.agentName}` : null,
+    opts.disposition ? `*Disposition:* ${opts.disposition}${opts.subDisposition ? ` (${opts.subDisposition})` : ''}` : null,
+    `*KB Change Comment / Details:*`,
+    `> ${opts.reviewNote?.trim() ? opts.reviewNote.trim().replace(/\n/g, '\n> ') : '_No specific comment provided_'}`,
+  ].filter((l): l is string => l !== null);
+
+  const sent = await sendSlackMessage(channel, lines.join('\n'), token, undefined, {
+    username: 'QA KB Change Notifier',
+    icon_emoji: ':books:',
+  });
+  console.log(`[quality-alert] KB change Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+}
+
+// ── BOT Parameter Evaluation Failure Alert ─────────────────────────────────
+
+function isParamNoValue(val: any): boolean {
+  if (val === undefined || val === null) return false;
+  if (val === false || val === 0) return true;
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase();
+    return s === 'no' || s === 'false' || s === '0';
+  }
+  if (typeof val === 'object' && val !== null) {
+    return isParamNoValue(val.score);
+  }
+  return false;
+}
+
+export function checkBotFailure(scores: Record<string, any>): {
+  isFailure: boolean;
+  issueResolutionReasoning?: string;
+  correctEscalationReasoning?: string;
+} {
+  if (!scores || typeof scores !== 'object') return { isFailure: false };
+
+  const issueResKey = ['issue_resolution', 'IssueResolution', 'all_questions'].find(k => k in scores);
+  const correctEscKey = ['correct_escalation', 'CorrectEscalation'].find(k => k in scores);
+
+  if (!issueResKey || !correctEscKey) return { isFailure: false };
+
+  const issueResCell = scores[issueResKey];
+  const correctEscCell = scores[correctEscKey];
+
+  if (isParamNoValue(issueResCell) && isParamNoValue(correctEscCell)) {
+    const getReasoning = (cell: any) => typeof cell === 'object' && cell?.reasoning ? cell.reasoning : String(cell);
+    return {
+      isFailure: true,
+      issueResolutionReasoning: getReasoning(issueResCell),
+      correctEscalationReasoning: getReasoning(correctEscCell),
+    };
+  }
+
+  return { isFailure: false };
+}
+
+export async function fireBotQualityAlert(opts: {
+  chatId: string;
+  agentName?: string;
+  contactPhone?: string;
+  scores?: Record<string, any>;
+  reasoning?: Record<string, string>;
+  iqs?: number;
+  disposition?: string;
+  subDisposition?: string;
+}): Promise<boolean> {
+  const botFailure = checkBotFailure(opts.scores || {});
+  if (!botFailure.isFailure) return false;
+
+  let token = process.env.BOT_FAIL_SLACK_BOT_TOKEN || process.env.BOT_SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      token = config.slackUserToken || '';
+    } catch {}
+  }
+
+  const channel = process.env.BOT_FAIL_SLACK_CHANNEL || process.env.BOT_SLACK_CHANNEL || 'C0BRE1U3X62';
+  if (!token || !channel) return false;
+
+  if (await storeHasBotQualityAlert(opts.chatId)) {
+    console.log(`[quality-alert] Skipping duplicate BOT alert for chat ${opts.chatId}`);
+    return false;
+  }
+  await storeMarkBotQualityAlert(opts.chatId);
+
+  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+    : opts.chatId;
+
+  const messageText = `Bot failed to resolve this chat : ${chatLink}`;
+
+  const sent = await sendSlackMessage(channel, messageText, token, undefined, {
+    username: 'Wint BOT Quality Alert',
+    icon_emoji: ':robot_face:',
+  });
+  console.log(`[quality-alert] BOT quality failure Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+  return sent;
+}
+

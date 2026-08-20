@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
 
   const config = await readConfig();
 
-  // ── Pass 1: chats with transcript + tags but no iqs_scores row ───────────────
-  const convs = await getUnscoredConversations();
+  // ── Pass 1: chats with transcript but no iqs_scores row (closed > 1h ago) ────
+  const convs = await getUnscoredConversations(1, 100);
   const chatResults: { chatId: string; iqs?: number; reason?: string }[] = [];
 
   for (const conv of convs) {

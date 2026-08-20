@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import type { CSSProperties } from 'react';
 import type { IQSScoreEntry } from '@/lib/quality';
-import { PARAM_NAMES } from '@/lib/quality';
+import { PARAM_NAMES, getDisputeClassification, formatParamLabel } from '@/lib/quality';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 import IRScorePanel from './IRScorePanel';
 
 // ─── Shared UI Tokens & Styles ────────────────────────────────────────────────
@@ -51,7 +52,7 @@ const TD_NUM: CSSProperties = {
 // ─── Badges ──────────────────────────────────────────────────────────────────
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   const bg = score >= 85 ? '#f0fdf4' : score >= 70 ? '#fefce8' : '#fef2f2';
   const color = score >= 85 ? '#166534' : score >= 70 ? '#854d0e' : '#991b1b';
   const border = score >= 85 ? '#bbf7d0' : score >= 70 ? '#fef08a' : '#fecaca';
@@ -147,6 +148,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   );
 }
 
+import { DisputeStatusPill, getDisputeOutcomeKey } from '@/components/tl/QualityChatsPage';
+
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
 interface DisputeRow {
@@ -160,6 +163,7 @@ interface DisputeRow {
   subDisposition?: string;
   closedAt: string;
   status: string;
+  raisedByRole?: 'ir' | 'tl' | string;
   challengedParams: { param: string; note: string }[];
   agentNote: string;
   reviewNote: string;
@@ -200,7 +204,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
   // Pagination state
   const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(20);
   const [totalEntries, setTotalEntries] = useState(0);
 
   // Disputes state
@@ -210,6 +214,55 @@ export default function MyQualityChatsPage({ agentName }: Props) {
   const [loadingReviewed, setLoadingReviewed] = useState(true);
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+
+  // Disputes filter state
+  const [pendingOutcomeFilter, setPendingOutcomeFilter] = useState('');
+  const [pendingFromFilter, setPendingFromFilter] = useState('');
+  const [pendingToFilter, setPendingToFilter] = useState('');
+
+  const [reviewedOutcomeFilter, setReviewedOutcomeFilter] = useState('');
+  const [reviewedFromFilter, setReviewedFromFilter] = useState('');
+  const [reviewedToFilter, setReviewedToFilter] = useState('');
+
+  // Disputes tabs pagination state
+  const [pendingPage, setPendingPage] = useState(0);
+  const [pendingPageSize, setPendingPageSize] = useState(20);
+  const [reviewedPage, setReviewedPage] = useState(0);
+  const [reviewedPageSize, setReviewedPageSize] = useState(20);
+
+  const [openPageDrop, setOpenPageDrop] = useState<'tab1' | 'tab2' | 'tab3' | null>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = () => setOpenPageDrop(null);
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  }, []);
+
+  const filteredPendingDisputes = pendingDisputes.filter((row) => {
+    if (pendingOutcomeFilter && getDisputeOutcomeKey(row as any) !== pendingOutcomeFilter) return false;
+    if (pendingFromFilter) {
+      const dDate = row.flaggedAt ? row.flaggedAt.substring(0, 10) : '';
+      if (dDate < pendingFromFilter) return false;
+    }
+    if (pendingToFilter) {
+      const dDate = row.flaggedAt ? row.flaggedAt.substring(0, 10) : '';
+      if (dDate > pendingToFilter) return false;
+    }
+    return true;
+  });
+
+  const filteredReviewedDisputes = reviewedDisputes.filter((row) => {
+    if (reviewedOutcomeFilter && getDisputeOutcomeKey(row as any) !== reviewedOutcomeFilter) return false;
+    if (reviewedFromFilter) {
+      const dDate = row.reviewedAt ? row.reviewedAt.substring(0, 10) : row.flaggedAt ? row.flaggedAt.substring(0, 10) : '';
+      if (dDate < reviewedFromFilter) return false;
+    }
+    if (reviewedToFilter) {
+      const dDate = row.reviewedAt ? row.reviewedAt.substring(0, 10) : row.flaggedAt ? row.flaggedAt.substring(0, 10) : '';
+      if (dDate > reviewedToFilter) return false;
+    }
+    return true;
+  });
 
   // ── Fetch Evaluated Chats ──────────────────────────────────────────────────
 
@@ -389,11 +442,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
           </button>
           <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
             Disputes Raised
-            <CountBadge count={pendingDisputes.length} active={activeTab === 'disputes'} />
+            <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
           </button>
           <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
             Reviewed Disputes
-            <CountBadge count={reviewedDisputes.length} active={activeTab === 'reviewed'} />
+            <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
           </button>
         </div>
 
@@ -435,132 +488,212 @@ export default function MyQualityChatsPage({ agentName }: Props) {
       {/* ── TAB 1: EVALUATED CHATS ──────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
-          {/* Filter Bar */}
+          {/* Single-line Filter & Pagination Bar */}
           <div
             style={{
-              minHeight: 56,
+              minHeight: 52,
               background: '#FFFFFF',
               borderBottom: '1px solid var(--qa-border, #E4E4E7)',
               display: 'flex',
-              flexWrap: 'wrap',
               alignItems: 'center',
-              gap: 8,
-              padding: '11px 16px',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 16px',
+              overflowX: 'auto',
             }}
           >
-            {/* Search Chat ID */}
-            <input
-              type="text"
-              placeholder="Search Chat ID…"
-              value={chatIdSearch}
-              onChange={(e) => setChatIdSearch(e.target.value)}
-              style={{ ...chipInputStyle, width: 140 }}
-            />
+            {/* Filter Inputs (Inline flex group) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              {/* Search Chat ID */}
+              <input
+                type="text"
+                placeholder="Search Chat ID…"
+                value={chatIdSearch}
+                onChange={(e) => setChatIdSearch(e.target.value)}
+                style={{ ...chipInputStyle, width: 130 }}
+              />
 
-            {/* Disposition */}
-            <select
-              value={disposition}
-              onChange={(e) => {
-                setDisposition(e.target.value);
-                setSubDisposition('');
-              }}
-              style={{ ...chipInputStyle, maxWidth: 160 }}
-            >
-              <option value="">All Dispositions</option>
-              {dispositions.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-
-            {/* Subdisposition */}
-            {disposition && subDispsForPicked.length > 0 && (
+              {/* Disposition */}
               <select
-                value={subDisposition}
-                onChange={(e) => setSubDisposition(e.target.value)}
-                style={{ ...chipInputStyle, maxWidth: 160 }}
+                value={disposition}
+                onChange={(e) => {
+                  setDisposition(e.target.value);
+                  setSubDisposition('');
+                }}
+                style={{ ...chipInputStyle, maxWidth: 150 }}
               >
-                <option value="">All Subdispositions</option>
-                {subDispsForPicked.map((sd) => (
-                  <option key={sd} value={sd}>
-                    {sd}
+                <option value="">All Dispositions</option>
+                {dispositions.map((d) => (
+                  <option key={d} value={d}>
+                    {d}
                   </option>
                 ))}
               </select>
-            )}
 
-            {/* Date Range */}
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              style={chipInputStyle}
-              title="From Date"
-            />
-            <span style={{ fontSize: 12, color: '#A1A1AA' }}>→</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              style={chipInputStyle}
-              title="To Date"
-            />
+              {/* Subdisposition */}
+              {disposition && subDispsForPicked.length > 0 && (
+                <select
+                  value={subDisposition}
+                  onChange={(e) => setSubDisposition(e.target.value)}
+                  style={{ ...chipInputStyle, maxWidth: 150 }}
+                >
+                  <option value="">All Subdispositions</option>
+                  {subDispsForPicked.map((sd) => (
+                    <option key={sd} value={sd}>
+                      {sd}
+                    </option>
+                  ))}
+                </select>
+              )}
 
-            {/* IQS Range */}
-            <input
-              type="number"
-              placeholder="Min IQS"
-              value={iqsMin}
-              onChange={(e) => setIqsMin(e.target.value)}
-              style={{ ...chipInputStyle, width: 75 }}
-            />
-            <input
-              type="number"
-              placeholder="Max IQS"
-              value={iqsMax}
-              onChange={(e) => setIqsMax(e.target.value)}
-              style={{ ...chipInputStyle, width: 75 }}
-            />
+              {/* Date Range */}
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                style={{ ...chipInputStyle, width: 120 }}
+                title="From Date"
+              />
+              <span style={{ fontSize: 12, color: '#A1A1AA' }}>→</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                style={{ ...chipInputStyle, width: 120 }}
+                title="To Date"
+              />
 
-            {/* CSAT */}
-            <select value={csat} onChange={(e) => setCsat(e.target.value)} style={chipInputStyle}>
-              <option value="">All CSAT</option>
-              <option value="5">Good (5)</option>
-              <option value="3">Neutral (3)</option>
-              <option value="1">Bad (1)</option>
-            </select>
+              {/* IQS Range */}
+              <input
+                type="number"
+                placeholder="Min IQS"
+                value={iqsMin}
+                onChange={(e) => setIqsMin(e.target.value)}
+                style={{ ...chipInputStyle, width: 70 }}
+              />
+              <input
+                type="number"
+                placeholder="Max IQS"
+                value={iqsMax}
+                onChange={(e) => setIqsMax(e.target.value)}
+                style={{ ...chipInputStyle, width: 70 }}
+              />
 
-            {/* Quality Param Filter */}
-            <select value={qualityParam} onChange={(e) => setQualityParam(e.target.value)} style={{ ...chipInputStyle, maxWidth: 160 }}>
-              <option value="">All Param Failures</option>
-              {PARAM_LIST.map((p) => (
-                <option key={p.key} value={p.key}>
-                  Failed: {p.label}
-                </option>
-              ))}
-            </select>
+              {/* CSAT */}
+              <select value={csat} onChange={(e) => setCsat(e.target.value)} style={chipInputStyle}>
+                <option value="">All CSAT</option>
+                <option value="5">Good (5)</option>
+                <option value="3">Neutral (3)</option>
+                <option value="1">Bad (1)</option>
+              </select>
 
-            {/* Right side actions */}
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 13, color: '#A1A1AA' }}>
-                Showing {entries.length} of {totalEntries}
-              </span>
+              {/* Quality Param Filter */}
+              <select value={qualityParam} onChange={(e) => setQualityParam(e.target.value)} style={{ ...chipInputStyle, maxWidth: 150 }}>
+                <option value="">All Param Failures</option>
+                {PARAM_LIST.map((p) => (
+                  <option key={p.key} value={p.key}>
+                    Failed: {p.label}
+                  </option>
+                ))}
+              </select>
+
               {hasFilters && (
                 <button
                   onClick={resetFilters}
                   style={{
-                    background: 'none',
-                    border: 0,
-                    fontSize: 13,
+                    height: 28,
+                    padding: '0 10px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
                     color: '#6B6B6B',
-                    cursor: 'pointer',
+                    fontSize: 12,
                     fontFamily: SANS,
+                    cursor: 'pointer',
                   }}
                 >
-                  Reset
+                  Clear
                 </button>
               )}
+            </div>
+
+            {/* Right Side: Page size icon dropdown + Range in single line */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
+              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
+                Showing {totalEntries === 0 ? 0 : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, totalEntries)}`} of {totalEntries}
+              </span>
+              <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                <button
+                  title="Rows per page"
+                  onClick={() => setOpenPageDrop(openPageDrop === 'tab1' ? null : 'tab1')}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 6,
+                    background: 'var(--qa-card, #FFFFFF)',
+                    color: 'var(--qa-text-2, #6B6B6B)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                </button>
+                {openPageDrop === 'tab1' && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      marginTop: 4,
+                      zIndex: 50,
+                      background: 'var(--qa-card, #FFFFFF)',
+                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      borderRadius: 8,
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                      minWidth: 130,
+                      overflow: 'hidden',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)' }}>
+                      Rows per page
+                    </div>
+                    {[20, 50, 100].map((n) => (
+                      <div
+                        key={n}
+                        onClick={() => {
+                          setPageSize(n);
+                          setPage(0);
+                          setOpenPageDrop(null);
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          background: pageSize === n ? 'var(--qa-gray-100, #F4F4F5)' : 'transparent',
+                          color: 'var(--qa-text, #111111)',
+                          fontWeight: pageSize === n ? 600 : 400,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n} / page
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -569,7 +702,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <colgroup>
               <col style={{ width: 170 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 85 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 85 }} />
               <col style={{ width: 90 }} />
@@ -581,7 +713,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Bot)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
@@ -593,13 +724,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingEntries ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading evaluated chats…
                   </td>
                 </tr>
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No evaluated chats found
                   </td>
                 </tr>
@@ -618,9 +749,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
                           {e.agentName || agentName}
-                        </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          <IQSBadge score={e.botIqsScore ?? null} />
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={e.iqs ?? null} />
@@ -699,11 +827,12 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           chatId={e.chatId}
                           agentName={e.agentName || agentName}
                           iqsScore={e.iqs}
+                          botIqsScore={e.botIqsScore}
                           closedAt={e.date || e.scoredAt || ''}
                           parameters={buildParams(e)}
                           mode="evaluated"
                           flagStatus={pendingFlag?.status}
-                          colSpan={9}
+                          colSpan={8}
                           onClose={() => setExpandedEvalId(null)}
                           onDisputeRaised={() => {
                             fetchDisputes();
@@ -774,11 +903,164 @@ export default function MyQualityChatsPage({ agentName }: Props) {
       {/* ── TAB 2: DISPUTES RAISED (PENDING) ────────────────────────────────── */}
       {activeTab === 'disputes' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+          {/* Single-line Filter & Pagination Bar */}
+          <div
+            style={{
+              minHeight: 52,
+              background: '#FFFFFF',
+              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 16px',
+              overflowX: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <select
+                value={pendingOutcomeFilter}
+                onChange={(e) => {
+                  setPendingOutcomeFilter(e.target.value);
+                  setPendingPage(0);
+                }}
+                style={chipInputStyle}
+              >
+                <option value="">All Statuses</option>
+                <option value="raised_ir">Dispute raised by IR</option>
+                <option value="raised_tl">Dispute raised by TL</option>
+              </select>
+
+              <input
+                type="date"
+                value={pendingFromFilter}
+                onChange={(e) => {
+                  setPendingFromFilter(e.target.value);
+                  setPendingPage(0);
+                }}
+                style={chipInputStyle}
+                placeholder="From"
+              />
+              <input
+                type="date"
+                value={pendingToFilter}
+                onChange={(e) => {
+                  setPendingToFilter(e.target.value);
+                  setPendingPage(0);
+                }}
+                style={chipInputStyle}
+                placeholder="To"
+              />
+
+              {(pendingOutcomeFilter || pendingFromFilter || pendingToFilter) && (
+                <button
+                  onClick={() => {
+                    setPendingOutcomeFilter('');
+                    setPendingFromFilter('');
+                    setPendingToFilter('');
+                    setPendingPage(0);
+                  }}
+                  style={{
+                    height: 28,
+                    padding: '0 10px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    color: '#6B6B6B',
+                    fontSize: 12,
+                    fontFamily: SANS,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Right Side: Page size icon dropdown + Range in single line */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
+              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
+                Showing {filteredPendingDisputes.length === 0 ? 0 : `${pendingPage * pendingPageSize + 1}–${Math.min((pendingPage + 1) * pendingPageSize, filteredPendingDisputes.length)}`} of {filteredPendingDisputes.length}
+              </span>
+              <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                <button
+                  title="Rows per page"
+                  onClick={() => setOpenPageDrop(openPageDrop === 'tab2' ? null : 'tab2')}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 6,
+                    background: 'var(--qa-card, #FFFFFF)',
+                    color: 'var(--qa-text-2, #6B6B6B)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                </button>
+                {openPageDrop === 'tab2' && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      marginTop: 4,
+                      zIndex: 50,
+                      background: 'var(--qa-card, #FFFFFF)',
+                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      borderRadius: 8,
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                      minWidth: 130,
+                      overflow: 'hidden',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)' }}>
+                      Rows per page
+                    </div>
+                    {[20, 50, 100].map((n) => (
+                      <div
+                        key={n}
+                        onClick={() => {
+                          setPendingPageSize(n);
+                          setPendingPage(0);
+                          setOpenPageDrop(null);
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          background: pendingPageSize === n ? 'var(--qa-gray-100, #F4F4F5)' : 'transparent',
+                          color: 'var(--qa-text, #111111)',
+                          fontWeight: pendingPageSize === n ? 600 : 400,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        {pendingPageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n} / page
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 180 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 85 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 85 }} />
               <col style={{ width: 90 }} />
@@ -790,7 +1072,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Bot)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
@@ -802,22 +1083,21 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingPending ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading raised disputes…
                   </td>
                 </tr>
-              ) : pendingDisputes.length === 0 ? (
+              ) : filteredPendingDisputes.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No pending disputes raised
                   </td>
                 </tr>
               ) : (
-                pendingDisputes.map((row, idx) => {
+                filteredPendingDisputes.slice(pendingPage * pendingPageSize, (pendingPage + 1) * pendingPageSize).map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
-                  const isLast = idx === pendingDisputes.length - 1 && !isOpen;
-                  // 'pending'/'ir_pending_tl' = awaiting TL review; 'tl_forwarded' =
-                  // TL has forwarded it on to QA for a final decision.
+                  const isLast = idx === filteredPendingDisputes.slice(pendingPage * pendingPageSize, (pendingPage + 1) * pendingPageSize).length - 1 && !isOpen;
+                  const targetInfo = getDisputeClassification(row.challengedParams);
                   const statusText = row.status === 'pending' || row.status === 'ir_pending_tl'
                     ? 'Raised'
                     : row.status === 'tl_forwarded' ? 'Forwarded to QA' : 'Under Review';
@@ -835,9 +1115,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           {agentName}
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          <IQSBadge score={row.botIqsScore ?? null} />
-                        </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.iqsScore} />
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
@@ -849,18 +1126,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
                           {dateStr}
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12, color: '#6B6B6B' }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              background: '#fefce8',
-                              color: '#854d0e',
-                              fontWeight: 500,
-                            }}
-                          >
-                            {statusText}
-                          </span>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                          <DisputeStatusPill
+                            status={row.status}
+                            raisedByRole={row.raisedByRole}
+                            reviewNote={row.reviewNote}
+                            parameters={row.parameters}
+                          />
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -916,21 +1188,64 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                       </tr>
                       {isOpen && (
-                        <IRScorePanel
-                          key={`panel-${row.flagId}`}
-                          chatId={row.chatId}
-                          agentName={agentName}
-                          iqsScore={row.iqsScore}
-                          closedAt={row.closedAt}
-                          parameters={row.parameters}
-                          mode="pending"
-                          challengedParams={row.challengedParams}
-                          reviewNote={row.reviewNote}
-                          flagId={row.flagId}
-                          flagStatus={row.status}
-                          colSpan={9}
-                          onClose={() => setExpandedDisputeId(null)}
-                        />
+                        <>
+                          <tr>
+                            <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                              {row.challengedParams.length > 0 && (() => {
+                                const targetInfo = getDisputeClassification(row.challengedParams);
+                                return (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 700,
+                                      background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                                      border: `1px solid ${targetInfo.badgeBorder}`,
+                                      borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
+                                    }}>
+                                      Target: {targetInfo.label}
+                                    </span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>Disputed Params</span>
+                                    {row.challengedParams.map(cp => (
+                                      <span key={cp.param} title={cp.note} style={{
+                                        fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                        background: '#F4F4F5', border: '1px solid #E4E4E7',
+                                        borderRadius: 4, padding: '2px 6px', color: '#52525B', cursor: cp.note ? 'help' : 'default',
+                                      }}>{formatParamLabel(cp.param)}</span>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                              <DisputeThread
+                                flagId={row.flagId}
+                                agentNote={row.agentNote}
+                                reviewNote={row.reviewNote}
+                                agentName={agentName}
+                                reviewedBy={row.reviewedBy}
+                                reviewerRole={row.status === 'tl_resolved' ? 'tl' : 'quality'}
+                                flaggedAt={row.flaggedAt}
+                                reviewedAt={row.reviewedAt}
+                                compact
+                              />
+                            </td>
+                          </tr>
+                          <IRScorePanel
+                            key={`panel-${row.flagId}`}
+                            chatId={row.chatId}
+                            agentName={agentName}
+                            iqsScore={row.iqsScore}
+                            botIqsScore={row.botIqsScore}
+                            closedAt={row.closedAt}
+                            parameters={row.parameters}
+                            mode="pending"
+                            challengedParams={row.challengedParams}
+                            agentNote={row.agentNote}
+                            reviewNote={row.reviewNote}
+                            flaggedAt={row.flaggedAt}
+                            flagId={row.flagId}
+                            flagStatus={row.status}
+                            colSpan={8}
+                            onClose={() => setExpandedDisputeId(null)}
+                          />
+                        </>
                       )}
                     </Fragment>
                   );
@@ -938,17 +1253,224 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               )}
             </tbody>
           </table>
+
+          {/* Pagination Footer */}
+          {filteredPendingDisputes.length > pendingPageSize && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderTop: '1px solid var(--qa-border, #E4E4E7)',
+              }}
+            >
+              <div style={{ fontSize: 13, color: '#6B6B6B' }}>
+                Page {pendingPage + 1} of {Math.max(1, Math.ceil(filteredPendingDisputes.length / pendingPageSize))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  disabled={pendingPage === 0}
+                  onClick={() => setPendingPage((p) => Math.max(0, p - 1))}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: pendingPage === 0 ? 'default' : 'pointer',
+                    opacity: pendingPage === 0 ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={(pendingPage + 1) * pendingPageSize >= filteredPendingDisputes.length}
+                  onClick={() => setPendingPage((p) => p + 1)}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: (pendingPage + 1) * pendingPageSize >= filteredPendingDisputes.length ? 'default' : 'pointer',
+                    opacity: (pendingPage + 1) * pendingPageSize >= filteredPendingDisputes.length ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+          {/* Single-line Filter & Pagination Bar */}
+          <div
+            style={{
+              minHeight: 52,
+              background: '#FFFFFF',
+              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              padding: '10px 16px',
+              overflowX: 'auto',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+              <select
+                value={reviewedOutcomeFilter}
+                onChange={(e) => {
+                  setReviewedOutcomeFilter(e.target.value);
+                  setReviewedPage(0);
+                }}
+                style={chipInputStyle}
+              >
+                <option value="">All Outcomes</option>
+                <option value="updated">Updated by QA</option>
+                <option value="resolved_qa">Resolved by QA</option>
+                <option value="resolved_tl">Resolved by TL</option>
+                <option value="forwarded">Forwarded by TL</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+
+              <input
+                type="date"
+                value={reviewedFromFilter}
+                onChange={(e) => {
+                  setReviewedFromFilter(e.target.value);
+                  setReviewedPage(0);
+                }}
+                style={chipInputStyle}
+                placeholder="From"
+              />
+              <input
+                type="date"
+                value={reviewedToFilter}
+                onChange={(e) => {
+                  setReviewedToFilter(e.target.value);
+                  setReviewedPage(0);
+                }}
+                style={chipInputStyle}
+                placeholder="To"
+              />
+
+              {(reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter) && (
+                <button
+                  onClick={() => {
+                    setReviewedOutcomeFilter('');
+                    setReviewedFromFilter('');
+                    setReviewedToFilter('');
+                    setReviewedPage(0);
+                  }}
+                  style={{
+                    height: 28,
+                    padding: '0 10px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    color: '#6B6B6B',
+                    fontSize: 12,
+                    fontFamily: SANS,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Right Side: Page size icon dropdown + Range in single line */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
+              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
+                Showing {filteredReviewedDisputes.length === 0 ? 0 : `${reviewedPage * reviewedPageSize + 1}–${Math.min((reviewedPage + 1) * reviewedPageSize, filteredReviewedDisputes.length)}`} of {filteredReviewedDisputes.length}
+              </span>
+              <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+                <button
+                  title="Rows per page"
+                  onClick={() => setOpenPageDrop(openPageDrop === 'tab3' ? null : 'tab3')}
+                  style={{
+                    width: 28,
+                    height: 28,
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 6,
+                    background: 'var(--qa-card, #FFFFFF)',
+                    color: 'var(--qa-text-2, #6B6B6B)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="8" y1="6" x2="21" y2="6" />
+                    <line x1="8" y1="12" x2="21" y2="12" />
+                    <line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" />
+                    <line x1="3" y1="12" x2="3.01" y2="12" />
+                    <line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                </button>
+                {openPageDrop === 'tab3' && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      right: 0,
+                      top: '100%',
+                      marginTop: 4,
+                      zIndex: 50,
+                      background: 'var(--qa-card, #FFFFFF)',
+                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      borderRadius: 8,
+                      boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
+                      minWidth: 130,
+                      overflow: 'hidden',
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)' }}>
+                      Rows per page
+                    </div>
+                    {[20, 50, 100].map((n) => (
+                      <div
+                        key={n}
+                        onClick={() => {
+                          setReviewedPageSize(n);
+                          setReviewedPage(0);
+                          setOpenPageDrop(null);
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                          background: reviewedPageSize === n ? 'var(--qa-gray-100, #F4F4F5)' : 'transparent',
+                          color: 'var(--qa-text, #111111)',
+                          fontWeight: reviewedPageSize === n ? 600 : 400,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        {reviewedPageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n} / page
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 180 }} />
               <col style={{ width: 130 }} />
-              <col style={{ width: 85 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 85 }} />
               <col style={{ width: 90 }} />
@@ -961,7 +1483,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
                 <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Bot)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                 <th style={TH_BASE}>CSAT</th>
@@ -974,20 +1495,21 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingReviewed ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading reviewed disputes…
                   </td>
                 </tr>
-              ) : reviewedDisputes.length === 0 ? (
+              ) : filteredReviewedDisputes.length === 0 ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No reviewed disputes found
                   </td>
                 </tr>
               ) : (
-                reviewedDisputes.map((row, idx) => {
+                filteredReviewedDisputes.slice(reviewedPage * reviewedPageSize, (reviewedPage + 1) * reviewedPageSize).map((row, idx) => {
                   const isOpen = expandedDisputeId === row.flagId;
-                  const isLast = idx === reviewedDisputes.length - 1 && !isOpen;
+                  const isLast = idx === filteredReviewedDisputes.slice(reviewedPage * reviewedPageSize, (reviewedPage + 1) * reviewedPageSize).length - 1 && !isOpen;
+                  const targetInfo = getDisputeClassification(row.challengedParams);
                   const isRejected = row.reviewNote?.toLowerCase().includes('reject');
                   const outcomeText = isRejected ? 'Rejected' : 'Accepted';
 
@@ -1007,9 +1529,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           {agentName}
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          <IQSBadge score={row.botIqsScore ?? null} />
-                        </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <IQSBadge score={row.iqsScore} />
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
@@ -1022,21 +1541,15 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           {dateStr}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
-                          {row.reviewedBy || 'TL / QA'}
+                          {row.reviewedBy || 'QA'}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              background: isRejected ? '#fef2f2' : '#f0fdf4',
-                              color: isRejected ? '#991b1b' : '#166534',
-                              border: `1px solid ${isRejected ? '#fecaca' : '#bbf7d0'}`,
-                              fontWeight: 600,
-                            }}
-                          >
-                            {outcomeText}
-                          </span>
+                          <DisputeStatusPill
+                            status={row.status}
+                            raisedByRole={row.raisedByRole}
+                            reviewNote={row.reviewNote}
+                            parameters={row.parameters}
+                          />
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
                           <button
@@ -1069,21 +1582,66 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                         </td>
                       </tr>
                       {isOpen && (
-                        <IRScorePanel
-                          key={`panel-${row.flagId}`}
-                          chatId={row.chatId}
-                          agentName={agentName}
-                          iqsScore={row.iqsScore}
-                          closedAt={row.closedAt}
-                          parameters={row.parameters}
-                          mode="reviewed"
-                          challengedParams={row.challengedParams}
-                          reviewNote={row.reviewNote}
-                          flagId={row.flagId}
-                          flagStatus={row.status}
-                          colSpan={10}
-                          onClose={() => setExpandedDisputeId(null)}
-                        />
+                        <>
+                          <tr>
+                            <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                              {row.challengedParams.length > 0 && (() => {
+                                const targetInfo = getDisputeClassification(row.challengedParams);
+                                return (
+                                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+                                    <span style={{
+                                      fontSize: 10, fontWeight: 700,
+                                      background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                                      border: `1px solid ${targetInfo.badgeBorder}`,
+                                      borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
+                                    }}>
+                                      Target: {targetInfo.label}
+                                    </span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>Disputed Params</span>
+                                    {row.challengedParams.map(cp => (
+                                      <span key={cp.param} title={cp.note} style={{
+                                        fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                        background: '#F4F4F5', border: '1px solid #E4E4E7',
+                                        borderRadius: 4, padding: '2px 6px', color: '#52525B', cursor: cp.note ? 'help' : 'default',
+                                      }}>{formatParamLabel(cp.param)}</span>
+                                    ))}
+                                  </div>
+                                );
+                              })()}
+                              <DisputeThread
+                                flagId={row.flagId}
+                                agentNote={row.agentNote}
+                                reviewNote={row.reviewNote}
+                                agentName={agentName}
+                                reviewedBy={row.reviewedBy}
+                                reviewerRole={row.status === 'tl_resolved' ? 'tl' : 'quality'}
+                                flaggedAt={row.flaggedAt}
+                                reviewedAt={row.reviewedAt}
+                                compact
+                              />
+                            </td>
+                          </tr>
+                          <IRScorePanel
+                            key={`panel-${row.flagId}`}
+                            chatId={row.chatId}
+                            agentName={agentName}
+                            iqsScore={row.iqsScore}
+                            botIqsScore={row.botIqsScore}
+                            closedAt={row.closedAt}
+                            parameters={row.parameters}
+                            mode="reviewed"
+                            challengedParams={row.challengedParams}
+                            agentNote={row.agentNote}
+                            reviewNote={row.reviewNote}
+                            reviewedBy={row.reviewedBy}
+                            flaggedAt={row.flaggedAt}
+                            reviewedAt={row.reviewedAt}
+                            flagId={row.flagId}
+                            flagStatus={row.status}
+                            colSpan={9}
+                            onClose={() => setExpandedDisputeId(null)}
+                          />
+                        </>
                       )}
                     </Fragment>
                   );
@@ -1091,6 +1649,57 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               )}
             </tbody>
           </table>
+
+          {/* Pagination Footer */}
+          {filteredReviewedDisputes.length > reviewedPageSize && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '12px 16px',
+                borderTop: '1px solid var(--qa-border, #E4E4E7)',
+              }}
+            >
+              <div style={{ fontSize: 13, color: '#6B6B6B' }}>
+                Page {reviewedPage + 1} of {Math.max(1, Math.ceil(filteredReviewedDisputes.length / reviewedPageSize))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  disabled={reviewedPage === 0}
+                  onClick={() => setReviewedPage((p) => Math.max(0, p - 1))}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: reviewedPage === 0 ? 'default' : 'pointer',
+                    opacity: reviewedPage === 0 ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Previous
+                </button>
+                <button
+                  disabled={(reviewedPage + 1) * reviewedPageSize >= filteredReviewedDisputes.length}
+                  onClick={() => setReviewedPage((p) => p + 1)}
+                  style={{
+                    height: 30,
+                    padding: '0 12px',
+                    borderRadius: 6,
+                    border: '1px solid #E4E4E7',
+                    background: '#FFFFFF',
+                    cursor: (reviewedPage + 1) * reviewedPageSize >= filteredReviewedDisputes.length ? 'default' : 'pointer',
+                    opacity: (reviewedPage + 1) * reviewedPageSize >= filteredReviewedDisputes.length ? 0.4 : 1,
+                    fontSize: 12,
+                  }}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

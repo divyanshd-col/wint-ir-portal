@@ -86,7 +86,7 @@ agents (id SERIAL PRIMARY KEY, name VARCHAR, team_id INT, status VARCHAR)
 Has a TIME dimension? (over N days/weeks, trend, daily, over time)
   → line_chart. GROUP BY closed_at::date (daily) or DATE_TRUNC('week', closed_at) (weekly). Alias date column AS "date", metric AS "value".
   → For CSAT over time: value = ROUND(COUNT(*) FILTER (WHERE csat_label='good')::numeric / NULLIF(COUNT(*) FILTER (WHERE csat_label IS NOT NULL),0)*100,1) — one row per day.
-  → For IQS over time: value = ROUND(AVG(i.iqs_score),1) — one row per day/week.
+  → For IQS over time / aggregate: SELECT date_trunc('week', c.closed_at)::date AS date, ROUND(AVG(i.iqs_score),1) AS value, jsonb_agg(i.parameters) FILTER (WHERE i.parameters IS NOT NULL) AS parameters FROM conversations c JOIN iqs_scores i ON i.chat_id = c.id ... — parameters is auto-pooled to compute exact weighted IQS.
   → NEVER use bar_chart when the question has a time dimension.
 
 No time dimension — comparing categories?

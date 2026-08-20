@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
+import { readConfig } from '@/lib/config';
 import TLDashboard from '@/components/cx/TLDashboard';
 import QADashboard from '@/components/cx/QADashboard';
 import AgentDashboard from '@/components/cx/AgentDashboard';
@@ -19,6 +20,13 @@ export default async function CXPage() {
 
   const isAdmin = !!user.isAdmin;
 
+  const config = await readConfig();
+  if (!config.cxDashboardEnabled) redirect('/');
+  const flags = {
+    callAnalysis: config.callAnalysisEnabled ?? false,
+    cxDashboard: config.cxDashboardEnabled ?? false,
+  };
+
   return (
     <div className="flex h-screen bg-[#1a1a1a]">
       {/* Sidebar */}
@@ -26,6 +34,7 @@ export default async function CXPage() {
         username={user.email ?? ''}
         role={role}
         isAdmin={isAdmin}
+        flags={flags}
       />
 
       {/* Main content */}

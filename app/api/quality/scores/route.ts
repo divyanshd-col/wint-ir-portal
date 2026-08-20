@@ -46,7 +46,9 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
 
   let botIqsScore: number | null = null;
   let callIqsScore: number | null = null;
+  let agentIqsScore: number | null = row.iqs != null ? Number(row.iqs) : null;
   if (params?.__scores) {
+    if (params.__scores.agent_iqs != null) agentIqsScore = parseFloat(params.__scores.agent_iqs);
     if (params.__scores.bot_iqs != null) botIqsScore = parseFloat(params.__scores.bot_iqs);
     if (params.__scores.call_iqs != null) callIqsScore = parseFloat(params.__scores.call_iqs);
   }
@@ -56,8 +58,8 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     chatId:          row.chatId,
     scoredAt:        row.scoredAt,
     agentName:       row.agentName || '',
-    date:            row.date ? String(row.date).slice(0, 10) : '',
-    iqs:             row.iqs,
+    date:            row.date ? (row.date instanceof Date ? row.date.toISOString().slice(0, 10) : typeof row.date === 'string' && row.date.includes('T') ? row.date.slice(0, 10) : String(row.date).slice(0, 10)) : '',
+    iqs:             agentIqsScore,
     botIqsScore:     botIqsScore ?? undefined,
     callIqsScore:    callIqsScore ?? undefined,
     csat:            csatStr,
@@ -88,6 +90,8 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const page          = Math.max(0, parseInt(searchParams.get('page') || '0'));
+  const limitParam    = parseInt(searchParams.get('limit') || searchParams.get('pageSize') || '50', 10);
+  const requestedPageSize = Math.min(100, Math.max(1, isNaN(limitParam) ? 50 : limitParam));
   const skipStats     = searchParams.get('skipStats') === '1';
   const agentFilter   = searchParams.get('agent') || '';
   const minScore      = searchParams.get('minScore') ? parseInt(searchParams.get('minScore')!) : 0;
@@ -109,33 +113,69 @@ export async function GET(req: NextRequest) {
   let scopedAgentNames: string[] | null = null; // null = no scope restriction
 
   let assignedDispositions: string[] | null = null;
+  let strictDispositions: string[] | null = null;
 
-  if (role === 'agent' || role === 'tl' || role === 'quality') {
+  if (role === 'agent' || role === 'tl' || role === 'quality' || role === 'admin') {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
     const email = session.user?.email || '';
-    const configUser = config.users.find(u => (u.email || u.username) === email);
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     selfAgentName = configUser?.agentName || '';
-    if (role === 'quality' && configUser?.assignedDispositions?.length) {
-      assignedDispositions = configUser.assignedDispositions;
+    if (!selfAgentName && email) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(email).catch(() => null);
+      if (dbUser?.name) {
+        selfAgentName = dbUser.name;
+      }
+    }
+    
+    const qaMapEntry = (config.qaDispositionMap ?? []).find(e => e.email.toLowerCase() === email.toLowerCase());
+    const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
+
+    if ((role === 'quality' || role === 'admin') && userDisps?.length) {
+      assignedDispositions = userDisps;
+      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+        strictDispositions = userDisps;
+      }
     }
   }
 
   if (role === 'agent' && selfAgentName) {
-    scopedAgentNames = [selfAgentName];
+    const { query: dbQuery } = await import('@/lib/cx/db');
+    const matchedRows = await dbQuery<{ name: string }>(
+      `SELECT name FROM agents WHERE name = $1 OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %'`,
+      [selfAgentName]
+    );
+    scopedAgentNames = matchedRows.length ? matchedRows.map(r => r.name) : [selfAgentName];
   } else if (role === 'tl' && selfAgentName) {
     scopedAgentNames = await getAgentNamesByTL(selfAgentName);
   } else if (role === 'quality' && selfAgentName) {
     scopedAgentNames = await getAgentNamesByQA(selfAgentName);
   }
 
-  // Push all filterable dimensions to DB — avoids fetching thousands of rows then filtering in memory
   const dbOpts: GetScoredConversationsOptions = {};
+  if (role === 'agent' || role === 'tl') {
+    dbOpts.excludeNil = true;
+  }
   if (!chatIdSearch) {
     if (dateFrom) dbOpts.dateFrom = dateFrom;
     if (dateTo)   dbOpts.dateTo   = dateTo;
-    if (tagFilter)     dbOpts.disposition     = tagFilter;
-    else if (assignedDispositions) dbOpts.dispositions = assignedDispositions; // soft default for QA
+    
+    if (strictDispositions) {
+      if (tagFilter) {
+        if (strictDispositions.includes(tagFilter)) {
+          dbOpts.disposition = tagFilter;
+        } else {
+          dbOpts.disposition = '__UNAUTHORIZED__';
+        }
+      } else {
+        dbOpts.dispositions = strictDispositions;
+      }
+    } else {
+      if (tagFilter)     dbOpts.disposition     = tagFilter;
+      else if (assignedDispositions) dbOpts.dispositions = assignedDispositions; // soft default for QA
+    }
+    
     if (subTagFilter)  dbOpts.subDisposition  = subTagFilter;
     if (csatFilter)    dbOpts.csat            = csatFilter;
     if (typeFilter)    dbOpts.conversationType = typeFilter;
@@ -157,7 +197,7 @@ export async function GET(req: NextRequest) {
   if (minScore)      dbOpts.iqsMin      = minScore;
   if (maxScore !== 100) dbOpts.iqsMax   = maxScore;
   dbOpts.page = page;
-  dbOpts.pageSize = PAGE_SIZE;
+  dbOpts.pageSize = requestedPageSize;
 
   let displayEntries: IQSScoreEntry[] = [];
   let totalFiltered = 0;
@@ -198,7 +238,9 @@ export async function GET(req: NextRequest) {
   try {
     const filters = await getScoredConversationsFilterOptions(filterOpts);
     availableAgents = filters.availableAgents;
-    availableDispositions = filters.availableDispositions;
+    availableDispositions = strictDispositions
+      ? filters.availableDispositions.filter(d => strictDispositions!.includes(d))
+      : filters.availableDispositions;
     availableSubDispositions = filters.availableSubDispositions;
     dispositionSubMap = filters.dispositionSubMap;
   } catch (err: any) {
@@ -212,11 +254,9 @@ export async function GET(req: NextRequest) {
   let weeklyParamData: any[] = [];
 
   try {
-    // We compute summary using the same search filters but without page limits
-    const statsOpts = { ...dbOpts, page: undefined, pageSize: undefined, limit: undefined };
-    summary = await getScoredConversationsSummary(statsOpts);
-
     if (!skipStats) {
+      const statsOpts = { ...dbOpts, page: undefined, pageSize: undefined, limit: undefined };
+      summary = await getScoredConversationsSummary(statsOpts);
       [agentStats, paramFails, weeklyParamData] = await Promise.all([
         getScoredConversationsAgentStats(statsOpts),
         getScoredConversationsParamFails(statsOpts),

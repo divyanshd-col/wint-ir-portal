@@ -2,8 +2,14 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { PARAM_ORDER, PARAM_NAMES, WEIGHTS, V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation } from '@/lib/quality';
+import {
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS,
+  BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS,
+  isV4Evaluation, getDisputeClassification, formatParamLabel,
+} from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -23,12 +29,16 @@ interface IRScorePanelProps {
   chatId: string;
   agentName: string;
   iqsScore: number | null;
+  botIqsScore?: number | null;
   closedAt: string;
   parameters: Record<string, any> | null;
   mode: 'evaluated' | 'pending' | 'reviewed';
   challengedParams?: ChallengedParam[];
+  agentNote?: string;
   reviewNote?: string;
   reviewedBy?: string;
+  flaggedAt?: string;
+  reviewedAt?: string;
   colSpan: number;
   flagId?: string;
   flagStatus?: string;
@@ -42,9 +52,11 @@ interface IRScorePanelProps {
 // this branch removed, and it collapses 0.5 half-scores to NA.)
 type DisplayScore = 'Yes' | 'No' | 'NA' | 'Half';
 
-function normalizeParams(raw: Record<string, any> | null, paramOrder: string[]) {
+function normalizeParams(raw: Record<string, any> | null, paramOrder: string[], isBot: boolean) {
   if (!raw) return {} as Record<string, { score: DisplayScore; reasoning: string }>;
-  const safe = raw.__agent_parameters || raw;
+  const safe = isBot
+    ? (raw.__bot_parameters || (raw.__agent_parameters ? {} : raw))
+    : (raw.__agent_parameters || raw);
   const out: Record<string, { score: DisplayScore; reasoning: string }> = {};
   for (const pascal of paramOrder) {
     const cell = resolveParamCell(safe, pascal);
@@ -84,15 +96,25 @@ function ScoreRing({ score }: { score: number | null }) {
 }
 
 export default function IRScorePanel({
-  chatId, agentName, iqsScore, closedAt, parameters, mode,
-  challengedParams = [], reviewNote, colSpan,
+  chatId, agentName, iqsScore, botIqsScore, closedAt, parameters, mode,
+  challengedParams = [], agentNote, reviewNote, reviewedBy, flaggedAt, reviewedAt, colSpan, flagId,
   onClose, onDisputeRaised, flagStatus,
 }: IRScorePanelProps) {
+  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>('agent');
   const isV4 = isV4Evaluation(parameters);
-  const activeParamOrder = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
-  const activeParamNames = isV4 ? PARAM_NAMES : V3_PARAM_NAMES;
-  const activeWeights    = isV4 ? WEIGHTS : V3_WEIGHTS;
-  const params = normalizeParams(parameters, activeParamOrder);
+  const activeParamOrder = activeTab === 'bot'
+    ? BOT_PARAM_ORDER
+    : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
+  const activeParamNames = activeTab === 'bot'
+    ? BOT_PARAM_NAMES
+    : (isV4 ? PARAM_NAMES : V3_PARAM_NAMES);
+  const activeWeights = activeTab === 'bot'
+    ? BOT_WEIGHTS
+    : (isV4 ? WEIGHTS : V3_WEIGHTS);
+  const params = normalizeParams(parameters, activeParamOrder, activeTab === 'bot');
+  const currentScore = activeTab === 'bot'
+    ? (botIqsScore ?? parameters?.__scores?.bot_iqs ?? null)
+    : (iqsScore ?? parameters?.__scores?.agent_iqs ?? null);
 
   const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
   const [txLoading, setTxLoading] = useState(true);
@@ -103,6 +125,10 @@ export default function IRScorePanel({
   const [disputeDone, setDisputeDone] = useState(false);
   const [error, setError] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    setActiveTab('agent');
+  }, [chatId]);
 
   useEffect(() => {
     setTxLoading(true);
@@ -122,11 +148,17 @@ export default function IRScorePanel({
   }, [chatId]);
 
   const togglePick = useCallback((param: string) => {
+    const pickKey = `${activeTab}:${param}`;
     setPicks(prev => {
       const next = new Set(prev);
-      if (next.has(param)) next.delete(param); else next.add(param);
+      if (next.has(pickKey)) next.delete(pickKey); else next.add(pickKey);
       return next;
     });
+  }, [activeTab]);
+
+  const startDisputing = useCallback(() => {
+    setDisputing(true);
+    setPicks(new Set());
   }, []);
 
   const canSubmit = picks.size > 0 && sharedNote.trim().length > 0;
@@ -179,7 +211,7 @@ export default function IRScorePanel({
             {/* Header */}
             <div style={{ padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <ScoreRing score={iqsScore} />
+                <ScoreRing score={currentScore} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#111111' }}>{agentName || '—'}</div>
                   <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 6 }}>
@@ -190,13 +222,56 @@ export default function IRScorePanel({
               </div>
             </div>
 
-            {/* Section label */}
+            {/* Tab header */}
             <div style={{
-              fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
-              color: '#A1A1AA', padding: '16px 16px 4px', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '12px 16px 0', borderBottom: '1px solid #E4E4E7', flexShrink: 0,
             }}>
-              Parameter Scores
+              <div style={{ display: 'flex', gap: 16 }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('agent')}
+                  style={{
+                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
+                    color: activeTab === 'agent' ? '#111111' : '#A1A1AA',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                    borderBottom: activeTab === 'agent' ? '2px solid #111111' : '2px solid transparent',
+                    background: 'none', cursor: 'pointer', fontFamily: SANS,
+                  }}
+                >
+                  Agent Parameters
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('bot')}
+                  style={{
+                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
+                    color: activeTab === 'bot' ? '#111111' : '#A1A1AA',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
+                    borderBottom: activeTab === 'bot' ? '2px solid #111111' : '2px solid transparent',
+                    background: 'none', cursor: 'pointer', fontFamily: SANS,
+                  }}
+                >
+                  Bot Parameters
+                </button>
+              </div>
+              {disputing && (
+                <span style={{ fontSize: 11, color: '#2563eb', fontWeight: 600, paddingBottom: 8 }}>
+                  {picks.size} selected for dispute
+                </span>
+              )}
             </div>
+
+            {disputing && (
+              <div style={{
+                fontSize: 12, color: '#1d4ed8', background: '#eff6ff', border: '1px solid #bfdbfe',
+                borderRadius: 6, padding: '8px 12px', margin: '4px 16px 8px', flexShrink: 0,
+              }}>
+                Select parameter(s) to challenge on the left, then write your reason on the right.
+              </div>
+            )}
+
+
 
             {/* Params */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -205,8 +280,9 @@ export default function IRScorePanel({
                   const entry = params[param];
                   const score = entry?.score || 'NA';
                   const reasoning = entry?.reasoning || '';
-                  const dispChallenge = challengedParams.find(c => c.param === param);
-                  const isPicked = picks.has(param);
+                  const pickKey = `${activeTab}:${param}`;
+                  const dispChallenge = challengedParams.find(c => c.param === pickKey || (activeTab === 'agent' && c.param === param));
+                  const isPicked = picks.has(pickKey);
                   const weight = activeWeights?.[param] != null ? `${Math.round((activeWeights[param] ?? 0) * 100)}%` : '';
                   const isLast = idx === activeParamOrder.length - 1;
 
@@ -228,6 +304,15 @@ export default function IRScorePanel({
                       onMouseLeave={disputing ? e => { (e.currentTarget as HTMLElement).style.background = isPicked ? '#FAFAFB' : 'transparent'; } : undefined}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {disputing && (
+                          <input
+                            type="checkbox"
+                            checked={isPicked}
+                            onChange={() => togglePick(param)}
+                            onClick={e => e.stopPropagation()}
+                            style={{ cursor: 'pointer', width: 16, height: 16, accentColor: '#111111' }}
+                          />
+                        )}
                         <span style={{ fontSize: 13, fontWeight: 500, color: '#111111', flex: '0 1 auto' }}>
                           {activeParamNames[param] || param}
                         </span>
@@ -341,7 +426,7 @@ export default function IRScorePanel({
                     background: '#FFFFFF', border: '1px solid #E4E4E7',
                     fontSize: 13, fontWeight: 500, color: '#111111', cursor: 'pointer', fontFamily: SANS,
                   }}
-                  onClick={() => setDisputing(true)}
+                  onClick={startDisputing}
                 >
                   Raise Dispute
                 </button>
@@ -380,7 +465,7 @@ export default function IRScorePanel({
                 <span style={{ fontSize: 13, color: '#A1A1AA' }}>{pendingStatusLabel}</span>
               )}
               {mode === 'reviewed' && (
-                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{reviewedOutcome}</span>
+                <span style={{ fontSize: 13, color: '#A1A1AA' }}>{reviewedOutcome}{reviewedBy ? ` by ${reviewedBy}` : ''}</span>
               )}
 
               {error && <span style={{ fontSize: 12, color: '#DC2626' }}>{error}</span>}
@@ -437,9 +522,23 @@ export default function IRScorePanel({
                     const isUser = msg.role === 'user';
                     const isSystem = msg.role === 'system';
 
+                    const formatTs = (ts?: string) => {
+                      if (!ts) return '';
+                      const d = new Date(ts);
+                      if (isNaN(d.getTime())) return String(ts);
+                      return d.toLocaleString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true,
+                      });
+                    };
+
                     if (isSystem) {
                       const systemTime = msg.timestamp
-                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        ? '  •  ' + formatTs(msg.timestamp)
                         : '';
                       return (
                         <div key={i} style={{ marginTop: i === 0 ? 0 : 8 }}>
@@ -454,13 +553,14 @@ export default function IRScorePanel({
                       );
                     }
 
+                    const timeStr = msg.timestamp ? formatTs(msg.timestamp) : '';
+                    const roleLabel = isUser ? 'User' : isAgent ? 'Agent' : 'Bot';
+
                     return (
                       <div key={i} style={{ marginTop: i === 0 ? 0 : 8, display: 'flex', flexDirection: 'column', alignItems: isUser ? 'flex-start' : 'flex-end' }}>
-                        {!isUser && (
-                          <div style={{ fontSize: 11, color: '#A1A1AA', marginBottom: 4 }}>
-                            {isAgent ? 'Agent' : 'Bot'}
-                          </div>
-                        )}
+                        <div style={{ fontSize: 11, color: '#A1A1AA', marginBottom: 4 }}>
+                          {roleLabel}{timeStr ? ` · ${timeStr}` : ''}
+                        </div>
                         <div style={{
                           background: isUser ? '#FFFFFF' : isAgent ? '#2D2D31' : '#F4F4F5',
                           color: isUser ? '#111111' : isAgent ? '#fff' : '#111111',

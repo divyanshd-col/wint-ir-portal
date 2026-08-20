@@ -82,6 +82,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   // Role-based agent scoping
   let agentNames: string[] | undefined;
+  let dispositions: string[] | undefined;
+
+  const { readConfig } = await import('@/lib/config');
+  const config = await readConfig();
+  const map = config.qaDispositionMap ?? [];
+  const qaEntry = map.find(e => e.email.toLowerCase() === userEmail.toLowerCase());
+
   if (role === 'agent') {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
@@ -95,11 +102,19 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     const tlAgentName = configUser?.agentName || userEmail;
     const tlAgents = await getAgentNamesByTL(tlAgentName);
     agentNames = agentFilter ? tlAgents.filter(n => n === agentFilter) : tlAgents;
-  } else if (role === 'quality') {
-    const qaAgents = await getAgentNamesByQA(userEmail);
-    agentNames = agentFilter ? qaAgents.filter(n => n === agentFilter) : qaAgents;
+  } else if (role === 'quality' || role === 'admin') {
+    if (role === 'quality') {
+      const qaAgents = await getAgentNamesByQA(userEmail);
+      agentNames = agentFilter ? qaAgents.filter(n => n === agentFilter) : qaAgents;
+    }
+
+    if (qaEntry && userEmail.toLowerCase() !== 'manorathi@wintwealth.com' && userEmail.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+      dispositions = qaEntry.dispositions;
+      if (dispositions.length === 0) {
+        return NextResponse.json({ ok: true, entries: [], total: 0, page, hasMore: false, stats: { totalCalls: 0 } });
+      }
+    }
   }
-  // admin/undefined -> agentNames stays undefined (all agents)
 
   let rows: any[] = [];
   let total = 0;
@@ -107,6 +122,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ({ rows, total } = await getAllScoredCalls({
       agentName: !agentNames && agentFilter ? agentFilter : undefined,
       agentNames: agentNames,
+      dispositions: dispositions,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       minScore,

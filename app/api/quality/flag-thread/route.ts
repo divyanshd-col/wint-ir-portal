@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 // POST — add a comment to a flag thread. TL is view-only; disputes are QA-owned,
 // and the agent who raised the dispute can reply. TL may still read via GET.
 export async function POST(req: NextRequest) {
-  const { session, response } = await requireRole(['admin', 'quality', 'agent']);
+  const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
   const { flagId, content } = await req.json();
@@ -29,8 +29,14 @@ export async function POST(req: NextRequest) {
   const role = (session.user as any)?.role || 'agent';
   const { readConfig } = await import('@/lib/config');
   const config = await readConfig();
-  const configUser = config.users.find(u => (u.email || u.username) === email);
-  const authorName = configUser?.agentName || email.split('@')[0];
+  const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  let authorName: string = configUser?.agentName || '';
+  if (!authorName && email) {
+    const { getUserByEmail } = await import('@/lib/users');
+    const dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser?.name) authorName = dbUser.name;
+  }
+  if (!authorName) authorName = email.split('@')[0] || 'User';
 
   const comment: IQSFlagComment = {
     id: randomUUID(),

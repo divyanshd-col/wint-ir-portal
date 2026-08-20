@@ -29,8 +29,46 @@ export async function GET(req: NextRequest) {
     flags = flags.filter(f => f.status === 'tl_resolved' || f.status === 'reviewed');
   }
 
-  // Enrich with iqs_score + closed_at + bot/call IQS + csat from DB
-  const enriched = await Promise.all(flags.map(async (f) => {
+  // Enrich with iqs_score + closed_at + bot/call IQS + csat from DB (batch queries)
+  const chatIds = [...new Set(flags.map(f => f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(flags.map(f => f.callId || f.chatId).filter(Boolean))];
+  const rowMap = new Map<string, any>();
+  const callRowMap = new Map<string, any>();
+
+  try {
+    const { query } = await import('@/lib/cx/db');
+    if (chatIds.length > 0) {
+      const rows = await query<any>(
+        `SELECT s.chat_id, s.iqs_score, c.closed_at, s.parameters, c.csat_score, c.tags
+         FROM iqs_scores s
+         LEFT JOIN conversations c ON c.id = s.chat_id
+         WHERE s.chat_id = ANY($1)`,
+        [chatIds]
+      );
+      for (const r of rows) {
+        if (r.chat_id) rowMap.set(String(r.chat_id), r);
+      }
+    }
+    if (targetCallIds.length > 0) {
+      const callRows = await query<any>(
+        `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, cr.called_at, cr.call_disposition, cr.call_sub_disposition
+         FROM call_evaluations ce
+         JOIN call_recordings cr ON cr.id = ce.call_id
+         WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
+        [targetCallIds]
+      );
+      for (const r of callRows) {
+        if (r.call_id) callRowMap.set(String(r.call_id), r);
+        if (r.chat_id) callRowMap.set(String(r.chat_id), r);
+      }
+    }
+  } catch {
+    // DB unavailable — return flag data only
+  }
+
+  const { computeIqsFromRawParams } = await import('@/lib/quality');
+
+  const enriched = flags.map((f) => {
     let iqsScore: number | null = null;
     let botIqsScore: number | null = null;
     let callIqsScore: number | null = null;
@@ -40,62 +78,36 @@ export async function GET(req: NextRequest) {
     let disposition = '';
     let subDisposition: string | null = null;
 
-    try {
-      const { query } = await import('@/lib/cx/db');
-      // iqs_scores' primary key is chat_id, NOT conversation_id. The old column
-      // name threw on every row, the bare catch swallowed it, and the agent saw
-      // "—" for IQS and a null parameters panel on every dispute.
-      const rows = await query<any>(
-        `SELECT s.iqs_score, c.closed_at, s.parameters, c.csat_score, c.tags
-         FROM iqs_scores s
-         LEFT JOIN conversations c ON c.id = s.chat_id
-         WHERE s.chat_id = $1
-         LIMIT 1`,
-        [f.chatId],
-      );
-      if (rows.length > 0) {
-        iqsScore = rows[0].iqs_score != null ? parseFloat(rows[0].iqs_score) : null;
-        closedAt = rows[0].closed_at ? new Date(rows[0].closed_at).toISOString() : null;
-        parameters = rows[0].parameters ?? null;
-        csatScore = rows[0].csat_score ?? null;
-        const tags = rows[0].tags || {};
-        disposition = tags.disposition || '';
-        subDisposition = tags.sub_disposition || null;
+    const row = rowMap.get(String(f.chatId));
+    const targetCallId = f.callId || f.chatId;
+    const cRow = targetCallId ? callRowMap.get(String(targetCallId)) : null;
 
-        if (parameters?.__scores) {
-          if (parameters.__scores.bot_iqs != null) botIqsScore = parseFloat(parameters.__scores.bot_iqs);
-          if (parameters.__scores.agent_iqs != null) iqsScore = parseFloat(parameters.__scores.agent_iqs);
-          if (parameters.__scores.call_iqs != null) callIqsScore = parseFloat(parameters.__scores.call_iqs);
-        }
-        if (botIqsScore === null && parameters) {
-          const { computeIqsFromRawParams } = await import('@/lib/quality');
-          botIqsScore = computeIqsFromRawParams(parameters, true);
-        }
-      }
+    if (row) {
+      iqsScore = row.iqs_score != null ? parseFloat(row.iqs_score) : null;
+      closedAt = row.closed_at ? new Date(row.closed_at).toISOString() : null;
+      parameters = row.parameters ?? null;
+      csatScore = row.csat_score ?? null;
+      const tags = row.tags || {};
+      disposition = tags.disposition || '';
+      subDisposition = tags.sub_disposition || null;
 
-      // If no chat score found or flag is explicitly for a call, try call_evaluations & call_recordings
-      const targetCallId = f.callId || f.chatId;
-      if (targetCallId) {
-        const callRows = await query<any>(
-          `SELECT ce.iqs_percent, ce.iqs_scores, cr.called_at, cr.call_disposition, cr.call_sub_disposition
-           FROM call_evaluations ce
-           JOIN call_recordings cr ON cr.id = ce.call_id
-           WHERE ce.call_id = $1 OR ce.chat_id = $1
-           LIMIT 1`,
-          [targetCallId]
-        );
-        if (callRows.length > 0) {
-          const cRow = callRows[0];
-          callIqsScore = cRow.iqs_percent != null ? parseFloat(cRow.iqs_percent) : null;
-          if (iqsScore === null) iqsScore = callIqsScore;
-          if (!closedAt && cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
-          if (!disposition) disposition = cRow.call_disposition || '';
-          if (!subDisposition) subDisposition = cRow.call_sub_disposition || null;
-          if (!parameters) parameters = cRow.iqs_scores ?? null;
-        }
+      if (parameters?.__scores) {
+        if (parameters.__scores.bot_iqs != null) botIqsScore = parseFloat(parameters.__scores.bot_iqs);
+        if (parameters.__scores.agent_iqs != null) iqsScore = parseFloat(parameters.__scores.agent_iqs);
+        if (parameters.__scores.call_iqs != null) callIqsScore = parseFloat(parameters.__scores.call_iqs);
       }
-    } catch {
-      // DB unavailable — return flag data only
+      if (botIqsScore === null && parameters) {
+        botIqsScore = computeIqsFromRawParams(parameters, true);
+      }
+    }
+
+    if (cRow) {
+      callIqsScore = cRow.iqs_percent != null ? parseFloat(cRow.iqs_percent) : null;
+      if (iqsScore === null) iqsScore = callIqsScore;
+      if (!closedAt && cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
+      if (!disposition) disposition = cRow.call_disposition || '';
+      if (!subDisposition) subDisposition = cRow.call_sub_disposition || null;
+      if (!parameters) parameters = cRow.iqs_scores ?? null;
     }
 
     return {
@@ -118,7 +130,7 @@ export async function GET(req: NextRequest) {
       parameters,
       flaggedAt: f.flaggedAt,
     };
-  }));
+  });
 
   // Sort newest first
   enriched.sort((a, b) => new Date(b.flaggedAt).getTime() - new Date(a.flaggedAt).getTime());

@@ -4,7 +4,7 @@ import { readConfig } from '@/lib/config';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { fireQualityAlert } from '@/lib/quality-alert';
+import { fireQualityAlert, fireBotQualityAlert } from '@/lib/quality-alert';
 import {
   getSystemPrompt, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
@@ -316,13 +316,17 @@ export async function executeScoring(
     question: primaryPass.parameters[p]?.comment || '' 
   })) || [];
 
+  const noGradeableLeg =
+    Object.keys(parameters).length === 0 ||
+    Object.values(parameters).every(p => p.score === null);
+
   await insertIQSScore({
     chatId,
-    iqsScore: isBotOnly ? null : (humanPass?.iqs_score || primaryPass.iqs_score || 0),
+    iqsScore: (isBotOnly || noGradeableLeg) ? null : (humanPass?.iqs_score ?? primaryPass.iqs_score ?? 0),
     parameters,
     modelVersion,
     uncertainParameters,
-    botIqsScore: botPass ? (botPass.iqs_score || 0) : undefined,
+    botIqsScore: botPass ? (botPass.iqs_score ?? 0) : undefined,
     botParameters,
     botModelVersion: botPass ? modelVersion : undefined,
     breaches: primaryPass.breaches?.map((b: any) => `${b.type}: ${b.quote}`),
@@ -364,7 +368,22 @@ export async function executeScoring(
     disposition,
     subDisposition,
     uncertainParameters,
+    breaches:            primaryPass.breaches,
+    complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
   }).catch(() => {});
+
+  if (botParameters) {
+    fireBotQualityAlert({
+      chatId,
+      agentName:           finalAgentName,
+      contactPhone,
+      scores:              Object.fromEntries(Object.entries(botParameters).map(([k,v]) => [k, String(v.score)])),
+      reasoning:           Object.fromEntries(Object.entries(botParameters).map(([k,v]) => [k, v.reasoning])),
+      iqs:                 botPass?.iqs_score ?? undefined,
+      disposition,
+      subDisposition,
+    }).catch(() => {});
+  }
 
   return { 
     chatId, 

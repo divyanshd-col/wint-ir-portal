@@ -38,16 +38,22 @@ export async function GET(req: NextRequest) {
 
   if (role === 'tl') {
     const config = await readConfig();
-    const configUser = config.users.find((u: any) => (u.email || u.username) === email);
+    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const selfAgentName = configUser?.agentName || '';
     if (selfAgentName) scopedAgentNames = await getAgentNamesByTL(selfAgentName);
-  } else if (role === 'quality') {
+  } else if (role === 'quality' || role === 'admin') {
     const config = await readConfig();
-    const configUser = config.users.find((u: any) => (u.email || u.username) === email);
+    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const selfAgentName = configUser?.agentName || '';
-    if (selfAgentName) scopedAgentNames = await getAgentNamesByQA(selfAgentName);
-    if ((configUser as any)?.assignedCallDispositions?.length) {
-      assignedCallDispositions = (configUser as any).assignedCallDispositions as string[];
+    if (selfAgentName && role === 'quality') scopedAgentNames = await getAgentNamesByQA(selfAgentName);
+    
+    const map = config.qaDispositionMap ?? [];
+    const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
+
+    if ((role === 'quality' || qaEntry) && (configUser as any)?.assignedCallDispositions?.length) {
+      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+        assignedCallDispositions = (configUser as any).assignedCallDispositions as string[];
+      }
     }
   }
 

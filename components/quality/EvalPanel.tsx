@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
-  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation,
+  V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification, formatParamLabel,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -41,7 +42,10 @@ export interface EvalPanelProps {
   mobileNumber?: string | null;
   reviewedBy?:   string | null;
   reviewedAt?:   string | null;
+  reviewerRole?: string | null;
   reviewNote?:   string | null;
+  allowRaiseDispute?: boolean;
+  onDisputeRaised?:   () => void;
   onDone:        () => void;
   onClose:       () => void;
   colSpan:       number;
@@ -60,7 +64,18 @@ interface TMessage {
 
 // ── SVG Score Ring ────────────────────────────────────────────────────────────
 
-function ScoreRing({ score }: { score: number }) {
+function ScoreRing({ score }: { score: number | null }) {
+  if (score == null) {
+    return (
+      <svg width="64" height="64" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+        <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-fill-med)" strokeWidth="5" />
+        <text x="32" y="33" textAnchor="middle" dominantBaseline="central"
+          fontSize="14" fontWeight="700" fill="var(--qa-text-3)" fontFamily="inherit">
+          NIL
+        </text>
+      </svg>
+    );
+  }
   const RING_C   = 169.6;
   const offset   = ((100 - Math.max(0, Math.min(100, score))) / 100 * RING_C).toFixed(1);
   return (
@@ -132,7 +147,8 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
   parameters, gates, mode, dispute, flagId,
-  mobileNumber, reviewedBy, reviewNote,
+  mobileNumber, reviewedBy, reviewedAt, reviewerRole, reviewNote,
+  allowRaiseDispute, onDisputeRaised,
   onDone, onClose, colSpan, conversationType,
 }: EvalPanelProps) {
 
@@ -141,17 +157,24 @@ export default function EvalPanel({
   // them forced every v4 human-only chat onto the bot tab. Look at __bot_parameters
   // when present, otherwise the top level only if there is no __agent_parameters.
   const BOT_ONLY_PARAM_KEYS = [
-    'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
-    'CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity',
+    'correct_escalation', 'no_repetition', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'Clarity',
   ];
-  const botParamsSrc: Record<string, any> = parameters?.__bot_parameters
-    || (parameters?.__agent_parameters ? {} : parameters) || {};
-  const hasBotParams = Object.keys(botParamsSrc).some(k => BOT_ONLY_PARAM_KEYS.includes(k));
-  const isBotChat = conversationType === 'bot' || (conversationType !== 'agent' && conversationType !== 'hybrid' && hasBotParams);
+  const botParamsSrc: Record<string, any> = parameters?.__bot_parameters || {};
+  const hasBotParams = Object.keys(botParamsSrc).some(k => BOT_ONLY_PARAM_KEYS.includes(k)) || !!parameters?.__bot_parameters || !!(parameters as any)?.__scores?.bot_iqs;
+  const isBotChat = conversationType === 'bot';
   const isHybrid = conversationType === 'hybrid';
-  const showTabs = isHybrid;
+  const showTabs = isHybrid || hasBotParams || !!parameters?.__agent_parameters || (!!parameters && Object.keys(parameters).length > 0);
 
-  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(isBotChat ? 'bot' : 'agent');
+  const disputeTarget = getDisputeClassification(dispute?.challengedParams, conversationType);
+
+  const [activeTab, setActiveTab] = useState<'agent' | 'bot'>(() => {
+    if (dispute?.challengedParams && dispute.challengedParams.length > 0) {
+      if (disputeTarget.type === 'bot') return 'bot';
+      if (disputeTarget.type === 'agent') return 'agent';
+    }
+    return isBotChat ? 'bot' : 'agent';
+  });
 
   const isV4 = isV4Evaluation(parameters);
 
@@ -204,7 +227,87 @@ export default function EvalPanel({
   const [historyOpen,    setHistoryOpen]    = useState(false);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  const [needsKbUpdate, setNeedsKbUpdate] = useState(false);
+  const initialNeedsKbUpdate = Boolean(
+    (parameters as any)?.__needs_kb_update?.score === true ||
+    (parameters as any)?.__needs_kb_update?.score === 'true' ||
+    (parameters as any)?.__needs_kb_update === true ||
+    (parameters as any)?.needs_kb_update?.score === true
+  );
+  const [needsKbUpdate, setNeedsKbUpdate] = useState(initialNeedsKbUpdate);
+  const initialKbComment = (parameters as any)?.__needs_kb_update?.reasoning || '';
+  const [kbComment, setKbComment] = useState<string>(initialKbComment);
+
+  useEffect(() => {
+    setNeedsKbUpdate(Boolean(
+      (parameters as any)?.__needs_kb_update?.score === true ||
+      (parameters as any)?.__needs_kb_update?.score === 'true' ||
+      (parameters as any)?.__needs_kb_update === true ||
+      (parameters as any)?.needs_kb_update?.score === true
+    ));
+    setKbComment((parameters as any)?.__needs_kb_update?.reasoning || '');
+  }, [chatId, parameters]);
+
+  const [userRole, setUserRole] = useState<string>(reviewerRole || '');
+
+  useEffect(() => {
+    if (!userRole) {
+      fetch('/api/users/me')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.role) setUserRole(d.role); })
+        .catch(() => {});
+    }
+  }, [userRole]);
+
+  const canMarkKb = ['admin', 'quality'].includes((userRole || reviewerRole || '').toLowerCase());
+
+
+
+  // Dispute creation state (for TL)
+  const [disputing, setDisputing] = useState(false);
+  const [disputePicks, setDisputePicks] = useState<Set<string>>(new Set());
+  const [disputeReason, setDisputeReason] = useState('');
+  const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [disputeDone, setDisputeDone] = useState(false);
+  const [disputeError, setDisputeError] = useState('');
+
+  function toggleDisputePick(pascal: string) {
+    setDisputePicks(prev => {
+      const next = new Set(prev);
+      if (next.has(pascal)) next.delete(pascal); else next.add(pascal);
+      return next;
+    });
+  }
+
+  async function submitTLDispute() {
+    if (disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting) return;
+    setDisputeSubmitting(true);
+    setDisputeError('');
+    try {
+      const challengedParams = [...disputePicks].map(p => ({
+        param: p,
+        note: disputeReason.trim(),
+      }));
+      const res = await fetch('/api/quality/flag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chatId,
+          challengedParams,
+          agentNote: disputeReason.trim(),
+          raisedByRole: 'tl',
+        }),
+      });
+      const d = await res.json();
+      if (!res.ok || d.error) throw new Error(d.error ?? 'Failed to submit dispute');
+      setDisputeDone(true);
+      setDisputing(false);
+      onDisputeRaised?.();
+    } catch (err: any) {
+      setDisputeError(err.message || 'Failed to submit dispute');
+    } finally {
+      setDisputeSubmitting(false);
+    }
+  }
 
   const disputeMap = new Map<string, { note: string }>(
     (dispute?.challengedParams ?? []).map(d => [d.param, { note: d.note }])
@@ -254,6 +357,7 @@ export default function EvalPanel({
 
   const isModified = (() => {
     let mod = false;
+    if (needsKbUpdate !== initialNeedsKbUpdate || (needsKbUpdate && kbComment.trim() !== initialKbComment.trim())) mod = true;
     const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
     if (checkAgent) {
       const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
@@ -276,7 +380,10 @@ export default function EvalPanel({
     return mod;
   })();
 
-  const primaryLabel = mode === 'resolve' ? (isModified ? 'Override & Resolve' : 'Resolve') : (isModified ? 'Override' : 'Submit');
+  const primaryLabel = mode === 'resolve'
+    ? (isModified ? 'Override & Resolve' : 'Resolve')
+    : (isModified ? 'Save / Override' : 'Submit');
+
 
   // Fetch transcript on mount
   useEffect(() => {
@@ -332,6 +439,14 @@ export default function EvalPanel({
 
   // Submit evaluation
   async function submit() {
+    let noteToUse = noteText.trim();
+    if (mode === 'resolve' && !noteToUse) {
+      const promptNote = prompt('Enter a resolution note explaining the decision for Agent & TL:');
+      if (promptNote === null) return; // User cancelled prompt
+      noteToUse = promptNote.trim();
+      if (noteToUse) setNoteText(noteToUse);
+    }
+
     setSubmitting(true);
     setSubmitErr('');
     try {
@@ -339,9 +454,9 @@ export default function EvalPanel({
         : (isModified ? 'override' : 'submit');
 
       const body: any = { action, flagId };
-      if (noteText.trim()) body.note = noteText.trim();
+      if (noteToUse) body.note = noteToUse;
 
-      if (isModified) {
+      if (isModified || needsKbUpdate !== initialNeedsKbUpdate || needsKbUpdate) {
         const params: Record<string, { score: number | null; reasoning: string }> = {};
         
         const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
@@ -369,7 +484,7 @@ export default function EvalPanel({
           }
         }
         
-        if (needsKbUpdate) params['__needs_kb_update'] = { score: true, reasoning: '' } as any;
+        params['__needs_kb_update'] = { score: needsKbUpdate, reasoning: kbComment.trim() || noteToUse || '' } as any;
         body.parameters = params;
       }
 
@@ -392,6 +507,20 @@ export default function EvalPanel({
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
 
+  function formatTranscriptDate(ts?: string | number | null): string {
+    if (!ts) return '';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return String(ts);
+    return d.toLocaleString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }
+
   // ── Transcript helpers ────────────────────────────────────────────────────
   const BOT_NAMES  = new Set(['bot', 'myra', 'wint bot', 'wintbot', 'robylon', 'robylon ai']);
   const USER_NAMES = new Set(['user', 'customer', 'visitor']);
@@ -410,27 +539,24 @@ export default function EvalPanel({
     background: 'var(--qa-gray-50)',
   };
   const panelWrap: React.CSSProperties = {
-    display: 'flex', height: 520,
+    display: 'flex', height: 520, width: '100%', maxWidth: '100%',
     border: '1px solid var(--qa-border)', borderRadius: 8,
     background: 'var(--qa-card)', overflow: 'hidden',
-    margin: 16,
+    margin: '16px auto', boxSizing: 'border-box',
   };
   const leftPanel: React.CSSProperties = {
-    // Wider param column, but allowed to shrink back to 400 when space is
-    // tight so the transcript pane stays readable.
-    width: 496, minWidth: 400, flexShrink: 1,
+    width: 440, minWidth: 320, maxWidth: '48%', flexShrink: 1,
     borderRight: '1px solid var(--qa-border)',
-    display: 'flex', flexDirection: 'column',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
   };
   const rightPanel: React.CSSProperties = {
-    // minWidth keeps the transcript readable — below it, the left column
-    // shrinks back toward 400 instead.
-    flex: 1, minWidth: 360, display: 'flex', flexDirection: 'column',
+    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',
   };
 
   return (
     <tr className="eval-panel-row">
-      <td colSpan={colSpan} style={td}>
+      <td colSpan={colSpan} style={{ ...td, maxWidth: 0, overflow: 'hidden' }}>
         <div style={panelWrap}>
 
           {/* ── LEFT ── */}
@@ -461,6 +587,15 @@ export default function EvalPanel({
                         <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
                           Disputed by {dispute.raisedBy} ({dispute.raisedByName})
                         </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          background: disputeTarget.badgeBg, color: disputeTarget.badgeText,
+                          border: `1px solid ${disputeTarget.badgeBorder}`,
+                          borderRadius: 4, padding: '1px 6px', marginLeft: 4,
+                          display: 'inline-block', verticalAlign: 'middle',
+                        }}>
+                          {disputeTarget.label}
+                        </span>
                       </>
                     )}
                     {mode === 'view' && reviewedBy && (
@@ -475,6 +610,8 @@ export default function EvalPanel({
 
             </div>
 
+
+
             {/* Param list */}
             {showTabs ? (
               <div style={{ display: 'flex', padding: '16px 16px 0', borderBottom: '1px solid var(--qa-border)', gap: 16 }}>
@@ -483,8 +620,9 @@ export default function EvalPanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'agent' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'agent' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    cursor: 'pointer'
+                    background: 'none', cursor: 'pointer'
                   }}
                 >
                   Agent Parameters
@@ -494,8 +632,9 @@ export default function EvalPanel({
                   style={{
                     fontSize: 12, fontWeight: 600, paddingBottom: 8,
                     color: activeTab === 'bot' ? 'var(--qa-text)' : 'var(--qa-text-3)',
+                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
                     borderBottom: activeTab === 'bot' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    cursor: 'pointer'
+                    background: 'none', cursor: 'pointer'
                   }}
                 >
                   Bot Parameters
@@ -525,7 +664,10 @@ export default function EvalPanel({
               </div>
               {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
-                const disputed = disputeMap.get(pascal);
+                const pickKey  = `${activeTab}:${pascal}`;
+                const disputed = (dispute?.challengedParams ?? []).find(c =>
+                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal) || c.param.toLowerCase() === pickKey.toLowerCase()
+                );
                 const paramReadOnly = isReadOnly;
                 return (
                   <div key={pascal} style={{
@@ -537,6 +679,14 @@ export default function EvalPanel({
                     } : {}),
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {disputing && (
+                        <input
+                          type="checkbox"
+                          checked={disputePicks.has(pascal)}
+                          onChange={() => toggleDisputePick(pascal)}
+                          style={{ cursor: 'pointer', width: 15, height: 15, accentColor: 'var(--qa-gray-700)' }}
+                        />
+                      )}
                       <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
                         {activeParamNames[pascal]}
                         {disputed && (
@@ -630,17 +780,17 @@ export default function EvalPanel({
               })}
             </div>
 
-            {/* Review note (QA modes) */}
-            {(mode === 'submit' || mode === 'resolve') && (
-              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
-                  Review Note
+            {/* Dispute composer for TL */}
+            {disputing && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
+                  Reason for Dispute (QA Review)
                 </div>
                 <textarea
-                  value={noteText}
-                  onChange={e => setNoteText(e.target.value)}
-                  placeholder="Add your evaluation comment…"
-                  rows={2}
+                  value={disputeReason}
+                  onChange={e => setDisputeReason(e.target.value)}
+                  placeholder="Explain why you disagree with the score on selected parameters…"
+                  rows={3}
                   style={{
                     width: '100%', resize: 'vertical',
                     border: '1px solid var(--qa-border)', borderRadius: 6,
@@ -649,19 +799,39 @@ export default function EvalPanel({
                     background: 'var(--qa-card)', outline: 'none',
                   }}
                 />
-                {isModified && (
-                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={needsKbUpdate}
-                      onChange={e => setNeedsKbUpdate(e.target.checked)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    Mark for Prompt / KB update
-                  </label>
+                {disputeError && (
+                  <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 6 }}>{disputeError}</div>
                 )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginRight: 'auto' }}>
+                    {disputePicks.size} parameter{disputePicks.size === 1 ? '' : 's'} selected
+                  </span>
+                  <button
+                    onClick={() => { setDisputing(false); setDisputePicks(new Set()); setDisputeReason(''); setDisputeError(''); }}
+                    style={{
+                      height: 30, padding: '0 12px', borderRadius: 6, border: '1px solid var(--qa-border)',
+                      background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitTLDispute}
+                    disabled={disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting}
+                    style={{
+                      height: 30, padding: '0 14px', borderRadius: 6, border: 'none',
+                      background: 'var(--qa-gray-700)', color: '#fff', fontSize: 12, fontWeight: 500,
+                      cursor: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 'not-allowed' : 'pointer',
+                      opacity: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 0.6 : 1,
+                    }}
+                  >
+                    {disputeSubmitting ? 'Sending to QA…' : 'Submit Dispute to QA'}
+                  </button>
+                </div>
               </div>
             )}
+
+
             {isReadOnly && reviewNote && (
               <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 4 }}>
@@ -683,8 +853,9 @@ export default function EvalPanel({
           <div style={rightPanel}>
             {/* Right header */}
             <div style={{
-              padding: '0 16px', borderBottom: '1px solid var(--qa-border)',
-              display: 'flex', alignItems: 'center', gap: 8, height: 52, flexShrink: 0,
+              padding: '0 12px', borderBottom: '1px solid var(--qa-border)',
+              display: 'flex', alignItems: 'center', gap: 6, height: 52, flexShrink: 0,
+              minWidth: 0, overflow: 'hidden',
             }}>
               {/* History toggle */}
               <button
@@ -735,16 +906,76 @@ export default function EvalPanel({
                       {dispute.raisedBy} disputed
                     </span>
                     <span
-                      title={dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      title={dispute.challengedParams.map(d => formatParamLabel(d.param) || d.param).join(' · ')}
                       style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     >
-                      {dispute.challengedParams.map(d => PARAM_NAMES[d.param] ?? d.param).join(' · ')}
+                      {dispute.challengedParams.map(d => formatParamLabel(d.param) || d.param).join(' · ')}
                     </span>
+
                   </>
                 )}
               </div>
-              {/* Primary action (submit/resolve modes) */}
-              {(mode === 'submit' || mode === 'resolve') && (
+              {/* Raise dispute button for TL */}
+              {allowRaiseDispute && mode === 'view' && (
+                disputeDone ? (
+                  <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 600, padding: '0 8px' }}>
+                    ✓ Dispute Sent to QA
+                  </span>
+                ) : !disputing ? (
+                  <button
+                    onClick={() => setDisputing(true)}
+                    style={{
+                      height: 32, padding: '0 12px', borderRadius: 8,
+                      fontFamily: 'inherit', fontSize: 12, fontWeight: 500,
+                      border: '1px solid var(--qa-border)', background: 'var(--qa-card)',
+                      color: 'var(--qa-text)', cursor: 'pointer',
+                      display: 'inline-flex', alignItems: 'center', gap: 6,
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>
+                    </svg>
+                    Raise Dispute to QA
+                  </button>
+                ) : null
+              )}
+              {/* Mark for KB change checkbox + comment field (only visible to admins and QA) */}
+              {canMarkKb && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <label style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500,
+                    color: needsKbUpdate ? '#92400e' : 'var(--qa-text-2)', cursor: 'pointer',
+                    background: needsKbUpdate ? '#fef3c7' : 'var(--qa-card)',
+                    border: needsKbUpdate ? '1px solid #f59e0b' : '1px solid var(--qa-border)',
+                    padding: '4px 10px', borderRadius: 8, transition: 'all 0.15s ease',
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={needsKbUpdate}
+                      onChange={e => setNeedsKbUpdate(e.target.checked)}
+                      style={{ cursor: 'pointer', accentColor: '#d97706' }}
+                    />
+                    Mark for KB change
+                  </label>
+                  {needsKbUpdate && (
+                    <input
+                      type="text"
+                      placeholder="Comment on KB update needed..."
+                      value={kbComment}
+                      onChange={e => setKbComment(e.target.value)}
+                      style={{
+                        height: 32, padding: '0 10px', borderRadius: 8,
+                        fontSize: 12, border: '1px solid #f59e0b',
+                        background: '#fffbe6', color: '#78350f',
+                        fontFamily: 'inherit', outline: 'none', width: 230,
+                      }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* Primary action (submit/resolve/override modes) */}
+              {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (
                 <button
                   onClick={submit}
                   disabled={submitting}
@@ -841,7 +1072,7 @@ export default function EvalPanel({
             )}
 
             {/* Transcript */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 0 }}>
+            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
               {txLoading ? (
                 <div style={{ color: 'var(--qa-text-3)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                   Loading transcript…
@@ -908,7 +1139,7 @@ export default function EvalPanel({
 
                     if (type === 'system') {
                       const systemTime = msg.timestamp
-                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        ? '  •  ' + formatTranscriptDate(msg.timestamp)
                         : '';
                       return (
                         <div key={idx} style={{ marginTop: gap + 'px', textAlign: 'center' }}>
@@ -917,6 +1148,7 @@ export default function EvalPanel({
                             borderRadius: 8, fontSize: 12, fontStyle: 'italic',
                             color: 'var(--qa-text-2)', padding: '8px 14px', display: 'inline-block',
                             maxWidth: '90%', lineHeight: 1.5,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere',
                           }}>
                             {msg.content}{systemTime}
                           </div>
@@ -926,7 +1158,7 @@ export default function EvalPanel({
 
                     if (type === 'internal_note') {
                       const noteTime = msg.timestamp
-                        ? '  •  ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                        ? '  •  ' + formatTranscriptDate(msg.timestamp)
                         : '';
                       return (
                         <div key={idx} style={{
@@ -941,6 +1173,7 @@ export default function EvalPanel({
                             borderRadius: 8, fontSize: 12,
                             color: '#78350f', padding: '10px 14px', display: 'inline-block',
                             maxWidth: '76%', lineHeight: 1.5,
+                            wordBreak: 'break-word', overflowWrap: 'anywhere',
                             boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                           }}>
                             <div style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#b45309', marginBottom: 4 }}>
@@ -956,19 +1189,21 @@ export default function EvalPanel({
 
                     const isRight = type === 'agent' || type === 'bot';
                     const label   = (msg.sender_name ?? msg.sender) + (msg.timestamp
-                      ? ' · ' + new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                      ? ' · ' + formatTranscriptDate(msg.timestamp)
                       : '');
                     return (
                       <div key={idx} style={{
                         marginTop: gap + 'px',
                         display: 'flex', flexDirection: 'column',
-                        maxWidth: '76%',
+                        maxWidth: '76%', minWidth: 0,
                         alignSelf: isRight ? 'flex-end' : 'flex-start',
                         alignItems: isRight ? 'flex-end' : 'flex-start',
+                        wordBreak: 'break-word', overflowWrap: 'anywhere',
                       }}>
                         <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginBottom: 4 }}>{label}</span>
                         <div style={{
                           padding: '10px 14px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
+                          wordBreak: 'break-word', overflowWrap: 'anywhere',
                           ...(type === 'agent' ? { background: 'var(--qa-gray-700)', color: '#fff' }
                             : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
                             : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),
