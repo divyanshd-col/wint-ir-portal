@@ -89,52 +89,58 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   if (!flags.length) return NextResponse.json({ disputes: [] });
 
-  // Bulk-fetch chat data
-  const chatIds = [...new Set(flags.map(f => f.chatId).filter(Boolean))];
-  const dbRows = await query<{
+  // Separate chat vs call flags
+  const chatFlags = flags.filter(f => !f.callId);
+  const callFlags = flags.filter(f => Boolean(f.callId));
+
+  const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId!).filter(Boolean))];
+
+  let dbRows: {
     chat_id: string; agent_id: number | null; agent_name: string | null; closed_at: string;
     disposition: string; sub_disposition: string | null;
     iqs_score: string; parameters: any;
     csat_score: string | null; mobile_number: string | null;
     conversation_type: string | null;
-  }>(
-    `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name, c.closed_at,
-            c.tags->>'disposition'     AS disposition,
-            c.tags->>'sub_disposition' AS sub_disposition,
-            i.iqs_score, i.parameters, c.csat_score,
-            ct.phone AS mobile_number, c.conversation_type
-     FROM conversations c
-     JOIN iqs_scores i ON i.chat_id = c.id
-     LEFT JOIN agents a ON a.id = c.agent_id
-     LEFT JOIN contacts ct ON ct.id = c.contact_id
-     WHERE c.id = ANY($1)`,
-    [chatIds]
-  );
+  }[] = [];
+  if (chatIds.length > 0) {
+    dbRows = await query(
+      `SELECT c.id AS chat_id, c.agent_id, a.name AS agent_name, c.closed_at,
+              c.tags->>'disposition'     AS disposition,
+              c.tags->>'sub_disposition' AS sub_disposition,
+              i.iqs_score, i.parameters, c.csat_score,
+              ct.phone AS mobile_number, c.conversation_type
+       FROM conversations c
+       JOIN iqs_scores i ON i.chat_id = c.id
+       LEFT JOIN agents a ON a.id = c.agent_id
+       LEFT JOIN contacts ct ON ct.id = c.contact_id
+       WHERE c.id = ANY($1)`,
+      [chatIds]
+    );
+  }
   const dbMap = new Map(dbRows.map(r => [r.chat_id, r]));
 
-  // Bulk-fetch call data from call_evaluations / call_recordings
-  const targetCallIds = [...new Set(flags.map(f => f.callId || f.chatId).filter(Boolean))];
-  const callDbRows = await query<{
+  // Bulk-fetch call data strictly by call_id for call disputes
+  let callDbRows: {
     call_id: string; chat_id: string | null; agent_name: string | null;
     called_at: string; disposition: string; sub_disposition: string | null;
     iqs_percent: string | null; parameters: any; gates: any;
-  }>(
-    `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, '') AS agent_name,
-            cr.called_at, cr.call_disposition AS disposition,
-            cr.call_sub_disposition AS sub_disposition,
-            ce.iqs_percent, ce.iqs_scores AS parameters,
-            ce.gates
-     FROM call_evaluations ce
-     JOIN call_recordings cr ON cr.id = ce.call_id
-     LEFT JOIN agents a ON a.id = ce.agent_id
-     WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
-    [targetCallIds]
-  );
-  const callDbMap = new Map<string, typeof callDbRows[0]>();
-  callDbRows.forEach(r => {
-    callDbMap.set(r.call_id, r);
-    if (r.chat_id) callDbMap.set(r.chat_id, r);
-  });
+  }[] = [];
+  if (targetCallIds.length > 0) {
+    callDbRows = await query(
+      `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, '') AS agent_name,
+              cr.called_at, cr.call_disposition AS disposition,
+              cr.call_sub_disposition AS sub_disposition,
+              ce.iqs_percent, ce.iqs_scores AS parameters,
+              ce.gates
+       FROM call_evaluations ce
+       JOIN call_recordings cr ON cr.id = ce.call_id
+       LEFT JOIN agents a ON a.id = ce.agent_id
+       WHERE ce.call_id = ANY($1)`,
+      [targetCallIds]
+    );
+  }
+  const callDbMap = new Map(callDbRows.map(r => [r.call_id, r]));
 
   // Build role label for who raised the dispute
   const config = await readConfig();
@@ -152,8 +158,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const disputes: TLDisputeRow[] = [];
   for (const flag of flags) {
-    const db = dbMap.get(flag.chatId);
-    const callDb = callDbMap.get(flag.callId || flag.chatId);
+    const isCall = Boolean(flag.callId);
+    const db = isCall ? null : dbMap.get(flag.chatId);
+    const callDb = isCall ? callDbMap.get(flag.callId!) : null;
 
     if (!db && !callDb) continue;
 
@@ -170,12 +177,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const agentName = db?.agent_name || callDb?.agent_name || flag.agentName;
     if (!matchesAgent(db?.agent_name ?? null) && !matchesAgent(callDb?.agent_name ?? null) && !matchesAgent(flag.agentName)) continue;
 
-    const isCallFlag = Boolean(
-      flag.callId ||
-      flag.challengedParams?.some(p => /^P(1|2|3|4|5|6|7|8|9|10|11)\b/i.test(p.param))
-    );
-
-    let params = isCallFlag ? (callDb?.parameters ?? db?.parameters ?? {}) : (db?.parameters ?? callDb?.parameters ?? {});
+    let params = isCall ? (callDb?.parameters ?? {}) : (db?.parameters ?? {});
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
     let botIqsScore: number | null = null;
@@ -188,7 +190,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (callDb?.iqs_percent != null && isCallFlag) {
+    if (callDb?.iqs_percent != null && isCall) {
       callIqsScore = parseFloat(callDb.iqs_percent);
       if (iqsScore === null) iqsScore = callIqsScore;
     }
@@ -221,7 +223,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
-      callId:           isCallFlag ? (flag.callId || callDb?.call_id) : undefined,
+      callId:           isCall ? flag.callId : undefined,
       agentName:        agentName,
       iqsScore,
       botIqsScore,

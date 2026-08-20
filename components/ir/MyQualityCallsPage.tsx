@@ -271,7 +271,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
       const pAll: DisputeRow[] = Array.isArray(pData.disputes) ? pData.disputes : [];
       const rAll: DisputeRow[] = Array.isArray(rData.disputes) ? rData.disputes : [];
 
-      const isCallDispute = (d: DisputeRow) => Boolean(d.callId && (d.challengedParams?.some(p => /^P(1|2|3|4|5|6|7|8|9|10|11)\b/i.test(p.param)) || !d.challengedParams?.length));
+      const isCallDispute = (d: DisputeRow) => Boolean(d.callId);
 
       setPendingDisputes(pAll.filter(isCallDispute));
       setReviewedDisputes(rAll.filter(isCallDispute));

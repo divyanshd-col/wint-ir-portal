@@ -105,9 +105,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   if (!pendingFlags.length) return NextResponse.json({ disputes: [] });
 
-  // Bulk-fetch DB rows for these chat IDs
-  const chatIds = [...new Set(pendingFlags.map(f => f.chatId).filter(Boolean))];
-  const targetCallIds = [...new Set(pendingFlags.map(f => f.callId || f.chatId).filter(Boolean))];
+  const chatFlags = pendingFlags.filter(f => !f.callId);
+  const callFlags = pendingFlags.filter(f => Boolean(f.callId));
+  const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId!).filter(Boolean))];
 
   const dbRows = chatIds.length > 0 ? await query<{
     chat_id: string;
@@ -145,7 +146,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     [chatIds]
   ) : [];
 
-  // Bulk-fetch call data
+  // Bulk-fetch call data strictly by call_id for call disputes
   let callDbRows: any[] = [];
   if (targetCallIds.length > 0) {
     try {
@@ -164,7 +165,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
          LEFT JOIN agents a ON a.id = ce.agent_id
-         WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
+         WHERE ce.call_id = ANY($1)`,
         [targetCallIds]
       );
     } catch {}
@@ -172,7 +173,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const callDbMap = new Map<string, any>();
   callDbRows.forEach(r => {
     if (r.call_id) callDbMap.set(r.call_id, r);
-    if (r.chat_id) callDbMap.set(r.chat_id, r);
   });
 
   // Query call recordings for these chats to check transcript statuses
@@ -306,11 +306,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       continue;
     }
 
-    const isCallFlag = Boolean(
-      flag.callId ||
-      flag.challengedParams?.some(p => /^P(1|2|3|4|5|6|7|8|9|10|11)\b/i.test(p.param))
-    );
-    let params = isCallFlag ? (callDb?.parameters ?? db?.parameters ?? {}) : (db?.parameters ?? callDb?.parameters ?? {});
+    const isCall = Boolean(flag.callId);
+    let params = isCall ? (callDb?.parameters ?? {}) : (db?.parameters ?? {});
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
     const callInfo = db ? getCallInfo(db.chat_id, db.contact_id, db.started_at, db.closed_at) : { status: 'transcribed' as const, label: 'Call' };
@@ -325,7 +322,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (callDb?.iqs_percent != null && isCallFlag) {
+    if (callDb?.iqs_percent != null && isCall) {
       callIqsScore = parseFloat(callDb.iqs_percent);
       if (iqsScore === null) iqsScore = callIqsScore;
     }
@@ -352,7 +349,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
-      callId:           isCallFlag ? (flag.callId || callDb?.call_id) : undefined,
+      callId:           isCall ? flag.callId : undefined,
       agentName:        effectiveAgentName,
       agentEmail:       flag.agentEmail,
       raisedBy:         submitterRole,

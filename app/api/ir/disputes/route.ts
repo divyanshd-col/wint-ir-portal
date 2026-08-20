@@ -22,10 +22,7 @@ export async function GET(req: NextRequest) {
 
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
 
-  const isCallFlag = (f: IQSFlag) => Boolean(
-    f.callId ||
-    f.challengedParams?.some(p => /^P(1|2|3|4|5|6|7|8|9|10|11)\b/i.test(p.param))
-  );
+  const isCallFlag = (f: IQSFlag) => Boolean(f.callId);
   if (typeFilter === 'calls') {
     flags = flags.filter(isCallFlag);
   } else if (typeFilter === 'chats') {
@@ -41,8 +38,10 @@ export async function GET(req: NextRequest) {
   }
 
   // Enrich with iqs_score + closed_at + bot/call IQS + csat from DB (batch queries)
-  const chatIds = [...new Set(flags.map(f => f.chatId).filter(Boolean))];
-  const targetCallIds = [...new Set(flags.map(f => f.callId || f.chatId).filter(Boolean))];
+  const chatFlags = flags.filter(f => !f.callId);
+  const callFlags = flags.filter(f => Boolean(f.callId));
+  const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId!).filter(Boolean))];
   const rowMap = new Map<string, any>();
   const callRowMap = new Map<string, any>();
 
@@ -65,12 +64,11 @@ export async function GET(req: NextRequest) {
         `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, ce.gates, cr.called_at, cr.call_disposition, cr.call_sub_disposition
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
-         WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
+         WHERE ce.call_id = ANY($1)`,
         [targetCallIds]
       );
       for (const r of callRows) {
         if (r.call_id) callRowMap.set(String(r.call_id), r);
-        if (r.chat_id) callRowMap.set(String(r.chat_id), r);
       }
     }
   } catch {
@@ -89,9 +87,9 @@ export async function GET(req: NextRequest) {
     let disposition = '';
     let subDisposition: string | null = null;
 
-    const row = rowMap.get(String(f.chatId));
-    const targetCallId = f.callId || f.chatId;
-    const cRow = targetCallId ? callRowMap.get(String(targetCallId)) : null;
+    const isCall = Boolean(f.callId);
+    const row = isCall ? null : rowMap.get(String(f.chatId));
+    const cRow = isCall ? callRowMap.get(String(f.callId!)) : null;
 
     if (row) {
       iqsScore = row.iqs_score != null ? parseFloat(row.iqs_score) : null;
@@ -112,20 +110,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const isCallDispute = isCallFlag(f);
     if (cRow) {
       callIqsScore = cRow.iqs_percent != null ? parseFloat(cRow.iqs_percent) : null;
-      if (isCallDispute && iqsScore === null) iqsScore = callIqsScore;
-      if (!closedAt && cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
-      if (!disposition) disposition = cRow.call_disposition || '';
-      if (!subDisposition) subDisposition = cRow.call_sub_disposition || null;
-      if (isCallDispute) parameters = cRow.iqs_scores ?? parameters;
+      iqsScore = callIqsScore;
+      if (cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
+      disposition = cRow.call_disposition || '';
+      subDisposition = cRow.call_sub_disposition || null;
+      parameters = cRow.iqs_scores ?? null;
     }
 
     return {
       flagId: f.id,
       chatId: f.chatId,
-      callId: isCallDispute ? (f.callId || f.chatId) : undefined,
+      callId: isCall ? f.callId : undefined,
       iqsScore,
       botIqsScore,
       callIqsScore,
