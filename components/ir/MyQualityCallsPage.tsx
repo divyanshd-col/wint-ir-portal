@@ -150,6 +150,7 @@ interface DisputeRow {
   reviewedBy: string;
   reviewedAt: string;
   parameters: Record<string, any> | null;
+  gates?: any;
   flaggedAt: string;
 }
 
@@ -974,7 +975,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             iqsScore={dispute.callIqsScore ?? dispute.iqsScore ?? 0}
                             calledAt={dispute.closedAt}
                             disposition={dispute.disposition}
-                            gates={dispute.parameters?.gates}
+                            gates={dispute.gates || dispute.parameters?.gates}
                             iqsScores={dispute.parameters || {}}
                             mode="view"
                             dispute={dispute}
@@ -1158,7 +1159,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             iqsScore={dispute.callIqsScore ?? dispute.iqsScore ?? 0}
                             calledAt={dispute.closedAt}
                             disposition={dispute.disposition}
-                            gates={dispute.parameters?.gates}
+                            gates={dispute.gates || dispute.parameters?.gates}
                             iqsScores={dispute.parameters || {}}
                             mode="view"
                             dispute={dispute}

@@ -33,6 +33,7 @@ export interface TLDisputeRow {
   agentNote:        string;
   challengedParams: { param: string; note: string }[];
   parameters:       Record<string, { score: boolean | null; reasoning: string }>;
+  gates?:           any;
   conversationType?: 'bot' | 'agent' | 'hybrid';
 }
 
@@ -116,12 +117,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const callDbRows = await query<{
     call_id: string; chat_id: string | null; agent_name: string | null;
     called_at: string; disposition: string; sub_disposition: string | null;
-    iqs_percent: string | null; parameters: any;
+    iqs_percent: string | null; parameters: any; gates: any;
   }>(
     `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, '') AS agent_name,
             cr.called_at, cr.call_disposition AS disposition,
             cr.call_sub_disposition AS sub_disposition,
-            ce.iqs_percent, ce.iqs_scores AS parameters
+            ce.iqs_percent, ce.iqs_scores AS parameters,
+            ce.gates
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
      LEFT JOIN agents a ON a.id = ce.agent_id
@@ -168,7 +170,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const agentName = db?.agent_name || callDb?.agent_name || flag.agentName;
     if (!matchesAgent(db?.agent_name ?? null) && !matchesAgent(callDb?.agent_name ?? null) && !matchesAgent(flag.agentName)) continue;
 
-    let params = db?.parameters ?? callDb?.parameters ?? {};
+    const isCallFlag = Boolean(flag.callId || callDb?.call_id || flag.challengedParams?.some(p => p.param.startsWith('P')));
+    let params = isCallFlag ? (callDb?.parameters ?? db?.parameters ?? {}) : (db?.parameters ?? callDb?.parameters ?? {});
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
     let botIqsScore: number | null = null;
@@ -228,6 +231,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       agentNote:        flag.agentNote,
       challengedParams: flag.challengedParams ?? [],
       parameters:       params,
+      gates:            callDb?.gates ?? null,
       conversationType: (db?.conversation_type ?? null) as any,
     });
   }

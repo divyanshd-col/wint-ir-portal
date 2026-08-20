@@ -784,7 +784,7 @@ export default function TLQualityCallsPage() {
                             iqsScore={dispute.callIqsScore ?? dispute.iqsScore ?? 0}
                             calledAt={dispute.closedAt || dispute.raisedAt}
                             disposition={dispute.disposition}
-                            gates={dispute.parameters?.gates}
+                            gates={dispute.gates || dispute.parameters?.gates}
                             iqsScores={dispute.parameters || {}}
                             mode="view"
                             dispute={dispute}
@@ -972,7 +972,7 @@ export default function TLQualityCallsPage() {
                             iqsScore={dispute.callIqsScore ?? dispute.iqsScore ?? 0}
                             calledAt={dispute.closedAt || dispute.raisedAt}
                             disposition={dispute.disposition}
-                            gates={dispute.parameters?.gates}
+                            gates={dispute.gates || dispute.parameters?.gates}
                             iqsScores={dispute.parameters || {}}
                             mode="view"
                             dispute={dispute}

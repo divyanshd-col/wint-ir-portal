@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     }
     if (targetCallIds.length > 0) {
       const callRows = await query<any>(
-        `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, cr.called_at, cr.call_disposition, cr.call_sub_disposition
+        `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, ce.gates, cr.called_at, cr.call_disposition, cr.call_sub_disposition
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
          WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
@@ -107,7 +107,8 @@ export async function GET(req: NextRequest) {
       if (!closedAt && cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
       if (!disposition) disposition = cRow.call_disposition || '';
       if (!subDisposition) subDisposition = cRow.call_sub_disposition || null;
-      if (!parameters) parameters = cRow.iqs_scores ?? null;
+      const isCallDispute = Boolean(f.callId || f.challengedParams?.some(p => p.param.startsWith('P')));
+      if (isCallDispute || !parameters) parameters = cRow.iqs_scores ?? parameters;
     }
 
     return {
@@ -128,6 +129,7 @@ export async function GET(req: NextRequest) {
       reviewedBy: f.reviewedBy || '',
       reviewedAt: f.reviewedAt || '',
       parameters,
+      gates: cRow?.gates ?? null,
       flaggedAt: f.flaggedAt,
     };
   });

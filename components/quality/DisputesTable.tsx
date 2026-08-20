@@ -383,18 +383,18 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       iqsScore={d.callIqsScore ?? d.iqsScore ?? 0}
                       calledAt={d.closedAt}
                       disposition={d.disposition}
-                      gates={d.parameters?.gates}
+                      gates={(d as any).gates || d.parameters?.gates}
                       iqsScores={d.parameters || {}}
                       mode="review"
                       dispute={d}
                       onDone={() => removeDispute(rowKey)}
                       onClose={() => setExpandedId(null)}
-                      colSpan={8}
+                      colSpan={7}
                     />
                   ) : (
                     <React.Fragment>
                       <tr>
-                        <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                        <td colSpan={7} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
                           <DisputeThread
                             flagId={d.flagId}
                             agentNote={d.agentNote}
@@ -424,7 +424,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                           }}
                           onDone={() => removeDispute(d.chatId)}
                           onClose={() => setExpandedId(null)}
-                          colSpan={8}
+                          colSpan={7}
                           conversationType={d.conversationType}
                         />
                       </ErrorBoundary>

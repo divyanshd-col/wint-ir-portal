@@ -53,6 +53,68 @@ function ScoreBadge({ score }: { score?: string | number | null | boolean }) {
   return <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: norm.badgeBg, color: norm.badgeText }}>{norm.label}</span>;
 }
 
+const PARAM_ALIASES: Record<string, string[]> = {
+  P1: ['P1', 'TechnicalLegal', 'Technical', 'factual', 'P1_factual'],
+  P2: ['P2', 'AllQuestions', 'questions', 'P2_questions'],
+  P3: ['P3', 'Expectation', 'ExpectationSetting', 'P3_expectation'],
+  P5: ['P5', 'CallOpening', 'Opening', 'P5_opening'],
+  P6: ['P6', 'CallClosing', 'Closing', 'P6_closing'],
+  P7: ['P7', 'Process', 'PreCheck', 'P7_process'],
+  P8: ['P8', 'Simplifying', 'Jargon', 'P8_simplifying'],
+  P9: ['P9', 'ActiveListening', 'ActiveListeningInterruptions', 'P9_active_listening'],
+  P10: ['P10', 'Fillers', 'DeadAir', 'FillersDeadAir', 'P10_fillers'],
+  P11: ['P11', 'EnergyTone', 'Energy', 'EnergyWarmthPace', 'P11_energy'],
+};
+
+function normScoreVal(val: any): string {
+  if (val === true || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') return 'Yes';
+  if (val === false || val === 0 || val === '0' || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') return 'No';
+  if (val === 1 || val === '1' || val === 'Part' || val === 'part') return 'Part';
+  if (val === 'NA' || val === 'na' || val === null || val === undefined) return 'NA';
+  return String(val);
+}
+
+function resolveParamData(raw: any, pKey: string): { score: string; reasoning: string } {
+  if (!raw || typeof raw !== 'object') return { score: 'NA', reasoning: '' };
+  const aliases = PARAM_ALIASES[pKey] || [pKey];
+
+  const scoresObj = raw.scores || (raw.__scores ? null : raw);
+  const evidenceObj = raw.evidence || raw.reasoning || {};
+
+  // 1. Check scoresObj
+  if (scoresObj && typeof scoresObj === 'object') {
+    for (const alias of aliases) {
+      if (scoresObj[alias] !== undefined) {
+        const val = scoresObj[alias];
+        if (typeof val === 'object' && val !== null) {
+          const s = val.score !== undefined ? normScoreVal(val.score) : 'NA';
+          const r = val.reasoning || val.evidence || val.note || '';
+          return { score: s, reasoning: typeof r === 'object' ? r.note || '' : String(r) };
+        }
+        const s = normScoreVal(val);
+        const ev = evidenceObj[alias] || raw[`${alias}_reasoning`] || raw[`${alias}_evidence`];
+        const r = ev ? (Array.isArray(ev) ? ev[0]?.note || '' : typeof ev === 'object' ? ev.note || '' : String(ev)) : '';
+        return { score: s, reasoning: r };
+      }
+    }
+  }
+
+  // 2. Check top level
+  for (const alias of aliases) {
+    if (raw[alias] !== undefined) {
+      const val = raw[alias];
+      if (typeof val === 'object' && val !== null) {
+        const s = val.score !== undefined ? normScoreVal(val.score) : 'NA';
+        const r = val.reasoning || val.evidence || val.note || '';
+        return { score: s, reasoning: typeof r === 'object' ? r.note || '' : String(r) };
+      }
+      return { score: normScoreVal(val), reasoning: '' };
+    }
+  }
+
+  return { score: 'NA', reasoning: '' };
+}
+
 export default function CallEvalPanel({
   callId,
   chatId,
@@ -78,8 +140,8 @@ export default function CallEvalPanel({
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
   const [liveIqs, setLiveIqs] = useState<number | null>(iqsScore);
-  const [currentGates, setCurrentGates] = useState<any>(gates);
-  const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores);
+  const [currentGates, setCurrentGates] = useState<any>(gates || dispute?.gates || dispute?.parameters?.gates);
+  const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores || dispute?.parameters);
 
   // Raising dispute inline state (for TL or agent)
   const [raisingDispute, setRaisingDispute] = useState(false);
@@ -89,27 +151,30 @@ export default function CallEvalPanel({
   const [submittingDispute, setSubmittingDispute] = useState(false);
 
   useEffect(() => {
-    setCurrentGates(gates);
-  }, [gates]);
+    if (gates) setCurrentGates(gates);
+    else if (dispute?.gates) setCurrentGates(dispute.gates);
+    else if (dispute?.parameters?.gates) setCurrentGates(dispute.parameters.gates);
+  }, [gates, dispute]);
 
   useEffect(() => {
-    setCurrentIqsScores(iqsScores);
-  }, [iqsScores]);
+    if (iqsScores) setCurrentIqsScores(iqsScores);
+    else if (dispute?.parameters) setCurrentIqsScores(dispute.parameters);
+  }, [iqsScores, dispute]);
 
   // Initialize parameter state
   useEffect(() => {
-    const scores = currentIqsScores?.scores || currentIqsScores || {};
-    const evidence = currentIqsScores?.evidence || {};
+    let raw = currentIqsScores || dispute?.parameters || iqsScores;
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch {}
+    }
     const state: Record<string, { score: string; reasoning: string }> = {};
 
     Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
-      const val = scores[p] !== undefined ? String(scores[p]) : 'NA';
-      const ev = evidence[p] ? (Array.isArray(evidence[p]) ? evidence[p][0]?.note || '' : typeof evidence[p] === 'object' ? evidence[p].note || '' : String(evidence[p])) : '';
-      state[p] = { score: val, reasoning: ev };
+      state[p] = resolveParamData(raw, p);
     });
 
     setParamState(state);
-  }, [currentIqsScores]);
+  }, [currentIqsScores, dispute, iqsScores]);
 
   // Recalculate live IQS score
   useEffect(() => {
@@ -125,13 +190,22 @@ export default function CallEvalPanel({
     setLiveIqs(applicable === 0 ? null : Math.round((earned / applicable) * 100));
   }, [paramState]);
 
-  // Load call transcript segments
+  // Load call transcript segments and fallback evaluation details
   useEffect(() => {
     fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`)
       .then(r => r.json())
       .then(d => {
         if (d.segments) setSegments(d.segments);
         if (d.recordingUrl) setRecordingUrl(d.recordingUrl);
+        if (d.gates && (!currentGates || Object.keys(currentGates).length === 0)) {
+          setCurrentGates(d.gates);
+        }
+        if (d.iqsScores && (!currentIqsScores || Object.keys(currentIqsScores).length === 0)) {
+          setCurrentIqsScores(d.iqsScores);
+        }
+        if (d.iqsPercent != null && (liveIqs === null || isNaN(liveIqs))) {
+          setLiveIqs(parseFloat(d.iqsPercent));
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
