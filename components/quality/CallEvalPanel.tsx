@@ -249,7 +249,7 @@ export default function CallEvalPanel({
 
   const handleReevaluate = async () => {
     if (isReevaluating || saving) return;
-    const ok = confirm(`Re-evaluate call ID ${callId}?\n\nThis will re-run diarization, transcription, and scoring for this call.`);
+    const ok = confirm(`Re-evaluate call ID ${callId}?\n\nThis will re-run the evaluation scoring and parameter calculation for this call.`);
     if (!ok) return;
 
     setIsReevaluating(true);
@@ -257,7 +257,7 @@ export default function CallEvalPanel({
       const res = await fetch('/api/call-quality/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId, forceTranscript: true })
+        body: JSON.stringify({ callId, forceTranscript: false })
       });
       const data = await res.json();
       if (res.ok && data.ok) {

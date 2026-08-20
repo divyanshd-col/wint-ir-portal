@@ -457,8 +457,16 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     }
 
     if (!transcriptionSuccess) {
-      await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
-      throw new Error(`Transcription stage failed after 3 attempts: ${transcriptionError.message}`);
+      const existingSegments = call.transcript ? (Array.isArray(call.transcript) ? call.transcript : call.transcript.segments || []) : [];
+      if (existingSegments.length > 0) {
+        log.warn('call-pipeline', `Transcription failed (${transcriptionError.message}), falling back to existing transcript with ${existingSegments.length} segments`);
+        segments = existingSegments;
+        duration = call.duration_seconds || duration;
+        language = call.language || language;
+      } else {
+        await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
+        throw new Error(`Transcription stage failed after 3 attempts: ${transcriptionError.message}`);
+      }
     }
   }
 
