@@ -249,8 +249,100 @@ export default function CallEvalPanel({
     }));
   };
 
+  const [isTranscriptModified, setIsTranscriptModified] = useState(false);
+  const [isSavingTranscript, setIsSavingTranscript] = useState(false);
+
+  const handleSwapAllSpeakers = () => {
+    setSegments(prev => {
+      return prev.map(seg => {
+        if (seg.type === 'interruption') {
+          const isInterruptedIR = seg.interrupted_speaker === 'IR_EXECUTIVE' || seg.interrupted_speaker === 'IR EXECUTIVE' || (seg.interrupted_speaker || '').toLowerCase().includes('agent');
+          return {
+            ...seg,
+            interrupted_speaker: isInterruptedIR ? 'INVESTOR' : 'IR_EXECUTIVE',
+            interrupted_by: isInterruptedIR ? 'IR_EXECUTIVE' : 'INVESTOR'
+          };
+        }
+        const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
+        return {
+          ...seg,
+          speaker: isIR ? 'INVESTOR' : 'IR_EXECUTIVE',
+          role: isIR ? 'customer' : 'agent'
+        };
+      });
+    });
+    setIsTranscriptModified(true);
+  };
+
+  const handleToggleSpeaker = (idx: number) => {
+    setSegments(prev => {
+      const copy = [...prev];
+      const seg = copy[idx];
+      if (!seg) return prev;
+      const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
+      copy[idx] = {
+        ...seg,
+        speaker: isIR ? 'INVESTOR' : 'IR_EXECUTIVE',
+        role: isIR ? 'customer' : 'agent'
+      };
+      return copy;
+    });
+    setIsTranscriptModified(true);
+  };
+
+  const handleSaveTranscriptAndReevaluate = async () => {
+    if (isSavingTranscript || isReevaluating || saving) return;
+    setIsSavingTranscript(true);
+    try {
+      // 1. Save updated segments to call_recordings
+      const saveRes = await fetch('/api/call-quality/update-transcript', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ call_id: callId, segments })
+      });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok || !saveData.ok) {
+        alert(saveData.error || 'Failed to save corrected transcript');
+        setIsSavingTranscript(false);
+        return;
+      }
+      setIsTranscriptModified(false);
+
+      // 2. Re-evaluate quality scores using corrected transcript
+      setIsReevaluating(true);
+      const evalRes = await fetch('/api/call-quality/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callId, forceTranscript: false })
+      });
+      const data = await evalRes.json();
+      if (evalRes.ok && data.ok) {
+        if (data.gates) setCurrentGates(data.gates);
+        if (data.iqsScores) {
+          setCurrentIqsScores(data.iqsScores);
+          const raw = data.iqsScores;
+          const state: Record<string, { score: string; reasoning: string }> = {};
+          Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
+            state[p] = resolveParamData(raw, p);
+          });
+          setParamState(state);
+        }
+        if (data.iqs !== undefined && data.iqs !== null) setLiveIqs(data.iqs);
+
+        alert('Transcript saved and call quality re-evaluated successfully!');
+      } else {
+        alert(`Re-evaluation failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Error saving and re-evaluating: ${err.message}`);
+    } finally {
+      setIsSavingTranscript(false);
+      setIsReevaluating(false);
+    }
+  };
+
   const handleReevaluate = async () => {
-    if (isReevaluating || saving) return;
+    if (isReevaluating || saving || isSavingTranscript) return;
     const ok = confirm(`Re-evaluate call ID ${callId}?\n\nThis will re-run the evaluation scoring and parameter calculation for this call.`);
     if (!ok) return;
 
@@ -276,7 +368,15 @@ export default function CallEvalPanel({
         }
 
         if (data.gates) setCurrentGates(data.gates);
-        if (data.iqsScores) setCurrentIqsScores(data.iqsScores);
+        if (data.iqsScores) {
+          setCurrentIqsScores(data.iqsScores);
+          const raw = data.iqsScores;
+          const state: Record<string, { score: string; reasoning: string }> = {};
+          Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
+            state[p] = resolveParamData(raw, p);
+          });
+          setParamState(state);
+        }
         if (data.iqs !== undefined && data.iqs !== null) setLiveIqs(data.iqs);
 
         alert('Call re-evaluation completed successfully!');
@@ -545,7 +645,70 @@ export default function CallEvalPanel({
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
           {/* Left panel: Transcript bubbles and audio */}
           <div style={{ flex: 1, minWidth: 320, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, maxHeight: '600px', overflowY: 'auto' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
+              
+              <button
+                onClick={handleSwapAllSpeakers}
+                disabled={loading || segments.length === 0 || isSavingTranscript || isReevaluating}
+                title="Swap IR Executive and Investor speakers across the entire transcript"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 10px',
+                  borderRadius: 6,
+                  border: '1px solid #cbd5e1',
+                  background: '#f8fafc',
+                  color: '#334155',
+                  fontSize: 12,
+                  fontWeight: 500,
+                  cursor: (loading || segments.length === 0 || isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                ⇄ Swap All Speakers (IR ⇋ Investor)
+              </button>
+            </div>
+
+            {isTranscriptModified && (
+              <div style={{
+                padding: '10px 14px',
+                background: '#fefce8',
+                border: '1px solid #fef08a',
+                borderRadius: 8,
+                marginBottom: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexWrap: 'wrap'
+              }}>
+                <span style={{ fontSize: 12, color: '#854d0e', fontWeight: 500 }}>
+                  ⚠️ Diarization / speakers modified. Click below to save and re-run quality scoring.
+                </span>
+                <button
+                  onClick={handleSaveTranscriptAndReevaluate}
+                  disabled={isSavingTranscript || isReevaluating}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: '#ca8a04',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: (isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  {isSavingTranscript ? 'Saving transcript…' : isReevaluating ? 'Re-evaluating…' : 'Save & Re-evaluate Call'}
+                </button>
+              </div>
+            )}
+
             {recordingUrl && (
               <div style={{
                 padding: '10px 14px',
@@ -594,9 +757,27 @@ export default function CallEvalPanel({
                   const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
-                      <span style={{ fontSize: 10, color: 'var(--qa-text-3)', marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
-                        {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || seg.timestamp || ''}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
+                        <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>
+                          {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || seg.timestamp || ''}
+                        </span>
+                        <button
+                          onClick={() => handleToggleSpeaker(idx)}
+                          title={`Switch speaker to ${isIR ? 'INVESTOR' : 'IR EXECUTIVE'}`}
+                          style={{
+                            border: '1px solid #e2e8f0',
+                            background: '#f8fafc',
+                            color: '#64748b',
+                            borderRadius: 4,
+                            padding: '1px 5px',
+                            fontSize: 10,
+                            cursor: 'pointer',
+                            lineHeight: 1
+                          }}
+                        >
+                          ⇄ Switch
+                        </button>
+                      </div>
                       <div style={{
                         padding: '10px 14px',
                         borderRadius: 12,

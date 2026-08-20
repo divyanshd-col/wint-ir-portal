@@ -41,7 +41,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     durationSeconds: row.duration_seconds,
     calledAt: row.called_at,
     recordingUrl: row.recording_url,
-    segments: Array.isArray(row.transcript) ? row.transcript : [],
+    segments: Array.isArray(row.transcript) 
+      ? row.transcript 
+      : (row.transcript && typeof row.transcript === 'object' && Array.isArray((row.transcript as any).segments) ? (row.transcript as any).segments : []),
     gates: evalData?.gates ?? null,
     iqsScores: evalData?.iqs_scores ?? null,
     iqsPercent: evalData?.iqs_percent ?? null,
