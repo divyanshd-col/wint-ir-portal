@@ -13,6 +13,7 @@ const ROUTE = 'cx/qa/disputes';
 export interface DisputeRow {
   flagId:       string;
   chatId:       string;
+  callId?:      string;
   agentName:    string;
   agentEmail:   string;
   raisedBy:     string;   // 'IR' | 'TL' | role label
@@ -30,6 +31,7 @@ export interface DisputeRow {
   agentNote:    string;
   challengedParams: { param: string; note: string }[];
   parameters:   Record<string, { score: boolean | null; reasoning: string }>;
+  gates?:       any;
   tlForwarded:  boolean;
   conversationType?: 'bot' | 'agent' | 'hybrid';
   reviewedBy?:  string | null;
@@ -103,9 +105,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   if (!pendingFlags.length) return NextResponse.json({ disputes: [] });
 
-  // Bulk-fetch DB rows for these chat IDs
-  const chatIds = [...new Set(pendingFlags.map(f => f.chatId))];
-  const dbRows = await query<{
+  const chatFlags = pendingFlags.filter(f => !f.callId);
+  const callFlags = pendingFlags.filter(f => Boolean(f.callId));
+  const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId || f.chatId).filter(Boolean))];
+
+  const dbRows = chatIds.length > 0 ? await query<{
     chat_id: string;
     agent_id: number | null;
     agent_name: string | null;
@@ -139,7 +144,37 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      LEFT JOIN contacts ct ON ct.id = c.contact_id
      WHERE c.id = ANY($1)`,
     [chatIds]
-  );
+  ) : [];
+
+  // Bulk-fetch call data for call disputes
+  let callDbRows: any[] = [];
+  if (targetCallIds.length > 0) {
+    try {
+      callDbRows = await query<{
+        call_id: string; chat_id: string | null; agent_name: string | null;
+        called_at: string; disposition: string; sub_disposition: string | null;
+        iqs_percent: string | null; parameters: any; gates: any; reviewed_by: string | null;
+        duration_seconds: number | null;
+      }>(
+        `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, '') AS agent_name,
+                cr.called_at, cr.call_disposition AS disposition,
+                cr.call_sub_disposition AS sub_disposition,
+                ce.iqs_percent, ce.iqs_scores AS parameters,
+                ce.gates,
+                ce.reviewed_by, cr.duration_seconds
+         FROM call_evaluations ce
+         JOIN call_recordings cr ON cr.id = ce.call_id
+         LEFT JOIN agents a ON a.id = ce.agent_id
+         WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
+        [targetCallIds]
+      );
+    } catch {}
+  }
+  const callDbMap = new Map<string, any>();
+  callDbRows.forEach(r => {
+    if (r.call_id) callDbMap.set(r.call_id, r);
+    if (r.chat_id) callDbMap.set(r.chat_id, r);
+  });
 
   // Query call recordings for these chats to check transcript statuses
   const contactIds = dbRows.map(r => r.contact_id).filter(Boolean);
@@ -215,9 +250,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const disputes: DisputeRow[] = [];
   for (const flag of pendingFlags) {
     const db = dbMap.get(flag.chatId);
-    if (!db) continue;
+    const callDb = callDbMap.get(flag.callId || flag.chatId);
+    if (!db && !callDb) continue;
 
-    const chatReviewer = (db.chat_reviewed_by || db.call_reviewed_by || '').trim();
+    const chatReviewer = (db?.chat_reviewed_by || db?.call_reviewed_by || callDb?.reviewed_by || '').trim();
+    const effectiveDisposition = db?.disposition || callDb?.disposition || '';
+    const effectiveAgentName = db?.agent_name || callDb?.agent_name || flag.agentName;
 
     // Scope-check: disputes should be sent to the QA who reviewed it; otherwise based on disposition
     if (role === 'quality' || (role === 'admin' && dispositions.length > 0)) {
@@ -248,9 +286,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
 
       if (!isReviewedByQA) {
-        // Chat was not reviewed by a specific QA — fallback to mapped dispositions or assigned agents
-        const agentMatches = myAgents && db.agent_name && myAgents.has(db.agent_name.toLowerCase());
-        const dispositionMatches = dispositions.length > 0 && db.disposition && dispositions.includes(db.disposition);
+        // Chat/Call was not reviewed by a specific QA — fallback to mapped dispositions or assigned agents
+        const agentMatches = myAgents && effectiveAgentName && myAgents.has(effectiveAgentName.toLowerCase());
+        const dispositionMatches = dispositions.length > 0 && effectiveDisposition && dispositions.includes(effectiveDisposition);
 
         if (dispositions.length > 0) {
           if (!dispositionMatches) continue;
@@ -261,7 +299,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
 
     // Robylon AI / Bot check
-    const isBot = flag.agentName === 'Robylon AI' || db.agent_name === 'Robylon AI' || (db.agent_id !== null && [15, 447, 784].includes(Number(db.agent_id)));
+    const isBot = flag.agentName === 'Robylon AI' || db?.agent_name === 'Robylon AI' || (db?.agent_id !== null && [15, 447, 784].includes(Number(db?.agent_id)));
     if (agentFilter === 'human_only' && isBot) {
       continue;
     }
@@ -269,10 +307,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       continue;
     }
 
-    let params = db.parameters ?? {};
+    const isCall = Boolean(flag.callId);
+    let params = isCall ? (callDb?.parameters ?? {}) : (db?.parameters ?? {});
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
-    const callInfo = getCallInfo(db.chat_id, db.contact_id, db.started_at, db.closed_at);
+    const callInfo = db ? getCallInfo(db.chat_id, db.contact_id, db.started_at, db.closed_at) : { status: 'transcribed' as const, label: 'Call' };
 
     let botIqsScore: number | null = null;
     let iqsScore: number | null = null;
@@ -284,52 +323,75 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (iqsScore === null && !isBot) {
+    if (callDb?.iqs_percent != null && isCall) {
+      callIqsScore = parseFloat(callDb.iqs_percent);
+      if (iqsScore === null) iqsScore = callIqsScore;
+    }
+
+    if (iqsScore === null && !isBot && !callDb) {
       iqsScore = computeIqsFromRawParams(params, false);
     }
-    if (botIqsScore === null) {
+    if (botIqsScore === null && !callDb) {
       botIqsScore = computeIqsFromRawParams(params, true);
     }
-    if (botIqsScore === null && db.iqs_score !== null && db.iqs_score !== undefined) {
+    if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
       botIqsScore = parseFloat(db.iqs_score);
     }
     if (isBot) {
       iqsScore = null;
     }
 
+    const submitterRole = raisedByLabel(flag.agentEmail);
+    const submitterUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === (flag.agentEmail || '').toLowerCase());
+    const effectiveRaisedByName = (flag.raisedByRole === 'tl' || submitterRole === 'TL')
+      ? (submitterUser?.agentName || submitterUser?.username || flag.agentEmail?.split('@')[0] || 'TL')
+      : (flag.agentName || effectiveAgentName);
+
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
-      agentName:        flag.agentName,
+      callId:           isCall ? (callDb?.call_id || flag.callId) : undefined,
+      agentName:        effectiveAgentName,
       agentEmail:       flag.agentEmail,
-      raisedBy:         raisedByLabel(flag.agentEmail),
-      raisedByName:     flag.agentName,
+      raisedBy:         submitterRole,
+      raisedByName:     effectiveRaisedByName,
       iqsScore,
       botIqsScore,
       callIqsScore,
       callTranscriptStatus: callInfo.status,
       callTranscriptLabel: callInfo.label,
-      closedAt:         db.closed_at ? new Date(db.closed_at).toISOString() : flag.flaggedAt || '',
-      csatScore:        db.csat_score ? parseInt(db.csat_score) : null,
-      mobileNumber:     db.mobile_number ?? null,
-      disposition:      db.disposition,
-      subDisposition:   db.sub_disposition,
+      closedAt:         db?.closed_at ? new Date(db.closed_at).toISOString() : (callDb?.called_at ? new Date(callDb.called_at).toISOString() : flag.flaggedAt || ''),
+      csatScore:        db?.csat_score ? parseInt(db.csat_score) : null,
+      mobileNumber:     db?.mobile_number ?? null,
+      disposition:      effectiveDisposition,
+      subDisposition:   db?.sub_disposition || callDb?.sub_disposition || null,
       agentNote:        flag.agentNote,
+      reviewNote:       flag.reviewNote || null,
+      reviewedBy:       flag.reviewedBy || chatReviewer || null,
+      reviewedAt:       flag.reviewedAt || null,
       challengedParams: flag.challengedParams ?? [],
       parameters:       params,
+      gates:            callDb?.gates ?? null,
       tlForwarded:      flag.status === 'tl_forwarded',
-      conversationType: db.conversation_type as any,
-      reviewedBy:       chatReviewer || null,
-    });
+      conversationType: (db?.conversation_type ?? null) as any,
+    } as any);
+  }
+
+  // Filter by type (calls vs chats) if provided
+  const typeParam = searchParams.get('type');
+  let finalDisputes = disputes;
+  if (typeParam === 'calls') {
+    finalDisputes = disputes.filter(d => Boolean(d.callId));
+  } else if (typeParam === 'chats') {
+    finalDisputes = disputes.filter(d => !d.callId);
   }
 
   // Filter by agent_filter or has_calls if provided
   const hasCallsParam = searchParams.get('has_calls') || searchParams.get('call_filter');
-  let finalDisputes = disputes;
   if (agentFilter === 'has_calls' || hasCallsParam === 'has_calls' || hasCallsParam === 'true' || hasCallsParam === 'yes') {
-    finalDisputes = disputes.filter(d => d.callTranscriptStatus !== 'no_call');
+    finalDisputes = finalDisputes.filter(d => d.callTranscriptStatus !== 'no_call');
   } else if (hasCallsParam === 'no_calls' || hasCallsParam === 'false' || hasCallsParam === 'no') {
-    finalDisputes = disputes.filter(d => d.callTranscriptStatus === 'no_call');
+    finalDisputes = finalDisputes.filter(d => d.callTranscriptStatus === 'no_call');
   }
 
   // Sort by closedAt desc safely

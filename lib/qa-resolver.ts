@@ -25,7 +25,17 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
       WHERE c.id = $1
     `, [chatId]);
 
-    const row = revRows[0];
+    let row = revRows[0];
+    if (!row) {
+      const callRows = await queryFn<{ reviewed_by: string | null; agent_id: number | null; disposition: string | null }>(`
+        SELECT ce.reviewed_by, ce.agent_id, cr.call_disposition AS disposition
+        FROM call_evaluations ce
+        JOIN call_recordings cr ON cr.id = ce.call_id
+        WHERE ce.call_id = $1 OR ce.chat_id = $1
+      `, [chatId]);
+      row = callRows[0];
+    }
+
     if (row) {
       const config = await readConfigFn();
 

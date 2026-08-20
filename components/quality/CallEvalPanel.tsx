@@ -1,6 +1,8 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { normalizeScore } from '@/lib/quality';
+import { DisputeThread } from './DisputeThread';
+
 // Parameter weights for call IQS (v3.1 Spec)
 const CALL_IQS_WEIGHTS: Record<string, number> = {
   P1: 20, // Factual correctness
@@ -16,18 +18,22 @@ const CALL_IQS_WEIGHTS: Record<string, number> = {
 };
 
 export interface CallEvalPanelProps {
-  callId:        string;
-  chatId:        string | null;
-  agentName:     string;
-  iqsScore:      number;
-  calledAt:      string;
-  disposition:   string;
-  gates:         any;
-  iqsScores:     any;
-  mode:          'submit' | 'view';
-  onDone:        () => void;
-  onClose:       () => void;
-  colSpan:       number;
+  callId:            string;
+  chatId?:           string | null;
+  agentName:         string;
+  iqsScore:          number;
+  calledAt?:         string | null;
+  disposition?:      string | null;
+  gates?:            any;
+  iqsScores?:        any;
+  mode?:             'submit' | 'view' | 'review' | 'resolve';
+  dispute?:          any;
+  allowRaiseDispute?: boolean;
+  allowReevaluate?:  boolean;
+  onDisputeRaised?:  () => void;
+  onDone:            () => void;
+  onClose:           () => void;
+  colSpan?:          number;
 }
 
 const PARAM_NAMES: Record<string, string> = {
@@ -48,43 +54,129 @@ function ScoreBadge({ score }: { score?: string | number | null | boolean }) {
   return <span style={{ padding: '2px 6px', borderRadius: 4, fontSize: 10, fontWeight: 700, background: norm.badgeBg, color: norm.badgeText }}>{norm.label}</span>;
 }
 
+const PARAM_ALIASES: Record<string, string[]> = {
+  P1: ['P1', 'TechnicalLegal', 'Technical', 'factual', 'P1_factual'],
+  P2: ['P2', 'AllQuestions', 'questions', 'P2_questions'],
+  P3: ['P3', 'Expectation', 'ExpectationSetting', 'P3_expectation'],
+  P5: ['P5', 'CallOpening', 'Opening', 'P5_opening'],
+  P6: ['P6', 'CallClosing', 'Closing', 'P6_closing'],
+  P7: ['P7', 'Process', 'PreCheck', 'P7_process'],
+  P8: ['P8', 'Simplifying', 'Jargon', 'P8_simplifying'],
+  P9: ['P9', 'ActiveListening', 'ActiveListeningInterruptions', 'P9_active_listening'],
+  P10: ['P10', 'Fillers', 'DeadAir', 'FillersDeadAir', 'P10_fillers'],
+  P11: ['P11', 'EnergyTone', 'Energy', 'EnergyWarmthPace', 'P11_energy'],
+};
+
+function normScoreVal(val: any): string {
+  if (val === true || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') return 'Yes';
+  if (val === false || val === 0 || val === '0' || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') return 'No';
+  if (val === 1 || val === '1' || val === 'Part' || val === 'part') return 'Part';
+  if (val === 'NA' || val === 'na' || val === null || val === undefined) return 'NA';
+  return String(val);
+}
+
+function resolveParamData(raw: any, pKey: string): { score: string; reasoning: string } {
+  if (!raw || typeof raw !== 'object') return { score: 'NA', reasoning: '' };
+  const aliases = PARAM_ALIASES[pKey] || [pKey];
+
+  const scoresObj = raw.scores || (raw.__scores ? null : raw);
+  const evidenceObj = raw.evidence || raw.reasoning || {};
+
+  // 1. Check scoresObj
+  if (scoresObj && typeof scoresObj === 'object') {
+    for (const alias of aliases) {
+      if (scoresObj[alias] !== undefined) {
+        const val = scoresObj[alias];
+        if (typeof val === 'object' && val !== null) {
+          const s = val.score !== undefined ? normScoreVal(val.score) : 'NA';
+          const r = val.reasoning || val.evidence || val.note || '';
+          return { score: s, reasoning: typeof r === 'object' ? r.note || '' : String(r) };
+        }
+        const s = normScoreVal(val);
+        const ev = evidenceObj[alias] || raw[`${alias}_reasoning`] || raw[`${alias}_evidence`];
+        const r = ev ? (Array.isArray(ev) ? ev[0]?.note || '' : typeof ev === 'object' ? ev.note || '' : String(ev)) : '';
+        return { score: s, reasoning: r };
+      }
+    }
+  }
+
+  // 2. Check top level
+  for (const alias of aliases) {
+    if (raw[alias] !== undefined) {
+      const val = raw[alias];
+      if (typeof val === 'object' && val !== null) {
+        const s = val.score !== undefined ? normScoreVal(val.score) : 'NA';
+        const r = val.reasoning || val.evidence || val.note || '';
+        return { score: s, reasoning: typeof r === 'object' ? r.note || '' : String(r) };
+      }
+      return { score: normScoreVal(val), reasoning: '' };
+    }
+  }
+
+  return { score: 'NA', reasoning: '' };
+}
+
 export default function CallEvalPanel({
-  callId, agentName, iqsScore, calledAt, disposition,
-  gates, iqsScores, mode, onDone, onClose, colSpan
+  callId,
+  chatId,
+  agentName,
+  iqsScore,
+  calledAt,
+  disposition,
+  gates,
+  iqsScores,
+  mode = 'view',
+  dispute,
+  allowRaiseDispute = false,
+  allowReevaluate = false,
+  onDisputeRaised,
+  onDone,
+  onClose,
+  colSpan = 7,
 }: CallEvalPanelProps) {
   const [segments, setSegments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [paramState, setParamState] = useState<Record<string, { score: string; reasoning: string }>>({});
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(dispute?.reviewNote || '');
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
   const [liveIqs, setLiveIqs] = useState<number | null>(iqsScore);
-  const [currentGates, setCurrentGates] = useState<any>(gates);
-  const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores);
+  const [currentGates, setCurrentGates] = useState<any>(gates || dispute?.gates || dispute?.parameters?.gates);
+  const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores || dispute?.parameters);
+
+  // Raising dispute inline state (for TL or agent)
+  const [raisingDispute, setRaisingDispute] = useState(false);
+  const [disputeSelectedParams, setDisputeSelectedParams] = useState<Record<string, boolean>>({});
+  const [disputeParamNotes, setDisputeParamNotes] = useState<Record<string, string>>({});
+  const [agentDisputeNote, setAgentDisputeNote] = useState('');
+  const [submittingDispute, setSubmittingDispute] = useState(false);
 
   useEffect(() => {
-    setCurrentGates(gates);
-  }, [gates]);
+    if (gates) setCurrentGates(gates);
+    else if (dispute?.gates) setCurrentGates(dispute.gates);
+    else if (dispute?.parameters?.gates) setCurrentGates(dispute.parameters.gates);
+  }, [gates, dispute]);
 
   useEffect(() => {
-    setCurrentIqsScores(iqsScores);
-  }, [iqsScores]);
+    if (iqsScores) setCurrentIqsScores(iqsScores);
+    else if (dispute?.parameters) setCurrentIqsScores(dispute.parameters);
+  }, [iqsScores, dispute]);
 
   // Initialize parameter state
   useEffect(() => {
-    const scores = currentIqsScores?.scores || {};
-    const evidence = currentIqsScores?.evidence || {};
+    let raw = currentIqsScores || dispute?.parameters || iqsScores;
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch {}
+    }
     const state: Record<string, { score: string; reasoning: string }> = {};
 
     Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
-      const val = scores[p] !== undefined ? String(scores[p]) : 'NA';
-      const ev = evidence[p] ? (Array.isArray(evidence[p]) ? evidence[p][0]?.note || '' : String(evidence[p])) : '';
-      state[p] = { score: val, reasoning: ev };
+      state[p] = resolveParamData(raw, p);
     });
 
     setParamState(state);
-  }, [currentIqsScores]);
+  }, [currentIqsScores, dispute, iqsScores]);
 
   // Recalculate live IQS score
   useEffect(() => {
@@ -92,25 +184,56 @@ export default function CallEvalPanel({
     let applicable = 0;
     Object.entries(paramState).forEach(([p, val]) => {
       const weight = CALL_IQS_WEIGHTS[p] || 0;
-      if (val.score === 'NA') return;
+      if (!val || val.score === 'NA') return;
       applicable += weight;
-      const num = val.score === 'Yes' ? 2 : val.score === 'No' ? 0 : parseFloat(val.score);
+      let num = 0;
+      if (val.score === 'Yes' || val.score === '2' || val.score === 'PASS') num = 2;
+      else if (val.score === 'No' || val.score === '0' || val.score === 'FAIL') num = 0;
+      else if (val.score === 'Part' || val.score === '1') num = 1;
+      else {
+        const parsed = parseFloat(String(val.score));
+        num = isNaN(parsed) ? 0 : parsed;
+      }
       earned += weight * (num / 2);
     });
-    setLiveIqs(applicable === 0 ? null : Math.round((earned / applicable) * 100));
-  }, [paramState]);
+    if (applicable === 0) {
+      setLiveIqs(iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
+    } else {
+      const calc = Math.round((earned / applicable) * 100);
+      setLiveIqs(isNaN(calc) ? (iqsScore != null && !isNaN(iqsScore) ? iqsScore : null) : calc);
+    }
+  }, [paramState, iqsScore]);
 
-  // Load call transcript segments
+  // Load call transcript segments and fallback evaluation details
   useEffect(() => {
     fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`)
       .then(r => r.json())
       .then(d => {
         if (d.segments) setSegments(d.segments);
         if (d.recordingUrl) setRecordingUrl(d.recordingUrl);
+        if (d.gates && (!currentGates || Object.keys(currentGates).length === 0)) {
+          setCurrentGates(d.gates);
+        }
+        if (d.iqsScores && (!currentIqsScores || Object.keys(currentIqsScores).length === 0)) {
+          setCurrentIqsScores(d.iqsScores);
+        }
+        if (d.iqsPercent != null && (liveIqs === null || isNaN(liveIqs))) {
+          setLiveIqs(parseFloat(d.iqsPercent));
+        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [callId]);
+
+  const challengedMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (dispute?.challengedParams && Array.isArray(dispute.challengedParams)) {
+      for (const cp of dispute.challengedParams) {
+        if (cp.param) map.set(cp.param, cp.note || '');
+      }
+    }
+    return map;
+  }, [dispute]);
 
   const handleScoreChange = (param: string, val: string) => {
     setParamState(prev => ({
@@ -126,9 +249,101 @@ export default function CallEvalPanel({
     }));
   };
 
+  const [isTranscriptModified, setIsTranscriptModified] = useState(false);
+  const [isSavingTranscript, setIsSavingTranscript] = useState(false);
+
+  const handleSwapAllSpeakers = () => {
+    setSegments(prev => {
+      return prev.map(seg => {
+        if (seg.type === 'interruption') {
+          const isInterruptedIR = seg.interrupted_speaker === 'IR_EXECUTIVE' || seg.interrupted_speaker === 'IR EXECUTIVE' || (seg.interrupted_speaker || '').toLowerCase().includes('agent');
+          return {
+            ...seg,
+            interrupted_speaker: isInterruptedIR ? 'INVESTOR' : 'IR_EXECUTIVE',
+            interrupted_by: isInterruptedIR ? 'IR_EXECUTIVE' : 'INVESTOR'
+          };
+        }
+        const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
+        return {
+          ...seg,
+          speaker: isIR ? 'INVESTOR' : 'IR_EXECUTIVE',
+          role: isIR ? 'customer' : 'agent'
+        };
+      });
+    });
+    setIsTranscriptModified(true);
+  };
+
+  const handleToggleSpeaker = (idx: number) => {
+    setSegments(prev => {
+      const copy = [...prev];
+      const seg = copy[idx];
+      if (!seg) return prev;
+      const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
+      copy[idx] = {
+        ...seg,
+        speaker: isIR ? 'INVESTOR' : 'IR_EXECUTIVE',
+        role: isIR ? 'customer' : 'agent'
+      };
+      return copy;
+    });
+    setIsTranscriptModified(true);
+  };
+
+  const handleSaveTranscriptAndReevaluate = async () => {
+    if (isSavingTranscript || isReevaluating || saving) return;
+    setIsSavingTranscript(true);
+    try {
+      // 1. Save updated segments to call_recordings
+      const saveRes = await fetch('/api/call-quality/update-transcript', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ call_id: callId, segments })
+      });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok || !saveData.ok) {
+        alert(saveData.error || 'Failed to save corrected transcript');
+        setIsSavingTranscript(false);
+        return;
+      }
+      setIsTranscriptModified(false);
+
+      // 2. Re-evaluate quality scores using corrected transcript
+      setIsReevaluating(true);
+      const evalRes = await fetch('/api/call-quality/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callId, forceTranscript: false })
+      });
+      const data = await evalRes.json();
+      if (evalRes.ok && data.ok) {
+        if (data.gates) setCurrentGates(data.gates);
+        if (data.iqsScores) {
+          setCurrentIqsScores(data.iqsScores);
+          const raw = data.iqsScores;
+          const state: Record<string, { score: string; reasoning: string }> = {};
+          Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
+            state[p] = resolveParamData(raw, p);
+          });
+          setParamState(state);
+        }
+        if (data.iqs !== undefined && data.iqs !== null) setLiveIqs(data.iqs);
+
+        alert('Transcript saved and call quality re-evaluated successfully!');
+      } else {
+        alert(`Re-evaluation failed: ${data.error || 'Unknown error'}`);
+      }
+    } catch (err: any) {
+      alert(`Error saving and re-evaluating: ${err.message}`);
+    } finally {
+      setIsSavingTranscript(false);
+      setIsReevaluating(false);
+    }
+  };
+
   const handleReevaluate = async () => {
-    if (isReevaluating || saving) return;
-    const ok = confirm(`Re-evaluate call ID ${callId}?\n\nThis will re-run diarization, transcription, and scoring for this call.`);
+    if (isReevaluating || saving || isSavingTranscript) return;
+    const ok = confirm(`Re-evaluate call ID ${callId}?\n\nThis will re-run the evaluation scoring and parameter calculation for this call.`);
     if (!ok) return;
 
     setIsReevaluating(true);
@@ -136,11 +351,10 @@ export default function CallEvalPanel({
       const res = await fetch('/api/call-quality/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId, forceTranscript: true })
+        body: JSON.stringify({ callId, forceTranscript: false })
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        // Re-fetch transcript segments & recording URL
         setLoading(true);
         try {
           const trRes = await fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`);
@@ -154,7 +368,15 @@ export default function CallEvalPanel({
         }
 
         if (data.gates) setCurrentGates(data.gates);
-        if (data.iqsScores) setCurrentIqsScores(data.iqsScores);
+        if (data.iqsScores) {
+          setCurrentIqsScores(data.iqsScores);
+          const raw = data.iqsScores;
+          const state: Record<string, { score: string; reasoning: string }> = {};
+          Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
+            state[p] = resolveParamData(raw, p);
+          });
+          setParamState(state);
+        }
         if (data.iqs !== undefined && data.iqs !== null) setLiveIqs(data.iqs);
 
         alert('Call re-evaluation completed successfully!');
@@ -172,7 +394,7 @@ export default function CallEvalPanel({
     setSaving(true);
     const scores: Record<string, string> = {};
     const reasoning: Record<string, string> = {};
-    
+
     Object.entries(paramState).forEach(([p, val]) => {
       scores[p] = val.score;
       reasoning[p] = val.reasoning;
@@ -182,21 +404,75 @@ export default function CallEvalPanel({
       const res = await fetch('/api/call-quality/override-evaluation', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ callId, scores, reasoning, note })
+        body: JSON.stringify({
+          callId,
+          scores,
+          reasoning,
+          note,
+          flagId: dispute?.flagId,
+          action: mode === 'review' || mode === 'resolve' ? 'resolve' : 'override',
+        })
       });
       if (res.ok) {
         onDone();
       } else {
-        alert('Failed to save override');
+        const d = await res.json();
+        alert(d.error || 'Failed to save evaluation');
       }
     } catch {
-      alert('Error saving override');
+      alert('Error saving evaluation');
     } finally {
       setSaving(false);
     }
   };
 
+  const handleRaiseDisputeSubmit = async () => {
+    const challenged = Object.entries(disputeSelectedParams)
+      .filter(([, checked]) => checked)
+      .map(([paramKey]) => ({
+        param: paramKey,
+        note: disputeParamNotes[paramKey] || '',
+      }));
+
+    if (challenged.length === 0) {
+      alert('Please select at least one parameter to challenge.');
+      return;
+    }
+
+    setSubmittingDispute(true);
+    try {
+      const res = await fetch('/api/quality/flag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callId,
+          chatId: chatId || callId,
+          agentNote: agentDisputeNote,
+          challengedParams: challenged,
+        }),
+      });
+
+      if (res.ok) {
+        alert('Dispute raised successfully!');
+        setRaisingDispute(false);
+        setDisputeSelectedParams({});
+        setDisputeParamNotes({});
+        setAgentDisputeNote('');
+        onDisputeRaised?.();
+        onDone();
+      } else {
+        const d = await res.json();
+        alert(d.error || 'Failed to raise dispute');
+      }
+    } catch (e: any) {
+      alert(`Error raising dispute: ${e.message}`);
+    } finally {
+      setSubmittingDispute(false);
+    }
+  };
+
   const isReadOnly = mode === 'view';
+  const isReviewMode = mode === 'review' || mode === 'resolve';
 
   const callDateStr = calledAt
     ? new Date(calledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
@@ -205,48 +481,236 @@ export default function CallEvalPanel({
   return (
     <tr>
       <td colSpan={colSpan} style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid var(--qa-border)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        {/* Header bar */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--qa-text)' }}>
             Call Evaluation Panel — ID: {callId} ({agentName}){callDateStr ? ` · ${callDateStr}` : ''}
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <button
-              onClick={handleReevaluate}
-              disabled={isReevaluating || saving}
-              title="Re-evaluate this call (diarization, transcription, and scoring)"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '6px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                borderRadius: 6,
-                border: '1px solid var(--qa-border, #cbd5e1)',
-                background: isReevaluating ? '#f1f5f9' : '#ffffff',
-                color: isReevaluating ? '#64748b' : 'var(--qa-text, #0f172a)',
-                cursor: isReevaluating ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <span style={{
-                display: 'inline-block',
-                transform: isReevaluating ? 'rotate(180deg)' : 'none',
-                transition: 'transform 0.5s ease-in-out'
-              }}>
-                🔄
-              </span>
-              {isReevaluating ? 'Re-evaluating Call…' : 'Re-evaluate Call'}
-            </button>
+            {allowRaiseDispute && mode === 'view' && !dispute && !raisingDispute && (
+              <button
+                onClick={() => setRaisingDispute(true)}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px solid #eab308',
+                  background: '#fefce8',
+                  color: '#854d0e',
+                  cursor: 'pointer',
+                }}
+              >
+                Raise Dispute
+              </button>
+            )}
+            {allowReevaluate && (
+              <button
+                onClick={handleReevaluate}
+                disabled={isReevaluating || saving}
+                title="Re-evaluate this call (diarization, transcription, and scoring)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px solid var(--qa-border, #cbd5e1)',
+                  background: isReevaluating ? '#f1f5f9' : '#ffffff',
+                  color: isReevaluating ? '#64748b' : 'var(--qa-text, #0f172a)',
+                  cursor: isReevaluating ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span style={{
+                  display: 'inline-block',
+                  transform: isReevaluating ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.5s ease-in-out'
+                }}>
+                  🔄
+                </span>
+                {isReevaluating ? 'Re-evaluating Call…' : 'Re-evaluate Call'}
+              </button>
+            )}
             <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 18, color: 'var(--qa-text-3)', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
           </div>
         </div>
 
+        {/* Disputed Params banner */}
+        {dispute?.challengedParams && dispute.challengedParams.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>
+              Disputed Params:
+            </span>
+            {dispute.challengedParams.map((cp: any) => (
+              <span
+                key={cp.param}
+                title={cp.note}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  background: '#F4F4F5',
+                  border: '1px solid #E4E4E7',
+                  borderRadius: 4,
+                  padding: '2px 8px',
+                  color: '#52525B',
+                  cursor: cp.note ? 'help' : 'default',
+                }}
+              >
+                {PARAM_NAMES[cp.param] ? `${cp.param}: ${PARAM_NAMES[cp.param]}` : cp.param}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Dispute Thread & Activity (When reviewing dispute or viewing existing dispute) */}
+        {dispute?.flagId && (
+          <div style={{ marginBottom: 16 }}>
+            <DisputeThread
+              flagId={dispute.flagId}
+              agentNote={dispute.agentNote}
+              reviewNote={dispute.reviewNote || note}
+              agentName={dispute.agentName || agentName}
+              reviewedBy={dispute.reviewedBy || dispute.resolvedBy || dispute.qaName}
+              reviewerRole="quality"
+              flaggedAt={dispute.flaggedAt || dispute.raisedAt}
+              reviewedAt={dispute.reviewedAt}
+            />
+          </div>
+        )}
+
+        {/* Inline Raise Dispute Form */}
+        {raisingDispute && (
+          <div style={{ padding: 16, background: '#fefce8', border: '1px solid #fef08a', borderRadius: 8, marginBottom: 16 }}>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: '#854d0e' }}>
+              Raise Dispute on Call {callId}
+            </h4>
+            <p style={{ fontSize: 12, color: '#713f12', marginBottom: 12 }}>
+              Select parameters to challenge and add brief justification:
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8, marginBottom: 12 }}>
+              {Object.keys(PARAM_NAMES).map(pKey => {
+                const isChecked = Boolean(disputeSelectedParams[pKey]);
+                return (
+                  <div key={pKey} style={{ padding: 8, background: '#fff', border: `1px solid ${isChecked ? '#eab308' : '#e5e7eb'}`, borderRadius: 6 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={e => setDisputeSelectedParams(prev => ({ ...prev, [pKey]: e.target.checked }))}
+                      />
+                      {PARAM_NAMES[pKey]}
+                    </label>
+                    {isChecked && (
+                      <input
+                        type="text"
+                        placeholder="Reason for challenge…"
+                        value={disputeParamNotes[pKey] || ''}
+                        onChange={e => setDisputeParamNotes(prev => ({ ...prev, [pKey]: e.target.value }))}
+                        style={{ width: '100%', marginTop: 6, padding: '4px 6px', fontSize: 11, border: '1px solid #e5e7eb', borderRadius: 4 }}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <textarea
+              placeholder="Overall explanation note…"
+              value={agentDisputeNote}
+              onChange={e => setAgentDisputeNote(e.target.value)}
+              style={{ width: '100%', height: 48, padding: 8, fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, marginBottom: 10 }}
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                disabled={submittingDispute}
+                onClick={handleRaiseDisputeSubmit}
+                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: '#854d0e', color: '#fff', border: 0, borderRadius: 6, cursor: 'pointer' }}
+              >
+                {submittingDispute ? 'Submitting…' : 'Submit Dispute'}
+              </button>
+              <button
+                onClick={() => setRaisingDispute(false)}
+                style={{ padding: '6px 14px', fontSize: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          {/* Left panel: Transcript bubbles */}
+          {/* Left panel: Transcript bubbles and audio */}
           <div style={{ flex: 1, minWidth: 320, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, maxHeight: '600px', overflowY: 'auto' }}>
-            <h4 style={{ margin: '0 0 12px 0', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+              <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
+              
+              {allowReevaluate && (
+                <button
+                  onClick={handleSwapAllSpeakers}
+                  disabled={loading || segments.length === 0 || isSavingTranscript || isReevaluating}
+                  title="Swap IR Executive and Investor speakers across the entire transcript"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    border: '1px solid #cbd5e1',
+                    background: '#f8fafc',
+                    color: '#334155',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    cursor: (loading || segments.length === 0 || isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  ⇄ Swap All Speakers (IR ⇋ Investor)
+                </button>
+              )}
+            </div>
+
+            {allowReevaluate && isTranscriptModified && (
+              <div style={{
+                padding: '10px 14px',
+                background: '#fefce8',
+                border: '1px solid #fef08a',
+                borderRadius: 8,
+                marginBottom: 12,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 10,
+                flexWrap: 'wrap'
+              }}>
+                <span style={{ fontSize: 12, color: '#854d0e', fontWeight: 500 }}>
+                  ⚠️ Diarization / speakers modified. Click below to save and re-run quality scoring.
+                </span>
+                <button
+                  onClick={handleSaveTranscriptAndReevaluate}
+                  disabled={isSavingTranscript || isReevaluating}
+                  style={{
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    border: 'none',
+                    background: '#ca8a04',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: (isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6
+                  }}
+                >
+                  {isSavingTranscript ? 'Saving transcript…' : isReevaluating ? 'Re-evaluating…' : 'Save & Re-evaluate Call'}
+                </button>
+              </div>
+            )}
+
             {recordingUrl && (
               <div style={{
                 padding: '10px 14px',
@@ -266,6 +730,7 @@ export default function CallEvalPanel({
                 />
               </div>
             )}
+
             {loading ? (
               <p style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>Loading transcript…</p>
             ) : segments.length === 0 ? (
@@ -288,15 +753,35 @@ export default function CallEvalPanel({
                     );
                   }
                   
-                  const textContent = (seg.text || seg.translation || '').trim();
+                  const textContent = (seg.text || seg.translation || seg.content || '').trim();
                   if (!textContent) return null;
 
-                  const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE';
+                  const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
-                      <span style={{ fontSize: 10, color: 'var(--qa-text-3)', marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
-                        {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || ''}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
+                        <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>
+                          {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || seg.timestamp || ''}
+                        </span>
+                        {allowReevaluate && (
+                          <button
+                            onClick={() => handleToggleSpeaker(idx)}
+                            title={`Switch speaker to ${isIR ? 'INVESTOR' : 'IR EXECUTIVE'}`}
+                            style={{
+                              border: '1px solid #e2e8f0',
+                              background: '#f8fafc',
+                              color: '#64748b',
+                              borderRadius: 4,
+                              padding: '1px 5px',
+                              fontSize: 10,
+                              cursor: 'pointer',
+                              lineHeight: 1
+                            }}
+                          >
+                            ⇄ Switch
+                          </button>
+                        )}
+                      </div>
                       <div style={{
                         padding: '10px 14px',
                         borderRadius: 12,
@@ -314,71 +799,116 @@ export default function CallEvalPanel({
             )}
           </div>
 
-          {/* Right panel: Evaluation list */}
-          <div style={{ width: 420, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* Right panel: Parameters & Scoring */}
+          <div style={{
+            flex: '0 0 440px',
+            width: 440,
+            minWidth: 320,
+            background: '#fff',
+            border: '1px solid var(--qa-border)',
+            borderRadius: 10,
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            maxHeight: '600px',
+            overflowY: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              position: 'sticky',
+              top: -16,
+              background: '#fff',
+              zIndex: 2,
+              paddingTop: 4,
+              paddingBottom: 8,
+              borderBottom: '1px solid var(--qa-border-sub, #f1f5f9)',
+              marginBottom: -4
+            }}>
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Evaluation Parameters</h4>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
-                Live Score: <span style={{ color: '#15803d' }}>{liveIqs ?? '—'}%</span>
+                Live Score: <span style={{ color: '#15803d' }}>{liveIqs != null && !isNaN(liveIqs) ? `${liveIqs}%` : (iqsScore != null && !isNaN(iqsScore) ? `${iqsScore}%` : '—')}</span>
               </span>
             </div>
 
             {/* Compliance Gates Card */}
-            <div style={{ background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12 }}>
-              <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                Compliance Gates: <span style={{ color: currentGates?.call_gate_result === 'FAIL' ? '#b91c1c' : '#15803d' }}>{currentGates?.call_gate_result || 'PASS'}</span>
-              </h5>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                <div>G1 Advice: <ScoreBadge score={currentGates?.G1_no_advice?.status === 'pass' ? 'Yes' : currentGates?.G1_no_advice?.status === 'fail' ? 'No' : 'NA'} /></div>
-                <div>G2 Fabrication: <ScoreBadge score={currentGates?.G2_no_fabrication?.status === 'pass' ? 'Yes' : currentGates?.G2_no_fabrication?.status === 'fail' ? 'No' : 'NA'} /></div>
-                <div>G3 Identity: <ScoreBadge score={currentGates?.G3_identity_first?.status === 'pass' ? 'Yes' : currentGates?.G3_identity_first?.status === 'fail' ? 'No' : 'NA'} /></div>
+            {currentGates && (
+              <div style={{ background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12 }}>
+                <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                  Compliance Gates: <span style={{ color: currentGates?.call_gate_result === 'FAIL' ? '#b91c1c' : '#15803d' }}>{currentGates?.call_gate_result || 'PASS'}</span>
+                </h5>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                  <div>G1 Advice: <ScoreBadge score={currentGates?.G1_no_advice?.status === 'pass' ? 'Yes' : currentGates?.G1_no_advice?.status === 'fail' ? 'No' : 'NA'} /></div>
+                  <div>G2 Fabrication: <ScoreBadge score={currentGates?.G2_no_fabrication?.status === 'pass' ? 'Yes' : currentGates?.G2_no_fabrication?.status === 'fail' ? 'No' : 'NA'} /></div>
+                  <div>G3 Identity: <ScoreBadge score={currentGates?.G3_identity_first?.status === 'pass' ? 'Yes' : currentGates?.G3_identity_first?.status === 'fail' ? 'No' : 'NA'} /></div>
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Parameters Accordion/List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: '360px', overflowY: 'auto', paddingRight: 4 }}>
+            {/* Parameter List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
               {Object.keys(CALL_IQS_WEIGHTS).map(p => {
-                const state = paramState[p] || { score: 'NA', reasoning: '' };
-                const weight = CALL_IQS_WEIGHTS[p];
+                const item = paramState[p] || { score: 'NA', reasoning: '' };
+                const isChallenged = challengedMap.has(p);
+                const challengedNote = challengedMap.get(p);
 
                 return (
-                  <div key={p} style={{ borderBottom: '1px solid #f1f5f9', paddingBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)', flex: 1, marginRight: 8 }}>
-                        {PARAM_NAMES[p]} <span style={{ color: 'var(--qa-text-3)', fontWeight: 400 }}>({weight}%)</span>
+                  <div
+                    key={p}
+                    style={{
+                      padding: 10,
+                      background: isChallenged ? '#fffbeb' : '#fafafa',
+                      border: `1px solid ${isChallenged ? '#fde047' : '#f0f0f2'}`,
+                      borderRadius: 8
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)' }}>
+                        {PARAM_NAMES[p]} <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>({CALL_IQS_WEIGHTS[p]}%)</span>
                       </span>
                       {isReadOnly ? (
-                        <ScoreBadge score={state.score} />
+                        <ScoreBadge score={item.score} />
                       ) : (
-                        <div style={{ display: 'flex', gap: 2 }}>
-                          {['2', '1', '0', 'NA'].map(v => (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          {['Yes', 'No', 'NA'].map(val => (
                             <button
-                              key={v}
-                              onClick={() => handleScoreChange(p, v)}
+                              key={val}
+                              onClick={() => handleScoreChange(p, val)}
                               style={{
-                                border: '1px solid var(--qa-border)',
+                                padding: '2px 8px',
                                 borderRadius: 4,
-                                padding: '2px 6px',
-                                fontSize: 10,
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                background: state.score === v ? '#1e293b' : '#fff',
-                                color: state.score === v ? '#fff' : 'var(--qa-text-2)'
+                                fontSize: 11,
+                                fontWeight: item.score === val ? 700 : 500,
+                                border: '1px solid var(--qa-border)',
+                                background: item.score === val ? 'var(--qa-gray-700)' : '#fff',
+                                color: item.score === val ? '#fff' : 'var(--qa-text)',
+                                cursor: 'pointer'
                               }}
                             >
-                              {v === '2' ? 'Yes' : v === '0' ? 'No' : v === '1' ? 'Part' : 'NA'}
+                              {val}
                             </button>
                           ))}
                         </div>
                       )}
                     </div>
+
+                    {isChallenged && (
+                      <div style={{ margin: '4px 0', padding: '4px 6px', background: '#fefce8', border: '1px solid #fef08a', borderRadius: 4, fontSize: 11, color: '#854d0e' }}>
+                        <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
+                      </div>
+                    )}
+
                     {isReadOnly ? (
-                      <p style={{ margin: 0, fontSize: 11, color: 'var(--qa-text-2)', lineHeight: '16px' }}>{state.reasoning}</p>
+                      item.reasoning ? (
+                        <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4 }}>{item.reasoning}</div>
+                      ) : null
                     ) : (
                       <textarea
-                        value={state.reasoning}
+                        value={item.reasoning}
                         onChange={e => handleReasoningChange(p, e.target.value)}
-                        placeholder="Reasoning for this parameter score override…"
+                        placeholder="Reasoning for this parameter score…"
                         style={{
                           width: '100%',
                           minHeight: 36,
@@ -388,7 +918,8 @@ export default function CallEvalPanel({
                           padding: '6px 8px',
                           outline: 'none',
                           resize: 'vertical',
-                          fontFamily: 'inherit'
+                          fontFamily: 'inherit',
+                          marginTop: 4,
                         }}
                       />
                     )}
@@ -397,11 +928,11 @@ export default function CallEvalPanel({
               })}
             </div>
 
-            {/* Overrides / Notes action */}
+            {/* Overrides / Notes / QA Dispute Resolution Action */}
             {!isReadOnly && (
               <div style={{ borderTop: '1px solid var(--qa-border)', paddingTop: 12 }}>
                 <textarea
-                  placeholder="Internal review note explaining why score was overridden…"
+                  placeholder={isReviewMode ? 'QA Dispute Resolution / Review Note…' : 'Internal review note explaining why score was overridden…'}
                   value={note}
                   onChange={e => setNote(e.target.value)}
                   style={{
@@ -423,7 +954,7 @@ export default function CallEvalPanel({
                   style={{
                     width: '100%',
                     height: 36,
-                    background: 'var(--qa-gray-700)',
+                    background: isReviewMode ? '#166534' : 'var(--qa-gray-700)',
                     color: '#fff',
                     border: 0,
                     borderRadius: 8,
@@ -433,7 +964,7 @@ export default function CallEvalPanel({
                     opacity: saving ? 0.7 : 1
                   }}
                 >
-                  {saving ? 'Saving…' : 'Submit Evaluation Override'}
+                  {saving ? 'Saving…' : (isReviewMode ? 'Resolve Dispute & Submit Review' : 'Submit Evaluation Override')}
                 </button>
               </div>
             )}

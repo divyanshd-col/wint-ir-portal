@@ -16,20 +16,21 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
     scores?: Record<string, string>;
     reasoning?: Record<string, string>;
     note?: string;
+    flagId?: string;
+    action?: string;
   };
 
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { callId, scores, reasoning, note } = body;
+  const { callId, scores, reasoning, note, flagId } = body;
   if (!callId?.trim() || !scores) {
     return NextResponse.json({ error: 'callId and scores are required' }, { status: 400 });
   }
 
-  // Fetch the existing call evaluation
   const evalRows = await query(`
-    SELECT * FROM call_evaluations WHERE call_id = $1
+    SELECT * FROM call_evaluations WHERE call_id = $1 OR chat_id = $1
   `, [callId.trim()]);
 
   if (!evalRows.length) {
@@ -37,6 +38,8 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
   }
 
   const existingEval = evalRows[0];
+  const actualCallId = existingEval.call_id;
+  const actualChatId = existingEval.chat_id || callId.trim();
 
   // Calculate new IQS percent & verdict
   const { iqs_percent, applicable_weight } = computeCallIQS(scores);
@@ -46,6 +49,8 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
   // Extract old scores for auditing
   const oldIqsScores = existingEval.iqs_scores || {};
   const oldIqsPercent = existingEval.iqs_percent;
+  const aiScoreInt = Math.round(parseFloat(String(oldIqsPercent ?? 0))) || 0;
+  const humanScoreInt = Math.round(parseFloat(String(iqs_percent ?? 0))) || 0;
 
   try {
     // 1. Log to call_review_comparisons for audit trail
@@ -60,9 +65,9 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
         reviewed_at = NOW(),
         review_note = EXCLUDED.review_note
     `, [
-      callId.trim(),
-      oldIqsPercent,
-      iqs_percent,
+      actualCallId,
+      aiScoreInt,
+      humanScoreInt,
       JSON.stringify(oldIqsScores.scores || {}),
       JSON.stringify(scores),
       email,
@@ -87,7 +92,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
           reviewed_at = NOW(),
           review_note = $6,
           status = 'reviewed'
-      WHERE call_id = $7
+        WHERE call_id = $7
     `, [
       JSON.stringify(newIqsScoresPayload),
       iqs_percent,
@@ -95,10 +100,31 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       newVerdict,
       email,
       note || '',
-      callId.trim()
+      actualCallId
     ]);
 
-    log.info(ROUTE, `Quality override complete for call ${callId} by ${email}`);
+    // 3. Update IQSFlag if associated with a dispute
+    if (flagId) {
+      const { storeUpdateIQSFlag, storeAppendAuditEntry } = await import('@/lib/store');
+      const { randomUUID } = await import('crypto');
+      await storeUpdateIQSFlag(flagId, {
+        status: 'reviewed',
+        reviewedBy: email,
+        reviewedAt: new Date().toISOString(),
+        reviewNote: note || '',
+      });
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: 'review_submitted',
+        chatId: actualChatId,
+        actorEmail: email,
+        actorRole: (session.user as any)?.role || 'quality',
+        ts: new Date().toISOString(),
+        meta: { oldIqs: oldIqsPercent, newIqs: iqs_percent, note: note || '', flagId },
+      });
+    }
+
+    log.info(ROUTE, `Quality override complete for call ${actualCallId} by ${email}`);
     return NextResponse.json({ ok: true, iqs: iqs_percent, verdict: newVerdict });
   } catch (err: any) {
     log.error(ROUTE, `Override database operations failed for call ${callId}: ${err.message}`);

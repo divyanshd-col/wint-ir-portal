@@ -468,7 +468,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/cx/tl/disputes?status=${status}`);
+        const res = await fetch(`/api/cx/tl/disputes?status=${status}&type=chats`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
