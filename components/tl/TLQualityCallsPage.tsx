@@ -179,9 +179,13 @@ export default function TLQualityCallsPage() {
       setTotalEntries(data.total ?? rows.length);
 
       // Collect available agents
-      const agentNamesSet = new Set<string>();
-      rows.forEach(r => { if (r.agentName) agentNamesSet.add(r.agentName); });
-      setAgentsList(prev => [...new Set([...prev, ...Array.from(agentNamesSet)])]);
+      if (Array.isArray(data.agents) && data.agents.length > 0) {
+        setAgentsList(data.agents);
+      } else {
+        const agentNamesSet = new Set<string>();
+        rows.forEach(r => { if (r.agentName) agentNamesSet.add(r.agentName); });
+        setAgentsList(prev => [...new Set([...prev, ...Array.from(agentNamesSet)])]);
+      }
     } catch {
       setEntries([]);
       setTotalEntries(0);
@@ -332,7 +336,7 @@ export default function TLQualityCallsPage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
             <select
               value={agentFilter}
-              onChange={e => setAgentFilter(e.target.value)}
+              onChange={e => { setAgentFilter(e.target.value); setPage(0); }}
               style={{
                 height: 36,
                 padding: '0 12px',
@@ -353,14 +357,14 @@ export default function TLQualityCallsPage() {
             <input
               type="date"
               value={dateFrom}
-              onChange={e => setDateFrom(e.target.value)}
+              onChange={e => { setDateFrom(e.target.value); setPage(0); }}
               style={{ height: 36, padding: '0 10px', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, fontSize: 13, background: '#fff' }}
               placeholder="From Date"
             />
             <input
               type="date"
               value={dateTo}
-              onChange={e => setDateTo(e.target.value)}
+              onChange={e => { setDateTo(e.target.value); setPage(0); }}
               style={{ height: 36, padding: '0 10px', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, fontSize: 13, background: '#fff' }}
               placeholder="To Date"
             />
@@ -370,7 +374,7 @@ export default function TLQualityCallsPage() {
                 type="number"
                 placeholder="Min IQS"
                 value={iqsMin}
-                onChange={e => setIqsMin(e.target.value)}
+                onChange={e => { setIqsMin(e.target.value); setPage(0); }}
                 style={{ width: 80, height: 36, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, fontSize: 13 }}
               />
               <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>to</span>
@@ -378,7 +382,7 @@ export default function TLQualityCallsPage() {
                 type="number"
                 placeholder="Max IQS"
                 value={iqsMax}
-                onChange={e => setIqsMax(e.target.value)}
+                onChange={e => { setIqsMax(e.target.value); setPage(0); }}
                 style={{ width: 80, height: 36, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, fontSize: 13 }}
               />
             </div>
@@ -391,6 +395,7 @@ export default function TLQualityCallsPage() {
                   setDateTo('');
                   setIqsMin('');
                   setIqsMax('');
+                  setPage(0);
                 }}
                 style={{
                   height: 36,

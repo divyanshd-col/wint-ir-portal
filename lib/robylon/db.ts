@@ -123,17 +123,41 @@ export async function getAgentTLByName(agentName: string): Promise<string | null
 export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]> {
   if (!tlIdentifier) return [];
   const normalized = tlIdentifier.trim().toLowerCase();
-  
-  const prefix = normalized.includes('@') ? normalized.split('@')[0] : normalized;
-  const firstName = prefix.split('.')[0];
-  
-  let dbUserName = '';
-  if (normalized.includes('@')) {
-    const userRows = await query<{ name: string }>(`SELECT name FROM users WHERE email = $1`, [normalized]);
-    dbUserName = userRows[0]?.name?.toLowerCase() || '';
-  }
 
-  const tokens = Array.from(new Set([normalized, prefix, firstName, dbUserName].filter(Boolean)));
+  const { readConfig } = await import('@/lib/config');
+  const config = await readConfig().catch(() => ({ users: [] }));
+  const configUser = config.users?.find((u: any) =>
+    (u.email || '').toLowerCase() === normalized ||
+    (u.username || '').toLowerCase() === normalized ||
+    (u.agentName || '').trim().toLowerCase() === normalized
+  );
+
+  let dbUserName = '';
+  try {
+    const userRows = await query<{ name: string; email: string }>(
+      `SELECT name, email FROM users WHERE LOWER(email) = $1 OR LOWER(name) = $1 LIMIT 1`,
+      [normalized]
+    );
+    if (userRows[0]?.name) dbUserName = userRows[0].name.toLowerCase();
+  } catch {}
+
+  const rawTokens = [
+    normalized,
+    normalized.includes('@') ? normalized.split('@')[0] : '',
+    normalized.includes('@') ? normalized.split('@')[0].split('.')[0] : '',
+    configUser?.email?.toLowerCase(),
+    configUser?.email ? configUser.email.split('@')[0].toLowerCase() : '',
+    configUser?.email ? configUser.email.split('@')[0].split('.')[0].toLowerCase() : '',
+    configUser?.agentName?.trim().toLowerCase(),
+    ...(configUser?.agentName ? configUser.agentName.trim().toLowerCase().split(/\s+/) : []),
+    configUser?.username?.toLowerCase(),
+    (configUser as any)?.name?.toLowerCase(),
+    dbUserName,
+    ...(dbUserName ? dbUserName.split(/\s+/) : []),
+    ...(normalized.split(/\s+/)),
+  ].filter(Boolean).map(s => s!.trim()).filter(s => s.length >= 3);
+
+  const tokens = Array.from(new Set(rawTokens));
 
   const rows = await query<{ name: string }>(
     `SELECT a.name
@@ -143,8 +167,8 @@ export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]>
          LOWER(TRIM(a.tl_name)) = ANY($1::text[])
          OR EXISTS (
            SELECT 1 FROM unnest($1::text[]) t
-           WHERE LOWER(a.tl_name) LIKE LOWER(t || '%')
-              OR LOWER(t) LIKE LOWER(TRIM(a.tl_name) || '%')
+           WHERE LOWER(a.tl_name) LIKE '%' || t || '%'
+              OR t LIKE '%' || LOWER(TRIM(a.tl_name)) || '%'
          )
        )
      ORDER BY a.name ASC`,

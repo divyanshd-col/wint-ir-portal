@@ -82,6 +82,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   // Role-based agent scoping
   let agentNames: string[] | undefined;
+  let availableAgents: string[] = [];
   let dispositions: string[] | undefined;
 
   const { readConfig } = await import('@/lib/config');
@@ -90,28 +91,63 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const qaEntry = map.find(e => e.email.toLowerCase() === userEmail.toLowerCase());
 
   if (role === 'agent') {
-    const { readConfig } = await import('@/lib/config');
-    const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username) === userEmail);
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === userEmail.toLowerCase());
     const selfName = configUser?.agentName || user?.agentName || userEmail.split('@')[0];
     agentNames = selfName ? [selfName] : [];
+    availableAgents = agentNames;
   } else if (role === 'tl') {
-    const { readConfig } = await import('@/lib/config');
-    const config = await readConfig();
-    const configUser = config.users.find(u => (u.email || u.username) === userEmail);
-    const tlAgentName = configUser?.agentName || userEmail;
+    const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === userEmail.toLowerCase());
+    let tlAgentName: string = configUser?.agentName || '';
+    if (!tlAgentName && userEmail) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(userEmail).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = userEmail || '';
     const tlAgents = await getAgentNamesByTL(tlAgentName);
-    agentNames = agentFilter ? tlAgents.filter(n => n === agentFilter) : tlAgents;
+    availableAgents = tlAgents;
+    if (agentFilter) {
+      agentNames = tlAgents.filter(n =>
+        n.toLowerCase() === agentFilter.toLowerCase() ||
+        n.toLowerCase().startsWith(agentFilter.toLowerCase() + ' ') ||
+        agentFilter.toLowerCase().startsWith(n.toLowerCase() + ' ')
+      );
+      if (!agentNames.length) agentNames = [agentFilter];
+    } else {
+      agentNames = tlAgents;
+    }
   } else if (role === 'quality' || role === 'admin') {
     if (role === 'quality') {
-      const qaAgents = await getAgentNamesByQA(userEmail);
-      agentNames = agentFilter ? qaAgents.filter(n => n === agentFilter) : qaAgents;
+      const qaAgents = await getAgentNamesByQA(userEmail || '');
+      availableAgents = qaAgents;
+      if (agentFilter) {
+        agentNames = qaAgents.filter(n =>
+          n.toLowerCase() === agentFilter.toLowerCase() ||
+          n.toLowerCase().startsWith(agentFilter.toLowerCase() + ' ') ||
+          agentFilter.toLowerCase().startsWith(n.toLowerCase() + ' ')
+        );
+        if (!agentNames.length) agentNames = [agentFilter];
+      } else {
+        agentNames = qaAgents;
+      }
+    } else {
+      const { query } = await import('@/lib/cx/db');
+      const allRows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active' ORDER BY name ASC`);
+      availableAgents = allRows.map(r => r.name);
+      if (agentFilter) {
+        agentNames = availableAgents.filter(n =>
+          n.toLowerCase() === agentFilter.toLowerCase() ||
+          n.toLowerCase().startsWith(agentFilter.toLowerCase() + ' ') ||
+          agentFilter.toLowerCase().startsWith(n.toLowerCase() + ' ')
+        );
+        if (!agentNames.length) agentNames = [agentFilter];
+      }
     }
 
     if (qaEntry && userEmail.toLowerCase() !== 'manorathi@wintwealth.com' && userEmail.toLowerCase() !== 'manorathi.t@wintwealth.com') {
       dispositions = qaEntry.dispositions;
       if (dispositions.length === 0) {
-        return NextResponse.json({ ok: true, entries: [], total: 0, page, hasMore: false, stats: { totalCalls: 0 } });
+        return NextResponse.json({ ok: true, entries: [], total: 0, page, hasMore: false, agents: availableAgents, stats: { totalCalls: 0 } });
       }
     }
   }
@@ -150,23 +186,27 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       language:          r.language || '',
       interruptionCount: r.interruptionCount ?? 0,
       deadAirCount:      r.deadAirCount ?? 0,
-      iqs:               r.iqs ?? null,
+      iqs:               r.iqs != null ? parseFloat(r.iqs) : null,
       scores,
       reasoning,
       failedParams,
-      gates:             r.gates || null,
-      verdict:           r.verdict || null,
-      rawParameters:     r.parameters || null,
+      verdict:           r.verdict ?? null,
+      gates:             r.gates ?? null,
+      rawParameters:     r.parameters,
       modelVersion:      r.modelVersion || '',
       scoredAt:          r.scoredAt || '',
     };
   });
 
-  // Stats
-  const iqsList   = entries.map((e: any) => e.iqs).filter((v: any) => v !== null) as number[];
-  const avgIqs    = avg(iqsList);
-  const avgInterruptions = avg(entries.map((e: any) => e.interruptionCount));
-  const avgDeadAir       = avg(entries.map((e: any) => e.deadAirCount));
+  // Calculate aggregates
+  const iqsScores = entries.map(e => e.iqs).filter((s): s is number => s !== null);
+  const avgIqs = avg(iqsScores);
+  const avgInterruptions = entries.length
+    ? +(entries.reduce((s, e) => s + e.interruptionCount, 0) / entries.length).toFixed(1)
+    : 0;
+  const avgDeadAir = entries.length
+    ? +(entries.reduce((s, e) => s + e.deadAirCount, 0) / entries.length).toFixed(1)
+    : 0;
 
   // Parameter fail rates
   const paramFailCounts: Record<string, number> = {};
@@ -190,6 +230,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     total,
     page,
     hasMore: (page + 1) * PAGE_SIZE < total,
+    agents: availableAgents,
     stats: {
       totalCalls: total,
       avgIqs,
