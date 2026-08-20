@@ -98,12 +98,37 @@ function resolveScope(requested: string): string | null {
   return null; // asked for something we don't offer
 }
 
+// Send the browser to the client's (already-validated) redirect_uri via a
+// navigation rather than an HTTP 302. The consent screen is a form POST, and the
+// app-wide CSP `form-action 'self'` blocks the browser from FOLLOWING a 302 to a
+// cross-origin (claude.ai) target after a form submission — leaving the user
+// stranded on the consent page. A meta-refresh / location navigation is not a
+// form submission, so `form-action` does not apply. The URL is validated
+// (registered redirect_uri + host allowlist) before we ever get here, so this is
+// not an open redirect. The inline script is CSP-safe (`script-src 'unsafe-inline'`)
+// and the URL is percent-encoded + `<`-escaped so it cannot break out of the tag.
+function clientRedirect(url: string): Response {
+  const attr = esc(url);
+  const js = JSON.stringify(url).replace(/</g, '\\u003c');
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=${attr}">
+<title>Completing sign-in…</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f7f8f7;color:#4b5563;display:flex;min-height:100vh;align-items:center;justify-content:center;margin:0">
+<p>Completing sign-in… <a href="${attr}">Continue</a></p>
+<script>location.replace(${js})</script>
+</body></html>`;
+  return new Response(html, {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
 function redirectError(redirectUri: string, error: string, description: string, state: string): Response {
   const url = new URL(redirectUri);
   url.searchParams.set('error', error);
   url.searchParams.set('error_description', description);
   if (state) url.searchParams.set('state', state);
-  return Response.redirect(url.toString(), 302);
+  return clientRedirect(url.toString());
 }
 
 async function eligibleUser(): Promise<{ userId: number; email: string; name: string } | null | 'none'> {
@@ -274,5 +299,5 @@ export async function POST(req: Request): Promise<Response> {
   const url = new URL(p.redirectUri);
   url.searchParams.set('code', code);
   if (p.state) url.searchParams.set('state', p.state);
-  return Response.redirect(url.toString(), 302);
+  return clientRedirect(url.toString());
 }
