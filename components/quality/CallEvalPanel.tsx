@@ -182,13 +182,25 @@ export default function CallEvalPanel({
     let applicable = 0;
     Object.entries(paramState).forEach(([p, val]) => {
       const weight = CALL_IQS_WEIGHTS[p] || 0;
-      if (val.score === 'NA') return;
+      if (!val || val.score === 'NA') return;
       applicable += weight;
-      const num = val.score === 'Yes' ? 2 : val.score === 'No' ? 0 : parseFloat(val.score);
+      let num = 0;
+      if (val.score === 'Yes' || val.score === '2' || val.score === 'PASS') num = 2;
+      else if (val.score === 'No' || val.score === '0' || val.score === 'FAIL') num = 0;
+      else if (val.score === 'Part' || val.score === '1') num = 1;
+      else {
+        const parsed = parseFloat(String(val.score));
+        num = isNaN(parsed) ? 0 : parsed;
+      }
       earned += weight * (num / 2);
     });
-    setLiveIqs(applicable === 0 ? null : Math.round((earned / applicable) * 100));
-  }, [paramState]);
+    if (applicable === 0) {
+      setLiveIqs(iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
+    } else {
+      const calc = Math.round((earned / applicable) * 100);
+      setLiveIqs(isNaN(calc) ? (iqsScore != null && !isNaN(iqsScore) ? iqsScore : null) : calc);
+    }
+  }, [paramState, iqsScore]);
 
   // Load call transcript segments and fallback evaluation details
   useEffect(() => {
@@ -599,11 +611,36 @@ export default function CallEvalPanel({
           </div>
 
           {/* Right panel: Parameters & Scoring */}
-          <div style={{ width: 420, minWidth: 320, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{
+            flex: '0 0 440px',
+            width: 440,
+            minWidth: 320,
+            background: '#fff',
+            border: '1px solid var(--qa-border)',
+            borderRadius: 10,
+            padding: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+            maxHeight: '600px',
+            overflowY: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              position: 'sticky',
+              top: -16,
+              background: '#fff',
+              zIndex: 2,
+              paddingTop: 4,
+              paddingBottom: 8,
+              borderBottom: '1px solid var(--qa-border-sub, #f1f5f9)',
+              marginBottom: -4
+            }}>
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Evaluation Parameters</h4>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
-                Live Score: <span style={{ color: '#15803d' }}>{liveIqs !== null ? `${liveIqs}%` : '—'}</span>
+                Live Score: <span style={{ color: '#15803d' }}>{liveIqs != null && !isNaN(liveIqs) ? `${liveIqs}%` : (iqsScore != null && !isNaN(iqsScore) ? `${iqsScore}%` : '—')}</span>
               </span>
             </div>
 
