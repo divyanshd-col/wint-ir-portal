@@ -27,10 +27,13 @@ async function q(sql, params = []) {
   return rows;
 }
 
+const overwrite = process.argv.includes('--overwrite');
+
 async function setTL(nameLike, tlName, opts = {}) {
   const exclude = opts.exclude || [];
-  // Only backfill — never overwrite a manually-set value
-  let sql = `UPDATE agents SET tl_name = $1 WHERE name ILIKE $2 AND tl_name IS NULL`;
+  let sql = overwrite
+    ? `UPDATE agents SET tl_name = $1 WHERE name ILIKE $2`
+    : `UPDATE agents SET tl_name = $1 WHERE name ILIKE $2 AND tl_name IS NULL`;
   const params = [tlName, nameLike];
   for (let i = 0; i < exclude.length; i++) {
     sql += ` AND name NOT ILIKE $${params.length + 1}`;
@@ -42,8 +45,9 @@ async function setTL(nameLike, tlName, opts = {}) {
 
 async function setQA(nameLike, qaName, opts = {}) {
   const exclude = opts.exclude || [];
-  // Only backfill — never overwrite a manually-set value
-  let sql = `UPDATE agents SET qa_name = $1 WHERE name ILIKE $2 AND qa_name IS NULL`;
+  let sql = overwrite
+    ? `UPDATE agents SET qa_name = $1 WHERE name ILIKE $2`
+    : `UPDATE agents SET qa_name = $1 WHERE name ILIKE $2 AND qa_name IS NULL`;
   const params = [qaName, nameLike];
   for (let i = 0; i < exclude.length; i++) {
     sql += ` AND name NOT ILIKE $${params.length + 1}`;
@@ -59,7 +63,7 @@ async function main() {
   console.log(`\n=== ${agents.length} agents ===`);
   agents.forEach(a => console.log(`  ${a.name} | TL: ${a.tl_name || '—'} | QA: ${a.qa_name || '—'}`));
 
-  console.log('\n=== Applying TL assignments ===');
+  console.log(`\n=== Applying TL assignments (overwrite: ${overwrite}) ===`);
   const tlMap = [
     // TL: Harsh
     ['Bhavika%',    'Harsh'],
@@ -69,11 +73,13 @@ async function main() {
     ['Dhanush%',    'Harsh'],
     ['Vaibhavi%',   'Harsh'],
     // TL: Yashika
-    ['Vedant%',     'Yashika'],
-    ['Aksa%',       'Yashika'],
-    ['Yashvi%',     'Yashika'],
-    ['Varshini%',   'Yashika'],
-    ['Sahana%',     'Yashika'],
+    ['Vedant%',        'Yashika'],
+    ['Aksa%',          'Yashika'],
+    ['Yashvi%',        'Yashika'],
+    ['Varshini%',      'Yashika'],
+    ['Sahana%',        'Yashika'],
+    ['Bhavna Sharma%', 'Yashika'],
+    ['Bhavna%',        'Yashika'],
     // TL: Neha C
     ['Anwesha%',    'Neha C'],
     ['Purvi%',      'Neha C'],
