@@ -342,14 +342,20 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       iqsScore = null;
     }
 
+    const submitterRole = raisedByLabel(flag.agentEmail);
+    const submitterUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === (flag.agentEmail || '').toLowerCase());
+    const effectiveRaisedByName = (flag.raisedByRole === 'tl' || submitterRole === 'TL')
+      ? (submitterUser?.agentName || submitterUser?.username || flag.agentEmail?.split('@')[0] || 'TL')
+      : (flag.agentName || effectiveAgentName);
+
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
       callId:           isCallFlag ? (flag.callId || callDb?.call_id) : undefined,
       agentName:        effectiveAgentName,
       agentEmail:       flag.agentEmail,
-      raisedBy:         raisedByLabel(flag.agentEmail),
-      raisedByName:     flag.agentName,
+      raisedBy:         submitterRole,
+      raisedByName:     effectiveRaisedByName,
       iqsScore,
       botIqsScore,
       callIqsScore,

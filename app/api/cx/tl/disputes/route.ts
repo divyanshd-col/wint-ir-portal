@@ -212,6 +212,11 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
 
     const roleTag = raisedByLabel(flag);
+    const submitterUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === (flag.agentEmail || '').toLowerCase());
+    const effectiveRaisedByName = (flag.raisedByRole === 'tl' || roleTag === 'TL')
+      ? (submitterUser?.agentName || submitterUser?.username || flag.agentEmail?.split('@')[0] || 'TL')
+      : (flag.agentName || agentName);
+
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
@@ -225,7 +230,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       disposition:      db?.disposition || callDb?.disposition || '',
       subDisposition:   db?.sub_disposition || callDb?.sub_disposition || null,
       raisedBy:         roleTag,
-      raisedByName:     flag.agentName,
+      raisedByName:     effectiveRaisedByName,
       raisedByRole:     flag.raisedByRole || (roleTag === 'TL' ? 'tl' : 'ir'),
       raisedAt:         flag.flaggedAt,
       status:           flag.status,
