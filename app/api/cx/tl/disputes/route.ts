@@ -29,6 +29,8 @@ export interface TLDisputeRow {
   raisedAt:         string;
   status:           'ir_pending_tl' | 'pending' | 'tl_forwarded' | 'tl_resolved' | 'reviewed' | 'cancelled';
   reviewNote:       string | null;
+  reviewedBy?:      string | null;
+  reviewedAt?:      string | null;
   tlForwarded:      boolean;
   agentNote:        string;
   challengedParams: { param: string; note: string }[];
@@ -242,6 +244,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       raisedAt:         flag.flaggedAt,
       status:           flag.status,
       reviewNote:       flag.reviewNote ?? null,
+      reviewedBy:       flag.reviewedBy ?? null,
+      reviewedAt:       flag.reviewedAt ?? null,
       tlForwarded:      flag.status === 'tl_forwarded',
       agentNote:        flag.agentNote,
       challengedParams: flag.challengedParams ?? [],
