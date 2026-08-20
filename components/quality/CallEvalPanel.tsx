@@ -349,6 +349,34 @@ export default function CallEvalPanel({
           </div>
         </div>
 
+        {/* Disputed Params banner */}
+        {dispute?.challengedParams && dispute.challengedParams.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>
+              Disputed Params:
+            </span>
+            {dispute.challengedParams.map((cp: any) => (
+              <span
+                key={cp.param}
+                title={cp.note}
+                style={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  background: '#F4F4F5',
+                  border: '1px solid #E4E4E7',
+                  borderRadius: 4,
+                  padding: '2px 8px',
+                  color: '#52525B',
+                  cursor: cp.note ? 'help' : 'default',
+                }}
+              >
+                {PARAM_NAMES[cp.param] ? `${cp.param}: ${PARAM_NAMES[cp.param]}` : cp.param}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Dispute Thread & Activity (When reviewing dispute or viewing existing dispute) */}
         {dispute?.flagId && (
           <div style={{ marginBottom: 16 }}>

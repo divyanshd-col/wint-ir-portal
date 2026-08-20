@@ -241,12 +241,11 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 140 }} />
-          <col style={{ width: 120 }} />
           <col style={{ width: 130 }} />
-          <col style={{ width: 120 }} />
+          <col style={{ width: 140 }} />
+          <col style={{ width: 130 }} />
           <col style={{ width: 90 }} />
-          <col style={{ width: 110 }} />
-          <col style={{ width: 70 }} />
+          <col style={{ width: 80 }} />
           <col style={{ width: 140 }} />
         </colgroup>
         <thead>
@@ -256,7 +255,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
             <th style={th}>Disposition</th>
             <th style={th}>Agent</th>
             <th style={{ ...th, textAlign: 'right' }}>IQS Score</th>
-            <th style={th}>Challenged</th>
             <th style={th}>CSAT</th>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
@@ -265,7 +263,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <tr key={i}>
-              {Array.from({ length: 8 }).map((_, j) => (
+              {Array.from({ length: 7 }).map((_, j) => (
                 <td key={j} style={td}>
                   <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
                 </td>
@@ -274,7 +272,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
           ))
         ) : pagedDisputes.length === 0 ? (
           <tr>
-            <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+            <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
               No disputes pending review.
             </td>
           </tr>
@@ -312,15 +310,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     ) : (
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                     )}
-                  </td>
-                  <td style={td}>
-                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                      {(d.challengedParams || []).map((cp, idx) => (
-                        <span key={idx} style={{ padding: '1px 5px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
-                          {cp.param}
-                        </span>
-                      ))}
-                    </div>
                   </td>
                   <td style={td}>
                     {d.csatScore == null ? (
@@ -373,7 +362,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 {/* Thread panel */}
                 {threadId === d.flagId && (
                   <tr>
-                    <td colSpan={8} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+                    <td colSpan={7} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
                       <DisputeThread
                         flagId={d.flagId}
                         agentNote={d.agentNote}

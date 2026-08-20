@@ -898,7 +898,6 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                  <th style={TH_BASE}>Challenged Params</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
@@ -906,13 +905,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <tbody>
                 {loadingPending ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading raised disputes…
                     </td>
                   </tr>
                 ) : filteredPendingDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No pending call disputes found.
                     </td>
                   </tr>
@@ -938,15 +937,6 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
-                          </td>
-                          <td style={TD_BASE}>
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                              {(dispute.challengedParams || []).map((cp, idx) => (
-                                <span key={idx} style={{ padding: '1px 6px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
-                                  {cp.param}
-                                </span>
-                              ))}
-                            </div>
                           </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
@@ -990,7 +980,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={7}
+                            colSpan={6}
                           />
                         )}
                       </Fragment>
@@ -1107,7 +1097,6 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                  <th style={TH_BASE}>Challenged Params</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={TH_BASE}>Reviewed At</th>
                 </tr>
@@ -1115,13 +1104,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <tbody>
                 {loadingReviewed ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading reviewed disputes…
                     </td>
                   </tr>
                 ) : filteredReviewedDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No reviewed call disputes found.
                     </td>
                   </tr>
@@ -1147,15 +1136,6 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
-                          </td>
-                          <td style={TD_BASE}>
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                              {(dispute.challengedParams || []).map((cp, idx) => (
-                                <span key={idx} style={{ padding: '1px 6px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
-                                  {cp.param}
-                                </span>
-                              ))}
-                            </div>
                           </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
@@ -1184,7 +1164,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={7}
+                            colSpan={6}
                           />
                         )}
                       </Fragment>

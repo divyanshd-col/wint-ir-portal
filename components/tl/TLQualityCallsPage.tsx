@@ -695,7 +695,6 @@ export default function TLQualityCallsPage() {
                   <th style={TH_BASE}>Raised By</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                   <th style={TH_BASE}>Disposition</th>
-                  <th style={TH_BASE}>Challenged Params</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Actions</th>
                 </tr>
@@ -703,13 +702,13 @@ export default function TLQualityCallsPage() {
               <tbody>
                 {loadingPending ? (
                   <tr>
-                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading raised call disputes…
                     </td>
                   </tr>
                 ) : filteredPendingDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No pending call disputes raised for your team.
                     </td>
                   </tr>
@@ -731,15 +730,6 @@ export default function TLQualityCallsPage() {
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
                           </td>
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
-                          <td style={TD_BASE}>
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                              {(dispute.challengedParams || []).map((cp, idx) => (
-                                <span key={idx} style={{ padding: '1px 6px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
-                                  {cp.param}
-                                </span>
-                              ))}
-                            </div>
-                          </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
                               status={dispute.status}
@@ -800,7 +790,7 @@ export default function TLQualityCallsPage() {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={8}
+                            colSpan={7}
                           />
                         )}
                       </Fragment>
@@ -929,7 +919,6 @@ export default function TLQualityCallsPage() {
                   <th style={TH_BASE}>Agent Name</th>
                   <th style={TH_BASE}>Raised By</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                  <th style={TH_BASE}>Challenged Params</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={TH_BASE}>Date Raised</th>
                 </tr>
@@ -937,13 +926,13 @@ export default function TLQualityCallsPage() {
               <tbody>
                 {loadingReviewed ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading reviewed call disputes…
                     </td>
                   </tr>
                 ) : filteredReviewedDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No reviewed call disputes found for your team.
                     </td>
                   </tr>
@@ -963,15 +952,6 @@ export default function TLQualityCallsPage() {
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
-                          </td>
-                          <td style={TD_BASE}>
-                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                              {(dispute.challengedParams || []).map((cp, idx) => (
-                                <span key={idx} style={{ padding: '1px 6px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
-                                  {cp.param}
-                                </span>
-                              ))}
-                            </div>
                           </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
@@ -998,7 +978,7 @@ export default function TLQualityCallsPage() {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={7}
+                            colSpan={6}
                           />
                         )}
                       </Fragment>
