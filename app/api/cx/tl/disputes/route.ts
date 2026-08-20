@@ -94,7 +94,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const callFlags = flags.filter(f => Boolean(f.callId));
 
   const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
-  const targetCallIds = [...new Set(callFlags.map(f => f.callId!).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId || f.chatId).filter(Boolean))];
 
   let dbRows: {
     chat_id: string; agent_id: number | null; agent_name: string | null; closed_at: string;
@@ -120,7 +120,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
   const dbMap = new Map(dbRows.map(r => [r.chat_id, r]));
 
-  // Bulk-fetch call data strictly by call_id for call disputes
+  // Bulk-fetch call data for call disputes
   let callDbRows: {
     call_id: string; chat_id: string | null; agent_name: string | null;
     called_at: string; disposition: string; sub_disposition: string | null;
@@ -136,11 +136,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
        FROM call_evaluations ce
        JOIN call_recordings cr ON cr.id = ce.call_id
        LEFT JOIN agents a ON a.id = ce.agent_id
-       WHERE ce.call_id = ANY($1)`,
+       WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
       [targetCallIds]
     );
   }
-  const callDbMap = new Map(callDbRows.map(r => [r.call_id, r]));
+  const callDbMap = new Map<string, typeof callDbRows[0]>();
+  callDbRows.forEach(r => {
+    callDbMap.set(r.call_id, r);
+    if (r.chat_id) callDbMap.set(r.chat_id, r);
+  });
 
   // Build role label for who raised the dispute
   const config = await readConfig();
@@ -160,7 +164,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   for (const flag of flags) {
     const isCall = Boolean(flag.callId);
     const db = isCall ? null : dbMap.get(flag.chatId);
-    const callDb = isCall ? callDbMap.get(flag.callId!) : null;
+    const callDb = isCall ? (callDbMap.get(flag.callId!) || callDbMap.get(flag.chatId)) : null;
 
     if (!db && !callDb) continue;
 
@@ -223,7 +227,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
-      callId:           isCall ? flag.callId : undefined,
+      callId:           isCall ? (callDb?.call_id || flag.callId) : undefined,
       agentName:        agentName,
       iqsScore,
       botIqsScore,

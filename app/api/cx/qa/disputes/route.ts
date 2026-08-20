@@ -108,7 +108,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const chatFlags = pendingFlags.filter(f => !f.callId);
   const callFlags = pendingFlags.filter(f => Boolean(f.callId));
   const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
-  const targetCallIds = [...new Set(callFlags.map(f => f.callId!).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId || f.chatId).filter(Boolean))];
 
   const dbRows = chatIds.length > 0 ? await query<{
     chat_id: string;
@@ -146,7 +146,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     [chatIds]
   ) : [];
 
-  // Bulk-fetch call data strictly by call_id for call disputes
+  // Bulk-fetch call data for call disputes
   let callDbRows: any[] = [];
   if (targetCallIds.length > 0) {
     try {
@@ -165,7 +165,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
          LEFT JOIN agents a ON a.id = ce.agent_id
-         WHERE ce.call_id = ANY($1)`,
+         WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
         [targetCallIds]
       );
     } catch {}
@@ -173,6 +173,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const callDbMap = new Map<string, any>();
   callDbRows.forEach(r => {
     if (r.call_id) callDbMap.set(r.call_id, r);
+    if (r.chat_id) callDbMap.set(r.chat_id, r);
   });
 
   // Query call recordings for these chats to check transcript statuses
@@ -349,7 +350,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
-      callId:           isCall ? flag.callId : undefined,
+      callId:           isCall ? (callDb?.call_id || flag.callId) : undefined,
       agentName:        effectiveAgentName,
       agentEmail:       flag.agentEmail,
       raisedBy:         submitterRole,
