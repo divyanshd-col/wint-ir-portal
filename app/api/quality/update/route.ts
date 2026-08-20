@@ -205,6 +205,19 @@ export async function PATCH(req: NextRequest) {
     const isV4b = rowExists ? isV4Evaluation(existing[0].parameters) : true;
     const finalIqs = scores ? calculateIQS(scores, isBot, isV4b) : (rowExists ? existing[0].iqs_score : 0);
 
+    if (scores) {
+      const { fireBotQualityAlert } = await import('@/lib/quality-alert');
+      fireBotQualityAlert({
+        chatId,
+        agentName,
+        scores,
+        reasoning,
+        iqs: finalIqs,
+        disposition,
+        subDisposition,
+      }).catch(() => {});
+    }
+
     return NextResponse.json({
       ok: true,
       entry: {

@@ -4,7 +4,7 @@ import { readConfig } from '@/lib/config';
 import { PASCAL_TO_DB } from '@/lib/param-keys';
 import { geminiGenerate, callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import { fetchKnowledgeChunks, retrieveRelevantChunks } from '@/lib/drive';
-import { fireQualityAlert } from '@/lib/quality-alert';
+import { fireQualityAlert, fireBotQualityAlert } from '@/lib/quality-alert';
 import {
   getSystemPrompt, buildScoringPrompt, parseScoringResponse,
   analyzeConversationTiming,
@@ -371,6 +371,19 @@ export async function executeScoring(
     breaches:            primaryPass.breaches,
     complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
   }).catch(() => {});
+
+  if (botParameters) {
+    fireBotQualityAlert({
+      chatId,
+      agentName:           finalAgentName,
+      contactPhone,
+      scores:              Object.fromEntries(Object.entries(botParameters).map(([k,v]) => [k, String(v.score)])),
+      reasoning:           Object.fromEntries(Object.entries(botParameters).map(([k,v]) => [k, v.reasoning])),
+      iqs:                 botPass?.iqs_score ?? undefined,
+      disposition,
+      subDisposition,
+    }).catch(() => {});
+  }
 
   return { 
     chatId, 
