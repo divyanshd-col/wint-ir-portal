@@ -81,4 +81,15 @@ KEY QUERY PATTERNS:
   -- Agent join:              JOIN agents a ON a.id = c.agent_id
   -- Team join:               JOIN teams t ON t.id = c.team_id
   -- Percentage:              ROUND(100.0 * COUNT(CASE WHEN x THEN 1 END) / NULLIF(COUNT(*), 0), 1)
+
+CONVERSATION TRANSCRIPTS (what was actually said):
+  -- conversations.transcript is a JSONB array of messages ({sender_type, content, timestamp}).
+  -- It is a large blob and is NEVER returned by run_read_query (do not SELECT it).
+  -- Two ways to use transcript content:
+  --   1) Keyword/existence questions ("how many chats mentioned 'refund'?") — filter in SQL WITHOUT fetching:
+  --        WHERE c.transcript::text ILIKE '%refund%'
+  --   2) Content questions (tone, verbatim quotes, root cause, why CSAT was bad, themes) — use the
+  --      get_transcripts tool: first run_read_query to get the relevant chat_ids (add a LIMIT, e.g. 20),
+  --      then call get_transcripts({ chat_ids: [...] }) with up to 50 ids to read the messages.
+  -- Fetch transcripts only when the answer depends on their content; for counts/metrics, SQL alone is enough.
 `;
