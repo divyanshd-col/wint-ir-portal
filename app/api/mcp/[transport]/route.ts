@@ -4,6 +4,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { DB_SCHEMA } from '@/lib/analytics/schema';
 import { executeReadOnlyQuery, writeAuditLog, isReadQuery } from '@/lib/analytics/executor';
 import { verifyAccessToken, OAUTH_SCOPE } from '@/lib/mcp/oauth';
+import { readTranscripts } from '@/lib/analytics/transcript-reader';
 
 // pg needs a TCP socket → Node runtime, not Edge. maxDuration mirrors the
 // analytics functions (30s query timeout + headroom).
@@ -45,6 +46,25 @@ function maskRow(row: Record<string, unknown>): void {
   }
 }
 
+// Mask phone-number-like digit runs inside free text (transcript message bodies),
+// preserving the last 4 digits — the column-based maskRow above can't reach text.
+function maskPhonesInText(text: string): string {
+  if (!text) return text;
+  return text.replace(/\+?\d[\d\s-]{8,}\d/g, (m) => {
+    const digits = m.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) return m; // not phone-like
+    return `••••${digits.slice(-4)}`;
+  });
+}
+
+// PII redaction hook for transcript message content. Currently phone-only, to
+// keep the connector's "phone numbers stay masked" guarantee. Broader free-text
+// PII redaction (emails, PANs, account numbers, names) is a pending product
+// decision — extend this one function when that's decided.
+function redactTranscriptText(text: string): string {
+  return maskPhonesInText(text);
+}
+
 // ── MCP server ─────────────────────────────────────────────────────────────────
 
 const handler = createMcpHandler(
@@ -60,7 +80,7 @@ const handler = createMcpHandler(
 
     server.tool(
       'run_read_query',
-      'Run a single read-only PostgreSQL SELECT against the live CX analytics database and return the rows as JSON. Only SELECT / WITH…SELECT is permitted — writes, DDL, catalog access, and multiple statements are rejected. Results are capped at 10,000 rows and time out after 30s. Phone numbers are masked. Call get_schema first for table and column names.',
+      'Run a single read-only PostgreSQL SELECT against the live CX analytics database and return the rows as JSON. Use this for counts, metrics, breakdowns, trends, and to find the chat_ids relevant to a question. Only SELECT / WITH…SELECT is permitted — writes, DDL, catalog access, and multiple statements are rejected. Results are capped at 10,000 rows and time out after 30s. Phone numbers are masked. The transcript column is NOT returned here — to read what was actually said, first narrow to chat_ids with this tool (you can filter on content with WHERE c.transcript::text ILIKE \'%keyword%\'), then call get_transcripts with those ids. Call get_schema first for table and column names.',
       { sql: z.string().describe('A single read-only SQL SELECT statement.') },
       async ({ sql }, extra) => {
         const auth = (extra as { authInfo?: AuthInfo }).authInfo;
@@ -97,6 +117,101 @@ const handler = createMcpHandler(
           const message = err instanceof Error ? err.message : String(err);
           return {
             content: [{ type: 'text' as const, text: `Query error: ${message}` }],
+            isError: true,
+          };
+        }
+      },
+    );
+
+    server.tool(
+      'get_transcripts',
+      "Fetch full message-by-message transcripts for specific conversations by chat_id — for questions that depend on what was actually said (tone, verbatim quotes, root cause, why CSAT was bad, recurring themes across chats). This is NOT for counts or metrics: use run_read_query first to find the relevant chat_ids (filter by disposition/CSAT/date, or WHERE c.transcript::text ILIKE '%keyword%'), then pass up to 50 ids here. Only fetch transcripts when the answer genuinely needs their content. Phone numbers are masked; very large transcripts are truncated (flagged per conversation).",
+      {
+        chat_ids: z
+          .array(z.string().min(1))
+          .min(1)
+          .max(50)
+          .describe('conversations.id values to fetch transcripts for (max 50). Narrow with run_read_query first.'),
+      },
+      async ({ chat_ids }, extra) => {
+        const auth = (extra as { authInfo?: AuthInfo }).authInfo;
+        const userEmail = (auth?.extra?.email as string) || 'mcp:unknown';
+        const t0 = Date.now();
+
+        // Volume guards so a batch can't blow the model's context or dump data.
+        const PER_TRANSCRIPT_CHAR_CAP = 20_000;
+        const TOTAL_CHAR_BUDGET = 400_000;
+
+        try {
+          const convos = await readTranscripts(chat_ids);
+          const found = new Set(convos.map((c) => c.conversation_id));
+
+          const omitted: { conversation_id: string; reason: string }[] = chat_ids
+            .filter((id) => !found.has(id))
+            .map((id) => ({ conversation_id: id, reason: 'not_found' }));
+
+          const transcripts: unknown[] = [];
+          let totalChars = 0;
+
+          for (const c of convos) {
+            let used = 0;
+            let truncated = false;
+            const messages: { sender_type: string; content: string; timestamp: string }[] = [];
+            for (const m of c.messages) {
+              const content = redactTranscriptText(m.content || '');
+              if (used + content.length > PER_TRANSCRIPT_CHAR_CAP) {
+                truncated = true;
+                break;
+              }
+              used += content.length;
+              messages.push({ sender_type: m.sender_type, content, timestamp: m.timestamp });
+            }
+
+            if (totalChars + used > TOTAL_CHAR_BUDGET) {
+              omitted.push({ conversation_id: c.conversation_id, reason: 'output_budget_exceeded' });
+              continue;
+            }
+            totalChars += used;
+
+            transcripts.push({
+              conversation_id: c.conversation_id,
+              csat_label: c.csat_label,
+              csat_score: c.csat_score,
+              disposition: c.disposition,
+              sub_disposition: c.sub_disposition,
+              iqs_score: c.iqs_score,
+              message_count: c.messages.length,
+              returned_messages: messages.length,
+              truncated,
+              messages,
+            });
+          }
+
+          writeAuditLog({
+            userEmail,
+            queryText: `[mcp:transcripts] requested=${chat_ids.length} returned=${transcripts.length}`.slice(0, 8000),
+            queryType: 1,
+            templateId: 'mcp_transcripts',
+            rowCount: transcripts.length,
+            latencyMs: Date.now() - t0,
+          }).catch(() => {});
+
+          return {
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify(
+                  { requested: chat_ids.length, returned: transcripts.length, omitted, transcripts },
+                  null,
+                  2,
+                ),
+              },
+            ],
+          };
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          return {
+            content: [{ type: 'text' as const, text: `Transcript error: ${message}` }],
             isError: true,
           };
         }
