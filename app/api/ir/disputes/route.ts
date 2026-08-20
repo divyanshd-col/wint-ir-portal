@@ -22,7 +22,11 @@ export async function GET(req: NextRequest) {
 
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
 
-  const isCallFlag = (f: IQSFlag) => Boolean(f.callId || f.challengedParams?.some(p => p.param.startsWith('P')));
+  const isCallFlag = (f: IQSFlag) => {
+    const hasCallParams = f.challengedParams?.some(p => /^P\d+/i.test(p.param) || p.param.startsWith('Call') || p.param.startsWith('Technical') || p.param.startsWith('AllQuestions') || p.param.startsWith('Expectation'));
+    const hasChatParams = f.challengedParams?.some(p => p.param.startsWith('agent:') || p.param.startsWith('bot:') || /^Q\d+/i.test(p.param) || p.param.startsWith('FollowUp'));
+    return hasCallParams || (!hasChatParams && Boolean(f.callId));
+  };
   if (typeFilter === 'calls') {
     flags = flags.filter(isCallFlag);
   } else if (typeFilter === 'chats') {
@@ -109,20 +113,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const isCallDispute = isCallFlag(f);
     if (cRow) {
       callIqsScore = cRow.iqs_percent != null ? parseFloat(cRow.iqs_percent) : null;
-      if (iqsScore === null) iqsScore = callIqsScore;
+      if (isCallDispute && iqsScore === null) iqsScore = callIqsScore;
       if (!closedAt && cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
       if (!disposition) disposition = cRow.call_disposition || '';
       if (!subDisposition) subDisposition = cRow.call_sub_disposition || null;
-      const isCallDispute = Boolean(f.callId || f.challengedParams?.some(p => p.param.startsWith('P')));
-      if (isCallDispute || !parameters) parameters = cRow.iqs_scores ?? parameters;
+      if (isCallDispute) parameters = cRow.iqs_scores ?? parameters;
     }
 
     return {
       flagId: f.id,
       chatId: f.chatId,
-      callId: f.callId || f.chatId,
+      callId: isCallDispute ? (f.callId || f.chatId) : undefined,
       iqsScore,
       botIqsScore,
       callIqsScore,

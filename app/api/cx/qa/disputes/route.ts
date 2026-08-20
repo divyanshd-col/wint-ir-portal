@@ -306,7 +306,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       continue;
     }
 
-    const isCallFlag = Boolean(flag.callId || callDb?.call_id || flag.challengedParams?.some(p => p.param.startsWith('P')));
+    const hasCallParams = flag.challengedParams?.some(p => /^P\d+/i.test(p.param) || p.param.startsWith('Call') || p.param.startsWith('Technical') || p.param.startsWith('AllQuestions') || p.param.startsWith('Expectation'));
+    const hasChatParams = flag.challengedParams?.some(p => p.param.startsWith('agent:') || p.param.startsWith('bot:') || /^Q\d+/i.test(p.param) || p.param.startsWith('FollowUp'));
+    const isCallFlag = hasCallParams || (!hasChatParams && Boolean(flag.callId));
     let params = isCallFlag ? (callDb?.parameters ?? db?.parameters ?? {}) : (db?.parameters ?? callDb?.parameters ?? {});
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
@@ -322,7 +324,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore = params.__scores.call_iqs !== undefined && params.__scores.call_iqs !== null ? parseFloat(params.__scores.call_iqs) : null;
     }
 
-    if (callDb?.iqs_percent != null) {
+    if (callDb?.iqs_percent != null && isCallFlag) {
       callIqsScore = parseFloat(callDb.iqs_percent);
       if (iqsScore === null) iqsScore = callIqsScore;
     }
@@ -343,7 +345,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     disputes.push({
       flagId:           flag.id,
       chatId:           flag.chatId,
-      callId:           flag.callId || callDb?.call_id,
+      callId:           isCallFlag ? (flag.callId || callDb?.call_id) : undefined,
       agentName:        effectiveAgentName,
       agentEmail:       flag.agentEmail,
       raisedBy:         raisedByLabel(flag.agentEmail),
@@ -372,9 +374,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const typeParam = searchParams.get('type');
   let finalDisputes = disputes;
   if (typeParam === 'calls') {
-    finalDisputes = disputes.filter(d => Boolean(d.callId || d.callIqsScore != null || d.challengedParams?.some(p => p.param.startsWith('P'))));
+    finalDisputes = disputes.filter(d => Boolean(d.callId));
   } else if (typeParam === 'chats') {
-    finalDisputes = disputes.filter(d => !d.callId && !d.challengedParams?.some(p => p.param.startsWith('P')));
+    finalDisputes = disputes.filter(d => !d.callId);
   }
 
   // Filter by agent_filter or has_calls if provided
