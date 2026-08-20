@@ -86,16 +86,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       sqlParams.push(effectiveDispositions);
       const dispParam = paramIdx++;
       baseWhere = reviewedMode
-        ? `ce.status = 'reviewed' AND (cr.call_disposition = ANY($${dispParam}) OR ce.reviewed_by IS NOT NULL)`
-        : `cr.call_disposition = ANY($${dispParam}) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
+        ? `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR ce.reviewed_by IS NOT NULL)`
+        : `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
     } else {
       sqlParams.push(effectiveDispositions);
       const dispParam = paramIdx++;
       const emailIdx = paramIdx++;
       sqlParams.push(email.toLowerCase());
       baseWhere = reviewedMode
-        ? `ce.status = 'reviewed' AND (cr.call_disposition = ANY($${dispParam}) OR LOWER(COALESCE(ce.reviewed_by, '')) = $${emailIdx})`
-        : `cr.call_disposition = ANY($${dispParam}) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
+        ? `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR LOWER(COALESCE(ce.reviewed_by, '')) = $${emailIdx})`
+        : `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
     }
   } else {
     baseWhere = reviewedMode
