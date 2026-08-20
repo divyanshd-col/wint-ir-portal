@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { DB_SCHEMA } from '@/lib/analytics/schema';
 import { executeReadOnlyQuery, writeAuditLog, isReadQuery } from '@/lib/analytics/executor';
-import { verifyToken as verifyMcpToken } from '@/lib/mcp/tokens';
+import { verifyAccessToken, OAUTH_SCOPE } from '@/lib/mcp/oauth';
 
 // pg needs a TCP socket → Node runtime, not Edge. maxDuration mirrors the
 // analytics functions (30s query timeout + headroom).
@@ -117,24 +117,37 @@ const handler = createMcpHandler(
   },
 );
 
-// ── Bearer-token auth (opaque tokens minted in Settings, not NextAuth) ──────────
+// ── OAuth bearer-token auth (tokens minted by the OAuth flow, not NextAuth) ─────
+// Access tokens come from the OAuth authorization-code flow (app/api/oauth/*).
+// The static wint_mcp_ token path has been retired — claude.ai's web connector
+// authenticates via OAuth only. On failure, withMcpAuth emits a 401 whose
+// WWW-Authenticate points at the protected-resource metadata below, which is how
+// the connector discovers the authorization server.
 
 async function verifyBearer(_req: Request, bearerToken?: string): Promise<AuthInfo | undefined> {
-  const user = await verifyMcpToken(bearerToken);
-  if (!user) return undefined;
+  const ctx = await verifyAccessToken(bearerToken);
+  if (!ctx) return undefined;
   return {
-    token: bearerToken as string,
-    clientId: `user:${user.userId}`,
-    scopes: ['analytics:read'],
+    token: ctx.token,
+    clientId: ctx.clientId,
+    scopes: ctx.scope.split(/\s+/).filter(Boolean),
+    expiresAt: ctx.expiresAt,
+    resource: ctx.resource ? new URL(ctx.resource) : undefined,
     extra: {
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      userId: user.userId,
+      email: ctx.user.email,
+      name: ctx.user.name,
+      role: ctx.user.role,
+      userId: ctx.user.userId,
     },
   };
 }
 
-const authHandler = withMcpAuth(handler, verifyBearer, { required: true });
+const authHandler = withMcpAuth(handler, verifyBearer, {
+  required: true,
+  requiredScopes: [OAUTH_SCOPE],
+  // The 401 WWW-Authenticate advertises this path so claude.ai can discover the
+  // authorization server (served via a rewrite in next.config.ts).
+  resourceMetadataPath: '/.well-known/oauth-protected-resource',
+});
 
 export { authHandler as GET, authHandler as POST, authHandler as DELETE };

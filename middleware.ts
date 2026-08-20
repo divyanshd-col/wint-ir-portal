@@ -7,6 +7,10 @@ export async function middleware(req: NextRequest) {
   if (
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
+    // Public OAuth discovery documents (RFC 8414 / RFC 9728). These are rewritten
+    // to /api/oauth/discovery/* and must be reachable without a session so
+    // claude.ai's connector can discover the authorization server.
+    pathname.startsWith('/.well-known/') ||
     pathname === '/setup' ||
     pathname === '/login' ||
     pathname === '/set-password'
