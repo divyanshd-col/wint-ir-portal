@@ -473,20 +473,19 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   <th style={TH_BASE}>Disposition</th>
                   <th style={TH_BASE}>Duration</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</th>
-                  <th style={TH_BASE}>Verdict</th>
                   <th style={{ ...TH_BASE, textAlign: 'center' }}>Dispute Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingEntries ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading evaluated calls…
                     </td>
                   </tr>
                 ) : entries.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No evaluated calls found.
                     </td>
                   </tr>
@@ -515,13 +514,6 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           <td style={TD_MONO}>{fmtDuration(call.durationSeconds)}</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={call.iqs} />
-                          </td>
-                          <td style={TD_BASE}>
-                            {call.verdict ? (
-                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: call.verdict === 'FAILED_CRITICAL' ? '#fee2e2' : '#f0fdf4', color: call.verdict === 'FAILED_CRITICAL' ? '#991b1b' : '#166534' }}>
-                                {call.verdict}
-                              </span>
-                            ) : '—'}
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'center' }} onClick={e => e.stopPropagation()}>
                             {pendingDispute ? (
@@ -569,14 +561,14 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             mode="view"
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
-                            colSpan={7}
+                            colSpan={6}
                           />
                         )}
 
                         {/* Inline Dispute Raising Form */}
                         {isExpanded && isRaising && !pendingDispute && !reviewedDispute && (
                           <tr>
-                            <td colSpan={7} style={{ padding: 20, background: '#fefce8', borderBottom: '1px solid #fef08a' }}>
+                            <td colSpan={6} style={{ padding: 20, background: '#fefce8', borderBottom: '1px solid #fef08a' }}>
                               <div style={{ maxWidth: 800, margin: '0 auto' }}>
                                 <h4 style={{ margin: '0 0 10px 0', fontSize: 15, fontWeight: 600, color: '#854d0e' }}>
                                   Raise Call Quality Dispute (ID: {call.callId})

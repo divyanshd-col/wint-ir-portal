@@ -425,20 +425,19 @@ export default function TLQualityCallsPage() {
                   <th style={TH_BASE}>Disposition</th>
                   <th style={TH_BASE}>Duration</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</th>
-                  <th style={TH_BASE}>Verdict</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loadingEntries ? (
                   <tr>
-                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading team evaluated calls…
                     </td>
                   </tr>
                 ) : entries.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No evaluated calls found for your team.
                     </td>
                   </tr>
@@ -464,13 +463,6 @@ export default function TLQualityCallsPage() {
                           <td style={TD_MONO}>{fmtDuration(call.durationSeconds)}</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={call.iqs} />
-                          </td>
-                          <td style={TD_BASE}>
-                            {call.verdict ? (
-                              <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 4, background: call.verdict === 'FAILED_CRITICAL' ? '#fee2e2' : '#f0fdf4', color: call.verdict === 'FAILED_CRITICAL' ? '#991b1b' : '#166534' }}>
-                                {call.verdict}
-                              </span>
-                            ) : '—'}
                           </td>
                           <td style={{ ...TD_BASE, textAlign: 'right' }}>
                             <button
@@ -501,7 +493,7 @@ export default function TLQualityCallsPage() {
                             mode="view"
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
-                            colSpan={8}
+                            colSpan={7}
                           />
                         )}
                       </Fragment>
