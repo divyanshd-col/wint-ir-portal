@@ -29,9 +29,8 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'callId and scores are required' }, { status: 400 });
   }
 
-  // Fetch the existing call evaluation
   const evalRows = await query(`
-    SELECT * FROM call_evaluations WHERE call_id = $1
+    SELECT * FROM call_evaluations WHERE call_id = $1 OR chat_id = $1
   `, [callId.trim()]);
 
   if (!evalRows.length) {
@@ -39,6 +38,8 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
   }
 
   const existingEval = evalRows[0];
+  const actualCallId = existingEval.call_id;
+  const actualChatId = existingEval.chat_id || callId.trim();
 
   // Calculate new IQS percent & verdict
   const { iqs_percent, applicable_weight } = computeCallIQS(scores);
@@ -62,7 +63,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
         reviewed_at = NOW(),
         review_note = EXCLUDED.review_note
     `, [
-      callId.trim(),
+      actualCallId,
       oldIqsPercent,
       iqs_percent,
       JSON.stringify(oldIqsScores.scores || {}),
@@ -97,7 +98,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       newVerdict,
       email,
       note || '',
-      callId.trim()
+      actualCallId
     ]);
 
     // 3. Update IQSFlag if associated with a dispute
@@ -113,7 +114,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       await storeAppendAuditEntry({
         id: randomUUID(),
         action: 'review_submitted',
-        chatId: callId.trim(),
+        chatId: actualChatId,
         actorEmail: email,
         actorRole: (session.user as any)?.role || 'quality',
         ts: new Date().toISOString(),
@@ -121,7 +122,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       });
     }
 
-    log.info(ROUTE, `Quality override complete for call ${callId} by ${email}`);
+    log.info(ROUTE, `Quality override complete for call ${actualCallId} by ${email}`);
     return NextResponse.json({ ok: true, iqs: iqs_percent, verdict: newVerdict });
   } catch (err: any) {
     log.error(ROUTE, `Override database operations failed for call ${callId}: ${err.message}`);
