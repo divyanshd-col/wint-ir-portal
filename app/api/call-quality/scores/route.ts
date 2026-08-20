@@ -143,7 +143,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
         );
         if (!agentNames.length) agentNames = [agentFilter];
       } else {
-        agentNames = qaAgents;
+        agentNames = undefined;
       }
     } else {
       const { query } = await import('@/lib/cx/db');

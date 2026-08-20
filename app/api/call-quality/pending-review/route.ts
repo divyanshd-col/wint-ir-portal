@@ -45,8 +45,6 @@ export async function GET(req: NextRequest) {
   } else if (role === 'quality' || role === 'admin') {
     const config = await readConfig();
     const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    const selfAgentName = configUser?.agentName || '';
-    if (selfAgentName && role === 'quality') scopedAgentNames = await getAgentNamesByQA(selfAgentName);
     
     const map = config.qaDispositionMap ?? [];
     const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
