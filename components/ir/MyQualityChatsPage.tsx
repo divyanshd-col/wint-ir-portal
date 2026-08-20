@@ -315,8 +315,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
     setLoadingReviewed(true);
     try {
       const [pRes, rRes] = await Promise.all([
-        fetch('/api/ir/disputes?status=pending'),
-        fetch('/api/ir/disputes?status=resolved'),
+        fetch('/api/ir/disputes?status=pending&type=chats'),
+        fetch('/api/ir/disputes?status=resolved&type=chats'),
       ]);
       const [pData, rData] = await Promise.all([pRes.json(), rRes.json()]);
       setPendingDisputes(Array.isArray(pData.disputes) ? pData.disputes : []);

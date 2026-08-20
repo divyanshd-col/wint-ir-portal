@@ -192,11 +192,24 @@ export function computeCallIQS(scores: Record<string, any>) {
   let earned = 0;
   let applicable = 0;
   for (const [param, weight] of Object.entries(CALL_IQS_WEIGHTS)) {
-    const s = scores[param];
-    if (s === 'NA' || s === null || s === undefined) continue;
+    let s = scores[param];
+    if (typeof s === 'object' && s !== null) {
+      s = s.score;
+    }
+    if (s === 'NA' || s === 'na' || s === null || s === undefined || s === '') continue;
     applicable += weight;
-    const numericScore = typeof s === 'string' ? parseFloat(s) : s;
-    earned += weight * (numericScore / 2); // s is 0, 1, or 2
+    let numericScore = 0;
+    if (s === 2 || s === '2' || s === 'Yes' || s === 'yes' || s === 'PASS' || s === 'pass' || s === true) {
+      numericScore = 2;
+    } else if (s === 1 || s === '1' || s === 'Part' || s === 'part') {
+      numericScore = 1;
+    } else if (s === 0 || s === '0' || s === 'No' || s === 'no' || s === 'FAIL' || s === 'fail' || s === false) {
+      numericScore = 0;
+    } else {
+      const parsed = parseFloat(String(s));
+      numericScore = isNaN(parsed) ? 0 : parsed;
+    }
+    earned += weight * (numericScore / 2);
   }
   return {
     iqs_percent: applicable === 0 ? null : Math.round((earned / applicable) * 100),
@@ -457,8 +470,16 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     }
 
     if (!transcriptionSuccess) {
-      await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
-      throw new Error(`Transcription stage failed after 3 attempts: ${transcriptionError.message}`);
+      const existingSegments = call.transcript ? (Array.isArray(call.transcript) ? call.transcript : call.transcript.segments || []) : [];
+      if (existingSegments.length > 0) {
+        log.warn('call-pipeline', `Transcription failed (${transcriptionError.message}), falling back to existing transcript with ${existingSegments.length} segments`);
+        segments = existingSegments;
+        duration = call.duration_seconds || duration;
+        language = call.language || language;
+      } else {
+        await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
+        throw new Error(`Transcription stage failed after 3 attempts: ${transcriptionError.message}`);
+      }
     }
   }
 

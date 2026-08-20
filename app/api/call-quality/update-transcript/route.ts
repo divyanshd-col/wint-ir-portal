@@ -9,13 +9,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/auth';
+import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
+  const { session, response } = await requireRole(['admin', 'quality']);
+  if (response) return response;
 
   let body: { call_id?: string; segments?: any[] } = {};
   try { body = await req.json(); } catch {

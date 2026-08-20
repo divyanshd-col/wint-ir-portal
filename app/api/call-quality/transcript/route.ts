@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { getCallRecording } from '@/lib/robylon/db';
+import { query } from '@/lib/cx/db';
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
   const session = await getServerSession(authOptions);
@@ -12,6 +13,22 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   const row = await getCallRecording(callId);
   if (!row) return NextResponse.json({ ok: true, found: false });
+
+  let evalData: any = null;
+  try {
+    const evalRows = await query<any>(
+      `SELECT gates, iqs_scores, iqs_percent, verdict, status, reviewed_by, review_note 
+       FROM call_evaluations 
+       WHERE call_id = $1 OR chat_id = $1 
+       ORDER BY id DESC LIMIT 1`,
+      [callId]
+    );
+    if (evalRows.length > 0) {
+      evalData = evalRows[0];
+    }
+  } catch (err) {
+    console.error('[transcript] failed to fetch call_evaluations:', err);
+  }
 
   return NextResponse.json({
     ok: true,
@@ -24,6 +41,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     durationSeconds: row.duration_seconds,
     calledAt: row.called_at,
     recordingUrl: row.recording_url,
-    segments: Array.isArray(row.transcript) ? row.transcript : [],
+    segments: Array.isArray(row.transcript) 
+      ? row.transcript 
+      : (row.transcript && typeof row.transcript === 'object' && Array.isArray((row.transcript as any).segments) ? (row.transcript as any).segments : []),
+    gates: evalData?.gates ?? null,
+    iqsScores: evalData?.iqs_scores ?? null,
+    iqsPercent: evalData?.iqs_percent ?? null,
+    verdict: evalData?.verdict ?? null,
+    reviewedBy: evalData?.reviewed_by ?? null,
+    reviewNote: evalData?.review_note ?? null,
   });
 }

@@ -274,7 +274,7 @@ export function DisputeThread({
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#065f46' }}>
-                {reviewedBy || 'Reviewer'}
+                {reviewedBy ? (reviewedBy.includes('@') ? (reviewedBy.split('@')[0].charAt(0).toUpperCase() + reviewedBy.split('@')[0].slice(1)) : reviewedBy) : 'QA Reviewer'}
               </span>
               <RoleBadge role={reviewerRole || 'quality'} />
               <span style={{

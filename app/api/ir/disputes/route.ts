@@ -15,11 +15,19 @@ export async function GET(req: NextRequest) {
   const email = (session.user as any)?.email || '';
   const { searchParams } = new URL(req.url);
   const statusFilter = searchParams.get('status') || ''; // 'pending' | 'resolved'
+  const typeFilter = searchParams.get('type') || '';     // 'calls' | 'chats'
 
   const raw = await storeGetIQSFlags();
   const all: IQSFlag[] = raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
 
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
+
+  const isCallFlag = (f: IQSFlag) => Boolean(f.callId);
+  if (typeFilter === 'calls') {
+    flags = flags.filter(isCallFlag);
+  } else if (typeFilter === 'chats') {
+    flags = flags.filter(f => !isCallFlag(f));
+  }
 
   if (statusFilter === 'pending') {
     // Still open from the agent's perspective: awaiting TL ('pending'/'ir_pending_tl')
@@ -29,13 +37,17 @@ export async function GET(req: NextRequest) {
     flags = flags.filter(f => f.status === 'tl_resolved' || f.status === 'reviewed');
   }
 
-  // Enrich with iqs_score + closed_at + bot/call IQS + csat from DB (single batch query)
-  const chatIds = [...new Set(flags.map(f => f.chatId).filter(Boolean))];
+  // Enrich with iqs_score + closed_at + bot/call IQS + csat from DB (batch queries)
+  const chatFlags = flags.filter(f => !f.callId);
+  const callFlags = flags.filter(f => Boolean(f.callId));
+  const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId || f.chatId).filter(Boolean))];
   const rowMap = new Map<string, any>();
+  const callRowMap = new Map<string, any>();
 
-  if (chatIds.length > 0) {
-    try {
-      const { query } = await import('@/lib/cx/db');
+  try {
+    const { query } = await import('@/lib/cx/db');
+    if (chatIds.length > 0) {
       const rows = await query<any>(
         `SELECT s.chat_id, s.iqs_score, c.closed_at, s.parameters, c.csat_score, c.tags
          FROM iqs_scores s
@@ -46,9 +58,22 @@ export async function GET(req: NextRequest) {
       for (const r of rows) {
         if (r.chat_id) rowMap.set(String(r.chat_id), r);
       }
-    } catch {
-      // DB unavailable — return flag data only
     }
+    if (targetCallIds.length > 0) {
+      const callRows = await query<any>(
+        `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, ce.gates, cr.called_at, cr.call_disposition, cr.call_sub_disposition
+         FROM call_evaluations ce
+         JOIN call_recordings cr ON cr.id = ce.call_id
+         WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
+        [targetCallIds]
+      );
+      for (const r of callRows) {
+        if (r.call_id) callRowMap.set(String(r.call_id), r);
+        if (r.chat_id) callRowMap.set(String(r.chat_id), r);
+      }
+    }
+  } catch {
+    // DB unavailable — return flag data only
   }
 
   const { computeIqsFromRawParams } = await import('@/lib/quality');
@@ -63,7 +88,10 @@ export async function GET(req: NextRequest) {
     let disposition = '';
     let subDisposition: string | null = null;
 
-    const row = rowMap.get(String(f.chatId));
+    const isCall = Boolean(f.callId);
+    const row = isCall ? null : rowMap.get(String(f.chatId));
+    const cRow = isCall ? (callRowMap.get(String(f.callId!)) || callRowMap.get(String(f.chatId))) : null;
+
     if (row) {
       iqsScore = row.iqs_score != null ? parseFloat(row.iqs_score) : null;
       closedAt = row.closed_at ? new Date(row.closed_at).toISOString() : null;
@@ -83,9 +111,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    if (cRow) {
+      callIqsScore = cRow.iqs_percent != null ? parseFloat(cRow.iqs_percent) : null;
+      iqsScore = callIqsScore;
+      if (cRow.called_at) closedAt = new Date(cRow.called_at).toISOString();
+      disposition = cRow.call_disposition || '';
+      subDisposition = cRow.call_sub_disposition || null;
+      parameters = cRow.iqs_scores ?? null;
+    }
+
     return {
       flagId: f.id,
       chatId: f.chatId,
+      callId: isCall ? (cRow?.call_id || f.callId) : undefined,
       iqsScore,
       botIqsScore,
       callIqsScore,
@@ -100,6 +138,7 @@ export async function GET(req: NextRequest) {
       reviewedBy: f.reviewedBy || '',
       reviewedAt: f.reviewedAt || '',
       parameters,
+      gates: cRow?.gates ?? null,
       flaggedAt: f.flaggedAt,
     };
   });

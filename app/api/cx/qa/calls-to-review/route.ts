@@ -42,26 +42,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
-    const explicit = searchParams.getAll('disposition');
-    if (explicit.length) {
-      dispositions = explicit;
-    } else {
-      const rows = await query<{ d: string }>(
-        `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
-      );
-      dispositions = rows.map(r => r.d);
-    }
-  } else if (qaEntry && qaEntry.dispositions.length > 0) {
-    dispositions = qaEntry.dispositions;
+  const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions;
+
+  if (role === 'quality') {
+    dispositions = userDisps ?? [];
   } else if (role === 'admin') {
     const rows = await query<{ d: string }>(
       `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
     );
     dispositions = rows.map(r => r.d);
-  } else if (role === 'quality') {
-    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    dispositions = (configUser as any)?.assignedCallDispositions ?? [];
   } else {
     return NextResponse.json({ calls: [], total: 0 });
   }
@@ -92,11 +82,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   let baseWhere = '';
 
   if (!hasCallId) {
-    sqlParams.push(effectiveDispositions);
-    const dispParam = paramIdx++;
-    baseWhere = reviewedMode
-      ? `cr.call_disposition = ANY($${dispParam}) AND ce.status = 'reviewed'`
-      : `cr.call_disposition = ANY($${dispParam}) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
+    if (role === 'admin') {
+      sqlParams.push(effectiveDispositions);
+      const dispParam = paramIdx++;
+      baseWhere = reviewedMode
+        ? `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR ce.reviewed_by IS NOT NULL)`
+        : `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
+    } else {
+      sqlParams.push(effectiveDispositions);
+      const dispParam = paramIdx++;
+      if (reviewedMode) {
+        const emailIdx = paramIdx++;
+        sqlParams.push(email.toLowerCase());
+        baseWhere = `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR LOWER(COALESCE(ce.reviewed_by, '')) = $${emailIdx})`;
+      } else {
+        baseWhere = `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
+      }
+    }
   } else {
     baseWhere = reviewedMode
       ? `ce.status = 'reviewed'`
@@ -107,7 +109,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const filters: Record<string, unknown> = {};
 
   if (hasCallId && callId) {
-    extraWhere += ` AND ce.call_id LIKE $${paramIdx++}`;
+    const pIdx = paramIdx++;
+    extraWhere += ` AND (ce.call_id LIKE $${pIdx} OR ce.chat_id LIKE $${pIdx})`;
     sqlParams.push(`${callId.trim()}%`);
     filters.callId = callId.trim();
   }
