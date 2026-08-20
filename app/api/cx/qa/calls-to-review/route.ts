@@ -107,7 +107,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const filters: Record<string, unknown> = {};
 
   if (hasCallId && callId) {
-    extraWhere += ` AND ce.call_id LIKE $${paramIdx++}`;
+    const pIdx = paramIdx++;
+    extraWhere += ` AND (ce.call_id LIKE $${pIdx} OR ce.chat_id LIKE $${pIdx})`;
     sqlParams.push(`${callId.trim()}%`);
     filters.callId = callId.trim();
   }
