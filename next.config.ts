@@ -44,6 +44,26 @@ const nextConfig: NextConfig = {
       headers: securityHeaders,
     },
   ],
+
+  // Serve the OAuth discovery documents at their spec-mandated .well-known paths.
+  // Rewrites run before filesystem routing, so this is independent of whether
+  // Next serves dot-prefixed app/ segments. claude.ai fetches these to discover
+  // the authorization server (RFC 8414) and the protected resource (RFC 9728).
+  rewrites: async () => [
+    {
+      source: '/.well-known/oauth-authorization-server',
+      destination: '/api/oauth/discovery/authorization-server',
+    },
+    {
+      source: '/.well-known/oauth-protected-resource',
+      destination: '/api/oauth/discovery/protected-resource',
+    },
+    {
+      // Some clients append the resource path to the protected-resource metadata URL.
+      source: '/.well-known/oauth-protected-resource/:path*',
+      destination: '/api/oauth/discovery/protected-resource',
+    },
+  ],
 };
 
 export default nextConfig;
