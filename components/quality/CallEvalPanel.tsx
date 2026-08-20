@@ -29,6 +29,7 @@ export interface CallEvalPanelProps {
   mode?:             'submit' | 'view' | 'review' | 'resolve';
   dispute?:          any;
   allowRaiseDispute?: boolean;
+  allowReevaluate?:  boolean;
   onDisputeRaised?:  () => void;
   onDone:            () => void;
   onClose:           () => void;
@@ -127,6 +128,7 @@ export default function CallEvalPanel({
   mode = 'view',
   dispute,
   allowRaiseDispute = false,
+  allowReevaluate = false,
   onDisputeRaised,
   onDone,
   onClose,
@@ -402,35 +404,37 @@ export default function CallEvalPanel({
                 Raise Dispute
               </button>
             )}
-            <button
-              onClick={handleReevaluate}
-              disabled={isReevaluating || saving}
-              title="Re-evaluate this call (diarization, transcription, and scoring)"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '6px 12px',
-                fontSize: 12,
-                fontWeight: 600,
-                borderRadius: 6,
-                border: '1px solid var(--qa-border, #cbd5e1)',
-                background: isReevaluating ? '#f1f5f9' : '#ffffff',
-                color: isReevaluating ? '#64748b' : 'var(--qa-text, #0f172a)',
-                cursor: isReevaluating ? 'not-allowed' : 'pointer',
-                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                transition: 'all 0.15s ease'
-              }}
-            >
-              <span style={{
-                display: 'inline-block',
-                transform: isReevaluating ? 'rotate(180deg)' : 'none',
-                transition: 'transform 0.5s ease-in-out'
-              }}>
-                🔄
-              </span>
-              {isReevaluating ? 'Re-evaluating Call…' : 'Re-evaluate Call'}
-            </button>
+            {allowReevaluate && (
+              <button
+                onClick={handleReevaluate}
+                disabled={isReevaluating || saving}
+                title="Re-evaluate this call (diarization, transcription, and scoring)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px solid var(--qa-border, #cbd5e1)',
+                  background: isReevaluating ? '#f1f5f9' : '#ffffff',
+                  color: isReevaluating ? '#64748b' : 'var(--qa-text, #0f172a)',
+                  cursor: isReevaluating ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span style={{
+                  display: 'inline-block',
+                  transform: isReevaluating ? 'rotate(180deg)' : 'none',
+                  transition: 'transform 0.5s ease-in-out'
+                }}>
+                  🔄
+                </span>
+                {isReevaluating ? 'Re-evaluating Call…' : 'Re-evaluate Call'}
+              </button>
+            )}
             <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 18, color: 'var(--qa-text-3)', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
           </div>
         </div>

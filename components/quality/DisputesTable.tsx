@@ -387,6 +387,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       iqsScores={d.parameters || {}}
                       mode="review"
                       dispute={d}
+                      allowReevaluate={true}
                       onDone={() => removeDispute(rowKey)}
                       onClose={() => setExpandedId(null)}
                       colSpan={7}

@@ -142,6 +142,7 @@ const CallEvalRow = React.memo(function CallEvalRow({
           gates={call.gates}
           iqsScores={call.iqsScores}
           mode="submit"
+          allowReevaluate={true}
           onDone={() => onRemoveCall(call.callId)}
           onClose={onCloseExpand}
           colSpan={7}
