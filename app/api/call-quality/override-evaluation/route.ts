@@ -49,6 +49,8 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
   // Extract old scores for auditing
   const oldIqsScores = existingEval.iqs_scores || {};
   const oldIqsPercent = existingEval.iqs_percent;
+  const aiScoreInt = Math.round(parseFloat(String(oldIqsPercent ?? 0))) || 0;
+  const humanScoreInt = Math.round(parseFloat(String(iqs_percent ?? 0))) || 0;
 
   try {
     // 1. Log to call_review_comparisons for audit trail
@@ -64,8 +66,8 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
         review_note = EXCLUDED.review_note
     `, [
       actualCallId,
-      oldIqsPercent,
-      iqs_percent,
+      aiScoreInt,
+      humanScoreInt,
       JSON.stringify(oldIqsScores.scores || {}),
       JSON.stringify(scores),
       email,
