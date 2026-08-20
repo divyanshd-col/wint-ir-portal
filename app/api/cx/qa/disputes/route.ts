@@ -306,9 +306,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       continue;
     }
 
-    const hasCallParams = flag.challengedParams?.some(p => /^P\d+/i.test(p.param) || p.param.startsWith('Call') || p.param.startsWith('Technical') || p.param.startsWith('AllQuestions') || p.param.startsWith('Expectation'));
-    const hasChatParams = flag.challengedParams?.some(p => p.param.startsWith('agent:') || p.param.startsWith('bot:') || /^Q\d+/i.test(p.param) || p.param.startsWith('FollowUp'));
-    const isCallFlag = hasCallParams || (!hasChatParams && Boolean(flag.callId));
+    const isCallFlag = Boolean(
+      flag.callId ||
+      flag.challengedParams?.some(p => /^P(1|2|3|4|5|6|7|8|9|10|11)\b/i.test(p.param))
+    );
     let params = isCallFlag ? (callDb?.parameters ?? db?.parameters ?? {}) : (db?.parameters ?? callDb?.parameters ?? {});
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 

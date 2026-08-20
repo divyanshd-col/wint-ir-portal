@@ -233,7 +233,7 @@ export default function TLQualityCallsPage() {
       const pAll: TLDisputeRow[] = Array.isArray(pData.disputes) ? pData.disputes : [];
       const rAll: TLDisputeRow[] = Array.isArray(rData.disputes) ? rData.disputes : [];
 
-      const isCallDispute = (d: TLDisputeRow) => Boolean(d.callId || d.callIqsScore != null || d.challengedParams?.some(p => p.param.startsWith('P')));
+      const isCallDispute = (d: TLDisputeRow) => Boolean(d.callId && (d.challengedParams?.some(p => /^P(1|2|3|4|5|6|7|8|9|10|11)\b/i.test(p.param)) || !d.challengedParams?.length));
 
       setPendingDisputes(pAll.filter(isCallDispute));
       setReviewedDisputes(rAll.filter(isCallDispute));

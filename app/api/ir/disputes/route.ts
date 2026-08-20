@@ -22,11 +22,10 @@ export async function GET(req: NextRequest) {
 
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
 
-  const isCallFlag = (f: IQSFlag) => {
-    const hasCallParams = f.challengedParams?.some(p => /^P\d+/i.test(p.param) || p.param.startsWith('Call') || p.param.startsWith('Technical') || p.param.startsWith('AllQuestions') || p.param.startsWith('Expectation'));
-    const hasChatParams = f.challengedParams?.some(p => p.param.startsWith('agent:') || p.param.startsWith('bot:') || /^Q\d+/i.test(p.param) || p.param.startsWith('FollowUp'));
-    return hasCallParams || (!hasChatParams && Boolean(f.callId));
-  };
+  const isCallFlag = (f: IQSFlag) => Boolean(
+    f.callId ||
+    f.challengedParams?.some(p => /^P(1|2|3|4|5|6|7|8|9|10|11)\b/i.test(p.param))
+  );
   if (typeFilter === 'calls') {
     flags = flags.filter(isCallFlag);
   } else if (typeFilter === 'chats') {
