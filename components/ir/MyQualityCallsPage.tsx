@@ -238,6 +238,8 @@ export default function MyQualityCallsPage({ agentName }: Props) {
       if (!res.ok) throw new Error('Fetch failed');
       const data = await res.json();
       let rows: CallScoreEntry[] = Array.isArray(data.entries) ? data.entries : [];
+      // Ensure only calls (with callId) are shown
+      rows = rows.filter(r => Boolean(r.callId));
       if (qualityParam) {
         rows = rows.filter(r => r.scores?.[qualityParam] === 'No' || r.scores?.[qualityParam] === '0');
       }
@@ -261,15 +263,15 @@ export default function MyQualityCallsPage({ agentName }: Props) {
     setLoadingReviewed(true);
     try {
       const [pRes, rRes] = await Promise.all([
-        fetch('/api/ir/disputes?status=pending'),
-        fetch('/api/ir/disputes?status=resolved'),
+        fetch('/api/ir/disputes?status=pending&type=calls'),
+        fetch('/api/ir/disputes?status=resolved&type=calls'),
       ]);
       const [pData, rData] = await Promise.all([pRes.json(), rRes.json()]);
 
       const pAll: DisputeRow[] = Array.isArray(pData.disputes) ? pData.disputes : [];
       const rAll: DisputeRow[] = Array.isArray(rData.disputes) ? rData.disputes : [];
 
-      const isCallDispute = (d: DisputeRow) => Boolean(d.callId || d.callIqsScore != null || d.challengedParams?.some(p => p.param.startsWith('P')));
+      const isCallDispute = (d: DisputeRow) => Boolean(d.callId || d.challengedParams?.some(p => p.param.startsWith('P')));
 
       setPendingDisputes(pAll.filter(isCallDispute));
       setReviewedDisputes(rAll.filter(isCallDispute));
@@ -344,17 +346,15 @@ export default function MyQualityCallsPage({ agentName }: Props) {
     }
   };
 
-  // Map of active/disputed flagIds by callId/chatId
+  // Map of active/disputed flagIds strictly by callId
   const pendingCallIdMap = new Map<string, DisputeRow>();
   pendingDisputes.forEach(d => {
     if (d.callId) pendingCallIdMap.set(d.callId, d);
-    if (d.chatId) pendingCallIdMap.set(d.chatId, d);
   });
 
   const reviewedCallIdMap = new Map<string, DisputeRow>();
   reviewedDisputes.forEach(d => {
     if (d.callId) reviewedCallIdMap.set(d.callId, d);
-    if (d.chatId) reviewedCallIdMap.set(d.chatId, d);
   });
 
   // Filter pending disputes

@@ -74,6 +74,8 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const url      = new URL(req.url);
 
   const page        = parseInt(url.searchParams.get('page') || '0', 10);
+  const limit       = parseInt(url.searchParams.get('limit') || String(PAGE_SIZE), 10);
+  const callId      = url.searchParams.get('callId') || '';
   const dateFrom    = url.searchParams.get('dateFrom') || '';
   const dateTo      = url.searchParams.get('dateTo') || '';
   const agentFilter = url.searchParams.get('agent') || '';
@@ -158,13 +160,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     ({ rows, total } = await getAllScoredCalls({
       agentName: !agentNames && agentFilter ? agentFilter : undefined,
       agentNames: agentNames,
+      callId: callId || undefined,
       dispositions: dispositions,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       minScore,
       maxScore,
       page,
-      pageSize: PAGE_SIZE,
+      pageSize: limit,
     }));
   } catch (err: any) {
     return NextResponse.json({ error: err.message || 'Database error' }, { status: 500 });

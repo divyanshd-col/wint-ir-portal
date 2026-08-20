@@ -225,8 +225,8 @@ export default function TLQualityCallsPage() {
     setLoadingReviewed(true);
     try {
       const [pRes, rRes] = await Promise.all([
-        fetch('/api/cx/tl/disputes?status=pending'),
-        fetch('/api/cx/tl/disputes?status=resolved'),
+        fetch('/api/cx/tl/disputes?status=pending&type=calls'),
+        fetch('/api/cx/tl/disputes?status=resolved&type=calls'),
       ]);
       const [pData, rData] = await Promise.all([pRes.json(), rRes.json()]);
 

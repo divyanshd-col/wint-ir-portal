@@ -15,11 +15,19 @@ export async function GET(req: NextRequest) {
   const email = (session.user as any)?.email || '';
   const { searchParams } = new URL(req.url);
   const statusFilter = searchParams.get('status') || ''; // 'pending' | 'resolved'
+  const typeFilter = searchParams.get('type') || '';     // 'calls' | 'chats'
 
   const raw = await storeGetIQSFlags();
   const all: IQSFlag[] = raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
 
   let flags = all.filter(f => f.agentEmail === email && f.raisedByRole === 'ir' && f.status !== 'cancelled');
+
+  const isCallFlag = (f: IQSFlag) => Boolean(f.callId || f.challengedParams?.some(p => p.param.startsWith('P')));
+  if (typeFilter === 'calls') {
+    flags = flags.filter(isCallFlag);
+  } else if (typeFilter === 'chats') {
+    flags = flags.filter(f => !isCallFlag(f));
+  }
 
   if (statusFilter === 'pending') {
     // Still open from the agent's perspective: awaiting TL ('pending'/'ir_pending_tl')

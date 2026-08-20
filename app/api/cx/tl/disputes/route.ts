@@ -236,12 +236,20 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     });
   }
 
-  disputes.sort((a, b) => b.raisedAt.localeCompare(a.raisedAt));
+  const typeParam = new URL(req.url).searchParams.get('type');
+  let finalDisputes = disputes;
+  if (typeParam === 'calls') {
+    finalDisputes = disputes.filter(d => Boolean(d.callId || d.callIqsScore != null || d.challengedParams?.some(p => p.param.startsWith('P'))));
+  } else if (typeParam === 'chats') {
+    finalDisputes = disputes.filter(d => !d.callId && !d.challengedParams?.some(p => p.param.startsWith('P')));
+  }
+
+  finalDisputes.sort((a, b) => b.raisedAt.localeCompare(a.raisedAt));
 
   log.info(ROUTE, 'result', {
-    statusFilter, flagCount: flags.length, filteredCount: disputes.length,
+    statusFilter, flagCount: flags.length, filteredCount: finalDisputes.length,
     durationMs: Date.now() - t0,
   });
 
-  return NextResponse.json({ disputes });
+  return NextResponse.json({ disputes: finalDisputes });
 });

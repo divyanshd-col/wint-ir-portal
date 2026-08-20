@@ -1136,6 +1136,7 @@ export async function getAllScoredCalls(opts: {
   agentNames?: string[];
   dateFrom?: string;
   dateTo?: string;
+  callId?: string;
   minScore?: number;
   maxScore?: number;
   unreviewedOnly?: boolean;
@@ -1146,6 +1147,11 @@ export async function getAllScoredCalls(opts: {
   // Join call_recordings → call_evaluations (via call_id) or iqs_scores (via chat_id)
   const conditions: string[] = ['(ce.iqs_percent IS NOT NULL OR s.call_iqs_score IS NOT NULL)'];
   const params: any[] = [];
+
+  if (opts.callId) {
+    params.push(`%${opts.callId.trim()}%`);
+    conditions.push(`r.id ILIKE $${params.length}`);
+  }
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
