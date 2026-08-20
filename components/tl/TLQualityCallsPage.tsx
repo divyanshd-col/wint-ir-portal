@@ -3,9 +3,12 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react';
 import type { CSSProperties } from 'react';
 import CallEvalPanel from '../quality/CallEvalPanel';
+import { DisputeThread } from '../quality/DisputeThread';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
+import { DisputeStatusPill, getDisputeOutcomeKey } from './QualityChatsPage';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
 const TH_BASE: CSSProperties = {
   height: 40,
@@ -125,7 +128,6 @@ interface CallScoreEntry {
   reasoning: Record<string, string>;
   failedParams: string[];
   gates?: any;
-  verdict?: string | null;
   rawParameters?: any;
 }
 
@@ -137,7 +139,7 @@ export default function TLQualityCallsPage() {
   const [loadingEntries, setLoadingEntries] = useState(true);
   const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
 
-  // Filters State
+  // Filters State for Evaluated Calls
   const [agentFilter, setAgentFilter] = useState('');
   const [agentsList, setAgentsList] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState('');
@@ -145,6 +147,7 @@ export default function TLQualityCallsPage() {
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
   const [page, setPage] = useState(0);
+  const [limit, setLimit] = useState(20);
   const [totalEntries, setTotalEntries] = useState(0);
 
   // Disputes State
@@ -154,17 +157,36 @@ export default function TLQualityCallsPage() {
   const [loadingReviewed, setLoadingReviewed] = useState(true);
   const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  // Thread comments state
-  const [commentsMap, setCommentsMap] = useState<Record<string, any[]>>({});
-  const [newCommentText, setNewCommentText] = useState<Record<string, string>>({});
-  const [postingComment, setPostingComment] = useState(false);
+  // Filter state for Disputes
+  const [pendingAgentFilter, setPendingAgentFilter] = useState('');
+  const [pendingOutcomeFilter, setPendingOutcomeFilter] = useState('');
+  const [pendingFromFilter, setPendingFromFilter] = useState('');
+  const [pendingToFilter, setPendingToFilter] = useState('');
+  const [pendingPage, setPendingPage] = useState(1);
+  const [pendingLimit, setPendingLimit] = useState(20);
+
+  const [reviewedAgentFilter, setReviewedAgentFilter] = useState('');
+  const [reviewedOutcomeFilter, setReviewedOutcomeFilter] = useState('');
+  const [reviewedFromFilter, setReviewedFromFilter] = useState('');
+  const [reviewedToFilter, setReviewedToFilter] = useState('');
+  const [reviewedPage, setReviewedPage] = useState(1);
+  const [reviewedLimit, setReviewedLimit] = useState(20);
+
+  const [openPageDrop, setOpenPageDrop] = useState<'tab1' | 'tab2' | 'tab3' | null>(null);
+
+  useEffect(() => {
+    const handleOutside = () => setOpenPageDrop(null);
+    window.addEventListener('click', handleOutside);
+    return () => window.removeEventListener('click', handleOutside);
+  }, []);
 
   // Fetch Evaluated Calls
   const fetchEvaluatedCalls = useCallback(async () => {
     setLoadingEntries(true);
     try {
-      const p = new URLSearchParams({ page: String(page) });
+      const p = new URLSearchParams({ page: String(page), limit: String(limit) });
       if (agentFilter) p.set('agent', agentFilter);
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
@@ -178,7 +200,6 @@ export default function TLQualityCallsPage() {
       setEntries(rows);
       setTotalEntries(data.total ?? rows.length);
 
-      // Collect available agents
       if (Array.isArray(data.agents) && data.agents.length > 0) {
         setAgentsList(data.agents);
       } else {
@@ -192,7 +213,7 @@ export default function TLQualityCallsPage() {
     } finally {
       setLoadingEntries(false);
     }
-  }, [agentFilter, dateFrom, dateTo, iqsMin, iqsMax, page]);
+  }, [agentFilter, dateFrom, dateTo, iqsMin, iqsMax, page, limit]);
 
   useEffect(() => {
     fetchEvaluatedCalls();
@@ -231,6 +252,7 @@ export default function TLQualityCallsPage() {
 
   const handleForwardToQA = async (flagId: string) => {
     setActioningId(flagId);
+    setActionError(null);
     try {
       const res = await fetch('/api/cx/tl/disputes/forward', {
         method: 'POST',
@@ -238,53 +260,80 @@ export default function TLQualityCallsPage() {
         body: JSON.stringify({ flagId }),
       });
       if (res.ok) {
-        alert('Dispute forwarded to QA successfully!');
         await fetchDisputes();
       } else {
         const d = await res.json();
-        alert(d.error || 'Failed to forward dispute');
+        setActionError(d.error || 'Failed to forward dispute');
       }
     } catch (e: any) {
-      alert(`Error forwarding dispute: ${e.message}`);
+      setActionError(`Error forwarding dispute: ${e.message}`);
     } finally {
       setActioningId(null);
     }
   };
 
-  const fetchFlagThread = async (flagId: string) => {
-    try {
-      const res = await fetch(`/api/quality/flag-thread?flagId=${flagId}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setCommentsMap(prev => ({ ...prev, [flagId]: data.comments || [] }));
-    } catch {
-      // ignore
-    }
-  };
+  const handleResolveAtTLLevel = async (flagId: string) => {
+    const note = prompt('Enter a note explaining why this call dispute was resolved at TL level:');
+    if (note === null) return;
 
-  const handlePostComment = async (flagId: string) => {
-    const content = (newCommentText[flagId] || '').trim();
-    if (!content) return;
-
-    setPostingComment(true);
+    setActioningId(flagId);
+    setActionError(null);
     try {
-      const res = await fetch('/api/quality/flag-thread', {
+      const res = await fetch('/api/cx/tl/disputes/resolve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flagId, content }),
+        body: JSON.stringify({ flagId, reviewNote: note || 'Resolved call dispute at TL level' }),
       });
       if (res.ok) {
-        setNewCommentText(prev => ({ ...prev, [flagId]: '' }));
-        await fetchFlagThread(flagId);
+        await fetchDisputes();
       } else {
-        alert('Failed to post comment');
+        const d = await res.json();
+        setActionError(d.error || 'Failed to resolve dispute');
       }
     } catch (e: any) {
-      alert(`Error posting comment: ${e.message}`);
+      setActionError(`Error resolving dispute: ${e.message}`);
     } finally {
-      setPostingComment(false);
+      setActioningId(null);
     }
   };
+
+  // Filter pending disputes
+  const filteredPendingDisputes = pendingDisputes.filter(d => {
+    if (pendingAgentFilter && d.agentName !== pendingAgentFilter) return false;
+    if (pendingOutcomeFilter && getDisputeOutcomeKey(d) !== pendingOutcomeFilter) return false;
+    if (pendingFromFilter) {
+      const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
+      if (dDate < pendingFromFilter) return false;
+    }
+    if (pendingToFilter) {
+      const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
+      if (dDate > pendingToFilter) return false;
+    }
+    return true;
+  });
+
+  // Filter reviewed disputes
+  const filteredReviewedDisputes = reviewedDisputes.filter(d => {
+    if (reviewedAgentFilter && d.agentName !== reviewedAgentFilter) return false;
+    if (reviewedOutcomeFilter && getDisputeOutcomeKey(d) !== reviewedOutcomeFilter) return false;
+    if (reviewedFromFilter) {
+      const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
+      if (dDate < reviewedFromFilter) return false;
+    }
+    if (reviewedToFilter) {
+      const dDate = d.raisedAt ? d.raisedAt.substring(0, 10) : '';
+      if (dDate > reviewedToFilter) return false;
+    }
+    return true;
+  });
+
+  const pagedPending = filteredPendingDisputes.slice((pendingPage - 1) * pendingLimit, pendingPage * pendingLimit);
+  const totalPendingPages = Math.max(1, Math.ceil(filteredPendingDisputes.length / pendingLimit));
+
+  const pagedReviewed = filteredReviewedDisputes.slice((reviewedPage - 1) * reviewedLimit, reviewedPage * reviewedLimit);
+  const totalReviewedPages = Math.max(1, Math.ceil(filteredReviewedDisputes.length / reviewedLimit));
+
+  const totalEvaluatedPages = Math.max(1, Math.ceil(totalEntries / limit));
 
   const tabStyle = (active: boolean): CSSProperties => ({
     height: 36,
@@ -301,17 +350,35 @@ export default function TLQualityCallsPage() {
     gap: 6,
   });
 
+  const chipInputStyle: CSSProperties = {
+    height: 32,
+    padding: '0 10px',
+    border: '1px solid var(--qa-border, #E4E4E7)',
+    borderRadius: 8,
+    fontSize: 13,
+    fontFamily: SANS,
+    background: 'var(--qa-card, #FFFFFF)',
+    color: 'var(--qa-text, #111111)',
+    outline: 'none',
+  };
+
   return (
-    <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto' }}>
+    <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto', fontFamily: SANS }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>
           Team Lead — Quality Calls
         </h1>
         <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: 0 }}>
-          View team members' call evaluations, manage raised call disputes, post thread notes, and forward disputes to QA.
+          View team members' call evaluations, manage raised call disputes, post thread comments, resolve disputes, or forward to QA.
         </p>
       </div>
+
+      {actionError && (
+        <div style={{ padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#b91c1c', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>
+          {actionError}
+        </div>
+      )}
 
       {/* Tabs Bar */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', padding: 4, borderRadius: 10, width: 'fit-content' }}>
@@ -321,11 +388,11 @@ export default function TLQualityCallsPage() {
         </button>
         <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
           Disputes Raised
-          <CountBadge count={pendingDisputes.length} active={activeTab === 'disputes'} />
+          <CountBadge count={filteredPendingDisputes.length} active={activeTab === 'disputes'} />
         </button>
         <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
           Reviewed Disputes
-          <CountBadge count={reviewedDisputes.length} active={activeTab === 'reviewed'} />
+          <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
         </button>
       </div>
 
@@ -337,16 +404,7 @@ export default function TLQualityCallsPage() {
             <select
               value={agentFilter}
               onChange={e => { setAgentFilter(e.target.value); setPage(0); }}
-              style={{
-                height: 36,
-                padding: '0 12px',
-                border: '1px solid var(--qa-border, #E4E4E7)',
-                borderRadius: 8,
-                fontSize: 13,
-                outline: 'none',
-                minWidth: 160,
-                background: '#fff',
-              }}
+              style={{ ...chipInputStyle, minWidth: 160 }}
             >
               <option value="">All Team Agents</option>
               {agentsList.map(a => (
@@ -358,34 +416,31 @@ export default function TLQualityCallsPage() {
               type="date"
               value={dateFrom}
               onChange={e => { setDateFrom(e.target.value); setPage(0); }}
-              style={{ height: 36, padding: '0 10px', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, fontSize: 13, background: '#fff' }}
-              placeholder="From Date"
+              style={chipInputStyle}
+              title="From Date"
             />
             <input
               type="date"
               value={dateTo}
               onChange={e => { setDateTo(e.target.value); setPage(0); }}
-              style={{ height: 36, padding: '0 10px', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, fontSize: 13, background: '#fff' }}
-              placeholder="To Date"
+              style={chipInputStyle}
+              title="To Date"
             />
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <input
-                type="number"
-                placeholder="Min IQS"
-                value={iqsMin}
-                onChange={e => { setIqsMin(e.target.value); setPage(0); }}
-                style={{ width: 80, height: 36, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, fontSize: 13 }}
-              />
-              <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>to</span>
-              <input
-                type="number"
-                placeholder="Max IQS"
-                value={iqsMax}
-                onChange={e => { setIqsMax(e.target.value); setPage(0); }}
-                style={{ width: 80, height: 36, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, fontSize: 13 }}
-              />
-            </div>
+            <input
+              type="number"
+              placeholder="Min IQS"
+              value={iqsMin}
+              onChange={e => { setIqsMin(e.target.value); setPage(0); }}
+              style={{ ...chipInputStyle, width: 80 }}
+            />
+            <input
+              type="number"
+              placeholder="Max IQS"
+              value={iqsMax}
+              onChange={e => { setIqsMax(e.target.value); setPage(0); }}
+              style={{ ...chipInputStyle, width: 80 }}
+            />
 
             {(agentFilter || dateFrom || dateTo || iqsMin || iqsMax) && (
               <button
@@ -397,21 +452,39 @@ export default function TLQualityCallsPage() {
                   setIqsMax('');
                   setPage(0);
                 }}
-                style={{
-                  height: 36,
-                  padding: '0 12px',
-                  border: '1px solid var(--qa-border)',
-                  borderRadius: 8,
-                  background: '#fff',
-                  color: '#ef4444',
-                  fontSize: 12,
-                  cursor: 'pointer',
-                  fontWeight: 500,
-                }}
+                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
               >
                 Clear Filters
               </button>
             )}
+
+            {/* Rows per page */}
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
+                {totalEntries === 0 ? '0 calls' : `Showing ${page * limit + 1}–${Math.min((page + 1) * limit, totalEntries)} of ${totalEntries}`}
+              </span>
+              <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => setOpenPageDrop(openPageDrop === 'tab1' ? null : 'tab1')}
+                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                >
+                  {limit} / page ▾
+                </button>
+                {openPageDrop === 'tab1' && (
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    {[20, 50, 100].map(n => (
+                      <div
+                        key={n}
+                        onClick={() => { setLimit(n); setPage(0); setOpenPageDrop(null); }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: limit === n ? '#f4f4f5' : '#fff' }}
+                      >
+                        {n} rows
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Table */}
@@ -491,6 +564,8 @@ export default function TLQualityCallsPage() {
                             gates={call.gates}
                             iqsScores={call.rawParameters || { scores: call.scores, evidence: call.reasoning }}
                             mode="view"
+                            allowRaiseDispute={true}
+                            onDisputeRaised={() => fetchEvaluatedCalls()}
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
                             colSpan={7}
@@ -502,196 +577,458 @@ export default function TLQualityCallsPage() {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination footer */}
+            {totalEvaluatedPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
+                <button
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.5 : 1 }}
+                >
+                  ← Prev
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>Page {page + 1} of {totalEvaluatedPages}</span>
+                <button
+                  onClick={() => setPage(p => Math.min(totalEvaluatedPages - 1, p + 1))}
+                  disabled={page >= totalEvaluatedPages - 1}
+                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: page >= totalEvaluatedPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalEvaluatedPages - 1 ? 0.5 : 1 }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* ── TAB 2: DISPUTES RAISED (PENDING TL REVIEW) ───────────────────────── */}
+      {/* ── TAB 2: DISPUTES RAISED (PENDING TL ACTION) ───────────────────────── */}
       {activeTab === 'disputes' && (
-        <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr>
-                <th style={TH_BASE}>Call / Chat ID</th>
-                <th style={TH_BASE}>Agent Name</th>
-                <th style={TH_BASE}>Raised By</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                <th style={TH_BASE}>Disposition</th>
-                <th style={TH_BASE}>Date Raised</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingPending ? (
-                <tr>
-                  <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
-                    Loading raised call disputes…
-                  </td>
-                </tr>
-              ) : pendingDisputes.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
-                    No pending call disputes raised for your team.
-                  </td>
-                </tr>
-              ) : (
-                pendingDisputes.map(dispute => {
-                  const isOpen = expandedDisputeId === dispute.flagId;
-                  const comments = commentsMap[dispute.flagId] || [];
+        <div>
+          {/* Filters Bar */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+            <select
+              value={pendingAgentFilter}
+              onChange={e => { setPendingAgentFilter(e.target.value); setPendingPage(1); }}
+              style={{ ...chipInputStyle, minWidth: 140 }}
+            >
+              <option value="">All Agents</option>
+              {Array.from(new Set(pendingDisputes.map(d => d.agentName).filter(Boolean))).sort().map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
 
-                  return (
-                    <Fragment key={dispute.flagId}>
-                      <tr
-                        onClick={() => {
-                          setExpandedDisputeId(isOpen ? null : dispute.flagId);
-                          if (!isOpen) fetchFlagThread(dispute.flagId);
-                        }}
-                        style={{ cursor: 'pointer', background: isOpen ? 'var(--qa-gray-50)' : undefined }}
+            <select
+              value={pendingOutcomeFilter}
+              onChange={e => { setPendingOutcomeFilter(e.target.value); setPendingPage(1); }}
+              style={{ ...chipInputStyle, minWidth: 140 }}
+            >
+              <option value="">All Statuses</option>
+              <option value="raised_ir">Dispute raised by IR</option>
+              <option value="raised_tl">Dispute raised by TL</option>
+            </select>
+
+            <input
+              type="date"
+              value={pendingFromFilter}
+              onChange={e => { setPendingFromFilter(e.target.value); setPendingPage(1); }}
+              style={chipInputStyle}
+              title="From Date"
+            />
+            <input
+              type="date"
+              value={pendingToFilter}
+              onChange={e => { setPendingToFilter(e.target.value); setPendingPage(1); }}
+              style={chipInputStyle}
+              title="To Date"
+            />
+
+            {(pendingAgentFilter || pendingOutcomeFilter || pendingFromFilter || pendingToFilter) && (
+              <button
+                onClick={() => {
+                  setPendingAgentFilter('');
+                  setPendingOutcomeFilter('');
+                  setPendingFromFilter('');
+                  setPendingToFilter('');
+                  setPendingPage(1);
+                }}
+                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+              >
+                Clear Filters
+              </button>
+            )}
+
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
+                {filteredPendingDisputes.length === 0 ? '0 disputes' : `Showing ${(pendingPage - 1) * pendingLimit + 1}–${Math.min(pendingPage * pendingLimit, filteredPendingDisputes.length)} of ${filteredPendingDisputes.length}`}
+              </span>
+              <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => setOpenPageDrop(openPageDrop === 'tab2' ? null : 'tab2')}
+                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                >
+                  {pendingLimit} / page ▾
+                </button>
+                {openPageDrop === 'tab2' && (
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    {[20, 50, 100].map(n => (
+                      <div
+                        key={n}
+                        onClick={() => { setPendingLimit(n); setPendingPage(1); setOpenPageDrop(null); }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: pendingLimit === n ? '#f4f4f5' : '#fff' }}
                       >
-                        <td style={TD_MONO}>{dispute.callId || dispute.chatId}</td>
-                        <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
-                        <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
-                        <td style={TD_NUM}>
-                          <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
-                        </td>
-                        <td style={TD_BASE}>{dispute.disposition || '—'}</td>
-                        <td style={TD_BASE}>{new Date(dispute.raisedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-                        <td style={{ ...TD_BASE, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                          <button
-                            onClick={() => handleForwardToQA(dispute.flagId)}
-                            disabled={actioningId === dispute.flagId}
-                            style={{
-                              padding: '6px 12px',
-                              fontSize: 12,
-                              fontWeight: 600,
-                              background: '#0284c7',
-                              color: '#fff',
-                              border: 'none',
-                              borderRadius: 6,
-                              cursor: 'pointer',
-                            }}
-                          >
-                            {actioningId === dispute.flagId ? 'Forwarding…' : 'Forward to QA'}
-                          </button>
-                        </td>
-                      </tr>
+                        {n} rows
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-                      {isOpen && (
-                        <tr>
-                          <td colSpan={7} style={{ padding: 20, background: '#f8fafc', borderBottom: '1px solid var(--qa-border)' }}>
-                            <div style={{ maxWidth: 800 }}>
-                              <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600 }}>Dispute Details</h4>
-                              <p style={{ fontSize: 13, color: 'var(--qa-text-2)', marginBottom: 12 }}>
-                                <b>Agent Note:</b> {dispute.agentNote || 'No note provided'}
-                              </p>
+          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr>
+                  <th style={TH_BASE}>Call ID</th>
+                  <th style={TH_BASE}>Agent Name</th>
+                  <th style={TH_BASE}>Raised By</th>
+                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
+                  <th style={TH_BASE}>Disposition</th>
+                  <th style={TH_BASE}>Challenged Params</th>
+                  <th style={TH_BASE}>Status</th>
+                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingPending ? (
+                  <tr>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                      Loading raised call disputes…
+                    </td>
+                  </tr>
+                ) : filteredPendingDisputes.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                      No pending call disputes raised for your team.
+                    </td>
+                  </tr>
+                ) : (
+                  pagedPending.map(dispute => {
+                    const isOpen = expandedDisputeId === dispute.flagId;
+                    const callKey = dispute.callId || dispute.chatId;
 
-                              {dispute.challengedParams?.length > 0 && (
-                                <div style={{ marginBottom: 16 }}>
-                                  <b style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Challenged Parameters:</b>
-                                  <ul style={{ margin: '6px 0 0 0', paddingLeft: 20, fontSize: 13 }}>
-                                    {dispute.challengedParams.map((cp, idx) => (
-                                      <li key={idx}>
-                                        <b>{CALL_PARAM_NAMES[cp.param] || cp.param}:</b> {cp.note || 'No specific note'}
-                                      </li>
-                                    ))}
-                                  </ul>
-                                </div>
-                              )}
-
-                              {/* Thread Comments */}
-                              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 12 }}>
-                                <h5 style={{ margin: '0 0 8px 0', fontSize: 13, fontWeight: 600 }}>Discussion Thread</h5>
-                                {comments.length === 0 ? (
-                                  <p style={{ fontSize: 12, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>No comments yet.</p>
-                                ) : (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-                                    {comments.map(c => (
-                                      <div key={c.id} style={{ background: '#fff', border: '1px solid #e2e8f0', padding: 8, borderRadius: 6, fontSize: 12 }}>
-                                        <b>{c.authorName} ({c.role}):</b> {c.content}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                  <input
-                                    type="text"
-                                    placeholder="Add comment to dispute thread…"
-                                    value={newCommentText[dispute.flagId] || ''}
-                                    onChange={e => setNewCommentText({ ...newCommentText, [dispute.flagId]: e.target.value })}
-                                    style={{ flex: 1, padding: '6px 10px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 6 }}
-                                  />
-                                  <button
-                                    onClick={() => handlePostComment(dispute.flagId)}
-                                    disabled={postingComment}
-                                    style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--qa-gray-700)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
-                                  >
-                                    Send
-                                  </button>
-                                </div>
-                              </div>
+                    return (
+                      <Fragment key={dispute.flagId}>
+                        <tr
+                          onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
+                          style={{ cursor: 'pointer', background: isOpen ? 'var(--qa-gray-50)' : undefined }}
+                        >
+                          <td style={TD_MONO}>{callKey}</td>
+                          <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
+                          <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
+                          <td style={TD_NUM}>
+                            <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+                          </td>
+                          <td style={TD_BASE}>{dispute.disposition || '—'}</td>
+                          <td style={TD_BASE}>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {(dispute.challengedParams || []).map((cp, idx) => (
+                                <span key={idx} style={{ padding: '1px 6px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                                  {cp.param}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={TD_BASE}>
+                            <DisputeStatusPill
+                              status={dispute.status}
+                              raisedByRole={dispute.raisedByRole || (dispute as any).raisedBy}
+                              reviewNote={dispute.reviewNote}
+                              parameters={dispute.parameters}
+                            />
+                          </td>
+                          <td style={{ ...TD_BASE, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                            <div style={{ display: 'inline-flex', gap: 6 }}>
+                              <button
+                                onClick={() => handleForwardToQA(dispute.flagId)}
+                                disabled={actioningId === dispute.flagId}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  background: '#0284c7',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: 6,
+                                  cursor: actioningId === dispute.flagId ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                {actioningId === dispute.flagId ? '…' : 'Forward to QA'}
+                              </button>
+                              <button
+                                onClick={() => handleResolveAtTLLevel(dispute.flagId)}
+                                disabled={actioningId === dispute.flagId}
+                                style={{
+                                  padding: '4px 10px',
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  background: '#166534',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: 6,
+                                  cursor: actioningId === dispute.flagId ? 'not-allowed' : 'pointer',
+                                }}
+                              >
+                                Resolve
+                              </button>
                             </div>
                           </td>
                         </tr>
-                      )}
-                    </Fragment>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+
+                        {isOpen && (
+                          <CallEvalPanel
+                            callId={callKey}
+                            chatId={dispute.chatId}
+                            agentName={dispute.agentName}
+                            iqsScore={dispute.callIqsScore ?? dispute.iqsScore ?? 0}
+                            calledAt={dispute.closedAt || dispute.raisedAt}
+                            disposition={dispute.disposition}
+                            gates={dispute.parameters?.gates}
+                            iqsScores={dispute.parameters || {}}
+                            mode="view"
+                            dispute={dispute}
+                            onDone={() => fetchDisputes()}
+                            onClose={() => setExpandedDisputeId(null)}
+                            colSpan={8}
+                          />
+                        )}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+
+            {/* Pagination footer */}
+            {totalPendingPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
+                <button
+                  onClick={() => setPendingPage(p => Math.max(1, p - 1))}
+                  disabled={pendingPage === 1}
+                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: pendingPage === 1 ? 'not-allowed' : 'pointer', opacity: pendingPage === 1 ? 0.5 : 1 }}
+                >
+                  ← Prev
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>Page {pendingPage} of {totalPendingPages}</span>
+                <button
+                  onClick={() => setPendingPage(p => Math.min(totalPendingPages, p + 1))}
+                  disabled={pendingPage >= totalPendingPages}
+                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: pendingPage >= totalPendingPages ? 'not-allowed' : 'pointer', opacity: pendingPage >= totalPendingPages ? 0.5 : 1 }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
-        <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead>
-              <tr>
-                <th style={TH_BASE}>Call / Chat ID</th>
-                <th style={TH_BASE}>Agent Name</th>
-                <th style={TH_BASE}>Raised By</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                <th style={TH_BASE}>Status</th>
-                <th style={TH_BASE}>Date Raised</th>
-                <th style={TH_BASE}>Review Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loadingReviewed ? (
+        <div>
+          {/* Filters Bar */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+            <select
+              value={reviewedAgentFilter}
+              onChange={e => { setReviewedAgentFilter(e.target.value); setReviewedPage(1); }}
+              style={{ ...chipInputStyle, minWidth: 140 }}
+            >
+              <option value="">All Agents</option>
+              {Array.from(new Set(reviewedDisputes.map(d => d.agentName).filter(Boolean))).sort().map(a => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+
+            <select
+              value={reviewedOutcomeFilter}
+              onChange={e => { setReviewedOutcomeFilter(e.target.value); setReviewedPage(1); }}
+              style={{ ...chipInputStyle, minWidth: 140 }}
+            >
+              <option value="">All Outcomes</option>
+              <option value="updated">Updated by QA</option>
+              <option value="resolved_qa">Resolved by QA</option>
+              <option value="resolved_tl">Resolved by TL</option>
+              <option value="forwarded">Forwarded by TL</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+
+            <input
+              type="date"
+              value={reviewedFromFilter}
+              onChange={e => { setReviewedFromFilter(e.target.value); setReviewedPage(1); }}
+              style={chipInputStyle}
+              title="From Date"
+            />
+            <input
+              type="date"
+              value={reviewedToFilter}
+              onChange={e => { setReviewedToFilter(e.target.value); setReviewedPage(1); }}
+              style={chipInputStyle}
+              title="To Date"
+            />
+
+            {(reviewedAgentFilter || reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter) && (
+              <button
+                onClick={() => {
+                  setReviewedAgentFilter('');
+                  setReviewedOutcomeFilter('');
+                  setReviewedFromFilter('');
+                  setReviewedToFilter('');
+                  setReviewedPage(1);
+                }}
+                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+              >
+                Clear Filters
+              </button>
+            )}
+
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
+                {filteredReviewedDisputes.length === 0 ? '0 disputes' : `Showing ${(reviewedPage - 1) * reviewedLimit + 1}–${Math.min(reviewedPage * reviewedLimit, filteredReviewedDisputes.length)} of ${filteredReviewedDisputes.length}`}
+              </span>
+              <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => setOpenPageDrop(openPageDrop === 'tab3' ? null : 'tab3')}
+                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                >
+                  {reviewedLimit} / page ▾
+                </button>
+                {openPageDrop === 'tab3' && (
+                  <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
+                    {[20, 50, 100].map(n => (
+                      <div
+                        key={n}
+                        onClick={() => { setReviewedLimit(n); setReviewedPage(1); setOpenPageDrop(null); }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: reviewedLimit === n ? '#f4f4f5' : '#fff' }}
+                      >
+                        {n} rows
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
                 <tr>
-                  <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
-                    Loading reviewed call disputes…
-                  </td>
+                  <th style={TH_BASE}>Call ID</th>
+                  <th style={TH_BASE}>Agent Name</th>
+                  <th style={TH_BASE}>Raised By</th>
+                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
+                  <th style={TH_BASE}>Challenged Params</th>
+                  <th style={TH_BASE}>Status</th>
+                  <th style={TH_BASE}>Date Raised</th>
                 </tr>
-              ) : reviewedDisputes.length === 0 ? (
-                <tr>
-                  <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
-                    No reviewed call disputes found for your team.
-                  </td>
-                </tr>
-              ) : (
-                reviewedDisputes.map(dispute => (
-                  <tr key={dispute.flagId}>
-                    <td style={TD_MONO}>{dispute.callId || dispute.chatId}</td>
-                    <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
-                    <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
-                    <td style={TD_NUM}>
-                      <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+              </thead>
+              <tbody>
+                {loadingReviewed ? (
+                  <tr>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                      Loading reviewed call disputes…
                     </td>
-                    <td style={TD_BASE}>
-                      <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
-                        {dispute.status}
-                      </span>
-                    </td>
-                    <td style={TD_BASE}>{new Date(dispute.raisedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
-                    <td style={TD_BASE}>{dispute.reviewNote || '—'}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : filteredReviewedDisputes.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                      No reviewed call disputes found for your team.
+                    </td>
+                  </tr>
+                ) : (
+                  pagedReviewed.map(dispute => {
+                    const isOpen = expandedDisputeId === dispute.flagId;
+                    const callKey = dispute.callId || dispute.chatId;
+
+                    return (
+                      <Fragment key={dispute.flagId}>
+                        <tr
+                          onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
+                          style={{ cursor: 'pointer', background: isOpen ? 'var(--qa-gray-50)' : undefined }}
+                        >
+                          <td style={TD_MONO}>{callKey}</td>
+                          <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
+                          <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
+                          <td style={TD_NUM}>
+                            <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+                          </td>
+                          <td style={TD_BASE}>
+                            <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                              {(dispute.challengedParams || []).map((cp, idx) => (
+                                <span key={idx} style={{ padding: '1px 6px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                                  {cp.param}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td style={TD_BASE}>
+                            <DisputeStatusPill
+                              status={dispute.status}
+                              raisedByRole={dispute.raisedByRole || (dispute as any).raisedBy}
+                              reviewNote={dispute.reviewNote}
+                              parameters={dispute.parameters}
+                            />
+                          </td>
+                          <td style={TD_BASE}>{new Date(dispute.raisedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                        </tr>
+
+                        {isOpen && (
+                          <CallEvalPanel
+                            callId={callKey}
+                            chatId={dispute.chatId}
+                            agentName={dispute.agentName}
+                            iqsScore={dispute.callIqsScore ?? dispute.iqsScore ?? 0}
+                            calledAt={dispute.closedAt || dispute.raisedAt}
+                            disposition={dispute.disposition}
+                            gates={dispute.parameters?.gates}
+                            iqsScores={dispute.parameters || {}}
+                            mode="view"
+                            dispute={dispute}
+                            onDone={() => fetchDisputes()}
+                            onClose={() => setExpandedDisputeId(null)}
+                            colSpan={7}
+                          />
+                        )}
+                      </Fragment>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+
+            {/* Pagination footer */}
+            {totalReviewedPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
+                <button
+                  onClick={() => setReviewedPage(p => Math.max(1, p - 1))}
+                  disabled={reviewedPage === 1}
+                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: reviewedPage === 1 ? 'not-allowed' : 'pointer', opacity: reviewedPage === 1 ? 0.5 : 1 }}
+                >
+                  ← Prev
+                </button>
+                <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>Page {reviewedPage} of {totalReviewedPages}</span>
+                <button
+                  onClick={() => setReviewedPage(p => Math.min(totalReviewedPages, p + 1))}
+                  disabled={reviewedPage >= totalReviewedPages}
+                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: reviewedPage >= totalReviewedPages ? 'not-allowed' : 'pointer', opacity: reviewedPage >= totalReviewedPages ? 0.5 : 1 }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

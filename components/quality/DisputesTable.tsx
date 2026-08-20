@@ -1,6 +1,7 @@
 'use client';
 import React, { useState, useEffect } from 'react';
 import EvalPanel from './EvalPanel';
+import CallEvalPanel from './CallEvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 import { getDisputeClassification } from '@/lib/quality';
@@ -10,6 +11,7 @@ interface Props {
   onCountChange?: (count: number) => void;
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
+  type?: 'chats' | 'calls' | 'all';
 }
 
 interface FlagComment {
@@ -29,15 +31,13 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all' }: Props) {
+export default function DisputesTable({ onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', type = 'all' }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
-  const [threadId,    setThreadId]    = useState<string | null>(null);   // flagId with open thread
+  const [threadId,    setThreadId]    = useState<string | null>(null);
   const [threads,     setThreads]     = useState<Record<string, FlagComment[]>>({});
   const [threadLoad,  setThreadLoad]  = useState<string | null>(null);
-  const [newComment,  setNewComment]  = useState('');
-  const [posting,     setPosting]     = useState(false);
   const [chatIdSearch, setChatIdSearch] = useState('');
   const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [openDrop,     setOpenDrop]     = useState<string | null>(null);
@@ -50,13 +50,14 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
 
   useEffect(() => {
     setPage(1);
-  }, [agentFilter, callsFilter, chatIdSearch]);
+  }, [agentFilter, callsFilter, chatIdSearch, type]);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const params = new URLSearchParams({ agent_filter: agentFilter });
+        if (type !== 'all') params.set('type', type);
         if (callsFilter !== 'all') params.set('has_calls', callsFilter);
         const res = await fetch(`/api/cx/qa/disputes?${params}`);
         if (!res.ok) return;
@@ -70,15 +71,15 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
       }
     })();
     return () => { cancelled = true; };
-  }, [agentFilter, callsFilter, onCountChange]);
+  }, [agentFilter, callsFilter, type, onCountChange]);
 
-  function toggleExpand(chatId: string) {
-    setExpandedId(prev => prev === chatId ? null : chatId);
+  function toggleExpand(id: string) {
+    setExpandedId(prev => prev === id ? null : id);
     setThreadId(null);
   }
 
-  function removeDispute(chatId: string) {
-    setDisputes(prev => prev.filter(d => d.chatId !== chatId));
+  function removeDispute(id: string) {
+    setDisputes(prev => prev.filter(d => d.chatId !== id && d.callId !== id));
     setExpandedId(null);
     setThreadId(null);
   }
@@ -87,7 +88,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     if (threadId === flagId) { setThreadId(null); return; }
     setExpandedId(null);
     setThreadId(flagId);
-    setNewComment('');
     if (threads[flagId]) return;
     setThreadLoad(flagId);
     try {
@@ -99,35 +99,13 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     }
   }
 
-  async function postComment(flagId: string) {
-    if (!newComment.trim() || posting) return;
-    setPosting(true);
-    try {
-      const res = await fetch('/api/quality/flag-thread', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flagId, content: newComment.trim() }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setThreads(prev => ({ ...prev, [flagId]: [...(prev[flagId] || []), data.comment] }));
-        setNewComment('');
-      }
-    } finally {
-      setPosting(false);
-    }
-  }
-
-  // The old "Raised by" chips (TL / TL Endorsed) are gone: every dispute that
-  // reaches QA has been forwarded by a TL, so the chip marked every row and the
-  // filters could never narrow anything down.
   const hasFilters = !!(chatIdSearch || callsFilter !== 'all');
 
   let visibleDisputes = disputes;
 
   if (chatIdSearch) {
     const term = chatIdSearch.toLowerCase().trim();
-    visibleDisputes = visibleDisputes.filter(d => d.chatId.toLowerCase().startsWith(term));
+    visibleDisputes = visibleDisputes.filter(d => (d.callId || d.chatId).toLowerCase().includes(term));
   }
 
   const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
@@ -155,41 +133,45 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     ...chip, background: 'var(--qa-gray-700)', color: '#fff', borderColor: 'var(--qa-gray-700)',
   };
 
+  const isCallsOnly = type === 'calls';
+
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
 
       {/* Filter bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)', flexWrap: 'wrap' }}>
         <input
-          placeholder="Search by Chat ID…"
+          placeholder={isCallsOnly ? "Search by Call ID…" : "Search by ID…"}
           value={chatIdSearch}
           onChange={e => setChatIdSearch(e.target.value)}
           style={{
             height: 32, padding: '0 10px', border: `1px solid ${chatIdSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
             background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
-            outline: 'none', width: 140
+            outline: 'none', width: 150
           }}
         />
-        {/* Calls filter */}
-        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button style={callsFilter !== 'all' ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'calls' ? null : 'calls')}>
-            {callsFilter === 'has_calls' ? 'Has Calls' : callsFilter === 'no_calls' ? 'No Calls' : 'Calls'} <span style={{ fontSize: 9 }}>▾</span>
-          </button>
-          {openDrop === 'calls' && (
-            <div style={{
-              position: 'absolute', top: '100%', left: 0, zIndex: 40, marginTop: 4,
-              background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 140, padding: '6px 0',
-            }} onClick={e => e.stopPropagation()}>
-              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'all' ? 600 : 400 }}
-                onClick={() => { setCallsFilter('all'); setOpenDrop(null); }}>All</div>
-              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'has_calls' ? 600 : 400 }}
-                onClick={() => { setCallsFilter('has_calls'); setOpenDrop(null); }}>Has Calls</div>
-              <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'no_calls' ? 600 : 400 }}
-                onClick={() => { setCallsFilter('no_calls'); setOpenDrop(null); }}>No Calls</div>
-            </div>
-          )}
-        </div>
+
+        {!isCallsOnly && (
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button style={callsFilter !== 'all' ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'calls' ? null : 'calls')}>
+              {callsFilter === 'has_calls' ? 'Has Calls' : callsFilter === 'no_calls' ? 'No Calls' : 'Calls'} <span style={{ fontSize: 9 }}>▾</span>
+            </button>
+            {openDrop === 'calls' && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, zIndex: 40, marginTop: 4,
+                background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)', minWidth: 140, padding: '6px 0',
+              }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'all' ? 600 : 400 }}
+                  onClick={() => { setCallsFilter('all'); setOpenDrop(null); }}>All</div>
+                <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'has_calls' ? 600 : 400 }}
+                  onClick={() => { setCallsFilter('has_calls'); setOpenDrop(null); }}>Has Calls</div>
+                <div style={{ padding: '8px 14px', fontSize: 13, color: 'var(--qa-text)', cursor: 'pointer', fontWeight: callsFilter === 'no_calls' ? 600 : 400 }}
+                  onClick={() => { setCallsFilter('no_calls'); setOpenDrop(null); }}>No Calls</div>
+              </div>
+            )}
+          </div>
+        )}
 
         <button
           disabled={!hasFilters}
@@ -255,117 +237,90 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         </div>
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {/* Table */}
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: 140 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 130 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 110 }} />
+          <col style={{ width: 70 }} />
+          <col style={{ width: 140 }} />
+        </colgroup>
         <thead>
           <tr>
-            <th style={th}>Chat ID</th>
+            <th style={th}>{isCallsOnly ? 'Call ID' : 'Chat ID'}</th>
+            <th style={th}>Date & Time</th>
+            <th style={th}>Disposition</th>
             <th style={th}>Agent</th>
-            <th style={th}>Disputed By</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
-            <th style={th}>Call Transcript</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS Score</th>
+            <th style={th}>Challenged</th>
             <th style={th}>CSAT</th>
-            <th style={{ ...th, textAlign: 'right' }}>Actions</th>
+            <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
         <tbody>
-          {loading ? (
-            Array.from({ length: 3 }).map((_, i) => (
-              <tr key={i}>
-                {Array.from({ length: 8 }).map((_, j) => (
-                  <td key={j} style={td}>
-                    <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '30%' : '60%' }} />
-                  </td>
-                ))}
-              </tr>
-            ))
-          ) : pagedDisputes.length === 0 ? (
-            <tr>
-              <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
-                {disputes.length === 0 ? 'No disputes pending' : 'No disputes match the filter'}
-              </td>
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <tr key={i}>
+              {Array.from({ length: 8 }).map((_, j) => (
+                <td key={j} style={td}>
+                  <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
+                </td>
+              ))}
             </tr>
-          ) : (
-            pagedDisputes.map(d => {
-              const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
-              return (
-              <React.Fragment key={d.chatId}>
+          ))
+        ) : pagedDisputes.length === 0 ? (
+          <tr>
+            <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+              No disputes pending review.
+            </td>
+          </tr>
+        ) : (
+          pagedDisputes.map(d => {
+            const isCallDispute = Boolean(d.callId || isCallsOnly || d.challengedParams?.some(p => p.param.startsWith('P')));
+            const rowKey = d.callId || d.chatId;
+            const isExpanded = expandedId === rowKey;
+
+            return (
+              <React.Fragment key={d.flagId}>
                 <tr
-                  style={{ background: expandedId === d.chatId || threadId === d.flagId ? 'var(--qa-gray-50)' : undefined }}
-                  onMouseEnter={e => { if (expandedId !== d.chatId && threadId !== d.flagId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
-                  onMouseLeave={e => { if (expandedId !== d.chatId && threadId !== d.flagId) e.currentTarget.style.background = ''; }}
+                  style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined }}
+                  onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
+                  onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                 >
-                  <td style={tdMono}>
-                    {/^\d+$/.test(d.chatId.trim()) ? (
-                      <a
-                        href={`https://app.robylon.ai/unified-inbox/share/${d.chatId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                      >
-                        {d.chatId}
-                      </a>
-                    ) : (
-                      d.chatId
-                    )}
+                  <td style={tdMono}>{rowKey}</td>
+                  <td style={td}>
+                    {d.closedAt ? `${fmtDate(d.closedAt)} ${fmtTime(d.closedAt)}` : '—'}
                   </td>
+                  <td style={{ ...td, color: 'var(--qa-text-2)' }}>{d.disposition || '—'}</td>
                   <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
-                  <td style={{ ...td, fontSize: 13 }}>
-                    <span style={{
-                      display: 'inline-block', fontSize: 10, fontWeight: 600,
-                      textTransform: 'uppercase', letterSpacing: '0.04em',
-                      background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                      borderRadius: 4, padding: '1px 5px', marginRight: 6, color: 'var(--qa-text-2)',
-                    }}>
-                      {d.raisedBy}
-                    </span>
-                    {d.raisedByName}
-                  </td>
                   <td style={tdNum}>
-                    {d.botIqsScore !== null ? (
+                    {(d.callIqsScore ?? d.iqsScore) != null ? (
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
+                        minWidth: 32, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
                         fontFamily: 'ui-monospace, monospace',
-                        background: d.botIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                        color:      d.botIqsScore < 60 ? '#b91c1c' : '#713f12',
+                        background: (d.callIqsScore ?? d.iqsScore ?? 0) >= 85 ? '#f0fdf4' : (d.callIqsScore ?? d.iqsScore ?? 0) >= 70 ? '#fefce8' : '#fef2f2',
+                        color: (d.callIqsScore ?? d.iqsScore ?? 0) >= 85 ? '#166534' : (d.callIqsScore ?? d.iqsScore ?? 0) >= 70 ? '#854d0e' : '#991b1b',
+                        border: `1px solid ${(d.callIqsScore ?? d.iqsScore ?? 0) >= 85 ? '#bbf7d0' : (d.callIqsScore ?? d.iqsScore ?? 0) >= 70 ? '#fef08a' : '#fecaca'}`,
                       }}>
-                        {d.botIqsScore}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-                    )}
-                  </td>
-                  <td style={tdNum}>
-                    {d.iqsScore !== null ? (
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
-                        fontFamily: 'ui-monospace, monospace',
-                        background: d.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                        color:      d.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                      }}>
-                        {d.iqsScore}
+                        {d.callIqsScore ?? d.iqsScore}
                       </span>
                     ) : (
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
                     )}
                   </td>
                   <td style={td}>
-                    {d.callTranscriptStatus === 'transcribed' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#16a34a', fontWeight: 500 }}>
-                        <span style={{ fontSize: 11 }}>✓</span> Transcribed
-                      </span>
-                    ) : d.callTranscriptStatus === 'pending' ? (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#ca8a04', fontWeight: 500 }}>
-                        <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ca8a04' }} className="animate-pulse" />
-                        Pending
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>No Call</span>
-                    )}
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                      {(d.challengedParams || []).map((cp, idx) => (
+                        <span key={idx} style={{ padding: '1px 5px', background: '#fefce8', border: '1px solid #fef08a', color: '#854d0e', borderRadius: 4, fontSize: 11, fontWeight: 600 }}>
+                          {cp.param}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                   <td style={td}>
                     {d.csatScore == null ? (
@@ -383,7 +338,6 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     )}
                   </td>
                   <td style={{ ...tdAct, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, border: 'none', height: 52 }}>
-                    {/* Thread button */}
                     <button
                       onClick={() => openThread(d.flagId)}
                       style={{
@@ -397,9 +351,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     >
                       💬 Comment
                     </button>
-                    {/* Resolve button */}
                     <button
-                      onClick={() => toggleExpand(d.chatId)}
+                      onClick={() => toggleExpand(rowKey)}
                       style={{
                         background: 'none', border: 0, padding: 0,
                         fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
@@ -410,7 +363,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       Resolve{' '}
                       <span style={{
                         fontSize: 11, color: 'var(--qa-text-2)',
-                        transform: expandedId === d.chatId ? 'rotate(180deg)' : 'none',
+                        transform: isExpanded ? 'rotate(180deg)' : 'none',
                         transition: 'transform 0.15s', display: 'inline-block',
                       }}>▾</span>
                     </button>
@@ -432,44 +385,62 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                   </tr>
                 )}
 
-                {expandedId === d.chatId && (
-                  <React.Fragment>
-                    <tr>
-                      <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
-                        <DisputeThread
-                          flagId={d.flagId}
-                          agentNote={d.agentNote}
+                {isExpanded && (
+                  isCallDispute ? (
+                    <CallEvalPanel
+                      callId={d.callId || d.chatId}
+                      chatId={d.chatId}
+                      agentName={d.agentName}
+                      iqsScore={d.callIqsScore ?? d.iqsScore ?? 0}
+                      calledAt={d.closedAt}
+                      disposition={d.disposition}
+                      gates={d.parameters?.gates}
+                      iqsScores={d.parameters || {}}
+                      mode="review"
+                      dispute={d}
+                      onDone={() => removeDispute(rowKey)}
+                      onClose={() => setExpandedId(null)}
+                      colSpan={8}
+                    />
+                  ) : (
+                    <React.Fragment>
+                      <tr>
+                        <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                          <DisputeThread
+                            flagId={d.flagId}
+                            agentNote={d.agentNote}
+                            agentName={d.agentName}
+                            flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
+                            compact
+                          />
+                        </td>
+                      </tr>
+                      <ErrorBoundary>
+                        <EvalPanel
+                          chatId={d.chatId}
                           agentName={d.agentName}
-                          flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
-                          compact
+                          iqsScore={d.iqsScore ?? 0}
+                          closedAt={d.closedAt}
+                          disposition={d.disposition}
+                          parameters={d.parameters}
+                          gates={(d as any).gates}
+                          mobileNumber={d.mobileNumber}
+                          mode="resolve"
+                          flagId={d.flagId}
+                          dispute={{
+                            raisedBy:        d.raisedBy,
+                            raisedByName:    d.raisedByName,
+                            agentNote:       d.agentNote,
+                            challengedParams: d.challengedParams,
+                          }}
+                          onDone={() => removeDispute(d.chatId)}
+                          onClose={() => setExpandedId(null)}
+                          colSpan={8}
+                          conversationType={d.conversationType}
                         />
-                      </td>
-                    </tr>
-                    <ErrorBoundary>
-                      <EvalPanel
-                        chatId={d.chatId}
-                        agentName={d.agentName}
-                        iqsScore={d.iqsScore ?? 0}
-                        closedAt={d.closedAt}
-                        disposition={d.disposition}
-                        parameters={d.parameters}
-                        gates={(d as any).gates}
-                        mobileNumber={d.mobileNumber}
-                        mode="resolve"
-                        flagId={d.flagId}
-                        dispute={{
-                          raisedBy:        d.raisedBy,
-                          raisedByName:    d.raisedByName,
-                          agentNote:       d.agentNote,
-                          challengedParams: d.challengedParams,
-                        }}
-                        onDone={() => removeDispute(d.chatId)}
-                        onClose={() => setExpandedId(null)}
-                        colSpan={8}
-                        conversationType={d.conversationType}
-                      />
-                    </ErrorBoundary>
-                  </React.Fragment>
+                      </ErrorBoundary>
+                    </React.Fragment>
+                  )
                 )}
               </React.Fragment>
             );

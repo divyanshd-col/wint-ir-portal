@@ -16,13 +16,15 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
     scores?: Record<string, string>;
     reasoning?: Record<string, string>;
     note?: string;
+    flagId?: string;
+    action?: string;
   };
 
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { callId, scores, reasoning, note } = body;
+  const { callId, scores, reasoning, note, flagId } = body;
   if (!callId?.trim() || !scores) {
     return NextResponse.json({ error: 'callId and scores are required' }, { status: 400 });
   }
@@ -87,7 +89,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
           reviewed_at = NOW(),
           review_note = $6,
           status = 'reviewed'
-      WHERE call_id = $7
+        WHERE call_id = $7
     `, [
       JSON.stringify(newIqsScoresPayload),
       iqs_percent,
@@ -97,6 +99,27 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       note || '',
       callId.trim()
     ]);
+
+    // 3. Update IQSFlag if associated with a dispute
+    if (flagId) {
+      const { storeUpdateIQSFlag, storeAppendAuditEntry } = await import('@/lib/store');
+      const { randomUUID } = await import('crypto');
+      await storeUpdateIQSFlag(flagId, {
+        status: 'reviewed',
+        reviewedBy: email,
+        reviewedAt: new Date().toISOString(),
+        reviewNote: note || '',
+      });
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: 'review_submitted',
+        chatId: callId.trim(),
+        actorEmail: email,
+        actorRole: (session.user as any)?.role || 'quality',
+        ts: new Date().toISOString(),
+        meta: { oldIqs: oldIqsPercent, newIqs: iqs_percent, note: note || '', flagId },
+      });
+    }
 
     log.info(ROUTE, `Quality override complete for call ${callId} by ${email}`);
     return NextResponse.json({ ok: true, iqs: iqs_percent, verdict: newVerdict });

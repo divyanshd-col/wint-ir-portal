@@ -3,8 +3,9 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import CallEvalTable from './CallEvalTable';
 import ReviewedCallsTable from './ReviewedCallsTable';
+import DisputesTable from './DisputesTable';
 
-type Tab = 'pending' | 'reviewed';
+type Tab = 'pending' | 'disputes' | 'reviewed';
 
 function CallEvaluationContent() {
   const searchParams = useSearchParams();
@@ -12,6 +13,7 @@ function CallEvaluationContent() {
 
   const [dispositions, setDispositions] = useState<string[]>([]);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [disputeCount, setDisputeCount] = useState<number | null>(null);
   const [loadingDisp, setLoadingDisp] = useState(true);
   const [tab, setTab] = useState<Tab>('pending');
   const [agentFilter, setAgentFilter] = useState<'all' | 'human_only'>('all');
@@ -77,6 +79,10 @@ function CallEvaluationContent() {
             Pending Review
             {pendingCount !== null && <CountBadge count={pendingCount} active={tab === 'pending'} />}
           </button>
+          <button style={tabStyle(tab === 'disputes')} onClick={() => setTab('disputes')}>
+            Disputes
+            {disputeCount !== null && disputeCount > 0 && <CountBadge count={disputeCount} active={tab === 'disputes'} />}
+          </button>
           <button style={tabStyle(tab === 'reviewed')} onClick={() => setTab('reviewed')}>
             Reviewed Calls
           </button>
@@ -120,6 +126,14 @@ function CallEvaluationContent() {
           agentFilter={agentFilter}
           initialCallId={targetCallId}
           onCallNotFound={() => setTab('reviewed')}
+        />
+      </div>
+
+      <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
+        <DisputesTable
+          type="calls"
+          onCountChange={setDisputeCount}
+          agentFilter={agentFilter}
         />
       </div>
 
