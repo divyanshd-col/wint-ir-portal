@@ -429,36 +429,66 @@ export default function CallEvalPanel({
           <div style={{ flex: 1, minWidth: 320, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, maxHeight: '600px', overflowY: 'auto' }}>
             <h4 style={{ margin: '0 0 12px 0', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
             {recordingUrl && (
-              <div style={{ marginBottom: 12, padding: '8px 12px', background: 'var(--qa-gray-50)', borderRadius: 8, border: '1px solid var(--qa-border)' }}>
-                <audio controls src={recordingUrl} style={{ width: '100%', height: 32 }} />
+              <div style={{
+                padding: '10px 14px',
+                background: '#f8fafc',
+                border: '1px solid var(--qa-border)',
+                borderRadius: 8,
+                marginBottom: 12,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 4
+              }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
+                <audio
+                  src={`/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
+                  controls
+                  style={{ width: '100%', height: 32 }}
+                />
               </div>
             )}
 
             {loading ? (
-              <div style={{ fontSize: 13, color: 'var(--qa-text-3)', textAlign: 'center', padding: 20 }}>Loading transcript…</div>
+              <p style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>Loading transcript…</p>
             ) : segments.length === 0 ? (
-              <div style={{ fontSize: 13, color: 'var(--qa-text-3)', textAlign: 'center', padding: 20 }}>No transcript available for this call.</div>
+              <p style={{ color: 'var(--qa-text-3)', fontSize: 13, fontStyle: 'italic' }}>No segments recorded</p>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {segments.map((s, idx) => {
-                  const isAgent = (s.speaker || '').toLowerCase().includes('agent') || (s.role || '').toLowerCase() === 'agent';
-                  return (
-                    <div
-                      key={idx}
-                      style={{
-                        alignSelf: isAgent ? 'flex-end' : 'flex-start',
-                        maxWidth: '85%',
-                        background: isAgent ? '#f0fdf4' : '#f8fafc',
-                        border: `1px solid ${isAgent ? '#bbf7d0' : '#e2e8f0'}`,
-                        borderRadius: 8,
-                        padding: '8px 12px',
-                        fontSize: 12
-                      }}
-                    >
-                      <div style={{ fontSize: 10, fontWeight: 700, color: isAgent ? '#166534' : '#475569', marginBottom: 2 }}>
-                        {isAgent ? 'AGENT' : 'CUSTOMER'}{s.timestamp ? ` · ${s.timestamp}` : ''}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {segments.map((seg, idx) => {
+                  if (seg.type === 'interruption') {
+                    return (
+                      <div key={idx} style={{ padding: '6px 12px', background: '#fef2f2', color: '#991b1b', borderRadius: 8, fontSize: 12, border: '1px solid #fee2e2' }}>
+                        ⚡ <b>{seg.interrupted_speaker || 'IR EXECUTIVE'}</b> interrupted by <b>{seg.interrupted_by || 'INVESTOR'}</b>
                       </div>
-                      <div style={{ color: 'var(--qa-text)' }}>{s.text || s.content}</div>
+                    );
+                  }
+                  if (seg.type === 'dead_air') {
+                    return (
+                      <div key={idx} style={{ padding: '6px 12px', background: '#f8fafc', color: '#475569', borderRadius: 8, fontSize: 12, border: '1px solid #f1f5f9' }}>
+                        ⏸ Dead air: {seg.duration || '2+ seconds'}
+                      </div>
+                    );
+                  }
+                  
+                  const textContent = (seg.text || seg.translation || seg.content || '').trim();
+                  if (!textContent) return null;
+
+                  const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
+                  return (
+                    <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
+                      <span style={{ fontSize: 10, color: 'var(--qa-text-3)', marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
+                        {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || seg.timestamp || ''}
+                      </span>
+                      <div style={{
+                        padding: '10px 14px',
+                        borderRadius: 12,
+                        background: isIR ? 'var(--qa-gray-700)' : '#f1f5f9',
+                        color: isIR ? '#fff' : 'var(--qa-text)',
+                        fontSize: 13,
+                        lineHeight: '18px'
+                      }}>
+                        {textContent}
+                      </div>
                     </div>
                   );
                 })}
@@ -467,13 +497,27 @@ export default function CallEvalPanel({
           </div>
 
           {/* Right panel: Parameters & Scoring */}
-          <div style={{ flex: 1, minWidth: 320, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, maxHeight: '600px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ width: 420, minWidth: 320, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Evaluation Parameters</h4>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
-                IQS: {liveIqs !== null ? `${liveIqs}%` : 'N/A'}
+                Live Score: <span style={{ color: '#15803d' }}>{liveIqs !== null ? `${liveIqs}%` : '—'}</span>
               </span>
             </div>
+
+            {/* Compliance Gates Card */}
+            {currentGates && (
+              <div style={{ background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12 }}>
+                <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                  Compliance Gates: <span style={{ color: currentGates?.call_gate_result === 'FAIL' ? '#b91c1c' : '#15803d' }}>{currentGates?.call_gate_result || 'PASS'}</span>
+                </h5>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                  <div>G1 Advice: <ScoreBadge score={currentGates?.G1_no_advice?.status === 'pass' ? 'Yes' : currentGates?.G1_no_advice?.status === 'fail' ? 'No' : 'NA'} /></div>
+                  <div>G2 Fabrication: <ScoreBadge score={currentGates?.G2_no_fabrication?.status === 'pass' ? 'Yes' : currentGates?.G2_no_fabrication?.status === 'fail' ? 'No' : 'NA'} /></div>
+                  <div>G3 Identity: <ScoreBadge score={currentGates?.G3_identity_first?.status === 'pass' ? 'Yes' : currentGates?.G3_identity_first?.status === 'fail' ? 'No' : 'NA'} /></div>
+                </div>
+              </div>
+            )}
 
             {/* Parameter List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
