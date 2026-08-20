@@ -2,7 +2,7 @@ import { createMcpHandler, withMcpAuth } from 'mcp-handler';
 import { z } from 'zod';
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js';
 import { DB_SCHEMA } from '@/lib/analytics/schema';
-import { executeRawSQL, writeAuditLog, isReadQuery } from '@/lib/analytics/executor';
+import { executeReadOnlyQuery, writeAuditLog, isReadQuery } from '@/lib/analytics/executor';
 import { verifyToken as verifyMcpToken } from '@/lib/mcp/tokens';
 
 // pg needs a TCP socket → Node runtime, not Edge. maxDuration mirrors the
@@ -11,10 +11,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 // ── Read-only guard ────────────────────────────────────────────────────────────
-// executeRawSQL only uses isReadQuery to gate its cache — it does NOT block
-// writes on its own. Since Claude composes arbitrary SQL here, validate first.
-// Combines the executor's DML/multi-statement guard with the text-to-sql
-// pg_*/information_schema block.
+// The executor does not block writes on its own. Since Claude composes arbitrary
+// SQL here, validate first. Combines the executor's DML/multi-statement guard
+// (isReadQuery) with the text-to-sql pg_*/information_schema block.
 const CATALOG_PATTERN = /\bPG_[A-Z_]+\b|\bINFORMATION_SCHEMA\b/i;
 
 function assertReadOnly(sql: string): string | null {
@@ -28,9 +27,9 @@ function assertReadOnly(sql: string): string | null {
 }
 
 // ── PII masking ────────────────────────────────────────────────────────────────
-// Product / CEO audience: never surface raw phone numbers. executeRawSQL already
-// strips raw_payload + transcript; this masks any phone-like column to its last
-// 4 digits. Relax by removing this pass if fuller access is later approved.
+// Product / CEO audience: never surface raw phone numbers. executeReadOnlyQuery
+// already strips raw_payload + transcript; this masks any phone-like column to
+// its last 4 digits. Relax by removing this pass if fuller access is approved.
 const PHONE_KEY = /(^|_)phone$/i;
 
 function maskPhoneValue(value: unknown): unknown {
@@ -76,7 +75,7 @@ const handler = createMcpHandler(
         }
 
         try {
-          const { rows, rowCount, latencyMs } = await executeRawSQL(sql);
+          const { rows, rowCount, latencyMs } = await executeReadOnlyQuery(sql);
           for (const row of rows) maskRow(row as Record<string, unknown>);
 
           // Audit every MCP query alongside the in-app analytics queries.

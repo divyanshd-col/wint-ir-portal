@@ -170,6 +170,37 @@ export async function executeRawSQL(sql: string): Promise<{ rows: any[]; rowCoun
   return result;
 }
 
+// ── Faithful read-only execution (for the MCP endpoint) ───────────────────────
+// Unlike executeRawSQL (which mangles rows for the old chat: deletes `parameters`
+// and recomputes value/avg_iqs/iqs), this returns rows as-selected so arbitrary
+// Claude-composed SQL answers truthfully. Still enforces the 30s timeout and 10k
+// row cap, and strips only the heavy/sensitive raw_payload + transcript columns.
+export async function executeReadOnlyQuery(
+  sql: string,
+): Promise<{ rows: any[]; rowCount: number; latencyMs: number }> {
+  const start = Date.now();
+
+  const rows = await Promise.race([
+    query<any>(sql, []),
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Query timed out after 30 seconds. Try narrowing the time range.')),
+        QUERY_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+
+  if (rows.length > ROW_CAP) {
+    throw new Error(
+      `Result too large (${rows.length.toLocaleString()} rows, cap ${ROW_CAP.toLocaleString()}). Add a LIMIT or more filters.`,
+    );
+  }
+
+  stripHeavyColumns(rows);
+
+  return { rows, rowCount: rows.length, latencyMs: Date.now() - start };
+}
+
 // ── Audit log ─────────────────────────────────────────────────────────────────
 
 export async function writeAuditLog(data: {
