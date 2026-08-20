@@ -127,7 +127,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
     if (userDisps?.length) {
       assignedDispositions = userDisps;
-      if (userEmail.toLowerCase() !== 'manorathi@wintwealth.com' && userEmail.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+      if (role === 'quality') {
         strictDispositions = userDisps;
       }
     }

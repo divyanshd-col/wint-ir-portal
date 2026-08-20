@@ -42,26 +42,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
-    const explicit = searchParams.getAll('disposition');
-    if (explicit.length) {
-      dispositions = explicit;
-    } else {
-      const rows = await query<{ d: string }>(
-        `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
-      );
-      dispositions = rows.map(r => r.d);
-    }
-  } else if (qaEntry && qaEntry.dispositions.length > 0) {
-    dispositions = qaEntry.dispositions;
+  const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions;
+
+  if (role === 'quality') {
+    dispositions = userDisps ?? [];
   } else if (role === 'admin') {
     const rows = await query<{ d: string }>(
       `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
     );
     dispositions = rows.map(r => r.d);
-  } else if (role === 'quality') {
-    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    dispositions = (configUser as any)?.assignedCallDispositions ?? [];
   } else {
     return NextResponse.json({ calls: [], total: 0 });
   }
