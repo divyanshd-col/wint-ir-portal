@@ -249,20 +249,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const disputes: DisputeRow[] = [];
   for (const flag of pendingFlags) {
-    const db = dbMap.get(flag.chatId);
-    const callDb = callDbMap.get(flag.callId || flag.chatId);
+    const isCall = Boolean(flag.callId);
+    const db = isCall ? null : dbMap.get(flag.chatId);
+    const callDb = isCall ? (callDbMap.get(flag.callId!) || callDbMap.get(flag.chatId)) : null;
     if (!db && !callDb) continue;
 
-    const isCall = Boolean(flag.callId);
     const chatReviewer = isCall
-      ? (callDb?.reviewed_by || db?.call_reviewed_by || db?.chat_reviewed_by || '').trim()
-      : (db?.chat_reviewed_by || db?.call_reviewed_by || callDb?.reviewed_by || '').trim();
+      ? (callDb?.reviewed_by || '').trim()
+      : (db?.chat_reviewed_by || '').trim();
     const effectiveDisposition = isCall
-      ? (callDb?.disposition || db?.disposition || '')
-      : (db?.disposition || callDb?.disposition || '');
+      ? (callDb?.disposition || '')
+      : (db?.disposition || '');
+    const effectiveSubDisposition = isCall
+      ? (callDb?.sub_disposition || null)
+      : (db?.sub_disposition || null);
     const effectiveAgentName = isCall
-      ? (callDb?.agent_name || db?.agent_name || flag.agentName)
-      : (db?.agent_name || callDb?.agent_name || flag.agentName);
+      ? (callDb?.agent_name || flag.agentName)
+      : (db?.agent_name || flag.agentName);
 
     // Scope-check: disputes should be sent to the QA who reviewed it; otherwise based on disposition
     if (role === 'quality' || (role === 'admin' && dispositions.length > 0)) {
@@ -370,7 +373,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       csatScore:        db?.csat_score ? parseInt(db.csat_score) : null,
       mobileNumber:     db?.mobile_number ?? null,
       disposition:      effectiveDisposition,
-      subDisposition:   db?.sub_disposition || callDb?.sub_disposition || null,
+      subDisposition:   effectiveSubDisposition,
       agentNote:        flag.agentNote,
       reviewNote:       flag.reviewNote || null,
       reviewedBy:       flag.reviewedBy || chatReviewer || null,
