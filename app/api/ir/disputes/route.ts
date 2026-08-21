@@ -41,7 +41,8 @@ export async function GET(req: NextRequest) {
   const chatFlags = flags.filter(f => !f.callId);
   const callFlags = flags.filter(f => Boolean(f.callId));
   const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
-  const targetCallIds = [...new Set(callFlags.map(f => f.callId || f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId).filter(Boolean))] as string[];
+  const fallbackChatIds = [...new Set(callFlags.filter(f => !f.callId).map(f => f.chatId).filter(Boolean))];
   const rowMap = new Map<string, any>();
   const callRowMap = new Map<string, any>();
 
@@ -59,17 +60,17 @@ export async function GET(req: NextRequest) {
         if (r.chat_id) rowMap.set(String(r.chat_id), r);
       }
     }
-    if (targetCallIds.length > 0) {
+    if (targetCallIds.length > 0 || fallbackChatIds.length > 0) {
       const callRows = await query<any>(
         `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, ce.gates, cr.called_at, cr.call_disposition, cr.call_sub_disposition
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
          WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
-        [targetCallIds]
+        [[...targetCallIds, ...fallbackChatIds]]
       );
       for (const r of callRows) {
         if (r.call_id) callRowMap.set(String(r.call_id), r);
-        if (r.chat_id) callRowMap.set(String(r.chat_id), r);
+        if (r.chat_id && !callRowMap.has(String(r.chat_id))) callRowMap.set(String(r.chat_id), r);
       }
     }
   } catch {
@@ -90,7 +91,7 @@ export async function GET(req: NextRequest) {
 
     const isCall = Boolean(f.callId);
     const row = isCall ? null : rowMap.get(String(f.chatId));
-    const cRow = isCall ? (callRowMap.get(String(f.callId!)) || callRowMap.get(String(f.chatId))) : null;
+    const cRow = isCall ? (f.callId ? callRowMap.get(String(f.callId)) : callRowMap.get(String(f.chatId))) : null;
 
     if (row) {
       iqsScore = row.iqs_score != null ? parseFloat(row.iqs_score) : null;

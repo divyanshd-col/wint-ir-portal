@@ -141,6 +141,12 @@ NA = TONE_SUMMARY is null (transcript-only call). Never infer tone from text.
 ALSO EXTRACT (does not affect scores)
 breach_mentions: every customer statement implying a previously promised action was not done ("I was told this would be resolved last week"). If PRIOR_CALL_TRANSCRIPTS is present, also check whether the broken promise matches a specific commitment made on a prior call and cite that prior call's turn where found.
 
+EVIDENCE RULES:
+- You MUST provide a non-empty string in "note" for EVERY parameter (P1, P2, P3, P5, P6, P7, P8, P9, P10, P11) in the "evidence" object.
+- Never leave "note": "" or empty arrays. Every score (whether 2, 1, 0, or "NA") must have a clear explanation of what happened or why it was scored as such.
+- For P11 (Tone/Energy): state the confidence/empathy ratings or specify if tone analysis was unavailable.
+- For NA parameters: explain why the condition was not applicable.
+
 OUTPUT: return ONLY this JSON, no other text, no markdown fences:
 {
   "scores": {
@@ -201,7 +207,7 @@ export function computeCallIQS(scores: Record<string, any>) {
     let numericScore = 0;
     if (s === 2 || s === '2' || s === 'Yes' || s === 'yes' || s === 'PASS' || s === 'pass' || s === true) {
       numericScore = 2;
-    } else if (s === 1 || s === '1' || s === 'Part' || s === 'part') {
+    } else if (s === 1 || s === '1' || s === 'Part' || s === 'part' || s === 'Half' || s === 'half' || s === 'Partial' || s === 'partial' || s === 0.5 || s === '0.5') {
       numericScore = 1;
     } else if (s === 0 || s === '0' || s === 'No' || s === 'no' || s === 'FAIL' || s === 'fail' || s === false) {
       numericScore = 0;
@@ -393,7 +399,13 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   }
   const apiKey = geminiKeys[0];
 
-  let segments = call.transcript ? (Array.isArray(call.transcript) ? call.transcript : call.transcript.segments || []) : [];
+  const rawTranscript = typeof call.transcript === 'string'
+    ? (() => { try { return JSON.parse(call.transcript); } catch { return call.transcript; } })()
+    : call.transcript;
+
+  let segments = Array.isArray(rawTranscript)
+    ? rawTranscript
+    : (rawTranscript && typeof rawTranscript === 'object' && Array.isArray(rawTranscript.segments) ? rawTranscript.segments : []);
   let duration = call.duration_seconds;
   let language = call.language || 'English';
   let status = call.status;
@@ -541,7 +553,10 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     `, [call.chat_id, call.called_at || new Date().toISOString()]);
 
     priorCallTranscripts = priorCalls.map((c: any) => {
-      const segs = Array.isArray(c.transcript) ? c.transcript : c.transcript.segments || [];
+      const raw = typeof c.transcript === 'string'
+        ? (() => { try { return JSON.parse(c.transcript); } catch { return c.transcript; } })()
+        : c.transcript;
+      const segs = Array.isArray(raw) ? raw : (raw?.segments || []);
       const lines = segs
         .filter((s: any) => s.type === 'speech' || s.type === 'turn')
         .map((s: any) => `[${s.speaker}]: ${s.text || ''}`);

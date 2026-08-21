@@ -496,7 +496,7 @@ export default function TLQualityCallsPage() {
                   <th style={TH_BASE}>Agent Name</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
-                  <th style={TH_BASE}>Duration</th>
+                  <th style={TH_BASE}>Linked Chat</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
@@ -533,7 +533,34 @@ export default function TLQualityCallsPage() {
                             {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
                           </td>
                           <td style={TD_BASE}>{call.disposition || '—'}</td>
-                          <td style={TD_MONO}>{fmtDuration(call.durationSeconds)}</td>
+                          <td style={TD_BASE} onClick={e => e.stopPropagation()}>
+                            {call.chatId ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '3px 8px',
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  borderRadius: 6,
+                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  background: '#fff',
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={`Open chat ${call.chatId} in Robylon`}
+                              >
+                                Show chat ↗
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                            )}
+                          </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={call.iqs} />
                           </td>
@@ -695,6 +722,7 @@ export default function TLQualityCallsPage() {
                   <th style={TH_BASE}>Raised By</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                   <th style={TH_BASE}>Disposition</th>
+                  <th style={TH_BASE}>Linked Chat</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Actions</th>
                 </tr>
@@ -702,13 +730,13 @@ export default function TLQualityCallsPage() {
               <tbody>
                 {loadingPending ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading raised call disputes…
                     </td>
                   </tr>
                 ) : filteredPendingDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No pending call disputes raised for your team.
                     </td>
                   </tr>
@@ -730,6 +758,34 @@ export default function TLQualityCallsPage() {
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
                           </td>
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
+                          <td style={TD_BASE} onClick={e => e.stopPropagation()}>
+                            {dispute.chatId ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '3px 8px',
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  borderRadius: 6,
+                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  background: '#fff',
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={`Open chat ${dispute.chatId} in Robylon`}
+                              >
+                                Show chat ↗
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                            )}
+                          </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
                               status={dispute.status}
@@ -790,7 +846,7 @@ export default function TLQualityCallsPage() {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={7}
+                            colSpan={8}
                           />
                         )}
                       </Fragment>
@@ -919,6 +975,7 @@ export default function TLQualityCallsPage() {
                   <th style={TH_BASE}>Agent Name</th>
                   <th style={TH_BASE}>Raised By</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
+                  <th style={TH_BASE}>Linked Chat</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={TH_BASE}>Date Raised</th>
                 </tr>
@@ -926,13 +983,13 @@ export default function TLQualityCallsPage() {
               <tbody>
                 {loadingReviewed ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading reviewed call disputes…
                     </td>
                   </tr>
                 ) : filteredReviewedDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No reviewed call disputes found for your team.
                     </td>
                   </tr>
@@ -952,6 +1009,34 @@ export default function TLQualityCallsPage() {
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
+                          </td>
+                          <td style={TD_BASE} onClick={e => e.stopPropagation()}>
+                            {dispute.chatId ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '3px 8px',
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  borderRadius: 6,
+                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  background: '#fff',
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={`Open chat ${dispute.chatId} in Robylon`}
+                              >
+                                Show chat ↗
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                            )}
                           </td>
                           <td style={TD_BASE}>
                             <DisputeStatusPill
@@ -978,7 +1063,7 @@ export default function TLQualityCallsPage() {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={6}
+                            colSpan={7}
                           />
                         )}
                       </Fragment>

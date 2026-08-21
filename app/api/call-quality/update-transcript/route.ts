@@ -38,21 +38,30 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
 
   const existing = rows[0];
   const existingTranscript = typeof existing.transcript === 'string'
-    ? JSON.parse(existing.transcript)
+    ? (() => { try { return JSON.parse(existing.transcript); } catch { return existing.transcript; } })()
     : existing.transcript;
+
+  const isObj = existingTranscript && typeof existingTranscript === 'object' && !Array.isArray(existingTranscript);
+  const prevCount = isObj ? Number(existingTranscript.reevalCount || (existingTranscript.editedAt ? 1 : 0)) : 0;
+
+  const role = (session.user as any)?.role;
+  if (role === 'quality' && prevCount >= 1) {
+    return NextResponse.json({ error: 'Re-evaluation has already been performed once for this call.' }, { status: 403 });
+  }
 
   // Merge new segments into existing transcript structure, preserving language
   const updatedTranscript = {
-    ...(existingTranscript && typeof existingTranscript === 'object' ? existingTranscript : {}),
+    ...(isObj ? existingTranscript : {}),
     segments: body.segments,
     editedAt: new Date().toISOString(),
     editedBy: (session.user as any)?.email || 'unknown',
+    reevalCount: prevCount + 1,
   };
 
   await query(
-    `UPDATE call_recordings SET transcript = $1, updated_at = NOW() WHERE id = $2`,
+    `UPDATE call_recordings SET transcript = $1, status = 'transcribed', updated_at = NOW() WHERE id = $2`,
     [JSON.stringify(updatedTranscript), callId],
   );
 
-  return NextResponse.json({ ok: true, callId, segmentCount: body.segments.length });
+  return NextResponse.json({ ok: true, callId, segmentCount: body.segments.length, reevalCount: prevCount + 1 });
 }

@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import { normalizeScore } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 
@@ -70,9 +71,30 @@ const PARAM_ALIASES: Record<string, string[]> = {
 function normScoreVal(val: any): string {
   if (val === true || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') return 'Yes';
   if (val === false || val === 0 || val === '0' || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') return 'No';
-  if (val === 1 || val === '1' || val === 'Part' || val === 'part') return 'Part';
+  if (val === 1 || val === '1' || val === 'Part' || val === 'part' || val === 'Half' || val === 'half' || val === 'Partial' || val === 'partial' || val === 0.5 || val === '0.5') return 'Half';
   if (val === 'NA' || val === 'na' || val === null || val === undefined) return 'NA';
   return String(val);
+}
+
+function extractReasoning(ev: any): string {
+  if (!ev) return '';
+  if (typeof ev === 'string') return ev.trim();
+  if (Array.isArray(ev)) {
+    const parts = ev
+      .map(item => {
+        if (!item) return '';
+        if (typeof item === 'string') return item.trim();
+        const text = item.note || item.why || item.reason || item.comment || item.explanation || item.text || item.quote || '';
+        return typeof text === 'string' ? text.trim() : String(text);
+      })
+      .filter(Boolean);
+    return parts.join(' • ');
+  }
+  if (typeof ev === 'object') {
+    const text = ev.note || ev.why || ev.reason || ev.comment || ev.explanation || ev.text || ev.quote || '';
+    return typeof text === 'string' ? text.trim() : String(text);
+  }
+  return String(ev).trim();
 }
 
 function resolveParamData(raw: any, pKey: string): { score: string; reasoning: string } {
@@ -80,7 +102,7 @@ function resolveParamData(raw: any, pKey: string): { score: string; reasoning: s
   const aliases = PARAM_ALIASES[pKey] || [pKey];
 
   const scoresObj = raw.scores || (raw.__scores ? null : raw);
-  const evidenceObj = raw.evidence || raw.reasoning || {};
+  const evidenceObj = raw.evidence || raw.reasoning || raw.parameters || {};
 
   // 1. Check scoresObj
   if (scoresObj && typeof scoresObj === 'object') {
@@ -89,12 +111,12 @@ function resolveParamData(raw: any, pKey: string): { score: string; reasoning: s
         const val = scoresObj[alias];
         if (typeof val === 'object' && val !== null) {
           const s = val.score !== undefined ? normScoreVal(val.score) : 'NA';
-          const r = val.reasoning || val.evidence || val.note || '';
-          return { score: s, reasoning: typeof r === 'object' ? r.note || '' : String(r) };
+          const r = extractReasoning(val.reasoning || val.evidence || val.note || val.why || val.comment || val);
+          return { score: s, reasoning: r };
         }
         const s = normScoreVal(val);
-        const ev = evidenceObj[alias] || raw[`${alias}_reasoning`] || raw[`${alias}_evidence`];
-        const r = ev ? (Array.isArray(ev) ? ev[0]?.note || '' : typeof ev === 'object' ? ev.note || '' : String(ev)) : '';
+        const ev = evidenceObj[alias] || raw[`${alias}_reasoning`] || raw[`${alias}_evidence`] || raw[`${alias}_note`];
+        const r = extractReasoning(ev);
         return { score: s, reasoning: r };
       }
     }
@@ -106,10 +128,11 @@ function resolveParamData(raw: any, pKey: string): { score: string; reasoning: s
       const val = raw[alias];
       if (typeof val === 'object' && val !== null) {
         const s = val.score !== undefined ? normScoreVal(val.score) : 'NA';
-        const r = val.reasoning || val.evidence || val.note || '';
-        return { score: s, reasoning: typeof r === 'object' ? r.note || '' : String(r) };
+        const r = extractReasoning(val.reasoning || val.evidence || val.note || val.why || val.comment);
+        return { score: s, reasoning: r };
       }
-      return { score: normScoreVal(val), reasoning: '' };
+      const ev = evidenceObj[alias] || raw[`${alias}_reasoning`] || raw[`${alias}_evidence`];
+      return { score: normScoreVal(val), reasoning: extractReasoning(ev) };
     }
   }
 
@@ -204,6 +227,10 @@ export default function CallEvalPanel({
     }
   }, [paramState, iqsScore]);
 
+  const [hasReevaluated, setHasReevaluated] = useState(false);
+  const [fetchedChatId, setFetchedChatId] = useState<string | null>(null);
+  const [fetchedChatStatus, setFetchedChatStatus] = useState<string | null>(null);
+
   // Load call transcript segments and fallback evaluation details
   useEffect(() => {
     fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`)
@@ -211,6 +238,11 @@ export default function CallEvalPanel({
       .then(d => {
         if (d.segments) setSegments(d.segments);
         if (d.recordingUrl) setRecordingUrl(d.recordingUrl);
+        if (d.chatId) setFetchedChatId(d.chatId);
+        if (d.chatStatus) setFetchedChatStatus(d.chatStatus);
+        if (d.hasReevaluated || (d.reevalCount && d.reevalCount > 0)) {
+          setHasReevaluated(true);
+        }
         if (d.gates && (!currentGates || Object.keys(currentGates).length === 0)) {
           setCurrentGates(d.gates);
         }
@@ -317,6 +349,8 @@ export default function CallEvalPanel({
       });
       const data = await evalRes.json();
       if (evalRes.ok && data.ok) {
+        setHasReevaluated(true);
+        setIsTranscriptModified(false);
         if (data.gates) setCurrentGates(data.gates);
         if (data.iqsScores) {
           setCurrentIqsScores(data.iqsScores);
@@ -473,6 +507,18 @@ export default function CallEvalPanel({
 
   const isReadOnly = mode === 'view';
   const isReviewMode = mode === 'review' || mode === 'resolve';
+  const effectiveChatId = chatId || fetchedChatId;
+  const effectiveChatStatus = fetchedChatStatus || (mode === 'submit' ? 'pending' : mode === 'view' ? 'reviewed' : 'pending');
+  const qaChatTab = effectiveChatStatus === 'reviewed' ? 'reviewed' : 'pending';
+
+  const pathname = usePathname() || '';
+  const chatSectionUrl = effectiveChatId
+    ? pathname.startsWith('/agent')
+      ? `/agent/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
+      : pathname.startsWith('/tl')
+      ? `/tl/quality-chats?chatId=${encodeURIComponent(effectiveChatId)}`
+      : `/quality/chat-evaluation?chatId=${encodeURIComponent(effectiveChatId)}&tab=${qaChatTab}`
+    : '#';
 
   const callDateStr = calledAt
     ? new Date(calledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
@@ -487,6 +533,35 @@ export default function CallEvalPanel({
             Call Evaluation Panel — ID: {callId} ({agentName}){callDateStr ? ` · ${callDateStr}` : ''}
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {effectiveChatId && (
+              <a
+                href={`https://app.robylon.ai/unified-inbox/share/${effectiveChatId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  borderRadius: 6,
+                  border: '1px solid var(--qa-border, #E4E4E7)',
+                  background: '#fff',
+                  color: 'var(--qa-text, #111111)',
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                }}
+                title={`Open chat ${effectiveChatId} in Robylon`}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+                Show Chat
+                <span style={{ fontSize: 11, opacity: 0.6 }}>↗</span>
+              </a>
+            )}
             {allowRaiseDispute && mode === 'view' && !dispute && !raisingDispute && (
               <button
                 onClick={() => setRaisingDispute(true)}
@@ -504,11 +579,11 @@ export default function CallEvalPanel({
                 Raise Dispute
               </button>
             )}
-            {allowReevaluate && (
+            {allowReevaluate && !hasReevaluated && isTranscriptModified && (
               <button
-                onClick={handleReevaluate}
-                disabled={isReevaluating || saving}
-                title="Re-evaluate this call (diarization, transcription, and scoring)"
+                onClick={handleSaveTranscriptAndReevaluate}
+                disabled={isSavingTranscript || isReevaluating || saving}
+                title="Save modified speaker diarization and re-evaluate this call"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -517,22 +592,22 @@ export default function CallEvalPanel({
                   fontSize: 12,
                   fontWeight: 600,
                   borderRadius: 6,
-                  border: '1px solid var(--qa-border, #cbd5e1)',
-                  background: isReevaluating ? '#f1f5f9' : '#ffffff',
-                  color: isReevaluating ? '#64748b' : 'var(--qa-text, #0f172a)',
-                  cursor: isReevaluating ? 'not-allowed' : 'pointer',
+                  border: '1px solid #ca8a04',
+                  background: '#ca8a04',
+                  color: '#ffffff',
+                  cursor: (isSavingTranscript || isReevaluating || saving) ? 'not-allowed' : 'pointer',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                   transition: 'all 0.15s ease'
                 }}
               >
                 <span style={{
                   display: 'inline-block',
-                  transform: isReevaluating ? 'rotate(180deg)' : 'none',
+                  transform: (isSavingTranscript || isReevaluating) ? 'rotate(180deg)' : 'none',
                   transition: 'transform 0.5s ease-in-out'
                 }}>
                   🔄
                 </span>
-                {isReevaluating ? 'Re-evaluating Call…' : 'Re-evaluate Call'}
+                {isSavingTranscript ? 'Saving transcript…' : isReevaluating ? 'Re-evaluating Call…' : 'Save & Re-evaluate Call'}
               </button>
             )}
             <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 18, color: 'var(--qa-text-3)', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
@@ -646,34 +721,61 @@ export default function CallEvalPanel({
           {/* Left panel: Transcript bubbles and audio */}
           <div style={{ flex: 1, minWidth: 320, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, maxHeight: '600px', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-              <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
+                {effectiveChatId && (
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontFamily: 'ui-monospace, monospace',
+                      color: '#475569',
+                      background: '#f1f5f9',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      border: '1px solid #e2e8f0',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span>💬</span> Chat #{effectiveChatId}
+                  </span>
+                )}
+              </div>
               
               {allowReevaluate && (
-                <button
-                  onClick={handleSwapAllSpeakers}
-                  disabled={loading || segments.length === 0 || isSavingTranscript || isReevaluating}
-                  title="Swap IR Executive and Investor speakers across the entire transcript"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '4px 10px',
-                    borderRadius: 6,
-                    border: '1px solid #cbd5e1',
-                    background: '#f8fafc',
-                    color: '#334155',
-                    fontSize: 12,
-                    fontWeight: 500,
-                    cursor: (loading || segments.length === 0 || isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  ⇄ Swap All Speakers (IR ⇋ Investor)
-                </button>
+                hasReevaluated ? (
+                  <span style={{ fontSize: 11, fontWeight: 500, color: '#64748b', background: '#f1f5f9', padding: '3px 8px', borderRadius: 4 }}>
+                    ✓ Re-evaluation used
+                  </span>
+                ) : (
+                  <button
+                    onClick={handleSwapAllSpeakers}
+                    disabled={loading || segments.length === 0 || isSavingTranscript || isReevaluating}
+                    title="Swap IR Executive and Investor speakers across the entire transcript"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '4px 10px',
+                      borderRadius: 6,
+                      border: '1px solid #cbd5e1',
+                      background: '#f8fafc',
+                      color: '#334155',
+                      fontSize: 12,
+                      fontWeight: 500,
+                      cursor: (loading || segments.length === 0 || isSavingTranscript || isReevaluating) ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    ⇄ Swap All Speakers (IR ⇋ Investor)
+                  </button>
+                )
               )}
             </div>
 
-            {allowReevaluate && isTranscriptModified && (
+            {allowReevaluate && !hasReevaluated && isTranscriptModified && (
               <div style={{
                 padding: '10px 14px',
                 background: '#fefce8',
@@ -763,7 +865,7 @@ export default function CallEvalPanel({
                         <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>
                           {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || seg.timestamp || ''}
                         </span>
-                        {allowReevaluate && (
+                        {allowReevaluate && !hasReevaluated && (
                           <button
                             onClick={() => handleToggleSpeaker(idx)}
                             title={`Switch speaker to ${isIR ? 'INVESTOR' : 'IR EXECUTIVE'}`}
@@ -872,7 +974,7 @@ export default function CallEvalPanel({
                         <ScoreBadge score={item.score} />
                       ) : (
                         <div style={{ display: 'flex', gap: 4 }}>
-                          {['Yes', 'No', 'NA'].map(val => (
+                          {['Yes', 'Half', 'No', 'NA'].map(val => (
                             <button
                               key={val}
                               onClick={() => handleScoreChange(p, val)}
@@ -887,7 +989,7 @@ export default function CallEvalPanel({
                                 cursor: 'pointer'
                               }}
                             >
-                              {val}
+                              {val === 'Half' ? 'Partial' : val}
                             </button>
                           ))}
                         </div>

@@ -26,7 +26,13 @@ export async function POST(req: NextRequest) {
   const email = (session.user as any)?.email || '';
   const role  = (session.user as any)?.role  || '';
   const configUser = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
-  const agentName = configUser?.agentName || email.split('@')[0];
+  let agentName = configUser?.agentName || '';
+  if (!agentName && email) {
+    const { getUserByEmail } = await import('@/lib/users');
+    const dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser?.name) agentName = dbUser.name;
+  }
+  if (!agentName) agentName = email.split('@')[0];
 
   const params: IQSChallengedParam[] = Array.isArray(challengedParams) ? challengedParams : [];
   const now = new Date().toISOString();

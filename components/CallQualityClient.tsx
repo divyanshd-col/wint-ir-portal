@@ -159,7 +159,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
 
 // ── Detail Modal ──────────────────────────────────────────────────────────────
 
-function DetailModal({ entry, onClose }: { entry: CallEntry; onClose: () => void }) {
+function DetailModal({ entry, onClose, agentOnly }: { entry: CallEntry; onClose: () => void; agentOnly?: boolean }) {
   const [segments, setSegments] = useState<CallSegment[]>([]);
   const [loadingTranscript, setLoadingTranscript] = useState(true);
   const [expandedParam, setExpandedParam] = useState<string | null>(null);
@@ -192,6 +192,17 @@ function DetailModal({ entry, onClose }: { entry: CallEntry; onClose: () => void
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={entry.iqs != null ? { background: iqsTheme(entry.iqs).bg, color: iqsTheme(entry.iqs).text } : {}}>
                   IQS: {entry.iqs}
                 </span>
+              )}
+              {entry.chatId && (
+                <a
+                  href={`https://app.robylon.ai/unified-inbox/share/${entry.chatId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+                  title={`Open chat ${entry.chatId} in Robylon`}
+                >
+                  <span>💬</span> Show Chat ↗
+                </a>
               )}
             </div>
             <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-500">
@@ -434,6 +445,7 @@ export default function CallQualityClient({ agentOnly }: Props) {
               {!agentOnly && <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Agent</th>}
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Date</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Duration</th>
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Linked Chat</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">IQS</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">⚡ / ⏸</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Fails</th>
@@ -454,6 +466,21 @@ export default function CallQualityClient({ agentOnly }: Props) {
                 )}
                 <td className="px-4 py-2.5 text-slate-500 text-xs">{entry.date}</td>
                 <td className="px-4 py-2.5 text-slate-500 text-xs tabular-nums">{fmtDuration(entry.durationSeconds)}</td>
+                <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
+                  {entry.chatId ? (
+                    <a
+                      href={`https://app.robylon.ai/unified-inbox/share/${entry.chatId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-100 transition-colors"
+                      title={`Open chat ${entry.chatId} in Robylon`}
+                    >
+                      Show chat ↗
+                    </a>
+                  ) : (
+                    <span className="text-slate-300 text-xs">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-2.5"><IQSBar iqs={entry.iqs} /></td>
                 <td className="px-4 py-2.5">
                   <span className="text-xs tabular-nums">
@@ -473,7 +500,7 @@ export default function CallQualityClient({ agentOnly }: Props) {
             ))}
             {!loading && entries.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-400 text-sm">
+                <td colSpan={agentOnly ? 7 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
                   No scored calls found for the selected filters.
                 </td>
               </tr>
@@ -496,7 +523,7 @@ export default function CallQualityClient({ agentOnly }: Props) {
       </div>
 
       {/* Detail modal */}
-      {detailEntry && <DetailModal entry={detailEntry} onClose={() => setDetailEntry(null)} />}
+      {detailEntry && <DetailModal entry={detailEntry} onClose={() => setDetailEntry(null)} agentOnly={agentOnly} />}
     </div>
   );
 }

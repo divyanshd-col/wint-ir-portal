@@ -96,7 +96,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const callFlags = flags.filter(f => Boolean(f.callId));
 
   const chatIds = [...new Set(chatFlags.map(f => f.chatId).filter(Boolean))];
-  const targetCallIds = [...new Set(callFlags.map(f => f.callId || f.chatId).filter(Boolean))];
+  const targetCallIds = [...new Set(callFlags.map(f => f.callId).filter(Boolean))] as string[];
+  const fallbackChatIds = [...new Set(callFlags.filter(f => !f.callId).map(f => f.chatId).filter(Boolean))];
 
   let dbRows: {
     chat_id: string; agent_id: number | null; agent_name: string | null; closed_at: string;
@@ -128,7 +129,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     called_at: string; disposition: string; sub_disposition: string | null;
     iqs_percent: string | null; parameters: any; gates: any;
   }[] = [];
-  if (targetCallIds.length > 0) {
+  if (targetCallIds.length > 0 || fallbackChatIds.length > 0) {
     callDbRows = await query(
       `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, '') AS agent_name,
               cr.called_at, cr.call_disposition AS disposition,
@@ -139,13 +140,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
        JOIN call_recordings cr ON cr.id = ce.call_id
        LEFT JOIN agents a ON a.id = ce.agent_id
        WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
-      [targetCallIds]
+      [[...targetCallIds, ...fallbackChatIds]]
     );
   }
   const callDbMap = new Map<string, typeof callDbRows[0]>();
   callDbRows.forEach(r => {
-    callDbMap.set(r.call_id, r);
-    if (r.chat_id) callDbMap.set(r.chat_id, r);
+    if (r.call_id) callDbMap.set(r.call_id, r);
+    if (r.chat_id && !callDbMap.has(r.chat_id)) callDbMap.set(r.chat_id, r);
   });
 
   // Build role label for who raised the dispute
@@ -166,7 +167,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   for (const flag of flags) {
     const isCall = Boolean(flag.callId);
     const db = isCall ? null : dbMap.get(flag.chatId);
-    const callDb = isCall ? (callDbMap.get(flag.callId!) || callDbMap.get(flag.chatId)) : null;
+    const callDb = isCall ? (flag.callId ? callDbMap.get(flag.callId) : callDbMap.get(flag.chatId)) : null;
 
     if (!db && !callDb) continue;
 
