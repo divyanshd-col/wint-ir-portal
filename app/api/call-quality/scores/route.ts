@@ -11,11 +11,32 @@ function avg(nums: number[]): number | null {
 }
 
 // DB stores parameters with keys like "Technical", "AllQuestions", etc.
-// Normalise to CallParamScore
-function normaliseScore(raw: any): 'Yes' | 'No' | 'NA' {
-  if (raw === true || raw === 'Yes' || raw === 'yes' || raw === 2)  return 'Yes';
-  if (raw === false || raw === 'No' || raw === 'no' || raw === 0) return 'No';
+function normaliseScore(raw: any): 'Yes' | 'No' | 'Half' | 'NA' {
+  if (raw === true || raw === 'Yes' || raw === 'yes' || raw === 2 || raw === '2' || raw === 'PASS' || raw === 'pass') return 'Yes';
+  if (raw === false || raw === 'No' || raw === 'no' || raw === 0 || raw === '0' || raw === 'FAIL' || raw === 'fail') return 'No';
+  if (raw === 1 || raw === '1' || raw === 0.5 || raw === '0.5' || raw === 'Half' || raw === 'half' || raw === 'Partial' || raw === 'partial' || raw === 'Part' || raw === 'part') return 'Half';
   return 'NA';
+}
+
+function extractReasoning(ev: any): string {
+  if (!ev) return '';
+  if (typeof ev === 'string') return ev.trim();
+  if (Array.isArray(ev)) {
+    const parts = ev
+      .map(item => {
+        if (!item) return '';
+        if (typeof item === 'string') return item.trim();
+        const text = item.note || item.why || item.reason || item.comment || item.explanation || item.text || item.quote || '';
+        return typeof text === 'string' ? text.trim() : String(text);
+      })
+      .filter(Boolean);
+    return parts.join(' • ');
+  }
+  if (typeof ev === 'object') {
+    const text = ev.note || ev.why || ev.reason || ev.comment || ev.explanation || ev.text || ev.quote || '';
+    return typeof text === 'string' ? text.trim() : String(text);
+  }
+  return String(ev).trim();
 }
 
 function normParamsFromDb(params: any): { scores: Record<string, string>; reasoning: Record<string, string> } {
@@ -26,11 +47,11 @@ function normParamsFromDb(params: any): { scores: Record<string, string>; reason
   // Check if params has v3.1 structure: { scores: {...}, evidence: {...} }
   if (params.scores && typeof params.scores === 'object') {
     const rawScores = params.scores;
-    const rawEvidence = params.evidence || {};
+    const rawEvidence = params.evidence || params.reasoning || {};
     Object.keys(rawScores).forEach(p => {
       scores[p] = normaliseScore(rawScores[p]);
-      const ev = rawEvidence[p];
-      reasoning[p] = ev ? (Array.isArray(ev) ? ev[0]?.note || '' : typeof ev === 'object' ? ev.note || '' : String(ev)) : '';
+      const ev = rawEvidence[p] || params[`${p}_reasoning`] || params[`${p}_evidence`];
+      reasoning[p] = extractReasoning(ev);
     });
     return { scores, reasoning };
   }
@@ -95,7 +116,13 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
 
   if (role === 'agent') {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === userEmail.toLowerCase());
-    const selfName = configUser?.agentName || user?.agentName || userEmail.split('@')[0];
+    let selfName = configUser?.agentName || user?.agentName || '';
+    if (!selfName && userEmail) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(userEmail).catch(() => null);
+      if (dbUser?.name) selfName = dbUser.name;
+    }
+    if (!selfName) selfName = userEmail.split('@')[0];
     agentNames = selfName ? [selfName] : [];
     availableAgents = agentNames;
   } else if (role === 'tl') {

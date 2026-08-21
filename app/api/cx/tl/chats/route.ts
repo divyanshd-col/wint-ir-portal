@@ -97,6 +97,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     }
   }
 
+  const chatId = searchParams.get('chatId') || searchParams.get('chat_id');
+  if (chatId) {
+    extraWhere += ` AND c.id LIKE $${paramIdx++}`;
+    sqlParams.push(`${chatId.trim()}%`);
+  }
+
   const from = searchParams.get('from');
   if (from) {
     const fromDate = new Date(from + 'T00:00:00+05:30');
