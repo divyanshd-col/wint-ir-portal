@@ -253,9 +253,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     const callDb = callDbMap.get(flag.callId || flag.chatId);
     if (!db && !callDb) continue;
 
-    const chatReviewer = (db?.chat_reviewed_by || db?.call_reviewed_by || callDb?.reviewed_by || '').trim();
-    const effectiveDisposition = db?.disposition || callDb?.disposition || '';
-    const effectiveAgentName = db?.agent_name || callDb?.agent_name || flag.agentName;
+    const isCall = Boolean(flag.callId);
+    const chatReviewer = isCall
+      ? (callDb?.reviewed_by || db?.call_reviewed_by || db?.chat_reviewed_by || '').trim()
+      : (db?.chat_reviewed_by || db?.call_reviewed_by || callDb?.reviewed_by || '').trim();
+    const effectiveDisposition = isCall
+      ? (callDb?.disposition || db?.disposition || '')
+      : (db?.disposition || callDb?.disposition || '');
+    const effectiveAgentName = isCall
+      ? (callDb?.agent_name || db?.agent_name || flag.agentName)
+      : (db?.agent_name || callDb?.agent_name || flag.agentName);
 
     // Scope-check: disputes should be sent to the QA who reviewed it; otherwise based on disposition
     if (role === 'quality' || (role === 'admin' && dispositions.length > 0)) {
@@ -307,7 +314,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       continue;
     }
 
-    const isCall = Boolean(flag.callId);
     let params = isCall ? (callDb?.parameters ?? {}) : (db?.parameters ?? {});
     if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
