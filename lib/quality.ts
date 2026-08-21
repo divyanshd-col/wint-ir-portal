@@ -233,18 +233,18 @@ export function normalizeScore(val: number | boolean | string | null): {
   badgeBg: string;
   badgeText: string;
 } {
-  // 1. Match 'Yes' / true / 1.0 / 2 (legacy Yes)
-  if (val === true || val === 1 || val === '1' || val === 2 || val === '2' || val === 'Yes') {
+  // 1. Match 'Yes' / true / 2 / '2' / 'PASS'
+  if (val === true || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') {
     return { label: 'Yes', value: 1.0, badgeBg: '#dcfce7', badgeText: '#15803d' };
   }
   
-  // 2. Match 'No' / false / 0.0 / 0
-  if (val === false || val === 0 || val === '0' || val === 'No') {
+  // 2. Match 'No' / false / 0.0 / 0 / 'FAIL'
+  if (val === false || val === 0 || val === '0' || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') {
     return { label: 'No', value: 0.0, badgeBg: '#fee2e2', badgeText: '#b91c1c' };
   }
   
-  // 3. Match 'Half' / 0.5 / 1 (legacy Half) / 'Partial'
-  if (val === 0.5 || val === '0.5' || val === 'Half' || val === 'Partial') {
+  // 3. Match 'Half' / 0.5 / 1 / '1' / 'Partial' / 'Part'
+  if (val === 0.5 || val === '0.5' || val === 1 || val === '1' || val === 'Half' || val === 'half' || val === 'Partial' || val === 'partial' || val === 'Part' || val === 'part') {
     return { label: 'Half', value: 0.5, badgeBg: '#fef3c7', badgeText: '#b45309' };
   }
   

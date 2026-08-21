@@ -496,12 +496,12 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   }
   if (opts.agentName) {
     params.push(opts.agentName);
-    conditions.push(`(a.name = $${params.length} OR a.name ILIKE $${params.length} || ' %' OR $${params.length} ILIKE a.name || ' %')`);
+    conditions.push(`(a.name = $${params.length} OR a.name ILIKE $${params.length} || ' %')`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
     conditions.push(`(a.name = ANY($${params.length}) OR EXISTS (
       SELECT 1 FROM unnest($${params.length}::text[]) elem
-      WHERE a.name ILIKE elem || ' %' OR elem ILIKE a.name || ' %'
+      WHERE a.name = elem OR a.name ILIKE elem || ' %'
     ))`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push(`1=0`);
@@ -1171,12 +1171,12 @@ export async function getAllScoredCalls(opts: {
   }
   if (opts.agentName) {
     params.push(opts.agentName);
-    conditions.push(`(COALESCE(a.name, '') = $${params.length} OR a.name ILIKE $${params.length} || ' %' OR $${params.length} ILIKE a.name || ' %')`);
+    conditions.push(`(COALESCE(a.name, '') = $${params.length} OR a.name ILIKE $${params.length} || ' %')`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
     conditions.push(`(COALESCE(a.name, '') = ANY($${params.length}) OR EXISTS (
       SELECT 1 FROM unnest($${params.length}::text[]) elem
-      WHERE a.name ILIKE elem || ' %' OR elem ILIKE a.name || ' %'
+      WHERE a.name = elem OR a.name ILIKE elem || ' %'
     ))`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');

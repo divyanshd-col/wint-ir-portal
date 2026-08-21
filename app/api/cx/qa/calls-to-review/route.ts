@@ -187,7 +187,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const offsetParamIdx = paramIdx++;
 
   const rows = await query<any>(
-    `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, 'Unknown') as agent_name,
+    `SELECT ce.call_id, COALESCE(ce.chat_id, cr.chat_id) as chat_id, COALESCE(a.name, 'Unknown') as agent_name,
             ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
             cr.duration_seconds, cr.language, cr.interruption_count, cr.dead_air_count,
             ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores

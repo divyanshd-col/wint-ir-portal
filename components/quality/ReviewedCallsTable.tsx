@@ -74,7 +74,34 @@ const CallEvalRow = React.memo(function CallEvalRow({
         <td style={tdMono}>{call.callId}</td>
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
         <td style={td}>{call.disposition}</td>
-        <td style={td}>{fmtDuration(call.durationSeconds)}</td>
+        <td style={td} onClick={e => e.stopPropagation()}>
+          {call.chatId ? (
+            <a
+              href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                fontSize: 12,
+                fontWeight: 500,
+                borderRadius: 6,
+                border: '1px solid var(--qa-border)',
+                background: 'var(--qa-card)',
+                color: '#2563eb',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+              title={`Open chat ${call.chatId} in Robylon`}
+            >
+              Show chat ↗
+            </a>
+          ) : (
+            <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+          )}
+        </td>
         <td style={tdNum}>
           <span style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -303,7 +330,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
               <th style={th}>Call ID</th>
               <th style={th}>Agent</th>
               <th style={th}>Disposition</th>
-              <th style={th}>Duration</th>
+              <th style={th}>Linked Chat</th>
               <th style={{ ...th, textAlign: 'right' }}>IQS</th>
               <th style={th}>Reviewed By</th>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>

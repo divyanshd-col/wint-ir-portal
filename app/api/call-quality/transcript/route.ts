@@ -30,20 +30,44 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     console.error('[transcript] failed to fetch call_evaluations:', err);
   }
 
+  let chatStatus: string | null = null;
+  const effectiveChatId = row.chat_id || (evalData?.chat_id);
+  if (effectiveChatId) {
+    try {
+      const chatRows = await query<any>(`SELECT status FROM iqs_scores WHERE chat_id = $1 LIMIT 1`, [effectiveChatId]);
+      if (chatRows.length > 0) {
+        chatStatus = chatRows[0].status;
+      }
+    } catch (err) {
+      console.error('[transcript] failed to fetch iqs_scores status:', err);
+    }
+  }
+
+  const transcriptData = typeof row.transcript === 'string'
+    ? (() => { try { return JSON.parse(row.transcript); } catch { return row.transcript; } })()
+    : row.transcript;
+
+  const isObj = transcriptData && typeof transcriptData === 'object' && !Array.isArray(transcriptData);
+  const segments = Array.isArray(transcriptData)
+    ? transcriptData
+    : (isObj && Array.isArray(transcriptData.segments) ? transcriptData.segments : []);
+  const reevalCount = isObj ? Number(transcriptData.reevalCount || (transcriptData.editedAt ? 1 : 0)) : 0;
+
   return NextResponse.json({
     ok: true,
     found: true,
     callId: row.id,
     chatId: row.chat_id,
+    chatStatus: chatStatus || (evalData?.status ?? null),
     language: row.language,
     interruptionCount: row.interruption_count,
     deadAirCount: row.dead_air_count,
     durationSeconds: row.duration_seconds,
     calledAt: row.called_at,
     recordingUrl: row.recording_url,
-    segments: Array.isArray(row.transcript) 
-      ? row.transcript 
-      : (row.transcript && typeof row.transcript === 'object' && Array.isArray((row.transcript as any).segments) ? (row.transcript as any).segments : []),
+    segments,
+    reevalCount,
+    hasReevaluated: reevalCount > 0,
     gates: evalData?.gates ?? null,
     iqsScores: evalData?.iqs_scores ?? null,
     iqsPercent: evalData?.iqs_percent ?? null,

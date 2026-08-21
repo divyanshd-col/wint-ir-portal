@@ -563,7 +563,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   <th style={TH_BASE}>Call ID</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
-                  <th style={TH_BASE}>Duration</th>
+                  <th style={TH_BASE}>Linked Chat</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</th>
                   <th style={{ ...TH_BASE, textAlign: 'center' }}>Dispute Action</th>
                 </tr>
@@ -603,7 +603,34 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
                           </td>
                           <td style={TD_BASE}>{call.disposition || '—'}</td>
-                          <td style={TD_MONO}>{fmtDuration(call.durationSeconds)}</td>
+                          <td style={TD_BASE} onClick={e => e.stopPropagation()}>
+                            {call.chatId ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '3px 8px',
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  borderRadius: 6,
+                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  background: '#fff',
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={`Open chat ${call.chatId} in Robylon`}
+                              >
+                                Show chat ↗
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                            )}
+                          </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={call.iqs} />
                           </td>
@@ -898,6 +925,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   <th style={TH_BASE}>Call ID</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
+                  <th style={TH_BASE}>Linked Chat</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
@@ -906,13 +934,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <tbody>
                 {loadingPending ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading raised disputes…
                     </td>
                   </tr>
                 ) : filteredPendingDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No pending call disputes found.
                     </td>
                   </tr>
@@ -936,6 +964,34 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
+                          <td style={TD_BASE} onClick={e => e.stopPropagation()}>
+                            {dispute.chatId ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '3px 8px',
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  borderRadius: 6,
+                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  background: '#fff',
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={`Open chat ${dispute.chatId} in Robylon`}
+                              >
+                                Show chat ↗
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                            )}
+                          </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
                           </td>
@@ -981,7 +1037,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={6}
+                            colSpan={7}
                           />
                         )}
                       </Fragment>
@@ -1097,6 +1153,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   <th style={TH_BASE}>Call ID</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
+                  <th style={TH_BASE}>Linked Chat</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                   <th style={TH_BASE}>Status</th>
                   <th style={TH_BASE}>Reviewed At</th>
@@ -1105,13 +1162,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <tbody>
                 {loadingReviewed ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading reviewed disputes…
                     </td>
                   </tr>
                 ) : filteredReviewedDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No reviewed call disputes found.
                     </td>
                   </tr>
@@ -1135,6 +1192,34 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
+                          <td style={TD_BASE} onClick={e => e.stopPropagation()}>
+                            {dispute.chatId ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  padding: '3px 8px',
+                                  fontSize: 12,
+                                  fontWeight: 500,
+                                  borderRadius: 6,
+                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  background: '#fff',
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  whiteSpace: 'nowrap',
+                                }}
+                                title={`Open chat ${dispute.chatId} in Robylon`}
+                              >
+                                Show chat ↗
+                              </a>
+                            ) : (
+                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                            )}
+                          </td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
                           </td>
@@ -1165,7 +1250,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={6}
+                            colSpan={7}
                           />
                         )}
                       </Fragment>
