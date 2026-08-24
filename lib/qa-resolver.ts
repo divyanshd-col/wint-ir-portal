@@ -62,11 +62,18 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
       }
 
       // 2. Priority 2: Forward based on disposition if not reviewed by a QA
-      if (row.disposition) {
-        const mapEntry = config.qaDispositionMap?.find((m: any) => m.dispositions?.includes(row.disposition!));
+      if (row.disposition && row.disposition.trim()) {
+        const cleanDisp = row.disposition.trim().toLowerCase();
+        const mapEntry = config.qaDispositionMap?.find((m: any) =>
+          m.dispositions?.some((d: string) => d.trim().toLowerCase() === cleanDisp)
+        );
         if (mapEntry?.email) {
           const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === mapEntry.email.toLowerCase());
           if (u?.agentName && u.role !== 'admin') return u.agentName;
+          const userRows = await queryFn<{ name: string }>(`SELECT name FROM cx_users WHERE LOWER(email) = LOWER($1)`, [mapEntry.email]);
+          if (userRows[0]?.name) return userRows[0].name;
+          const parts = mapEntry.email.split('@')[0].split('.');
+          return parts.map((p: string) => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
         }
       }
 

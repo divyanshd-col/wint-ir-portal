@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     const userDisps = qaMapEntry?.dispositions ?? configUser?.assignedDispositions;
 
     if (['quality', 'admin'].includes(role) && userDisps?.length) {
-      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+      if (role === 'quality') {
         strictDispositions = userDisps;
       }
     }
