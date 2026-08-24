@@ -84,8 +84,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  // For QA (or mapped admins), restrict by assigned dispositions (except Manorathi)
-  if ((role === 'quality' || qaEntry) && email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+  // For QA (or mapped admins), restrict by assigned dispositions
+  if (role === 'quality' || qaEntry) {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
     if (strictDispositions.length > 0) {

@@ -63,23 +63,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
   const configUser = me;
+  const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions;
 
-  if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
-    const rows = await query<{ d: string }>(
-      `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
-       WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`
-    );
-    dispositions = rows.map(r => r.d);
-  } else if (qaEntry && qaEntry.dispositions.length > 0) {
-    dispositions = qaEntry.dispositions;
-  } else if (role === 'admin') {
-    const rows = await query<{ d: string }>(
-      `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
-       WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`
-    );
-    dispositions = rows.map(r => r.d);
-  } else if (role === 'quality') {
-    dispositions = configUser?.assignedDispositions ?? [];
+  if (role === 'quality') {
+    dispositions = userDisps ?? [];
     
     try {
       const rows = await query<{ name: string }>(
@@ -91,6 +78,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     } catch {
       // CX DB unavailable
+    }
+  } else if (role === 'admin') {
+    if (qaEntry && qaEntry.dispositions.length > 0) {
+      dispositions = qaEntry.dispositions;
+    } else {
+      const rows = await query<{ d: string }>(
+        `SELECT DISTINCT tags->>'disposition' AS d FROM conversations
+         WHERE tags->>'disposition' IS NOT NULL AND tags->>'disposition' != ''`
+      );
+      dispositions = rows.map(r => r.d);
     }
   }
 

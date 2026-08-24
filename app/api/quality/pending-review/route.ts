@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
 
     if (['quality', 'admin'].includes(role) && userDisps?.length) {
       assignedDispositions = userDisps;
-      if (email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+      if (role === 'quality') {
         strictDispositions = userDisps;
       }
     }
