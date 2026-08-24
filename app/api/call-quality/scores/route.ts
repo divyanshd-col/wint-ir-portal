@@ -125,6 +125,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     if (!selfName) selfName = userEmail.split('@')[0];
     agentNames = selfName ? [selfName] : [];
     availableAgents = agentNames;
+    if (tagFilter) dispositions = [tagFilter];
   } else if (role === 'tl') {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === userEmail.toLowerCase());
     let tlAgentName: string = configUser?.agentName || '';
