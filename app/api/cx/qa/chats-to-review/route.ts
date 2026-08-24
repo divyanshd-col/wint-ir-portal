@@ -41,35 +41,28 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const { searchParams } = new URL(req.url);
   log.info(ROUTE, 'params', { raw: req.url.split('?')[1] ?? '' });
 
-  // Resolve dispositions — admin sees ALL dispositions (unscoped), QA sees assigned (except Manorathi sees all)
+  // Resolve dispositions — admin sees ALL dispositions (unscoped), QA sees assigned
   let dispositions: string[] = [];
   const config = await readConfig();
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
-    // Manorathi exception: gets all dispositions
-    const rows = await query<{ d: string }>(`
-      SELECT DISTINCT tags->>'disposition' AS d
-      FROM conversations
-      WHERE tags->>'disposition' IS NOT NULL
-    `);
-    dispositions = rows.map(r => r.d);
-  } else if (qaEntry && qaEntry.dispositions.length > 0) {
-    // If they are in the QA mapping, strictly use their assigned dispositions
-    dispositions = qaEntry.dispositions;
+  const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions;
+
+  if (role === 'quality') {
+    dispositions = userDisps ?? [];
   } else if (role === 'admin') {
-    // Admin users not in QA mapping get everything
-    const rows = await query<{ d: string }>(`
-      SELECT DISTINCT tags->>'disposition' AS d
-      FROM conversations
-      WHERE tags->>'disposition' IS NOT NULL
-    `);
-    dispositions = rows.map(r => r.d);
-  } else if (role === 'quality') {
-    // Quality users not in mapping get nothing (or we could fetch from assignedDispositions as fallback)
-    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    dispositions = configUser?.assignedDispositions ?? [];
+    if (qaEntry && qaEntry.dispositions.length > 0) {
+      dispositions = qaEntry.dispositions;
+    } else {
+      const rows = await query<{ d: string }>(`
+        SELECT DISTINCT tags->>'disposition' AS d
+        FROM conversations
+        WHERE tags->>'disposition' IS NOT NULL
+      `);
+      dispositions = rows.map(r => r.d);
+    }
   } else {
     return NextResponse.json({ chats: [], total: 0 });
   }
@@ -102,15 +95,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   let baseWhere = '';
 
   if (reviewedMode) {
-    if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
-      if (dispositionFilters.length > 0) {
-        const dispIdx = paramIdx++;
-        sqlParams.push(safeDispositions);
-        baseWhere = `i.status = 'reviewed' AND c.tags->>'disposition' = ANY($${dispIdx}::text[])`;
-      } else {
-        baseWhere = `i.status = 'reviewed'`;
-      }
-    } else if (role === 'admin' && (!qaEntry || qaEntry.dispositions.length === 0)) {
+    if (role === 'admin' && (!qaEntry || qaEntry.dispositions.length === 0)) {
       if (dispositionFilters.length > 0) {
         const dispIdx = paramIdx++;
         sqlParams.push(safeDispositions);
