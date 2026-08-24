@@ -12,6 +12,8 @@ interface Props {
   onCountChange?: (count: number) => void;
   agentFilter?:   'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
+  initialChatId?: string;
+  onChatNotFound?: () => void;
 }
 
 // ── Chip / filter styles ──────────────────────────────────────────────────────
@@ -56,7 +58,7 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
 type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'botIqsScore';
 type SortDir = 'asc' | 'desc';
 
-export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all' }: Props) {
+export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId, onChatNotFound }: Props) {
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -71,7 +73,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
   }
 
   // ── Filter state ──────────────────────────────────────────────────────────
-  const [chatIdSearch,  setChatIdSearch]  = useState('');
+  const [chatIdSearch,  setChatIdSearch]  = useState(initialChatId || '');
   const [dispFilter,    setDispFilter]    = useState<string[]>([]);
   const [subDispFilter, setSubDispFilter] = useState<string[]>([]);
   const [iqsMin,        setIqsMin]        = useState('');
@@ -100,6 +102,20 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
 
   // ── Expanded row state ────────────────────────────────────────────────────
   const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  // Auto-expand initial target chat
+  const autoExpandedRef = React.useRef(false);
+  useEffect(() => {
+    if (initialChatId && !autoExpandedRef.current && chats.length > 0) {
+      const matching = chats.find(c => c.chatId.toLowerCase().includes(initialChatId.toLowerCase()));
+      if (matching) {
+        setExpandedId(matching.chatId);
+        autoExpandedRef.current = true;
+      }
+    } else if (initialChatId && !loading && chats.length === 0 && !autoExpandedRef.current) {
+      onChatNotFound?.();
+    }
+  }, [chats, initialChatId, loading, onChatNotFound]);
 
   // ── Sub-disposition map ───────────────────────────────────────────────────
   const [subMap, setSubMap] = useState<Record<string, string[]>>({});

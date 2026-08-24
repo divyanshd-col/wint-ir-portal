@@ -123,17 +123,41 @@ export async function getAgentTLByName(agentName: string): Promise<string | null
 export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]> {
   if (!tlIdentifier) return [];
   const normalized = tlIdentifier.trim().toLowerCase();
-  
-  const prefix = normalized.includes('@') ? normalized.split('@')[0] : normalized;
-  const firstName = prefix.split('.')[0];
-  
-  let dbUserName = '';
-  if (normalized.includes('@')) {
-    const userRows = await query<{ name: string }>(`SELECT name FROM users WHERE email = $1`, [normalized]);
-    dbUserName = userRows[0]?.name?.toLowerCase() || '';
-  }
 
-  const tokens = Array.from(new Set([normalized, prefix, firstName, dbUserName].filter(Boolean)));
+  const { readConfig } = await import('@/lib/config');
+  const config = await readConfig().catch(() => ({ users: [] }));
+  const configUser = config.users?.find((u: any) =>
+    (u.email || '').toLowerCase() === normalized ||
+    (u.username || '').toLowerCase() === normalized ||
+    (u.agentName || '').trim().toLowerCase() === normalized
+  );
+
+  let dbUserName = '';
+  try {
+    const userRows = await query<{ name: string; email: string }>(
+      `SELECT name, email FROM users WHERE LOWER(email) = $1 OR LOWER(name) = $1 LIMIT 1`,
+      [normalized]
+    );
+    if (userRows[0]?.name) dbUserName = userRows[0].name.toLowerCase();
+  } catch {}
+
+  const rawTokens = [
+    normalized,
+    normalized.includes('@') ? normalized.split('@')[0] : '',
+    normalized.includes('@') ? normalized.split('@')[0].split('.')[0] : '',
+    configUser?.email?.toLowerCase(),
+    configUser?.email ? configUser.email.split('@')[0].toLowerCase() : '',
+    configUser?.email ? configUser.email.split('@')[0].split('.')[0].toLowerCase() : '',
+    configUser?.agentName?.trim().toLowerCase(),
+    ...(configUser?.agentName ? configUser.agentName.trim().toLowerCase().split(/\s+/) : []),
+    configUser?.username?.toLowerCase(),
+    (configUser as any)?.name?.toLowerCase(),
+    dbUserName,
+    ...(dbUserName ? dbUserName.split(/\s+/) : []),
+    ...(normalized.split(/\s+/)),
+  ].filter(Boolean).map(s => s!.trim()).filter(s => s.length >= 3);
+
+  const tokens = Array.from(new Set(rawTokens));
 
   const rows = await query<{ name: string }>(
     `SELECT a.name
@@ -143,8 +167,8 @@ export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]>
          LOWER(TRIM(a.tl_name)) = ANY($1::text[])
          OR EXISTS (
            SELECT 1 FROM unnest($1::text[]) t
-           WHERE LOWER(a.tl_name) LIKE LOWER(t || '%')
-              OR LOWER(t) LIKE LOWER(TRIM(a.tl_name) || '%')
+           WHERE LOWER(a.tl_name) LIKE '%' || t || '%'
+              OR t LIKE '%' || LOWER(TRIM(a.tl_name)) || '%'
          )
        )
      ORDER BY a.name ASC`,
@@ -472,12 +496,12 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   }
   if (opts.agentName) {
     params.push(opts.agentName);
-    conditions.push(`(a.name = $${params.length} OR a.name ILIKE $${params.length} || ' %' OR $${params.length} ILIKE a.name || ' %')`);
+    conditions.push(`(a.name = $${params.length} OR a.name ILIKE $${params.length} || ' %')`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
     conditions.push(`(a.name = ANY($${params.length}) OR EXISTS (
       SELECT 1 FROM unnest($${params.length}::text[]) elem
-      WHERE a.name ILIKE elem || ' %' OR elem ILIKE a.name || ' %'
+      WHERE a.name = elem OR a.name ILIKE elem || ' %'
     ))`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push(`1=0`);
@@ -1112,6 +1136,7 @@ export async function getAllScoredCalls(opts: {
   agentNames?: string[];
   dateFrom?: string;
   dateTo?: string;
+  callId?: string;
   minScore?: number;
   maxScore?: number;
   unreviewedOnly?: boolean;
@@ -1119,9 +1144,14 @@ export async function getAllScoredCalls(opts: {
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
-  // Join call_recordings → iqs_scores (via chat_id) — call_iqs_score must exist
-  const conditions: string[] = ['s.call_iqs_score IS NOT NULL'];
+  // Join call_recordings → call_evaluations (via call_id) or iqs_scores (via chat_id)
+  const conditions: string[] = ['(ce.iqs_percent IS NOT NULL OR s.call_iqs_score IS NOT NULL)'];
   const params: any[] = [];
+
+  if (opts.callId) {
+    params.push(`%${opts.callId.trim()}%`);
+    conditions.push(`r.id ILIKE $${params.length}`);
+  }
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
@@ -1133,26 +1163,26 @@ export async function getAllScoredCalls(opts: {
   }
   if (opts.minScore !== undefined) {
     params.push(opts.minScore);
-    conditions.push(`s.call_iqs_score >= $${params.length}`);
+    conditions.push(`COALESCE(ce.iqs_percent, s.call_iqs_score) >= $${params.length}`);
   }
   if (opts.maxScore !== undefined) {
     params.push(opts.maxScore);
-    conditions.push(`s.call_iqs_score <= $${params.length}`);
+    conditions.push(`COALESCE(ce.iqs_percent, s.call_iqs_score) <= $${params.length}`);
   }
   if (opts.agentName) {
     params.push(opts.agentName);
-    conditions.push(`(COALESCE(a.name, '') = $${params.length} OR a.name ILIKE $${params.length} || ' %' OR $${params.length} ILIKE a.name || ' %')`);
+    conditions.push(`(COALESCE(a.name, '') = $${params.length} OR a.name ILIKE $${params.length} || ' %')`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
     conditions.push(`(COALESCE(a.name, '') = ANY($${params.length}) OR EXISTS (
       SELECT 1 FROM unnest($${params.length}::text[]) elem
-      WHERE a.name ILIKE elem || ' %' OR elem ILIKE a.name || ' %'
+      WHERE a.name = elem OR a.name ILIKE elem || ' %'
     ))`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');
   }
   if (opts.unreviewedOnly) {
-    conditions.push(`s.reviewed_at IS NULL`);
+    conditions.push(`COALESCE(ce.reviewed_at, s.reviewed_at) IS NULL`);
   }
   if (opts.dispositions?.length) {
     params.push(opts.dispositions);
@@ -1164,9 +1194,10 @@ export async function getAllScoredCalls(opts: {
   const countRows = await query<{ count: string }>(`
     SELECT COUNT(*) AS count
     FROM call_recordings r
-    JOIN iqs_scores s ON s.chat_id = r.chat_id
+    LEFT JOIN call_evaluations ce ON ce.call_id = r.id
+    LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, conv.agent_id, r.agent_id)
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
@@ -1179,25 +1210,30 @@ export async function getAllScoredCalls(opts: {
   const rows = await query(`
     SELECT
       r.id                                    AS "callId",
-      r.chat_id                               AS "chatId",
+      COALESCE(ce.chat_id, r.chat_id)         AS "chatId",
       r.called_at                             AS "calledAt",
       r.called_at::date                       AS "date",
       r.duration_seconds                      AS "durationSeconds",
       r.language,
       r.interruption_count                    AS "interruptionCount",
       r.dead_air_count                        AS "deadAirCount",
+      r.call_disposition                     AS "disposition",
+      r.call_sub_disposition                 AS "subDisposition",
       NULLIF(COALESCE(a.name, ''), 'Robylon Automation') AS "agentName",
-      s.call_iqs_score                        AS "iqs",
-      s.call_parameters                       AS "parameters",
+      COALESCE(ce.iqs_percent, s.call_iqs_score) AS "iqs",
+      COALESCE(ce.iqs_scores, s.call_parameters) AS "parameters",
+      ce.verdict                              AS "verdict",
+      ce.gates                                AS "gates",
       s.call_model_version                    AS "modelVersion",
-      s.call_scored_at                        AS "scoredAt",
-      s.reviewed_by                           AS "reviewedBy",
-      s.reviewed_at                           AS "reviewedAt",
-      s.review_note                           AS "reviewNote"
+      COALESCE(ce.scored_at, s.call_scored_at) AS "scoredAt",
+      COALESCE(ce.reviewed_by, s.reviewed_by) AS "reviewedBy",
+      COALESCE(ce.reviewed_at, s.reviewed_at) AS "reviewedAt",
+      COALESCE(ce.review_note, s.review_note) AS "reviewNote"
     FROM call_recordings r
-    JOIN iqs_scores s ON s.chat_id = r.chat_id
+    LEFT JOIN call_evaluations ce ON ce.call_id = r.id
+    LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, conv.agent_id, r.agent_id)
     ${where}
     ORDER BY r.called_at DESC
     LIMIT $${params.length - 1} OFFSET $${params.length}

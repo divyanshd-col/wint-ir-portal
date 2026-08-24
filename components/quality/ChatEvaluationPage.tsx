@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import ChatEvalTable from './ChatEvalTable';
 import DisputesTable from './DisputesTable';
 import ReviewedChatsTable from './ReviewedChatsTable';
@@ -13,13 +14,21 @@ interface Props {
 }
 
 export default function ChatEvaluationPage({ role }: Props) {
+  const searchParams = useSearchParams();
+  const targetChatId = searchParams.get('chatId') || searchParams.get('chat_id') || '';
+  const initialTabParam = searchParams.get('tab') as Tab | null;
+
   const isAdmin = role === 'admin';
   const [dispositions,   setDispositions]   = useState<string[]>([]);
   const [pendingCount,   setPendingCount]   = useState<number | null>(null);
   const [disputeCount,   setDisputeCount]   = useState<number | null>(null);
   const [unscoredCount,  setUnscoredCount]  = useState<number | null>(null);
   const [loadingDisp,    setLoadingDisp]    = useState(true);
-  const [tab,            setTab]            = useState<Tab>('pending');
+  const [tab,            setTab]            = useState<Tab>(
+    initialTabParam && ['pending', 'disputes', 'reviewed', 'unscored'].includes(initialTabParam)
+      ? initialTabParam
+      : 'pending'
+  );
   const [agentFilter,    setAgentFilter]    = useState<'bot_only' | 'all' | 'human_only' | 'has_calls'>('human_only');
 
   useEffect(() => {
@@ -134,6 +143,8 @@ export default function ChatEvaluationPage({ role }: Props) {
           dispositions={loadingDisp ? [] : dispositions}
           onCountChange={setPendingCount}
           agentFilter={agentFilter}
+          initialChatId={targetChatId}
+          onChatNotFound={() => setTab('reviewed')}
         />
       </div>
 
@@ -148,6 +159,7 @@ export default function ChatEvaluationPage({ role }: Props) {
         <ReviewedChatsTable
           dispositions={loadingDisp ? [] : dispositions}
           agentFilter={agentFilter}
+          initialChatId={targetChatId}
         />
       </div>
 

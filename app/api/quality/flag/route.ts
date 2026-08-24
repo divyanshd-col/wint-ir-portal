@@ -17,15 +17,22 @@ export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
-  const { scoreId, chatId, agentNote, challengedParams, raisedByRole } = await req.json();
-  if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
+  const { scoreId, chatId, callId, agentNote, challengedParams, raisedByRole } = await req.json();
+  const effectiveChatId = chatId || callId;
+  if (!effectiveChatId) return NextResponse.json({ error: 'chatId or callId required' }, { status: 400 });
 
   const { readConfig } = await import('@/lib/config');
   const config = await readConfig();
   const email = (session.user as any)?.email || '';
   const role  = (session.user as any)?.role  || '';
   const configUser = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
-  const agentName = configUser?.agentName || email.split('@')[0];
+  let agentName = configUser?.agentName || '';
+  if (!agentName && email) {
+    const { getUserByEmail } = await import('@/lib/users');
+    const dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser?.name) agentName = dbUser.name;
+  }
+  if (!agentName) agentName = email.split('@')[0];
 
   const params: IQSChallengedParam[] = Array.isArray(challengedParams) ? challengedParams : [];
   const now = new Date().toISOString();
@@ -35,7 +42,7 @@ export async function POST(req: NextRequest) {
   const initialStatus = isTL ? 'tl_forwarded' : 'pending';
 
   const flag: IQSFlag = {
-    id: randomUUID(), scoreId, chatId, agentName, agentEmail: email,
+    id: randomUUID(), scoreId, chatId: effectiveChatId, callId: callId || undefined, agentName, agentEmail: email,
     agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
     raisedByRole: effectiveRaisedByRole, paramCategory: 'qa', status: initialStatus,
   };
@@ -47,7 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (isTL) {
-    const qaName = await resolveQANameForChat(chatId);
+    const qaName = await resolveQANameForChat(effectiveChatId);
     await storeAppendFlagComment({
       id: randomUUID(),
       flagId: flag.id,
@@ -60,7 +67,7 @@ export async function POST(req: NextRequest) {
   }
 
   const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
-  await storeAppendAuditEntry({ id: randomUUID(), action: auditAction, chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
+  await storeAppendAuditEntry({ id: randomUUID(), action: auditAction, chatId: effectiveChatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
 

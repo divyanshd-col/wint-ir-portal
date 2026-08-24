@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, Fragment } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import type { IQSScoreEntry } from '@/lib/quality';
 import { PARAM_NAMES, getDisputeClassification, formatParamLabel } from '@/lib/quality';
@@ -180,7 +181,13 @@ interface Props {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function MyQualityChatsPage({ agentName }: Props) {
-  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>('evaluated');
+  const searchParams = useSearchParams();
+  const targetChatId = searchParams.get('chatId') || searchParams.get('chat_id') || '';
+  const initialTab = searchParams.get('tab') as ('evaluated' | 'disputes' | 'reviewed') | null;
+
+  const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>(
+    initialTab && ['evaluated', 'disputes', 'reviewed'].includes(initialTab) ? initialTab : 'evaluated'
+  );
   const [agentFilter, setAgentFilter] = useState<'all' | 'has_calls'>('all');
 
   // Evaluated Chats State
@@ -189,7 +196,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
   const [expandedEvalId, setExpandedEvalId] = useState<string | null>(null);
 
   // Filters state for Evaluated Chats
-  const [chatIdSearch, setChatIdSearch] = useState('');
+  const [chatIdSearch, setChatIdSearch] = useState(targetChatId);
   const [disposition, setDisposition] = useState('');
   const [subDisposition, setSubDisposition] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -198,6 +205,18 @@ export default function MyQualityChatsPage({ agentName }: Props) {
   const [qualityParam, setQualityParam] = useState('');
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
+
+  // Auto-expand target chat
+  const autoExpandedRef = useRef(false);
+  useEffect(() => {
+    if (targetChatId && !autoExpandedRef.current && entries.length > 0) {
+      const matching = entries.find(e => (e.id || '').toLowerCase().includes(targetChatId.toLowerCase()));
+      if (matching) {
+        setExpandedEvalId(matching.id);
+        autoExpandedRef.current = true;
+      }
+    }
+  }, [entries, targetChatId]);
 
   const [dispositions, setDispositions] = useState<string[]>([]);
   const [dispositionSubMap, setDispositionSubMap] = useState<Record<string, string[]>>({});
@@ -315,8 +334,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
     setLoadingReviewed(true);
     try {
       const [pRes, rRes] = await Promise.all([
-        fetch('/api/ir/disputes?status=pending'),
-        fetch('/api/ir/disputes?status=resolved'),
+        fetch('/api/ir/disputes?status=pending&type=chats'),
+        fetch('/api/ir/disputes?status=resolved&type=chats'),
       ]);
       const [pData, rData] = await Promise.all([pRes.json(), rRes.json()]);
       setPendingDisputes(Array.isArray(pData.disputes) ? pData.disputes : []);

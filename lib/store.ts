@@ -231,6 +231,7 @@ export interface IQSFlag {
   id: string;
   scoreId?: string;
   chatId: string;
+  callId?: string;
   agentName: string;
   agentEmail: string;
   agentNote: string;
@@ -287,15 +288,16 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
 
     await query(`
       INSERT INTO iqs_flags (
-        id, score_id, chat_id, agent_name, agent_email, agent_note,
+        id, score_id, chat_id, call_id, agent_name, agent_email, agent_note,
         challenged_params, flagged_at, updated_at, raised_by_role,
         param_category, parent_flag_id, status, reviewed_by, reviewed_at, review_note
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
       ON CONFLICT (id) DO NOTHING
     `, [
       entry.id,
       entry.scoreId || null,
       String(entry.chatId),
+      entry.callId || null,
       entry.agentName || '',
       entry.agentEmail || '',
       entry.agentNote || '',
@@ -321,7 +323,7 @@ export async function storeGetIQSFlags(): Promise<string[]> {
   try {
     const rows = await query(`
       SELECT
-        id, score_id AS "scoreId", chat_id AS "chatId", agent_name AS "agentName",
+        id, score_id AS "scoreId", chat_id AS "chatId", call_id AS "callId", agent_name AS "agentName",
         agent_email AS "agentEmail", agent_note AS "agentNote", challenged_params AS "challengedParams",
         flagged_at AS "flaggedAt", updated_at AS "updatedAt", raised_by_role AS "raisedByRole",
         param_category AS "paramCategory", parent_flag_id AS "parentFlagId", status,

@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
@@ -163,6 +164,9 @@ function ChatIdCell({ chatId }: { chatId: string }) {
 
 // ─── Section A — Evaluated Chats ──────────────────────────────────────────────
 function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: number) => void }) {
+  const searchParams = useSearchParams();
+  const targetChatId = searchParams.get('chatId') || searchParams.get('chat_id') || '';
+
   const [chats,      setChats]      = useState<TLChatRow[]>([]);
   const [total,      setTotal]      = useState(0);
   const [agents,     setAgents]     = useState<string[]>([]);
@@ -173,6 +177,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   const [pageSizeDrop, setPageSizeDrop] = useState(false);
 
   // Filters
+  const [chatIdSearch, setChatIdSearch] = useState(targetChatId);
   const [agent,   setAgent]   = useState('');
   const [from,    setFrom]    = useState('');
   const [to,      setTo]      = useState('');
@@ -180,12 +185,25 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   const [iqsMax,  setIqsMax]  = useState('');
   const [csat,    setCsat]    = useState<string[]>([]);
 
+  // Auto-expand target chat
+  const autoExpandedRef = React.useRef(false);
+  useEffect(() => {
+    if (targetChatId && !autoExpandedRef.current && chats.length > 0) {
+      const matching = chats.find(c => c.chatId.toLowerCase().includes(targetChatId.toLowerCase()));
+      if (matching) {
+        setExpandedId(matching.chatId);
+        autoExpandedRef.current = true;
+      }
+    }
+  }, [chats, targetChatId]);
+
   const fetchChats = useCallback(async (pg: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set('page', String(pg));
       params.set('limit', String(limit));
+      if (chatIdSearch) params.set('chatId', chatIdSearch);
       if (agent)  params.set('agent', agent);
       if (from)   params.set('from', from);
       if (to)     params.set('to', to);
@@ -203,7 +221,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
     } finally {
       setLoading(false);
     }
-  }, [agent, from, to, iqsMin, iqsMax, csat, limit, onTotalChange]);
+  }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit, onTotalChange]);
 
   useEffect(() => { fetchChats(page); }, [fetchChats, page]);
 
@@ -223,6 +241,13 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
         display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
         padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
       }}>
+        <input
+          type="text"
+          value={chatIdSearch}
+          onChange={e => setChatIdSearch(e.target.value)}
+          placeholder="Search Chat ID…"
+          style={{ ...inputStyle, width: 130 }}
+        />
         {agents.length > 0 && (
           <select value={agent} onChange={e => setAgent(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
             <option value="">All Agents</option>
@@ -468,7 +493,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/cx/tl/disputes?status=${status}`);
+        const res = await fetch(`/api/cx/tl/disputes?status=${status}&type=chats`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
@@ -911,7 +936,12 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
 
 // ─── Root page ────────────────────────────────────────────────────────────────
 export default function QualityChatsPage() {
-  const [tab, setTab] = useState<Tab>('evaluated');
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') as Tab | null;
+
+  const [tab, setTab] = useState<Tab>(
+    initialTab && ['evaluated', 'disputes', 'reviewed'].includes(initialTab) ? initialTab : 'evaluated'
+  );
   const [evaluatedCount, setEvaluatedCount] = useState<number | null>(null);
   const [disputeCount,   setDisputeCount]   = useState<number | null>(null);
   const [reviewedCount,  setReviewedCount]  = useState<number | null>(null);
