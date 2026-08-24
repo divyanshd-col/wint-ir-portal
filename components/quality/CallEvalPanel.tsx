@@ -69,9 +69,9 @@ const PARAM_ALIASES: Record<string, string[]> = {
 };
 
 function normScoreVal(val: any): string {
-  if (val === true || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') return 'Yes';
+  if (val === true || val === 1 || val === '1' || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') return 'Yes';
   if (val === false || val === 0 || val === '0' || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') return 'No';
-  if (val === 1 || val === '1' || val === 'Part' || val === 'part' || val === 'Half' || val === 'half' || val === 'Partial' || val === 'partial' || val === 0.5 || val === '0.5') return 'Half';
+  if (val === 0.5 || val === '0.5' || val === 'Part' || val === 'part' || val === 'Half' || val === 'half' || val === 'Partial' || val === 'partial') return 'Half';
   if (val === 'NA' || val === 'na' || val === null || val === undefined) return 'NA';
   return String(val);
 }
