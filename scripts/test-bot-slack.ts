@@ -18,13 +18,46 @@ async function main() {
   });
   console.log('Test 2 (one YES, one NO):', !test2.isFailure ? 'PASSED (not failure)' : 'FAILED');
 
-  // Test case 3: Triggering Slack alert
+  // Test case 3: Transferred chat (hybrid or isTransferred: true) should NOT trigger BOT alert
+  const testTransferred1 = await fireBotQualityAlert({
+    chatId: `test_transferred_${Date.now()}`,
+    conversationType: 'hybrid',
+    scores: {
+      issue_resolution: 'No',
+      correct_escalation: 'No',
+    },
+  });
+  console.log('Test 3 (hybrid / transferred chat):', !testTransferred1 ? 'PASSED (skipped)' : 'FAILED');
+
+  const testTransferred2 = await fireBotQualityAlert({
+    chatId: `test_transferred_flag_${Date.now()}`,
+    isTransferred: true,
+    scores: {
+      issue_resolution: 'No',
+      correct_escalation: 'No',
+    },
+  });
+  console.log('Test 4 (isTransferred flag):', !testTransferred2 ? 'PASSED (skipped)' : 'FAILED');
+
+  const testAgent = await fireBotQualityAlert({
+    chatId: `test_agent_${Date.now()}`,
+    conversationType: 'agent',
+    scores: {
+      issue_resolution: 'No',
+      correct_escalation: 'No',
+    },
+  });
+  console.log('Test 5 (agent chat):', !testAgent ? 'PASSED (skipped)' : 'FAILED');
+
+  // Test case 6: Pure bot chat triggering Slack alert
   const testChatId = `test_bot_${Date.now()}`;
-  console.log(`\nSending test BOT quality alert for chat ${testChatId}...`);
+  console.log(`\nSending test pure BOT quality alert for chat ${testChatId}...`);
 
   const sent = await fireBotQualityAlert({
     chatId: testChatId,
     agentName: 'Myra (Bot)',
+    conversationType: 'bot',
+    isTransferred: false,
     scores: {
       issue_resolution: 'No',
       correct_escalation: 'No',
