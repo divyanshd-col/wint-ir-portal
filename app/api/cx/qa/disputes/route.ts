@@ -357,12 +357,17 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     if (iqsScore === null && !isBot && !callDb) {
       iqsScore = computeIqsFromRawParams(params, false);
+      if (iqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
+        iqsScore = parseFloat(db.iqs_score);
+      }
     }
     if (botIqsScore === null && !callDb) {
       botIqsScore = computeIqsFromRawParams(params, true);
     }
     if (botIqsScore === null && db?.iqs_score !== null && db?.iqs_score !== undefined) {
-      botIqsScore = parseFloat(db.iqs_score);
+      if (isBot || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+        botIqsScore = parseFloat(db.iqs_score);
+      }
     }
     if (isBot) {
       iqsScore = null;
