@@ -539,18 +539,44 @@ export function extractPooledParams(paramsArray: any[]): Record<string, { yes: n
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
   if (!paramsObj || typeof paramsObj !== 'object') return null;
 
-  const isBotParams = !!(
-    paramsObj.__bot_parameters ||
-    paramsObj.issue_resolution !== undefined ||
-    paramsObj.IssueResolution !== undefined ||
-    paramsObj.bot_handover !== undefined ||
-    paramsObj.BotHandover !== undefined ||
-    (paramsObj.__scores && paramsObj.__scores.bot_iqs !== undefined && paramsObj.__scores.agent_iqs === undefined)
-  );
+  const BOT_ONLY_KEYS = [
+    'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity',
+    'bot_handover', 'BotHandover'
+  ];
+  const HUMAN_ONLY_KEYS = [
+    'expectation_follow_through', 'dissatisfaction_handling', 'dissatisfactionhandling',
+    'escalation_decision', 'escalationdecision', 'readability', 'greeting_handover',
+    'greetinghandover', 'post_call_recap', 'postcallrecap', 'empathy',
+    'ExpectationFollowThrough', 'DissatisfactionHandling', 'EscalationDecision',
+    'Readability', 'GreetingHandover', 'PostCallRecap', 'Empathy',
+    'Technical', 'AllQuestions', 'Expectation', 'Contextual', 'FollowUp', 'Sentences', 'Process', 'Opening', 'Call', 'Grammar'
+  ];
 
-  const targetParams = isBot
-    ? (paramsObj.__bot_parameters || (paramsObj.issue_resolution !== undefined || paramsObj.IssueResolution !== undefined ? paramsObj : null))
-    : (paramsObj.__agent_parameters || (isBotParams ? null : paramsObj));
+  let targetParams: any = null;
+  if (isBot) {
+    if (paramsObj.__bot_parameters) {
+      targetParams = paramsObj.__bot_parameters;
+    } else if (!paramsObj.__agent_parameters) {
+      // Flat object - only treat as bot if it contains bot-only keys and no human-only keys
+      const hasBotOnlyKey = Object.keys(paramsObj).some(k => BOT_ONLY_KEYS.includes(k));
+      const hasHumanOnlyKey = Object.keys(paramsObj).some(k => HUMAN_ONLY_KEYS.includes(k));
+      if (hasBotOnlyKey && !hasHumanOnlyKey) {
+        targetParams = paramsObj;
+      }
+    }
+  } else {
+    if (paramsObj.__agent_parameters) {
+      targetParams = paramsObj.__agent_parameters;
+    } else if (!paramsObj.__bot_parameters) {
+      // Flat object - treat as agent/human if it has human-only keys or does not have exclusive bot-only keys
+      const hasBotOnlyKey = Object.keys(paramsObj).some(k => BOT_ONLY_KEYS.includes(k));
+      const hasHumanOnlyKey = Object.keys(paramsObj).some(k => HUMAN_ONLY_KEYS.includes(k));
+      if (hasHumanOnlyKey || !hasBotOnlyKey) {
+        targetParams = paramsObj;
+      }
+    }
+  }
 
   if (!targetParams || typeof targetParams !== 'object') return null;
 
@@ -563,9 +589,7 @@ export function computeIqsFromRawParams(paramsObj: any, isBot = false): number |
   let hasValidParam = false;
 
   for (const pascal of paramKeys) {
-    const rawVal = (isBot || !isV4)
-      ? (targetParams[PASCAL_TO_DB[pascal] || pascal] ?? targetParams[pascal])
-      : resolveParamCell(targetParams, pascal);
+    const rawVal = resolveParamCell(targetParams, pascal);
     const hasData = rawVal !== undefined && rawVal !== null
       && !(typeof rawVal === 'object' && rawVal.score === undefined);
     if (hasData) {

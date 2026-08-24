@@ -208,12 +208,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     if (iqsScore === null && !isBotOnly) {
       iqsScore = computeIqsFromRawParams(params, false);
+      if (iqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+        iqsScore = parseFloat(r.iqs_score);
+      }
     }
     if (botIqsScore === null) {
       botIqsScore = computeIqsFromRawParams(params, true);
     }
     if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
-      if (r.conversation_type !== 'agent' || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+      if (r.conversation_type === 'bot' || isBotOnly || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
         botIqsScore = parseFloat(r.iqs_score);
       }
     }

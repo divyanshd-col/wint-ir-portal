@@ -11,13 +11,23 @@ import { PARAM_NAMES, PARAM_ORDER, type IQSScoreEntry, calculateWeightedOverallI
 
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
 function toIQSScoreEntry(row: any): IQSScoreEntry {
-  const params = row.parameters || {};
+  const rawParams = row.parameters || {};
+  const isBotRow = row.conversationType === 'bot' || (!rawParams.__agent_parameters && Boolean(rawParams.__bot_parameters));
+  const targetParams = isBotRow
+    ? (rawParams.__bot_parameters || rawParams)
+    : (rawParams.__agent_parameters || rawParams);
+
   const scores: Record<string, string> = {};
   const reasoning: Record<string, string> = {};
-  for (const [key, val] of Object.entries(params) as [string, any][]) {
+  for (const [key, val] of Object.entries(targetParams) as [string, any][]) {
+    if (key.startsWith('__')) continue;
     const k = ALL_DB_KEY_TO_PASCAL[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
-    scores[k]    = val?.score === true ? 'Yes' : val?.score === false ? 'No' : 'NA';
-    reasoning[k] = val?.reasoning || '';
+    const sc = val?.score;
+    scores[k]    = (sc === true || sc === 1 || sc === 'Yes' || sc === 'pass') ? 'Yes'
+      : (sc === 0.5 || sc === 'Half' || sc === 'half') ? 'Half'
+      : (sc === false || sc === 0 || sc === 'No' || sc === 'fail') ? 'No'
+      : 'NA';
+    reasoning[k] = val?.reasoning || val?.comment || '';
   }
   const csatStr = row.csat_score ? String(row.csat_score) : '';
   const tagsStr = row.tags
@@ -30,8 +40,8 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     scoredAt:        row.scoredAt ? new Date(row.scoredAt).toISOString() : '',
     agentName:       row.agentName || '',
     date:            row.date ? String(row.date).slice(0, 10) : '',
-    iqs:             row.iqs,
-    rawParams:       params,
+    iqs:             rawParams?.__scores?.agent_iqs ?? row.iqs,
+    rawParams:       rawParams,
     csat:            csatStr,
     scores,
     reasoning,
