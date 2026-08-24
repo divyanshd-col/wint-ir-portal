@@ -230,20 +230,6 @@ export async function fireQualityAlert(opts: {
     subDisposition: opts.subDisposition,
     failedParams:   sheetParams,
   }).catch((err) => console.error('[quality-alert] Sheet append failed:', err?.message));
-
-  // ── 3. BOT Parameter Failure Alert (Issue Resolution = NO & Correct Escalation = NO) ──
-  if (opts.scores) {
-    fireBotQualityAlert({
-      chatId: opts.chatId,
-      agentName: opts.agentName,
-      contactPhone: opts.contactPhone,
-      scores: opts.scores,
-      reasoning: opts.reasoning,
-      iqs: opts.iqs,
-      disposition: opts.disposition,
-      subDisposition: opts.subDisposition,
-    }).catch(() => {});
-  }
 }
 
 // ── Call-interaction flag (skip scoring) ────────────────────────────────────
@@ -371,7 +357,29 @@ export async function fireBotQualityAlert(opts: {
   iqs?: number;
   disposition?: string;
   subDisposition?: string;
+  conversationType?: string;
+  isTransferred?: boolean;
 }): Promise<boolean> {
+  // 1. Guard against transferred chats or human agent chats explicitly passed
+  if (opts.isTransferred || opts.conversationType === 'hybrid' || opts.conversationType === 'agent' || (opts.conversationType && opts.conversationType !== 'bot')) {
+    console.log(`[quality-alert] Skipping BOT alert for transferred/agent chat ${opts.chatId} (type=${opts.conversationType}, transferred=${opts.isTransferred})`);
+    return false;
+  }
+
+  // 2. Fallback check: verify conversation_type from DB if not provided
+  if (!opts.conversationType && opts.chatId) {
+    try {
+      const { getConversation } = await import('./robylon/db');
+      const conv = await getConversation(opts.chatId);
+      if (conv?.conversation_type && conv.conversation_type !== 'bot') {
+        console.log(`[quality-alert] Skipping BOT alert for transferred/agent chat ${opts.chatId} (db conversation_type=${conv.conversation_type})`);
+        return false;
+      }
+    } catch (e) {
+      console.warn(`[quality-alert] Could not fetch conversation_type for chat ${opts.chatId}:`, e);
+    }
+  }
+
   const botFailure = checkBotFailure(opts.scores || {});
   if (!botFailure.isFailure) return false;
 

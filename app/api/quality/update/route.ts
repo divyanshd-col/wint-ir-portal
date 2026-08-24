@@ -202,10 +202,11 @@ export async function PATCH(req: NextRequest) {
       ? Object.keys(scores).some(k => BOT_ONLY_PASCAL.includes(k))
       : Object.keys(existingParamsObj2).some(k => BOT_ONLY_SNAKE.includes(k));
     const isBot = convType2 === 'bot' || (convType2 !== 'agent' && convType2 !== 'hybrid' && hasBotParams2);
+    const isTransferred = convType2 === 'hybrid' || convType2 === 'agent';
     const isV4b = rowExists ? isV4Evaluation(existing[0].parameters) : true;
     const finalIqs = scores ? calculateIQS(scores, isBot, isV4b) : (rowExists ? existing[0].iqs_score : 0);
 
-    if (scores) {
+    if (scores && isBot && !isTransferred) {
       const { fireBotQualityAlert } = await import('@/lib/quality-alert');
       fireBotQualityAlert({
         chatId,
@@ -215,6 +216,8 @@ export async function PATCH(req: NextRequest) {
         iqs: finalIqs,
         disposition,
         subDisposition,
+        conversationType: convType2 || 'bot',
+        isTransferred: false,
       }).catch(() => {});
     }
 
