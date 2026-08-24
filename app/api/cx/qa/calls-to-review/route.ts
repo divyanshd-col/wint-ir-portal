@@ -203,7 +203,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
      JOIN call_recordings cr ON cr.id = ce.call_id
      LEFT JOIN agents a ON a.id = ce.agent_id
      WHERE ${baseWhere}${extraWhere}
-     ORDER BY ${reviewedMode ? 'ce.reviewed_at DESC' : 'ce.scored_at DESC'}
+     ORDER BY cr.called_at DESC NULLS LAST, ${reviewedMode ? 'ce.reviewed_at DESC NULLS LAST' : 'ce.scored_at DESC NULLS LAST'}
      LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
     dataSqlParams
   );

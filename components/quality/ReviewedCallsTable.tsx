@@ -71,7 +71,14 @@ const CallEvalRow = React.memo(function CallEvalRow({
         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
       >
-        <td style={tdMono}>{call.callId}</td>
+        <td style={tdMono}>
+          <div>{call.callId}</div>
+          {call.calledAt && (
+            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2 }}>
+              {new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+            </div>
+          )}
+        </td>
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
         <td style={td}>{call.disposition}</td>
         <td style={td} onClick={e => e.stopPropagation()}>
@@ -155,8 +162,10 @@ const CallEvalRow = React.memo(function CallEvalRow({
   );
 });
 
+type SortCol = 'callId' | 'agentName' | 'iqsScore';
+
 export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', initialCallId }: Props) {
-  const [sortCol, setSortCol] = useState<'callId' | 'agentName' | 'iqsScore'>('callId');
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const [callIdSearch, setCallIdSearch] = useState(initialCallId || '');
@@ -225,6 +234,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
   }, []);
 
   const sortedCalls = [...calls].sort((a, b) => {
+    if (!sortCol) return 0;
     let cmp = 0;
     if (sortCol === 'callId') cmp = a.callId.localeCompare(b.callId);
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);

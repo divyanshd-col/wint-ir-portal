@@ -1235,7 +1235,7 @@ export async function getAllScoredCalls(opts: {
     LEFT JOIN conversations conv ON conv.id = r.chat_id
     LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, conv.agent_id, r.agent_id)
     ${where}
-    ORDER BY r.called_at DESC
+    ORDER BY r.called_at DESC NULLS LAST, COALESCE(ce.scored_at, s.call_scored_at) DESC NULLS LAST
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `, params);
 
