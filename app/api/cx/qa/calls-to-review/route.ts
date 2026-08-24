@@ -167,6 +167,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filters.status = statusParam;
   }
 
+  // Agent / Interaction filter: all | human_only (default: human_only for QA if applicable or 'all')
+  const agentFilter = searchParams.get('agent_filter') || 'all';
+  if (agentFilter === 'human_only') {
+    extraWhere += ` AND (a.name IS NULL OR a.name NOT IN ('Robylon AI', 'Robylon Automation')) AND (ce.agent_id IS NULL OR ce.agent_id NOT IN (15, 447, 784))`;
+    filters.agentFilter = 'human_only';
+  }
+
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
@@ -176,6 +183,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     `SELECT COUNT(*) AS total
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
+     LEFT JOIN agents a ON a.id = ce.agent_id
      WHERE ${baseWhere}${extraWhere}`,
     sqlParams
   );

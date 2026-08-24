@@ -370,9 +370,45 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
         }}>Reset</button>
 
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
-          {loading ? 'Loading…' : `Total: ${total}`}
-        </span>
+
+        {/* Rows per page selector + count */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
+            {loading ? 'Loading…' : `Showing ${calls.length} of ${total}`}
+          </span>
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button
+              title="Rows per page"
+              onClick={() => setOpenDrop(openDrop === 'pagesize' ? null : 'pagesize')}
+              style={{
+                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            {openDrop === 'pagesize' && (
+              <div style={{ ...dropdown, right: 0, left: 'auto', minWidth: 120 }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                  Rows per page
+                </div>
+                {[20, 50, 100].map(n => (
+                  <div
+                    key={n}
+                    style={{ ...dropItem, fontWeight: pageSize === n ? 600 : 400 }}
+                    onClick={() => { setPageSize(n); fetchData(1, n); setOpenDrop(null); }}
+                  >
+                    {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
@@ -412,6 +448,25 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Footer */}
+      {total > pageSize && !loading && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Page {page} of {Math.ceil(total / pageSize)}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button disabled={page <= 1} onClick={() => fetchData(page - 1)} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page <= 1 ? 'not-allowed' : 'pointer',
+              color: page <= 1 ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>← Prev</button>
+            <button disabled={page >= Math.ceil(total / pageSize)} onClick={() => fetchData(page + 1)} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page >= Math.ceil(total / pageSize) ? 'not-allowed' : 'pointer',
+              color: page >= Math.ceil(total / pageSize) ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>Next →</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
