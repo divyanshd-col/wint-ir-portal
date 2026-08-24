@@ -21,36 +21,49 @@ const PAGE_SIZE = 50;
 
 // ── Convert PostgreSQL row → IQSScoreEntry ────────────────────────────────────
 function toIQSScoreEntry(row: any): IQSScoreEntry {
-  const params = row.parameters || {};
+  const rawParams = row.parameters || {};
+  const isBotRow = row.conversationType === 'bot' || (!rawParams.__agent_parameters && Boolean(rawParams.__bot_parameters));
+  const targetParams = isBotRow
+    ? (rawParams.__bot_parameters || rawParams)
+    : (rawParams.__agent_parameters || rawParams);
+
   const scores: Record<string, string> = {};
   const reasoning: Record<string, string> = {};
   let uncertainParameters: Array<{ parameter: string; question: string }> | undefined;
   let reviewNote: string | undefined;
 
-  for (const [key, val] of Object.entries(params) as [string, any][]) {
-    if (key === '__uncertain') {
-      if (Array.isArray(val) && val.length > 0) uncertainParameters = val;
-      continue;
-    }
-    if (key === '__review_note') {
-      if (typeof val === 'string' && val) reviewNote = val;
+  for (const [key, val] of Object.entries(targetParams) as [string, any][]) {
+    if (key.startsWith('__')) {
+      if (key === '__uncertain' && Array.isArray(val) && val.length > 0) uncertainParameters = val;
+      if (key === '__review_note' && typeof val === 'string' && val) reviewNote = val;
       continue;
     }
     // Map DB snake_case key → legacy PascalCase; fall back to first-letter capitalize
     const k = ALL_DB_KEY_TO_PASCAL[key] ?? (key.charAt(0).toUpperCase() + key.slice(1));
-    scores[k]    = val.score === true ? 'Yes' : val.score === false ? 'No' : 'NA';
-    reasoning[k] = val.reasoning || '';
+    const sc = val?.score;
+    scores[k]    = (sc === true || sc === 1 || sc === 'Yes' || sc === 'pass') ? 'Yes'
+      : (sc === 0.5 || sc === 'Half' || sc === 'half') ? 'Half'
+      : (sc === false || sc === 0 || sc === 'No' || sc === 'fail') ? 'No'
+      : 'NA';
+    reasoning[k] = val?.reasoning || val?.comment || '';
   }
+  if (!uncertainParameters && Array.isArray(rawParams.__uncertain) && rawParams.__uncertain.length > 0) {
+    uncertainParameters = rawParams.__uncertain;
+  }
+  if (!reviewNote && typeof rawParams.__review_note === 'string' && rawParams.__review_note) {
+    reviewNote = rawParams.__review_note;
+  }
+
   const csatStr = row.csat_score ? String(row.csat_score) : '';
   const tags = row.tags || {};
 
   let botIqsScore: number | null = null;
   let callIqsScore: number | null = null;
   let agentIqsScore: number | null = row.iqs != null ? Number(row.iqs) : null;
-  if (params?.__scores) {
-    if (params.__scores.agent_iqs != null) agentIqsScore = parseFloat(params.__scores.agent_iqs);
-    if (params.__scores.bot_iqs != null) botIqsScore = parseFloat(params.__scores.bot_iqs);
-    if (params.__scores.call_iqs != null) callIqsScore = parseFloat(params.__scores.call_iqs);
+  if (rawParams?.__scores) {
+    if (rawParams.__scores.agent_iqs != null) agentIqsScore = parseFloat(rawParams.__scores.agent_iqs);
+    if (rawParams.__scores.bot_iqs != null) botIqsScore = parseFloat(rawParams.__scores.bot_iqs);
+    if (rawParams.__scores.call_iqs != null) callIqsScore = parseFloat(rawParams.__scores.call_iqs);
   }
 
   return {
@@ -65,7 +78,7 @@ function toIQSScoreEntry(row: any): IQSScoreEntry {
     csat:            csatStr,
     scores:          scores as Record<string, any>,
     reasoning,
-    parameters:      params,
+    parameters:      rawParams,
     summary:         '',
     provider:        row.modelVersion?.includes('gemini') ? 'gemini' : 'claude',
     model:           row.modelVersion || '',

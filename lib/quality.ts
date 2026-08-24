@@ -233,18 +233,18 @@ export function normalizeScore(val: number | boolean | string | null): {
   badgeBg: string;
   badgeText: string;
 } {
-  // 1. Match 'Yes' / true / 2 / '2' / 'PASS'
-  if (val === true || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') {
+  // 1. Match 'Yes' / true / 1 / '1' / 2 / '2' / 'PASS' / 'pass'
+  if (val === true || val === 1 || val === '1' || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') {
     return { label: 'Yes', value: 1.0, badgeBg: '#dcfce7', badgeText: '#15803d' };
   }
   
-  // 2. Match 'No' / false / 0.0 / 0 / 'FAIL'
-  if (val === false || val === 0 || val === '0' || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') {
+  // 2. Match 'No' / false / 0.0 / 0 / '0' / 'FAIL' / 'fail'
+  if (val === false || val === 0 || val === '0' || val === 0.0 || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') {
     return { label: 'No', value: 0.0, badgeBg: '#fee2e2', badgeText: '#b91c1c' };
   }
   
-  // 3. Match 'Half' / 0.5 / 1 / '1' / 'Partial' / 'Part'
-  if (val === 0.5 || val === '0.5' || val === 1 || val === '1' || val === 'Half' || val === 'half' || val === 'Partial' || val === 'partial' || val === 'Part' || val === 'part') {
+  // 3. Match 'Half' / 0.5 / '0.5' / 'Partial' / 'partial' / 'Part' / 'part'
+  if (val === 0.5 || val === '0.5' || val === 'Half' || val === 'half' || val === 'Partial' || val === 'partial' || val === 'Part' || val === 'part') {
     return { label: 'Half', value: 0.5, badgeBg: '#fef3c7', badgeText: '#b45309' };
   }
   
@@ -539,18 +539,44 @@ export function extractPooledParams(paramsArray: any[]): Record<string, { yes: n
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
   if (!paramsObj || typeof paramsObj !== 'object') return null;
 
-  const isBotParams = !!(
-    paramsObj.__bot_parameters ||
-    paramsObj.issue_resolution !== undefined ||
-    paramsObj.IssueResolution !== undefined ||
-    paramsObj.bot_handover !== undefined ||
-    paramsObj.BotHandover !== undefined ||
-    (paramsObj.__scores && paramsObj.__scores.bot_iqs !== undefined && paramsObj.__scores.agent_iqs === undefined)
-  );
+  const BOT_ONLY_KEYS = [
+    'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity',
+    'bot_handover', 'BotHandover'
+  ];
+  const HUMAN_ONLY_KEYS = [
+    'expectation_follow_through', 'dissatisfaction_handling', 'dissatisfactionhandling',
+    'escalation_decision', 'escalationdecision', 'readability', 'greeting_handover',
+    'greetinghandover', 'post_call_recap', 'postcallrecap', 'empathy',
+    'ExpectationFollowThrough', 'DissatisfactionHandling', 'EscalationDecision',
+    'Readability', 'GreetingHandover', 'PostCallRecap', 'Empathy',
+    'Technical', 'AllQuestions', 'Expectation', 'Contextual', 'FollowUp', 'Sentences', 'Process', 'Opening', 'Call', 'Grammar'
+  ];
 
-  const targetParams = isBot
-    ? (paramsObj.__bot_parameters || (paramsObj.issue_resolution !== undefined || paramsObj.IssueResolution !== undefined ? paramsObj : null))
-    : (paramsObj.__agent_parameters || (isBotParams ? null : paramsObj));
+  let targetParams: any = null;
+  if (isBot) {
+    if (paramsObj.__bot_parameters) {
+      targetParams = paramsObj.__bot_parameters;
+    } else if (!paramsObj.__agent_parameters) {
+      // Flat object - only treat as bot if it contains bot-only keys and no human-only keys
+      const hasBotOnlyKey = Object.keys(paramsObj).some(k => BOT_ONLY_KEYS.includes(k));
+      const hasHumanOnlyKey = Object.keys(paramsObj).some(k => HUMAN_ONLY_KEYS.includes(k));
+      if (hasBotOnlyKey && !hasHumanOnlyKey) {
+        targetParams = paramsObj;
+      }
+    }
+  } else {
+    if (paramsObj.__agent_parameters) {
+      targetParams = paramsObj.__agent_parameters;
+    } else if (!paramsObj.__bot_parameters) {
+      // Flat object - treat as agent/human if it has human-only keys or does not have exclusive bot-only keys
+      const hasBotOnlyKey = Object.keys(paramsObj).some(k => BOT_ONLY_KEYS.includes(k));
+      const hasHumanOnlyKey = Object.keys(paramsObj).some(k => HUMAN_ONLY_KEYS.includes(k));
+      if (hasHumanOnlyKey || !hasBotOnlyKey) {
+        targetParams = paramsObj;
+      }
+    }
+  }
 
   if (!targetParams || typeof targetParams !== 'object') return null;
 
@@ -563,9 +589,7 @@ export function computeIqsFromRawParams(paramsObj: any, isBot = false): number |
   let hasValidParam = false;
 
   for (const pascal of paramKeys) {
-    const rawVal = (isBot || !isV4)
-      ? (targetParams[PASCAL_TO_DB[pascal] || pascal] ?? targetParams[pascal])
-      : resolveParamCell(targetParams, pascal);
+    const rawVal = resolveParamCell(targetParams, pascal);
     const hasData = rawVal !== undefined && rawVal !== null
       && !(typeof rawVal === 'object' && rawVal.score === undefined);
     if (hasData) {
