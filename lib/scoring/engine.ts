@@ -372,7 +372,8 @@ export async function executeScoring(
     complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
   }).catch(() => {});
 
-  if (botParameters) {
+  // BOT flag channel alert: only for pure bot chats that were not transferred
+  if (botParameters && timing.conversationType === 'bot') {
     fireBotQualityAlert({
       chatId,
       agentName:           finalAgentName,
@@ -382,6 +383,8 @@ export async function executeScoring(
       iqs:                 botPass?.iqs_score ?? undefined,
       disposition,
       subDisposition,
+      conversationType:    'bot',
+      isTransferred:       false,
     }).catch(() => {});
   }
 
