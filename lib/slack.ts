@@ -43,8 +43,9 @@ export async function sendSlackMessage(
     const body: any = {
       channel,
       text,
-      username,
+      as_user: true,
     };
+    if (username && username !== 'cx-agent') body.username = username;
     if (icon_emoji) body.icon_emoji = icon_emoji;
     if (blocks?.length) body.blocks = blocks;
     const res = await fetch('https://slack.com/api/chat.postMessage', {

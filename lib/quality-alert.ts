@@ -97,12 +97,14 @@ export async function fireQualityAlert(opts: {
   breaches?: Array<{ type?: string; breach_type?: string; quote?: string; note?: string } | string>;
   complianceFlag?: boolean;
 }): Promise<void> {
+  let complianceToken = process.env.COMPLIANCE_SLACK_BOT_TOKEN || '';
   let token = process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
-  if (!token) {
+  if (!complianceToken || !token) {
     try {
       const { readConfig } = await import('./config');
       const config = await readConfig();
-      token = config.slackUserToken || '';
+      if (!complianceToken) complianceToken = (config as any).complianceSlackBotToken || '';
+      if (!token) token = (config as any).slackBotToken || config.slackUserToken || '';
     } catch {}
   }
   const complianceChannel = process.env.COMPLIANCE_SLACK_CHANNEL || process.env.QUALITY_SLACK_CHANNEL || 'C0BRLHDDGQ0';
@@ -147,7 +149,7 @@ export async function fireQualityAlert(opts: {
   await storeMarkQualityAlert(opts.chatId);
 
   // ── 1. Slack — Compliance Failure Alert ─────────────────────────────────────
-  if (isComplianceFailure && token && complianceChannel) {
+  if (isComplianceFailure && (complianceToken || token) && complianceChannel) {
     const chatLink = /^\d+$/.test((opts.chatId || '').trim())
       ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
       : opts.chatId;
@@ -180,10 +182,8 @@ export async function fireQualityAlert(opts: {
       reasons.join('\n'),
     ];
 
-    const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), token, undefined, {
-      username: 'Wint Compliance Alert',
-      icon_emoji: ':warning:',
-    });
+    const targetToken = complianceToken || token;
+    const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), targetToken);
     console.log(`[quality-alert] Compliance failure Slack alert for chat ${opts.chatId}: ${sent ? 'SUCCESS' : 'FAILED'}`);
   }
   // ── 2. Slack — Non-compliance Quality Parameter Alert ───────────────────────
