@@ -824,22 +824,24 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
             {/* Pagination footer */}
             {totalEvaluatedPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
-                <button
-                  onClick={() => setPage(p => Math.max(0, p - 1))}
-                  disabled={page === 0}
-                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.5 : 1 }}
-                >
-                  ← Prev
-                </button>
-                <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>Page {page + 1} of {totalEvaluatedPages}</span>
-                <button
-                  onClick={() => setPage(p => Math.min(totalEvaluatedPages - 1, p + 1))}
-                  disabled={page >= totalEvaluatedPages - 1}
-                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: page >= totalEvaluatedPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalEvaluatedPages - 1 ? 0.5 : 1 }}
-                >
-                  Next →
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
+                <span style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>Page {page + 1} of {totalEvaluatedPages}</span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    style={{ height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: page === 0 ? 'not-allowed' : 'pointer', opacity: page === 0 ? 0.5 : 1 }}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    onClick={() => setPage(p => Math.min(totalEvaluatedPages - 1, p + 1))}
+                    disabled={page >= totalEvaluatedPages - 1}
+                    style={{ height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: page >= totalEvaluatedPages - 1 ? 'not-allowed' : 'pointer', opacity: page >= totalEvaluatedPages - 1 ? 0.5 : 1 }}
+                  >
+                    Next →
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1049,22 +1051,24 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
             {/* Pagination footer */}
             {totalPendingPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
-                <button
-                  onClick={() => setPendingPage(p => Math.max(1, p - 1))}
-                  disabled={pendingPage === 1}
-                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: pendingPage === 1 ? 'not-allowed' : 'pointer', opacity: pendingPage === 1 ? 0.5 : 1 }}
-                >
-                  ← Prev
-                </button>
-                <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>Page {pendingPage} of {totalPendingPages}</span>
-                <button
-                  onClick={() => setPendingPage(p => Math.min(totalPendingPages, p + 1))}
-                  disabled={pendingPage >= totalPendingPages}
-                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: pendingPage >= totalPendingPages ? 'not-allowed' : 'pointer', opacity: pendingPage >= totalPendingPages ? 0.5 : 1 }}
-                >
-                  Next →
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
+                <span style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>Page {pendingPage} of {totalPendingPages}</span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setPendingPage(p => Math.max(1, p - 1))}
+                    disabled={pendingPage === 1}
+                    style={{ height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: pendingPage === 1 ? 'not-allowed' : 'pointer', opacity: pendingPage === 1 ? 0.5 : 1 }}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    onClick={() => setPendingPage(p => Math.min(totalPendingPages, p + 1))}
+                    disabled={pendingPage >= totalPendingPages}
+                    style={{ height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: pendingPage >= totalPendingPages ? 'not-allowed' : 'pointer', opacity: pendingPage >= totalPendingPages ? 0.5 : 1 }}
+                  >
+                    Next →
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -1262,22 +1266,24 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
             {/* Pagination footer */}
             {totalReviewedPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8, padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
-                <button
-                  onClick={() => setReviewedPage(p => Math.max(1, p - 1))}
-                  disabled={reviewedPage === 1}
-                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: reviewedPage === 1 ? 'not-allowed' : 'pointer', opacity: reviewedPage === 1 ? 0.5 : 1 }}
-                >
-                  ← Prev
-                </button>
-                <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>Page {reviewedPage} of {totalReviewedPages}</span>
-                <button
-                  onClick={() => setReviewedPage(p => Math.min(totalReviewedPages, p + 1))}
-                  disabled={reviewedPage >= totalReviewedPages}
-                  style={{ height: 28, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: reviewedPage >= totalReviewedPages ? 'not-allowed' : 'pointer', opacity: reviewedPage >= totalReviewedPages ? 0.5 : 1 }}
-                >
-                  Next →
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid var(--qa-border)' }}>
+                <span style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>Page {reviewedPage} of {totalReviewedPages}</span>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setReviewedPage(p => Math.max(1, p - 1))}
+                    disabled={reviewedPage === 1}
+                    style={{ height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: reviewedPage === 1 ? 'not-allowed' : 'pointer', opacity: reviewedPage === 1 ? 0.5 : 1 }}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    onClick={() => setReviewedPage(p => Math.min(totalReviewedPages, p + 1))}
+                    disabled={reviewedPage >= totalReviewedPages}
+                    style={{ height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: reviewedPage >= totalReviewedPages ? 'not-allowed' : 'pointer', opacity: reviewedPage >= totalReviewedPages ? 0.5 : 1 }}
+                  >
+                    Next →
+                  </button>
+                </div>
               </div>
             )}
           </div>
