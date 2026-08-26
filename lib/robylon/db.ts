@@ -981,7 +981,7 @@ export async function getCallRecording(callId: string): Promise<CallRecordingRow
  *  Safe to call before or after the chat IQS row is created — ON CONFLICT merges. */
 export async function updateCallIQSScore(data: {
   chatId: string;
-  callIqsScore: number;
+  callIqsScore: number | null;
   callParameters: Record<string, IQSParameterResult>;
   callModelVersion: string;
 }): Promise<void> {

@@ -92,7 +92,7 @@ export interface CallIQSScoreEntry {
   interruptionCount: number;
   deadAirCount: number;
   poorListeningCount: number;
-  iqs: number;
+  iqs: number | null;
   scores: Record<string, CallParamScore>;
   reasoning: Record<string, string>;
   summary: string;
@@ -101,7 +101,7 @@ export interface CallIQSScoreEntry {
 }
 
 // ── IQS calculation ───────────────────────────────────────────────────────────
-export function calculateCallIQS(scores: Record<string, CallParamScore>): number {
+export function calculateCallIQS(scores: Record<string, CallParamScore>): number | null {
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(CALL_WEIGHTS)) {
     const score = scores[param] ?? 'NA';
@@ -112,7 +112,7 @@ export function calculateCallIQS(scores: Record<string, CallParamScore>): number
       }
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : 0;
+  return possible > 0 ? Math.round((total / possible) * 100) : null;
 }
 
 // ── Build readable text from segments (for LLM scoring input) ─────────────────
@@ -462,10 +462,16 @@ Before scoring ANY parameter, read the COMPLETE call transcript from segment [1]
 
 ## SCORING PHILOSOPHY
 - Catch DEFINITIVE failures, not minor imperfections. When in doubt, score Yes.
-- NA counts as Yes (pass) in the final IQS calculation.
+- NA parameters are excluded from the IQS calculation (both numerator and denominator). If all parameters are NA, the IQS score is NIL (null).
 - Never penalise for something the transcript does not clearly show.
 - You receive the CALL TRANSCRIPT (primary — score this) and optionally a WHATSAPP CHAT TRANSCRIPT (context only).
 - **Date awareness**: Today's date is provided in CALL METADATA. Any date on or before today is a PAST event that has already occurred. Do NOT treat a past date as a missed future commitment when scoring Expectation. Only fail Expectation for missing or vague timelines on genuinely unresolved future issues — never for referencing dates that have already passed.
+
+## EMPTY, UNCONNECTED, OR NON-CONVERSATION CALLS / JUNK CHATS
+- If the call never went through, did not connect, was unanswered, disconnected immediately with no conversation, or was categorized as a Junk Chat / No query asked with no substantive dialogue:
+  - Set EVERY parameter score to "NA".
+  - Set summary explaining that the call did not take place / no conversation occurred.
+  - Do NOT mark parameters as "No" or penalize the agent with 0 for an unattempted or failed connection. All "NA" will produce a NIL (null) score.
 
 ---
 
@@ -773,7 +779,7 @@ export function parseCallScoringResponse(raw: string): {
   scores: Record<string, CallParamScore>;
   reasoning: Record<string, string>;
   poorListeningSegments: PoorListeningSegment[];
-  iqs: number;
+  iqs: number | null;
   summary: string;
   kbCitation: string | null;
 } {
