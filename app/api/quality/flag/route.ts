@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (isTL) {
-    const qaName = await resolveQANameForChat(effectiveChatId);
+    const qaName = await resolveQANameForChat(effectiveChatId, undefined, callId);
     await storeAppendFlagComment({
       id: randomUUID(),
       flagId: flag.id,

@@ -753,7 +753,23 @@ export default function TLQualityCallsPage() {
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
                           style={{ cursor: 'pointer', background: isOpen ? 'var(--qa-gray-50)' : undefined }}
                         >
-                          <td style={TD_MONO}>{callKey}</td>
+                          <td style={TD_MONO}>
+                            {/^\d+$/.test(String(callKey).trim()) ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ color: 'var(--qa-text-2, #6B6B6B)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                              >
+                                {callKey}
+                              </a>
+                            ) : (
+                              callKey
+                            )}
+                          </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
@@ -1008,7 +1024,23 @@ export default function TLQualityCallsPage() {
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
                           style={{ cursor: 'pointer', background: isOpen ? 'var(--qa-gray-50)' : undefined }}
                         >
-                          <td style={TD_MONO}>{callKey}</td>
+                          <td style={TD_MONO}>
+                            {/^\d+$/.test(String(callKey).trim()) ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ color: 'var(--qa-text-2, #6B6B6B)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                              >
+                                {callKey}
+                              </a>
+                            ) : (
+                              callKey
+                            )}
+                          </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>

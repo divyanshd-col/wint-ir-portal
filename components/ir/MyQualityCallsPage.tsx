@@ -961,7 +961,21 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             transition: 'background 0.15s ease',
                           }}
                         >
-                          <td style={TD_MONO}>{callKey}</td>
+                          <td style={TD_MONO}>
+                            {/^\d+$/.test(String(callKey).trim()) ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: '#C7C7CC', fontFamily: MONO, fontSize: 13 }}
+                              >
+                                {callKey}
+                              </a>
+                            ) : (
+                              callKey
+                            )}
+                          </td>
                           <td style={TD_BASE}>
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>
@@ -1191,7 +1205,21 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             transition: 'background 0.15s ease',
                           }}
                         >
-                          <td style={TD_MONO}>{callKey}</td>
+                          <td style={TD_MONO}>
+                            {/^\d+$/.test(String(callKey).trim()) ? (
+                              <a
+                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: '#C7C7CC', fontFamily: MONO, fontSize: 13 }}
+                              >
+                                {callKey}
+                              </a>
+                            ) : (
+                              callKey
+                            )}
+                          </td>
                           <td style={TD_BASE}>
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>
