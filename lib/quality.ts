@@ -375,7 +375,7 @@ export function analyzeConversationTiming(
 // every key would miss and the old `?? 'Yes'` default silently returned 100.
 // Skipping instead surfaces the mismatch as an obviously-wrong low score.
 // Pass the correct isV4 flag at every call site so the weight set matches the scores.
-export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number {
+export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number | null {
   const activeWeights = isBot ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(activeWeights)) {
@@ -388,7 +388,7 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
       total += weight * 0.5;
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : null as any;
+  return possible > 0 ? Math.round((total / possible) * 100) : null;
 }
 
 export type PooledParamInput =
@@ -782,9 +782,15 @@ Before scoring ANY parameter, read the COMPLETE transcript from the very first m
 - Being too strict is as bad as being too lenient.
 - When in doubt, give the agent the benefit of the doubt → score Yes.
 - A single factual error can cascade into No on multiple parameters.
-- NA parameters are treated as Yes (pass) in the final IQS calculation.
+- NA parameters are excluded from the IQS calculation (both numerator and denominator). If all parameters are NA, the IQS score is NIL (null).
 - **NEVER assume a failure when the transcript is ambiguous.** If you are not certain the agent did something wrong, score NA and flag for QA review.
 - **Date awareness**: Today's date is provided in CHAT METADATA. Any date on or before today is a PAST event that has already occurred. Do NOT treat a past date as a missed future commitment when scoring Expectation Setting. Only fail Expectation Setting for missing or vague timelines on genuinely unresolved future issues — never for referencing dates that have already passed.
+
+## EMPTY OR NON-CHATS / JUNK CHATS / CALLS THAT DID NOT CONNECT
+If there is no substantive interaction (a customer message with no agent reply, an instant drop, a call that did not go through or connect, or Junk Chats with no query asked / no conversation):
+- Set EVERY parameter score to "NA".
+- Explain in the summary that the interaction did not take place or no query was raised.
+- Do NOT score parameters as "No" or penalize the agent with 0 for non-interactions. All "NA" will evaluate to NIL (null).
 
 ## WINT WEALTH SPECIFIC POLICIES
 
