@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { readConfig } from '@/lib/config';
-import { geminiGenerate, getIQSGeminiKeys } from '@/lib/gemini';
+import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import {
   CALL_TRANSCRIPTION_PROMPT,
   parseTranscriptionResponse,
@@ -100,18 +100,16 @@ async function processCallWebhook(body: any): Promise<void> {
 
   let transcriptionRaw = '';
   try {
-    transcriptionRaw = await geminiGenerate(
+    transcriptionRaw = await callGeminiForCall(
       geminiKeys,
-      'gemini-3.5-flash',
       [{
-        role: 'user',
         parts: [
-          { inlineData: { mimeType, data: audioBase64 } },
+          { inline_data: { mime_type: mimeType, data: audioBase64 } },
           { text: CALL_TRANSCRIPTION_PROMPT },
         ],
       }],
-      {},
-      120_000,
+      undefined,
+      270_000,
     );
   } catch (err: any) {
     console.error(`[call-webhook] Transcription failed for call ${callId}:`, err.message);

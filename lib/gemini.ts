@@ -126,7 +126,7 @@ export async function callGeminiForCall(
       generationConfig: {
         temperature: 0,
         responseMimeType: 'application/json',
-        maxOutputTokens: 8192,
+        maxOutputTokens: 65536,
         ...(!isPro ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
       },
     });
@@ -148,6 +148,11 @@ export async function callGeminiForCall(
           );
           const res  = await Promise.race([fetchPromise, timeoutPromise]);
           const data = await res.json() as any;
+
+          const finishReason = data.candidates?.[0]?.finishReason;
+          if (finishReason && finishReason !== 'STOP') {
+            console.warn(`[callGeminiForCall] Response finished with reason: ${finishReason}`);
+          }
 
           const errMsg = (data.error?.message) ?? '';
           const isCapacity   = res.status === 503 || res.status === 429
