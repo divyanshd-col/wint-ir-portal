@@ -289,7 +289,35 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                   onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                 >
-                  <td style={tdMono}>{rowKey}</td>
+                  <td style={tdMono}>
+                    {d.chatId && /^\d+$/.test(String(d.chatId).trim()) ? (
+                      <a
+                        href={`https://app.robylon.ai/unified-inbox/share/${String(d.chatId).trim()}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                      >
+                        {rowKey}
+                      </a>
+                    ) : /^\d+$/.test(String(rowKey).trim()) ? (
+                      <a
+                        href={`https://app.robylon.ai/unified-inbox/share/${String(rowKey).trim()}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                      >
+                        {rowKey}
+                      </a>
+                    ) : (
+                      rowKey
+                    )}
+                  </td>
                   <td style={td}>
                     {d.closedAt ? `${fmtDate(d.closedAt)} ${fmtTime(d.closedAt)}` : '—'}
                   </td>

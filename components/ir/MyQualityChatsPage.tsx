@@ -107,15 +107,16 @@ function CSATBadge({ score }: { score: string | number | null }) {
 }
 
 function ChatIdCell({ chatId }: { chatId: string }) {
-  const id = chatId ?? '';
+  const id = String(chatId ?? '').trim();
   const display = id.length > 18 ? id.slice(0, 18) + '…' : id;
-  const isRobylon = /^\d+$/.test(id.trim());
+  const isRobylon = /^\d+$/.test(id);
   if (isRobylon) {
     return (
       <a
         href={`https://app.robylon.ai/unified-inbox/share/${id}`}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
         style={{
           color: 'var(--qa-text, #111111)',
           textDecoration: 'underline',

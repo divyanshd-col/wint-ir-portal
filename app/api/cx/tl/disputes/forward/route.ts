@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
     .find((f: any) => f && f.id === flagId);
 
   const chatId = flag?.chatId || '';
-  const qaName = await resolveQANameForChat(chatId);
+  const callId = flag?.callId;
+  const qaName = await resolveQANameForChat(chatId, undefined, callId);
 
   const config = await readConfig();
   const configUser = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());

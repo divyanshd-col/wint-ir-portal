@@ -4,34 +4,55 @@ import { readConfig } from '@/lib/config';
 export interface QAResolverDeps {
   query?: <T = any>(sql: string, params?: any[]) => Promise<T[]>;
   readConfig?: () => Promise<any>;
+  callId?: string | null;
 }
 
-export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps): Promise<string> {
-  if (!chatId) return 'Manorathi';
+export async function resolveQANameForChat(
+  chatId: string,
+  deps?: QAResolverDeps,
+  callId?: string | null,
+): Promise<string> {
+  const effectiveCallId = callId || deps?.callId;
+  if (!chatId && !effectiveCallId) return 'Manorathi';
   const queryFn = deps?.query || query;
   const readConfigFn = deps?.readConfig || readConfig;
 
   try {
-    const revRows = await queryFn<{ reviewed_by: string | null; agent_id: number | null; disposition: string | null }>(`
-      SELECT 
-        COALESCE(
-          i.reviewed_by,
-          (SELECT reviewed_by FROM call_evaluations ce WHERE ce.chat_id = c.id AND reviewed_by IS NOT NULL AND reviewed_by != '' LIMIT 1)
-        ) AS reviewed_by,
-        c.agent_id,
-        c.tags->>'disposition' AS disposition
-      FROM conversations c
-      LEFT JOIN iqs_scores i ON i.chat_id = c.id
-      WHERE c.id = $1
-    `, [chatId]);
+    let row: { reviewed_by: string | null; agent_id: number | null; disposition: string | null } | undefined;
 
-    let row = revRows[0];
-    if (!row) {
+    // 0. If effectiveCallId is provided, resolve directly from call_recordings / call_evaluations first
+    if (effectiveCallId) {
       const callRows = await queryFn<{ reviewed_by: string | null; agent_id: number | null; disposition: string | null }>(`
-        SELECT ce.reviewed_by, ce.agent_id, cr.call_disposition AS disposition
-        FROM call_evaluations ce
-        JOIN call_recordings cr ON cr.id = ce.call_id
-        WHERE ce.call_id = $1 OR ce.chat_id = $1
+        SELECT ce.reviewed_by, COALESCE(ce.agent_id, cr.agent_id) AS agent_id, cr.call_disposition AS disposition
+        FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+        WHERE cr.id = $1
+      `, [effectiveCallId]);
+      row = callRows[0];
+    }
+
+    if (!row && chatId) {
+      const revRows = await queryFn<{ reviewed_by: string | null; agent_id: number | null; disposition: string | null }>(`
+        SELECT 
+          COALESCE(
+            i.reviewed_by,
+            (SELECT reviewed_by FROM call_evaluations ce WHERE ce.chat_id = c.id AND reviewed_by IS NOT NULL AND reviewed_by != '' LIMIT 1)
+          ) AS reviewed_by,
+          c.agent_id,
+          c.tags->>'disposition' AS disposition
+        FROM conversations c
+        LEFT JOIN iqs_scores i ON i.chat_id = c.id
+        WHERE c.id = $1
+      `, [chatId]);
+      row = revRows[0];
+    }
+
+    if (!row && chatId) {
+      const callRows = await queryFn<{ reviewed_by: string | null; agent_id: number | null; disposition: string | null }>(`
+        SELECT ce.reviewed_by, COALESCE(ce.agent_id, cr.agent_id) AS agent_id, cr.call_disposition AS disposition
+        FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+        WHERE cr.id = $1 OR cr.chat_id = $1
       `, [chatId]);
       row = callRows[0];
     }
@@ -65,7 +86,12 @@ export async function resolveQANameForChat(chatId: string, deps?: QAResolverDeps
       if (row.disposition && row.disposition.trim()) {
         const cleanDisp = row.disposition.trim().toLowerCase();
         const mapEntry = config.qaDispositionMap?.find((m: any) =>
-          m.dispositions?.some((d: string) => d.trim().toLowerCase() === cleanDisp)
+          m.dispositions?.some((d: string) => {
+            const cd = d.trim().toLowerCase();
+            return cd === cleanDisp ||
+                   (cleanDisp === 'junk' && cd === 'junk chats') ||
+                   (cleanDisp === 'junk chats' && cd === 'junk');
+          })
         );
         if (mapEntry?.email) {
           const u = config.users?.find((user: any) => (user.email || user.username)?.toLowerCase() === mapEntry.email.toLowerCase());

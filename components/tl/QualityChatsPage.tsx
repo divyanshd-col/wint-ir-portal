@@ -148,11 +148,14 @@ export function DisputeStatusPill({
 
 // ─── Chat ID cell ─────────────────────────────────────────────────────────────
 function ChatIdCell({ chatId }: { chatId: string }) {
-  if (/^\d+$/.test(chatId.trim())) {
+  const id = String(chatId ?? '').trim();
+  if (/^\d+$/.test(id)) {
     return (
       <a
-        href={`https://app.robylon.ai/unified-inbox/share/${chatId}`}
-        target="_blank" rel="noopener noreferrer"
+        href={`https://app.robylon.ai/unified-inbox/share/${id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
         style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
         onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
         onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
