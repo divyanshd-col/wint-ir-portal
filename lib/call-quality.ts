@@ -191,6 +191,7 @@ If a name is unclear, write it phonetically as best you can, or write [unclear].
 ══════════════════════════════════════════
 TRANSCRIPTION RULES
 ══════════════════════════════════════════
+- Process the ENTIRE audio recording from 0:00 to the very last second. DO NOT stop midway or skip later parts of the conversation. Keep transcribing until the final closing or disconnection.
 - Each segment = one complete speaker turn.
 - Transcribe EVERY single word spoken — do not skip, summarize, or paraphrase anything.
 - During overlapping speech: transcribe what BOTH speakers said. The interrupted speaker's words appear in their segment up to the cutoff point; the interrupting speaker's words appear in their own new segment.
@@ -200,6 +201,7 @@ TRANSCRIPTION RULES
 - Keep filler sounds as-is where they are English (uh, um). Translate non-English fillers (haan → yes, theek hai → okay).
 - Set "translated": true for any segment that contained non-English words (even partially).
 - Report all detected languages in the "language" field.
+- EXTREMELY CRITICAL: Output MINIFIED JSON. Do NOT include extra whitespace, indentation, or newlines in the JSON output, to maximize token capacity for long calls.
 
 ══════════════════════════════════════════
 INTERRUPTION DETECTION
