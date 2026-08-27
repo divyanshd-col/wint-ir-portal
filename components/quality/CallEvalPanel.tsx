@@ -164,7 +164,7 @@ export default function CallEvalPanel({
   const [note, setNote] = useState(dispute?.reviewNote || '');
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
-  const [liveIqs, setLiveIqs] = useState<number | null>(iqsScore);
+  const [currentIqs, setCurrentIqs] = useState<number | null>(iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
   const [currentGates, setCurrentGates] = useState<any>(gates || dispute?.gates || dispute?.parameters?.gates);
   const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores || dispute?.parameters);
 
@@ -186,6 +186,12 @@ export default function CallEvalPanel({
     else if (dispute?.parameters) setCurrentIqsScores(dispute.parameters);
   }, [iqsScores, dispute]);
 
+  useEffect(() => {
+    if (iqsScore != null && !isNaN(iqsScore)) {
+      setCurrentIqs(iqsScore);
+    }
+  }, [iqsScore]);
+
   // Initialize parameter state
   useEffect(() => {
     let raw = currentIqsScores || dispute?.parameters || iqsScores;
@@ -200,32 +206,6 @@ export default function CallEvalPanel({
 
     setParamState(state);
   }, [currentIqsScores, dispute, iqsScores]);
-
-  // Recalculate live IQS score
-  useEffect(() => {
-    let earned = 0;
-    let applicable = 0;
-    Object.entries(paramState).forEach(([p, val]) => {
-      const weight = CALL_IQS_WEIGHTS[p] || 0;
-      if (!val || val.score === 'NA') return;
-      applicable += weight;
-      let num = 0;
-      if (val.score === 'Yes' || val.score === '2' || val.score === 'PASS') num = 2;
-      else if (val.score === 'No' || val.score === '0' || val.score === 'FAIL') num = 0;
-      else if (val.score === 'Part' || val.score === '1') num = 1;
-      else {
-        const parsed = parseFloat(String(val.score));
-        num = isNaN(parsed) ? 0 : parsed;
-      }
-      earned += weight * (num / 2);
-    });
-    if (applicable === 0) {
-      setLiveIqs(iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
-    } else {
-      const calc = Math.round((earned / applicable) * 100);
-      setLiveIqs(isNaN(calc) ? (iqsScore != null && !isNaN(iqsScore) ? iqsScore : null) : calc);
-    }
-  }, [paramState, iqsScore]);
 
   const [hasReevaluated, setHasReevaluated] = useState(false);
   const [fetchedChatId, setFetchedChatId] = useState<string | null>(null);
@@ -249,8 +229,8 @@ export default function CallEvalPanel({
         if (d.iqsScores && (!currentIqsScores || Object.keys(currentIqsScores).length === 0)) {
           setCurrentIqsScores(d.iqsScores);
         }
-        if (d.iqsPercent != null && (liveIqs === null || isNaN(liveIqs))) {
-          setLiveIqs(parseFloat(d.iqsPercent));
+        if (d.iqsPercent != null && (currentIqs === null || isNaN(currentIqs))) {
+          setCurrentIqs(parseFloat(d.iqsPercent));
         }
       })
       .catch(() => {})
@@ -361,7 +341,10 @@ export default function CallEvalPanel({
           });
           setParamState(state);
         }
-        if (data.iqs !== undefined && data.iqs !== null) setLiveIqs(data.iqs);
+        if (data.iqs !== undefined && data.iqs !== null) {
+          const parsed = typeof data.iqs === 'number' ? data.iqs : parseFloat(data.iqs);
+          if (!isNaN(parsed)) setCurrentIqs(parsed);
+        }
 
         alert('Transcript saved and call quality re-evaluated successfully!');
       } else {
@@ -411,7 +394,10 @@ export default function CallEvalPanel({
           });
           setParamState(state);
         }
-        if (data.iqs !== undefined && data.iqs !== null) setLiveIqs(data.iqs);
+        if (data.iqs !== undefined && data.iqs !== null) {
+          const parsed = typeof data.iqs === 'number' ? data.iqs : parseFloat(data.iqs);
+          if (!isNaN(parsed)) setCurrentIqs(parsed);
+        }
 
         alert('Call re-evaluation completed successfully!');
       } else {
@@ -931,7 +917,7 @@ export default function CallEvalPanel({
             }}>
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Evaluation Parameters</h4>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
-                Live Score: <span style={{ color: '#15803d' }}>{liveIqs != null && !isNaN(liveIqs) ? `${liveIqs}%` : (iqsScore != null && !isNaN(iqsScore) ? `${iqsScore}%` : '—')}</span>
+                IQS Score: <span style={{ color: '#15803d' }}>{currentIqs != null && !isNaN(currentIqs) ? `${currentIqs}%` : (iqsScore != null && !isNaN(iqsScore) ? `${iqsScore}%` : '—')}</span>
               </span>
             </div>
 
