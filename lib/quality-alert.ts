@@ -89,7 +89,7 @@ export async function fireQualityAlert(opts: {
   contactPhone?: string;
   scores: Record<string, string>;
   reasoning: Record<string, string>;
-  iqs?: number;
+  iqs?: number | null;
   csat?: string;
   disposition?: string;
   subDisposition?: string;
@@ -354,7 +354,7 @@ export async function fireBotQualityAlert(opts: {
   contactPhone?: string;
   scores?: Record<string, any>;
   reasoning?: Record<string, string>;
-  iqs?: number;
+  iqs?: number | null;
   disposition?: string;
   subDisposition?: string;
   conversationType?: string;

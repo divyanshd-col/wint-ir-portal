@@ -112,8 +112,8 @@ Read every message from first to last before scoring anything. Decisive details 
 ## LANGUAGE
 Chats are often in Hinglish or Hindi, or mix scripts. Do NOT lower any dimension for language mix, transliteration, or non-English phrasing. Judge clarity of meaning and correctness, never English purity.
 
-## EMPTY OR NON-CHATS
-If there is no substantive interaction (a customer message with no agent reply, an instant drop, only system or activity lines, or no real question or resolution), set every score to "NA", explain in summary, and do not fabricate scores.
+## EMPTY OR NON-CHATS / JUNK CHATS / CALLS THAT DID NOT CONNECT
+If there is no substantive interaction (a customer message with no agent reply, an instant drop, only system or activity lines, a call that did not go through or connect, or Junk Chats with no real question or resolution), set every score to "NA", explain in summary, and do not fabricate scores. All "NA" scores produce a NIL (null) score and are not penalized.
 - EXCEPTION FOR ESCALATED / TRANSFERRED CHATS: Customer messages or queries sent during the bot phase prior to transfer ARE active, substantive context for the human leg. If a chat is transferred to a human agent after the customer states a query, and the human agent joins but fails to acknowledge, address, or answer that query, this is NOT an empty/non-chat or NA. It MUST be scored as an agent failure (score 0) on applicable dimensions (GreetingHandover, Personalization, IssueResolution).
 
 ## HOW TO GRADE THE SOFT DIMENSIONS (0 / 0.5 / 1)

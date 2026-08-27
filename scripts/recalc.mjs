@@ -73,7 +73,7 @@ function calculateCallIQS(scores) {
       }
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : 100;
+  return possible > 0 ? Math.round((total / possible) * 100) : null;
 }
 
 async function main() {
