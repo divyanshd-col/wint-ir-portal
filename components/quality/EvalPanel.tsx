@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS, ParamScore, normalizeScore,
@@ -323,41 +323,216 @@ export default function EvalPanel({
     return calculateIQS(scores, activeTab === 'bot', isV4);
   })();
 
-  const gatesData = gates || (parameters as any)?.__gates || (parameters as any)?.gates;
+const COMPLIANCE_GATES_LIST = [
+  { key: 'G1_no_advice', altKey: 'G1', label: 'G1: Advice (No Investment / Tax Advice)', shortLabel: 'G1 Advice' },
+  { key: 'G2_no_fabrication', altKey: 'G2', label: 'G2: Fabrication (No Fabricated Facts)', shortLabel: 'G2 Fabrication' },
+  { key: 'G3_identity_first', altKey: 'G3', label: 'G3: Identity (Identity Verified First)', shortLabel: 'G3 Identity' },
+];
 
-  function resolveGateScore(gateItem: any, defaultVal: 'Yes' | 'No' | 'NA'): 'Yes' | 'No' | 'NA' {
-    if (gateItem === undefined || gateItem === null) return defaultVal;
-    if (typeof gateItem === 'object') {
-      if (gateItem.status === 'pass') return 'Yes';
-      if (gateItem.status === 'fail') return 'No';
-      if (gateItem.status === 'not_applicable') return 'NA';
-      if (gateItem.score !== undefined) return resolveGateScore(gateItem.score, defaultVal);
-    }
-    if (typeof gateItem === 'string') {
-      const s = gateItem.toLowerCase();
-      if (s === 'yes' || s === 'pass') return 'Yes';
-      if (s === 'no' || s === 'fail') return 'No';
-      if (s === 'na' || s === 'not_applicable') return 'NA';
-    }
-    if (typeof gateItem === 'boolean') {
-      return gateItem ? 'Yes' : 'No';
-    }
-    return defaultVal;
+interface GateParamState {
+  status: 'pass' | 'fail' | 'not_applicable';
+  reasoning: string;
+}
+
+function extractGateReasoning(item: any): string {
+  if (!item) return '';
+  if (typeof item === 'string') return item;
+  if (typeof item !== 'object') return String(item);
+
+  const parts: string[] = [];
+
+  if (item.reasoning && typeof item.reasoning === 'string' && item.reasoning.trim()) {
+    parts.push(item.reasoning.trim());
+  } else if (item.reason && typeof item.reason === 'string' && item.reason.trim()) {
+    parts.push(item.reason.trim());
+  } else if (item.note && typeof item.note === 'string' && item.note.trim()) {
+    parts.push(item.note.trim());
+  } else if (item.why && typeof item.why === 'string' && item.why.trim()) {
+    parts.push(item.why.trim());
   }
 
-  const g1Badge = resolveGateScore(gatesData?.G1_no_advice || gatesData?.G1, 'Yes');
-  const g2Badge = resolveGateScore(gatesData?.G2_no_fabrication || gatesData?.G2, 'No');
-  const g3Badge = resolveGateScore(gatesData?.G3_identity_first || gatesData?.G3, 'NA');
+  if (item.reason_code && typeof item.reason_code === 'string') {
+    parts.push(`[Reason code: ${item.reason_code}]`);
+  }
 
-  const overallGateResult =
-    gatesData?.chat_gate_result ||
-    gatesData?.call_gate_result ||
-    gatesData?.gate_result ||
-    (g1Badge === 'No' || g2Badge === 'Yes' ? 'FAIL' : 'PASS');
+  // Evidence list
+  if (Array.isArray(item.evidence) && item.evidence.length > 0) {
+    const evText = item.evidence
+      .map((ev: any) => {
+        if (!ev) return '';
+        if (typeof ev === 'string') return ev;
+        const turnStr = ev.turn !== undefined && ev.turn !== null ? `Turn ${ev.turn}: ` : '';
+        const quoteStr = ev.quote ? `"${ev.quote}"` : '';
+        const whyStr = ev.why || ev.note || '';
+        if (quoteStr && whyStr) return `${turnStr}${quoteStr} — Note: ${whyStr}`;
+        if (quoteStr) return `${turnStr}${quoteStr}`;
+        if (whyStr) return `${turnStr}Note: ${whyStr}`;
+        return typeof ev === 'object' ? JSON.stringify(ev) : String(ev);
+      })
+      .filter(Boolean)
+      .join('\n');
+    if (evText && !parts.some(p => p.includes(evText))) {
+      parts.push(evText);
+    }
+  } else if (item.evidence && typeof item.evidence === 'string' && item.evidence.trim()) {
+    parts.push(item.evidence.trim());
+  }
+
+  // Borderline list
+  if (Array.isArray(item.borderline) && item.borderline.length > 0) {
+    const blText = item.borderline
+      .map((bl: any) => {
+        if (!bl) return '';
+        if (typeof bl === 'string') return `Borderline: ${bl}`;
+        const turnStr = bl.turn !== undefined && bl.turn !== null ? `Turn ${bl.turn}: ` : '';
+        const quoteStr = bl.quote ? `"${bl.quote}"` : '';
+        const whyStr = bl.why || bl.note || '';
+        return `Borderline: ${turnStr}${quoteStr} ${whyStr ? `(${whyStr})` : ''}`.trim();
+      })
+      .filter(Boolean)
+      .join('; ');
+    if (blText) parts.push(blText);
+  }
+
+  return parts.filter(Boolean).join('\n');
+}
+
+function findChatBreachesForGate(params: any, gateKey: string): string {
+  if (!params || typeof params !== 'object') return '';
+  const rawBreaches: any[] = [
+    ...(Array.isArray(params.__breaches) ? params.__breaches : []),
+    ...(Array.isArray(params.breaches) ? params.breaches : []),
+    ...(Array.isArray(params.compliance?.breaches) ? params.compliance.breaches : []),
+    ...(Array.isArray(params.__compliance?.breaches) ? params.__compliance.breaches : []),
+    ...(Array.isArray(params.breach_mentions) ? params.breach_mentions : []),
+  ];
+
+  if (!rawBreaches.length) return '';
+
+  const matched = rawBreaches.filter(b => {
+    const t = typeof b === 'string'
+      ? b.toLowerCase()
+      : ((b.type || '') + ' ' + (b.breach_type || '') + ' ' + (b.category || '') + ' ' + (b.note || '') + ' ' + (b.why || '')).toLowerCase();
+
+    if (gateKey === 'G1_no_advice') {
+      return t.includes('advice') || t.includes('advisory') || t.includes('guarantee') || t.includes('return') || t.includes('tax') || t.includes('invest');
+    }
+    if (gateKey === 'G2_no_fabrication') {
+      return t.includes('fabricat') || t.includes('mislead') || t.includes('fact') || t.includes('false') || t.includes('inaccurat');
+    }
+    if (gateKey === 'G3_identity_first') {
+      return t.includes('data') || t.includes('identity') || t.includes('privacy') || t.includes('kyc') || t.includes('statement') || t.includes('slack') || t.includes('sheet');
+    }
+    return false;
+  });
+
+  if (!matched.length) return '';
+
+  return matched.map(b => {
+    if (typeof b === 'string') {
+      // e.g. "misleading_error: The refund process may take 5–7 working days..."
+      const colonIdx = b.indexOf(':');
+      if (colonIdx > 0 && colonIdx < 30) {
+        return b.slice(colonIdx + 1).trim();
+      }
+      return b.trim();
+    }
+    const q = b.quote ? `"${b.quote}"` : '';
+    const n = b.note || b.why || b.reason || '';
+    if (q && n) return `${q} — Note: ${n}`;
+    return q || (n ? `Note: ${n}` : JSON.stringify(b));
+  }).filter(Boolean).join('\n');
+}
+
+function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params?: any): GateParamState {
+  if (!rawGates || typeof rawGates !== 'object') {
+    const breachReason = params ? findChatBreachesForGate(params, gateKey) : '';
+    return { status: breachReason ? 'fail' : 'pass', reasoning: breachReason };
+  }
+  const item = rawGates[gateKey] || (altKey ? rawGates[altKey] : undefined) || rawGates[gateKey.toLowerCase()] || rawGates[gateKey.split('_')[0]];
+  if (!item) {
+    const breachReason = params ? findChatBreachesForGate(params, gateKey) : '';
+    return { status: breachReason ? 'fail' : 'pass', reasoning: breachReason };
+  }
+
+  let status: 'pass' | 'fail' | 'not_applicable' = 'pass';
+  if (typeof item === 'object') {
+    if (item.status === 'pass' || item.status === 'fail' || item.status === 'not_applicable') {
+      status = item.status;
+    } else if (item.score === 'Yes' || item.score === true || item.score === 1) {
+      status = 'pass';
+    } else if (item.score === 'No' || item.score === false || item.score === 0) {
+      status = 'fail';
+    } else if (item.score === 'NA' || item.score === 'not_applicable') {
+      status = 'not_applicable';
+    }
+  } else if (typeof item === 'string') {
+    const s = item.toLowerCase();
+    if (s === 'pass' || s === 'yes') status = 'pass';
+    else if (s === 'fail' || s === 'no') status = 'fail';
+    else if (s === 'na' || s === 'not_applicable') status = 'not_applicable';
+  } else if (typeof item === 'boolean') {
+    status = item ? 'pass' : 'fail';
+  }
+
+  let reasoning = extractGateReasoning(item);
+  if (!reasoning && params) {
+    reasoning = findChatBreachesForGate(params, gateKey);
+  }
+  if (reasoning && status === 'pass') {
+    status = 'fail';
+  }
+  return { status, reasoning };
+}
+
+  const gatesData = gates || (parameters as any)?.__gates || (parameters as any)?.gates;
+
+  const initialGateState = useMemo(() => {
+    const initial: Record<string, GateParamState> = {};
+    COMPLIANCE_GATES_LIST.forEach(g => {
+      initial[g.key] = resolveGateData(gatesData, g.key, g.altKey, parameters);
+    });
+    return initial;
+  }, [gatesData, parameters]);
+
+  const [gateState, setGateState] = useState<Record<string, GateParamState>>(initialGateState);
+
+  useEffect(() => {
+    setGateState(initialGateState);
+  }, [initialGateState]);
+
+  const overallGateResult = useMemo(() => {
+    const hasFail = Object.values(gateState).some(g => g.status === 'fail');
+    return hasFail ? 'FAIL' : 'PASS';
+  }, [gateState]);
+
+  const handleGateStatusChange = (gateKey: string, status: 'pass' | 'fail' | 'not_applicable') => {
+    setGateState(prev => ({
+      ...prev,
+      [gateKey]: { ...(prev[gateKey] || { reasoning: '' }), status }
+    }));
+  };
+
+  const handleGateReasoningChange = (gateKey: string, reasoning: string) => {
+    setGateState(prev => ({
+      ...prev,
+      [gateKey]: { ...(prev[gateKey] || { status: 'pass' }), reasoning }
+    }));
+  };
 
   const isModified = (() => {
     let mod = false;
     if (needsKbUpdate !== initialNeedsKbUpdate || (needsKbUpdate && kbComment.trim() !== initialKbComment.trim())) mod = true;
+
+    // Check compliance gates modified
+    const gatesChanged = COMPLIANCE_GATES_LIST.some(g => {
+      const orig = initialGateState[g.key];
+      const cur = gateState[g.key];
+      if (!orig || !cur) return false;
+      return orig.status !== cur.status || (orig.reasoning || '').trim() !== (cur.reasoning || '').trim();
+    });
+    if (gatesChanged) mod = true;
+
     const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
     if (checkAgent) {
       const paramOrderToUse = isV4 ? PARAM_ORDER : V3_PARAM_ORDER;
@@ -434,6 +609,7 @@ export default function EvalPanel({
   function reset() {
     setAgentParamState(initAgentParams());
     setBotParamState(initBotParams());
+    setGateState(initialGateState);
     setSubmitErr('');
   }
 
@@ -457,7 +633,7 @@ export default function EvalPanel({
       if (noteToUse) body.note = noteToUse;
 
       if (isModified || needsKbUpdate !== initialNeedsKbUpdate || needsKbUpdate) {
-        const params: Record<string, { score: number | null; reasoning: string }> = {};
+        const params: Record<string, any> = {};
         
         const checkAgent = conversationType !== 'bot' || parameters?.__agent_parameters || activeTab === 'agent';
         if (checkAgent) {
@@ -485,6 +661,30 @@ export default function EvalPanel({
         }
         
         params['__needs_kb_update'] = { score: needsKbUpdate, reasoning: kbComment.trim() || noteToUse || '' } as any;
+
+        // Include __gates
+        const gatesPayload: Record<string, any> = {
+          ...(gatesData || {}),
+          G1_no_advice: {
+            status: gateState['G1_no_advice']?.status || 'pass',
+            reasoning: gateState['G1_no_advice']?.reasoning || '',
+            evidence: gateState['G1_no_advice']?.reasoning ? [{ note: gateState['G1_no_advice'].reasoning }] : (gatesData?.G1_no_advice?.evidence || []),
+          },
+          G2_no_fabrication: {
+            status: gateState['G2_no_fabrication']?.status || 'pass',
+            reasoning: gateState['G2_no_fabrication']?.reasoning || '',
+            evidence: gateState['G2_no_fabrication']?.reasoning ? [{ note: gateState['G2_no_fabrication'].reasoning }] : (gatesData?.G2_no_fabrication?.evidence || []),
+          },
+          G3_identity_first: {
+            status: gateState['G3_identity_first']?.status || 'pass',
+            reasoning: gateState['G3_identity_first']?.reasoning || '',
+            evidence: gateState['G3_identity_first']?.reasoning ? [{ note: gateState['G3_identity_first'].reasoning }] : (gatesData?.G3_identity_first?.evidence || []),
+          },
+          gate_result: overallGateResult,
+          chat_gate_result: overallGateResult,
+        };
+        params['__gates'] = gatesPayload;
+
         body.parameters = params;
       }
 
@@ -651,16 +851,146 @@ export default function EvalPanel({
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {/* Compliance Gates — scrolls away with the params to free space for them */}
               <div style={{
-                margin: '12px 16px', background: '#f8fafc', border: '1px solid var(--qa-border)',
+                margin: '12px 16px', background: '#f8fafc',
+                border: `1px solid ${overallGateResult === 'FAIL' ? '#fecaca' : 'var(--qa-border)'}`,
                 borderRadius: 8, padding: '10px 12px',
-                display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12, fontSize: 12,
               }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                  Compliance Gates: <span style={{ color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d' }}>{overallGateResult}</span>
-                </span>
-                <span>G1 Advice: <ScoreBadge score={g1Badge} /></span>
-                <span>G2 Fabrication: <ScoreBadge score={g2Badge} /></span>
-                <span>G3 Identity: <ScoreBadge score={g3Badge} /></span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                    Compliance Gates: <span style={{
+                      color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d',
+                      background: overallGateResult === 'FAIL' ? '#fee2e2' : '#dcfce7',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                      marginLeft: 4
+                    }}>{overallGateResult}</span>
+                  </span>
+                  {!isReadOnly && (
+                    <span style={{ fontSize: 10, color: 'var(--qa-text-3)', fontWeight: 500 }}>
+                      Fail on any gate flags interaction
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+                  {COMPLIANCE_GATES_LIST.map(g => {
+                    const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
+                    const scoreBadgeVal = gItem.status === 'pass' ? 'Yes' : gItem.status === 'fail' ? 'No' : 'NA';
+                    const showMistakeBox = gItem.status === 'fail' || Boolean(gItem.reasoning);
+
+                    return (
+                      <div key={g.key} style={{
+                        padding: '6px 10px',
+                        background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
+                        border: `1px solid ${gItem.status === 'fail' ? '#fecdd3' : 'var(--qa-border-sub, #f1f5f9)'}`,
+                        borderRadius: 6
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: showMistakeBox ? 4 : 0
+                        }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
+                            {g.shortLabel}: <span style={{ fontWeight: 400, color: 'var(--qa-text-2)' }}>{g.label.split('(')[1]?.replace(')', '') || g.label}</span>
+                          </span>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            {([
+                              { label: 'Yes', val: 'pass' as const },
+                              { label: 'No', val: 'fail' as const },
+                              { label: 'NA', val: 'not_applicable' as const },
+                            ]).map(opt => {
+                              const isSel = gItem.status === opt.val;
+                              const bg = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-card, #fff)';
+                              const borderColor = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-border, #e2e8f0)';
+                              const color = isSel ? '#fff' : 'var(--qa-text-2, #64748b)';
+
+                              return (
+                                <button
+                                  key={opt.val}
+                                  onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                                  disabled={isReadOnly}
+                                  style={{
+                                    height: 24,
+                                    padding: '0 8px',
+                                    borderRadius: 6,
+                                    fontSize: 11,
+                                    fontWeight: isSel ? 700 : 500,
+                                    border: `1px solid ${borderColor}`,
+                                    background: bg,
+                                    color: color,
+                                    cursor: isReadOnly ? 'default' : 'pointer',
+                                    fontFamily: 'inherit',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Reason for compliance gate (shown only in case of breach) */}
+                        {gItem.status === 'fail' && (
+                          isReadOnly ? (
+                            gItem.reasoning ? (
+                              <div style={{
+                                marginTop: 6,
+                                padding: '5px 8px',
+                                background: '#fee2e2',
+                                borderLeft: '3px solid #ef4444',
+                                borderRadius: 4,
+                                fontSize: 11,
+                                color: '#991b1b',
+                                lineHeight: 1.4,
+                                whiteSpace: 'pre-wrap'
+                              }}>
+                                <span style={{ fontWeight: 700 }}>Reason: </span>{gItem.reasoning}
+                              </div>
+                            ) : null
+                          ) : (
+                            <div style={{ marginTop: 6 }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 2, textTransform: 'uppercase' }}>
+                                Reason for Breach:
+                              </div>
+                              <textarea
+                                value={gItem.reasoning}
+                                onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                                placeholder="Specify reason / citation for this compliance breach…"
+                                rows={2}
+                                style={{
+                                  width: '100%',
+                                  boxSizing: 'border-box',
+                                  resize: 'vertical',
+                                  border: '1px solid #fca5a5',
+                                  borderRadius: 4,
+                                  padding: '4px 6px',
+                                  fontSize: 11,
+                                  color: '#991b1b',
+                                  background: '#fff1f2',
+                                  lineHeight: 1.4
+                                }}
+                              />
+                            </div>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
               {activeParamOrder.map(pascal => {
                 const st       = currentParamState[pascal];
