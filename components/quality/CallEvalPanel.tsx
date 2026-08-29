@@ -139,6 +139,111 @@ function resolveParamData(raw: any, pKey: string): { score: string; reasoning: s
   return { score: 'NA', reasoning: '' };
 }
 
+const COMPLIANCE_GATES_LIST = [
+  { key: 'G1_no_advice', label: 'G1: Advice (No Investment / Tax Advice)', shortLabel: 'G1 Advice' },
+  { key: 'G2_no_fabrication', label: 'G2: Fabrication (No Fabricated Facts)', shortLabel: 'G2 Fabrication' },
+  { key: 'G3_identity_first', label: 'G3: Identity (Identity Verified First)', shortLabel: 'G3 Identity' },
+];
+
+interface GateParamState {
+  status: 'pass' | 'fail' | 'not_applicable';
+  reasoning: string;
+}
+
+function extractGateReasoning(item: any): string {
+  if (!item) return '';
+  if (typeof item === 'string') return item;
+  if (typeof item !== 'object') return String(item);
+
+  const parts: string[] = [];
+
+  if (item.reasoning && typeof item.reasoning === 'string' && item.reasoning.trim()) {
+    parts.push(item.reasoning.trim());
+  } else if (item.reason && typeof item.reason === 'string' && item.reason.trim()) {
+    parts.push(item.reason.trim());
+  } else if (item.note && typeof item.note === 'string' && item.note.trim()) {
+    parts.push(item.note.trim());
+  } else if (item.why && typeof item.why === 'string' && item.why.trim()) {
+    parts.push(item.why.trim());
+  }
+
+  if (item.reason_code && typeof item.reason_code === 'string') {
+    parts.push(`[Reason code: ${item.reason_code}]`);
+  }
+
+  // Evidence list
+  if (Array.isArray(item.evidence) && item.evidence.length > 0) {
+    const evText = item.evidence
+      .map((ev: any) => {
+        if (!ev) return '';
+        if (typeof ev === 'string') return ev;
+        const turnStr = ev.turn !== undefined && ev.turn !== null ? `Turn ${ev.turn}: ` : '';
+        const quoteStr = ev.quote ? `"${ev.quote}"` : '';
+        const whyStr = ev.why || ev.note || '';
+        if (quoteStr && whyStr) return `${turnStr}${quoteStr} — Note: ${whyStr}`;
+        if (quoteStr) return `${turnStr}${quoteStr}`;
+        if (whyStr) return `${turnStr}Note: ${whyStr}`;
+        return typeof ev === 'object' ? JSON.stringify(ev) : String(ev);
+      })
+      .filter(Boolean)
+      .join('\n');
+    if (evText && !parts.some(p => p.includes(evText))) {
+      parts.push(evText);
+    }
+  } else if (item.evidence && typeof item.evidence === 'string' && item.evidence.trim()) {
+    parts.push(item.evidence.trim());
+  }
+
+  // Borderline list
+  if (Array.isArray(item.borderline) && item.borderline.length > 0) {
+    const blText = item.borderline
+      .map((bl: any) => {
+        if (!bl) return '';
+        if (typeof bl === 'string') return `Borderline: ${bl}`;
+        const turnStr = bl.turn !== undefined && bl.turn !== null ? `Turn ${bl.turn}: ` : '';
+        const quoteStr = bl.quote ? `"${bl.quote}"` : '';
+        const whyStr = bl.why || bl.note || '';
+        return `Borderline: ${turnStr}${quoteStr} ${whyStr ? `(${whyStr})` : ''}`.trim();
+      })
+      .filter(Boolean)
+      .join('; ');
+    if (blText) parts.push(blText);
+  }
+
+  return parts.filter(Boolean).join('\n');
+}
+
+function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateParamState {
+  if (!rawGates || typeof rawGates !== 'object') {
+    return { status: 'pass', reasoning: '' };
+  }
+  const item = rawGates[gateKey] || (altKey ? rawGates[altKey] : undefined) || rawGates[gateKey.toLowerCase()] || rawGates[gateKey.split('_')[0]];
+  if (!item) return { status: 'pass', reasoning: '' };
+
+  let status: 'pass' | 'fail' | 'not_applicable' = 'pass';
+  if (typeof item === 'object') {
+    if (item.status === 'pass' || item.status === 'fail' || item.status === 'not_applicable') {
+      status = item.status;
+    } else if (item.score === 'Yes' || item.score === true || item.score === 1) {
+      status = 'pass';
+    } else if (item.score === 'No' || item.score === false || item.score === 0) {
+      status = 'fail';
+    } else if (item.score === 'NA' || item.score === 'not_applicable') {
+      status = 'not_applicable';
+    }
+  } else if (typeof item === 'string') {
+    const s = item.toLowerCase();
+    if (s === 'pass' || s === 'yes') status = 'pass';
+    else if (s === 'fail' || s === 'no') status = 'fail';
+    else if (s === 'na' || s === 'not_applicable') status = 'not_applicable';
+  } else if (typeof item === 'boolean') {
+    status = item ? 'pass' : 'fail';
+  }
+
+  const reasoning = extractGateReasoning(item);
+  return { status, reasoning };
+}
+
 export default function CallEvalPanel({
   callId,
   chatId,
@@ -148,25 +253,34 @@ export default function CallEvalPanel({
   disposition,
   gates,
   iqsScores,
-  mode = 'view',
+  mode = 'submit',
   dispute,
   allowRaiseDispute = false,
   allowReevaluate = false,
   onDisputeRaised,
-  onDone,
+  onDone = () => {},
   onClose,
-  colSpan = 7,
+  colSpan = 6,
 }: CallEvalPanelProps) {
   const [segments, setSegments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [paramState, setParamState] = useState<Record<string, { score: string; reasoning: string }>>({});
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [note, setNote] = useState(dispute?.reviewNote || '');
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
+  const [note, setNote] = useState(dispute?.reviewNote || '');
+  const [currentGates, setCurrentGates] = useState<any>(gates || null);
+  const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores || null);
   const [currentIqs, setCurrentIqs] = useState<number | null>(iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
-  const [currentGates, setCurrentGates] = useState<any>(gates || dispute?.gates || dispute?.parameters?.gates);
-  const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores || dispute?.parameters);
+  const [paramState, setParamState] = useState<Record<string, { score: string; reasoning: string }>>({});
+
+  // Compliance Gates state
+  const [gateState, setGateState] = useState<Record<string, GateParamState>>(() => {
+    const initial: Record<string, GateParamState> = {};
+    COMPLIANCE_GATES_LIST.forEach(g => {
+      initial[g.key] = resolveGateData(gates || dispute?.gates || dispute?.parameters?.gates, g.key);
+    });
+    return initial;
+  });
 
   // Raising dispute inline state (for TL or agent)
   const [raisingDispute, setRaisingDispute] = useState(false);
@@ -180,6 +294,36 @@ export default function CallEvalPanel({
     else if (dispute?.gates) setCurrentGates(dispute.gates);
     else if (dispute?.parameters?.gates) setCurrentGates(dispute.parameters.gates);
   }, [gates, dispute]);
+
+  useEffect(() => {
+    const raw = currentGates || gates || dispute?.gates || dispute?.parameters?.gates;
+    if (raw) {
+      const next: Record<string, GateParamState> = {};
+      COMPLIANCE_GATES_LIST.forEach(g => {
+        next[g.key] = resolveGateData(raw, g.key);
+      });
+      setGateState(next);
+    }
+  }, [currentGates, gates, dispute]);
+
+  const overallGateResult = useMemo(() => {
+    const hasFail = Object.values(gateState).some(g => g.status === 'fail');
+    return hasFail ? 'FAIL' : 'PASS';
+  }, [gateState]);
+
+  const handleGateStatusChange = (gateKey: string, status: 'pass' | 'fail' | 'not_applicable') => {
+    setGateState(prev => ({
+      ...prev,
+      [gateKey]: { ...(prev[gateKey] || { reasoning: '' }), status }
+    }));
+  };
+
+  const handleGateReasoningChange = (gateKey: string, reasoning: string) => {
+    setGateState(prev => ({
+      ...prev,
+      [gateKey]: { ...(prev[gateKey] || { status: 'pass' }), reasoning }
+    }));
+  };
 
   useEffect(() => {
     if (iqsScores) setCurrentIqsScores(iqsScores);
@@ -420,6 +564,35 @@ export default function CallEvalPanel({
       reasoning[p] = val.reasoning;
     });
 
+    const gatesPayload: Record<string, any> = {
+      ...(currentGates || {}),
+      G1_no_advice: {
+        ...(currentGates?.G1_no_advice || {}),
+        status: gateState['G1_no_advice']?.status || 'pass',
+        reasoning: gateState['G1_no_advice']?.reasoning || '',
+        evidence: gateState['G1_no_advice']?.reasoning
+          ? [{ note: gateState['G1_no_advice'].reasoning }]
+          : (currentGates?.G1_no_advice?.evidence || []),
+      },
+      G2_no_fabrication: {
+        ...(currentGates?.G2_no_fabrication || {}),
+        status: gateState['G2_no_fabrication']?.status || 'pass',
+        reasoning: gateState['G2_no_fabrication']?.reasoning || '',
+        evidence: gateState['G2_no_fabrication']?.reasoning
+          ? [{ note: gateState['G2_no_fabrication'].reasoning }]
+          : (currentGates?.G2_no_fabrication?.evidence || []),
+      },
+      G3_identity_first: {
+        ...(currentGates?.G3_identity_first || {}),
+        status: gateState['G3_identity_first']?.status || 'pass',
+        reasoning: gateState['G3_identity_first']?.reasoning || '',
+        evidence: gateState['G3_identity_first']?.reasoning
+          ? [{ note: gateState['G3_identity_first'].reasoning }]
+          : (currentGates?.G3_identity_first?.evidence || []),
+      },
+      call_gate_result: overallGateResult,
+    };
+
     try {
       const res = await fetch('/api/call-quality/override-evaluation', {
         method: 'PATCH',
@@ -428,6 +601,8 @@ export default function CallEvalPanel({
           callId,
           scores,
           reasoning,
+          gates: gatesPayload,
+          callGateResult: overallGateResult,
           note,
           flagId: dispute?.flagId,
           action: mode === 'review' || mode === 'resolve' ? 'resolve' : 'override',
@@ -922,18 +1097,148 @@ export default function CallEvalPanel({
             </div>
 
             {/* Compliance Gates Card */}
-            {currentGates && (
-              <div style={{ background: '#f8fafc', border: '1px solid var(--qa-border)', borderRadius: 8, padding: 12 }}>
-                <h5 style={{ margin: '0 0 8px 0', fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                  Compliance Gates: <span style={{ color: currentGates?.call_gate_result === 'FAIL' ? '#b91c1c' : '#15803d' }}>{currentGates?.call_gate_result || 'PASS'}</span>
+            <div style={{
+              background: '#f8fafc',
+              border: `1px solid ${overallGateResult === 'FAIL' ? '#fecaca' : 'var(--qa-border)'}`,
+              borderRadius: 8,
+              padding: 12,
+              marginBottom: 12
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <h5 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
+                  Compliance Gates: <span style={{
+                    color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d',
+                    background: overallGateResult === 'FAIL' ? '#fee2e2' : '#dcfce7',
+                    padding: '2px 8px',
+                    borderRadius: 4,
+                    marginLeft: 4
+                  }}>{overallGateResult}</span>
                 </h5>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
-                  <div>G1 Advice: <ScoreBadge score={currentGates?.G1_no_advice?.status === 'pass' ? 'Yes' : currentGates?.G1_no_advice?.status === 'fail' ? 'No' : 'NA'} /></div>
-                  <div>G2 Fabrication: <ScoreBadge score={currentGates?.G2_no_fabrication?.status === 'pass' ? 'Yes' : currentGates?.G2_no_fabrication?.status === 'fail' ? 'No' : 'NA'} /></div>
-                  <div>G3 Identity: <ScoreBadge score={currentGates?.G3_identity_first?.status === 'pass' ? 'Yes' : currentGates?.G3_identity_first?.status === 'fail' ? 'No' : 'NA'} /></div>
-                </div>
+                {!isReadOnly && (
+                  <span style={{ fontSize: 10, color: 'var(--qa-text-3)', fontWeight: 500 }}>
+                    Fail on any gate marks call as Critical Fail
+                  </span>
+                )}
               </div>
-            )}
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+                {COMPLIANCE_GATES_LIST.map(g => {
+                  const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
+                  const scoreLabel = gItem.status === 'pass' ? 'Yes' : gItem.status === 'fail' ? 'No' : 'NA';
+
+                  return (
+                    <div key={g.key} style={{
+                      padding: '8px 10px',
+                      background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
+                      border: `1px solid ${gItem.status === 'fail' ? '#fecdd3' : 'var(--qa-border-sub, #f1f5f9)'}`,
+                      borderRadius: 6
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
+                          {g.label}
+                        </span>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            {([
+                              { label: 'Yes', val: 'pass' as const },
+                              { label: 'No', val: 'fail' as const },
+                              { label: 'NA', val: 'not_applicable' as const },
+                            ]).map(opt => {
+                              const isSel = gItem.status === opt.val;
+                              const bg = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-card, #fff)';
+                              const borderColor = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-border, #e2e8f0)';
+                              const color = isSel ? '#fff' : 'var(--qa-text-2, #64748b)';
+
+                              return (
+                                <button
+                                  key={opt.val}
+                                  onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                                  disabled={isReadOnly}
+                                  style={{
+                                    height: 24,
+                                    padding: '0 8px',
+                                    borderRadius: 6,
+                                    fontSize: 11,
+                                    fontWeight: isSel ? 700 : 500,
+                                    border: `1px solid ${borderColor}`,
+                                    background: bg,
+                                    color: color,
+                                    cursor: isReadOnly ? 'default' : 'pointer',
+                                    fontFamily: 'inherit',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                      </div>
+
+                      {/* Reason for compliance gate (shown only in case of breach) */}
+                      {gItem.status === 'fail' && (
+                        isReadOnly ? (
+                          gItem.reasoning ? (
+                            <div style={{
+                              marginTop: 6,
+                              padding: '5px 8px',
+                              background: '#fee2e2',
+                              borderLeft: '3px solid #ef4444',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              color: '#991b1b',
+                              lineHeight: 1.4,
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              <span style={{ fontWeight: 700 }}>Reason: </span>{gItem.reasoning}
+                            </div>
+                          ) : null
+                        ) : (
+                          <div style={{ marginTop: 6 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 2, textTransform: 'uppercase' }}>
+                              Reason for Breach:
+                            </div>
+                            <textarea
+                              value={gItem.reasoning}
+                              onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                              placeholder="Specify reason / citation for this compliance breach…"
+                              rows={2}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                resize: 'vertical',
+                                border: '1px solid #fca5a5',
+                                borderRadius: 4,
+                                padding: '4px 8px',
+                                fontSize: 11,
+                                color: '#991b1b',
+                                background: '#fff1f2',
+                                lineHeight: 1.4
+                              }}
+                            />
+                          </div>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
 
             {/* Parameter List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>

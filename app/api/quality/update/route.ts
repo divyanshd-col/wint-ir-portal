@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest) {
   let body: any;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 }); }
 
-  const { id, chatId, scores, reasoning, agentName, disposition, subDisposition, csat, note, isKbChange, needsKbUpdate } = body;
+  const { id, chatId, scores, reasoning, gates, agentName, disposition, subDisposition, csat, note, isKbChange, needsKbUpdate } = body;
   if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
 
   // Validate scores if provided
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest) {
 
     // ── Upsert iqs_scores (parameters + iqs_score) ────────────────────────────
     const hasKbToggle = needsKbUpdate !== undefined || isKbChange !== undefined;
-    if (scores || reasoning || note || hasKbToggle) {
+    if (scores || reasoning || note || hasKbToggle || gates) {
       let params = rowExists ? (existing[0].parameters || {}) : {};
       if (typeof params === 'string') { try { params = JSON.parse(params); } catch { params = {}; } }
 
@@ -94,6 +94,8 @@ export async function PATCH(req: NextRequest) {
         const kbVal = Boolean(needsKbUpdate ?? isKbChange);
         params['__needs_kb_update'] = { score: kbVal, reasoning: '' };
       }
+
+      if (gates) params['__gates'] = gates;
 
       if (note) params['__review_note'] = note;
 

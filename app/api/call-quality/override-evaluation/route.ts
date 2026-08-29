@@ -15,6 +15,9 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
     callId?: string;
     scores?: Record<string, string>;
     reasoning?: Record<string, string>;
+    gates?: Record<string, any>;
+    callGateResult?: string;
+    call_gate_result?: string;
     note?: string;
     flagId?: string;
     action?: string;
@@ -24,7 +27,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
 
-  const { callId, scores, reasoning, note, flagId } = body;
+  const { callId, scores, reasoning, gates: incomingGates, callGateResult, call_gate_result, note, flagId } = body;
   if (!callId?.trim() || !scores) {
     return NextResponse.json({ error: 'callId and scores are required' }, { status: 400 });
   }
@@ -41,9 +44,23 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
   const actualCallId = existingEval.call_id;
   const actualChatId = existingEval.chat_id || callId.trim();
 
+  // Merge gates
+  const existingGates = existingEval.gates || {};
+  const mergedGates = incomingGates ? { ...existingGates, ...incomingGates } : existingGates;
+
+  // Determine gate verdict
+  let gateVerdict: 'PASS' | 'FAIL' = (callGateResult || call_gate_result || existingEval.call_gate_result || 'PASS') as 'PASS' | 'FAIL';
+  if (incomingGates) {
+    const hasFail = Object.values(mergedGates).some((g: any) => {
+      if (!g || typeof g !== 'object') return false;
+      const st = String(g.status || g.score || '').toLowerCase();
+      return st === 'fail' || st === 'no';
+    });
+    gateVerdict = hasFail ? 'FAIL' : (callGateResult || call_gate_result ? ((callGateResult || call_gate_result) as 'PASS' | 'FAIL') : 'PASS');
+  }
+
   // Calculate new IQS percent & verdict
   const { iqs_percent, applicable_weight } = computeCallIQS(scores);
-  const gateVerdict = existingEval.call_gate_result || 'PASS';
   const newVerdict = finalVerdict(gateVerdict, iqs_percent);
 
   // Extract old scores for auditing
@@ -69,7 +86,7 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       aiScoreInt,
       humanScoreInt,
       JSON.stringify(oldIqsScores.scores || {}),
-      JSON.stringify(scores),
+      JSON.stringify({ ...scores, __gates: mergedGates, call_gate_result: gateVerdict }),
       email,
       note || ''
     ]);
@@ -87,16 +104,20 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
       SET iqs_scores = $1,
           iqs_percent = $2,
           applicable_weight = $3,
-          verdict = $4,
-          reviewed_by = $5,
+          gates = $4,
+          call_gate_result = $5,
+          verdict = $6,
+          reviewed_by = $7,
           reviewed_at = NOW(),
-          review_note = $6,
+          review_note = $8,
           status = 'reviewed'
-        WHERE call_id = $7
+        WHERE call_id = $9
     `, [
       JSON.stringify(newIqsScoresPayload),
       iqs_percent,
       applicable_weight,
+      JSON.stringify(mergedGates),
+      gateVerdict,
       newVerdict,
       email,
       note || '',
@@ -120,12 +141,12 @@ async function _PATCH(req: NextRequest): Promise<NextResponse> {
         actorEmail: email,
         actorRole: (session.user as any)?.role || 'quality',
         ts: new Date().toISOString(),
-        meta: { oldIqs: oldIqsPercent, newIqs: iqs_percent, note: note || '', flagId },
+        meta: { oldIqs: oldIqsPercent, newIqs: iqs_percent, note: note || '', flagId, gates: mergedGates, gateVerdict },
       });
     }
 
-    log.info(ROUTE, `Quality override complete for call ${actualCallId} by ${email}`);
-    return NextResponse.json({ ok: true, iqs: iqs_percent, verdict: newVerdict });
+    log.info(ROUTE, `Quality override complete for call ${actualCallId} by ${email} (gateVerdict: ${gateVerdict})`);
+    return NextResponse.json({ ok: true, iqs: iqs_percent, verdict: newVerdict, gates: mergedGates, call_gate_result: gateVerdict });
   } catch (err: any) {
     log.error(ROUTE, `Override database operations failed for call ${callId}: ${err.message}`);
     return NextResponse.json({ error: 'Database update failed', detail: err.message }, { status: 500 });

@@ -110,6 +110,9 @@ export async function PATCH(
         for (const [key, val] of Object.entries(parameters) as [string, any][]) {
           if (key === '__needs_kb_update') {
             merged['__needs_kb_update'] = val;
+          } else if (key === '__gates') {
+            merged['__gates'] = val;
+            paramChanges++;
           } else if (!key.startsWith('__')) {
             const prev = existingParams[key];
             if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;
