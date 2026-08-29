@@ -1123,61 +1123,111 @@ export default function CallEvalPanel({
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
                 {COMPLIANCE_GATES_LIST.map(g => {
-                  const gItem = gateState[g.key] || { status: 'pass' };
+                  const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
                   const scoreLabel = gItem.status === 'pass' ? 'Yes' : gItem.status === 'fail' ? 'No' : 'NA';
+                  const showMistakeBox = gItem.status === 'fail' || Boolean(gItem.reasoning);
 
                   return (
                     <div key={g.key} style={{
                       padding: '8px 10px',
                       background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
                       border: `1px solid ${gItem.status === 'fail' ? '#fecdd3' : 'var(--qa-border-sub, #f1f5f9)'}`,
-                      borderRadius: 6,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
+                      borderRadius: 6
                     }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
-                        {g.label}
-                      </span>
-                      {isReadOnly ? (
-                        <ScoreBadge score={scoreLabel} />
-                      ) : (
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {([
-                            { label: 'Pass', val: 'pass' as const },
-                            { label: 'Fail', val: 'fail' as const },
-                            { label: 'NA', val: 'not_applicable' as const },
-                          ]).map(opt => {
-                            const isSel = gItem.status === opt.val;
-                            const bg = isSel
-                              ? opt.val === 'pass'
-                                ? '#15803d'
-                                : opt.val === 'fail'
-                                ? '#b91c1c'
-                                : 'var(--qa-gray-700)'
-                              : '#fff';
-                            const color = isSel ? '#fff' : 'var(--qa-text)';
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: showMistakeBox ? 6 : 0
+                      }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
+                          {g.label}
+                        </span>
+                        {isReadOnly ? (
+                          <ScoreBadge score={scoreLabel} />
+                        ) : (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            {([
+                              { label: 'Pass', val: 'pass' as const },
+                              { label: 'Fail', val: 'fail' as const },
+                              { label: 'NA', val: 'not_applicable' as const },
+                            ]).map(opt => {
+                              const isSel = gItem.status === opt.val;
+                              const bg = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700)'
+                                : '#fff';
+                              const color = isSel ? '#fff' : 'var(--qa-text)';
 
-                            return (
-                              <button
-                                key={opt.val}
-                                onClick={() => handleGateStatusChange(g.key, opt.val)}
-                                style={{
-                                  padding: '2px 8px',
-                                  borderRadius: 4,
-                                  fontSize: 11,
-                                  fontWeight: isSel ? 700 : 500,
-                                  border: '1px solid var(--qa-border)',
-                                  background: bg,
-                                  color: color,
-                                  cursor: 'pointer'
-                                }}
-                              >
-                                {opt.label}
-                              </button>
-                            );
-                          })}
-                        </div>
+                              return (
+                                <button
+                                  key={opt.val}
+                                  onClick={() => handleGateStatusChange(g.key, opt.val)}
+                                  style={{
+                                    padding: '2px 8px',
+                                    borderRadius: 4,
+                                    fontSize: 11,
+                                    fontWeight: isSel ? 700 : 500,
+                                    border: '1px solid var(--qa-border)',
+                                    background: bg,
+                                    color: color,
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Mention comments/quotes where Agent/Bot made a mistake */}
+                      {showMistakeBox && (
+                        isReadOnly ? (
+                          gItem.reasoning ? (
+                            <div style={{
+                              marginTop: 4,
+                              padding: '5px 8px',
+                              background: '#fee2e2',
+                              borderLeft: '3px solid #ef4444',
+                              borderRadius: 4,
+                              fontSize: 11,
+                              color: '#991b1b',
+                              lineHeight: 1.4,
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              <span style={{ fontWeight: 700 }}>Mistake: </span>{gItem.reasoning}
+                            </div>
+                          ) : null
+                        ) : (
+                          <div style={{ marginTop: 4 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 2, textTransform: 'uppercase' }}>
+                              Mistake Comment (Where Agent/Bot failed):
+                            </div>
+                            <textarea
+                              value={gItem.reasoning}
+                              onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                              placeholder="Mention quote / comment where Agent/Bot made the mistake…"
+                              rows={gItem.reasoning || gItem.status === 'fail' ? 2 : 1}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                resize: 'vertical',
+                                border: '1px solid #fca5a5',
+                                borderRadius: 4,
+                                padding: '4px 6px',
+                                fontSize: 11,
+                                color: '#991b1b',
+                                background: '#fff1f2',
+                                lineHeight: 1.4
+                              }}
+                            />
+                          </div>
+                        )
                       )}
                     </div>
                   );

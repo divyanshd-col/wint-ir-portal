@@ -397,12 +397,44 @@ function extractGateReasoning(item: any): string {
   return parts.filter(Boolean).join('\n');
 }
 
-function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateParamState {
+function findChatBreachesForGate(params: any, gateKey: string): string {
+  if (!params || typeof params !== 'object') return '';
+  const breaches: any[] = params.breaches || params.compliance?.breaches || params.__compliance?.breaches || [];
+  if (!Array.isArray(breaches) || breaches.length === 0) return '';
+
+  const matched = breaches.filter(b => {
+    const t = (b.type || '').toLowerCase();
+    if (gateKey === 'G1_no_advice') {
+      return t.includes('advice') || t.includes('advisory') || t.includes('guarantee') || t.includes('return');
+    }
+    if (gateKey === 'G2_no_fabrication') {
+      return t.includes('fabricat') || t.includes('mislead') || t.includes('fact');
+    }
+    if (gateKey === 'G3_identity_first') {
+      return t.includes('data') || t.includes('identity') || t.includes('privacy') || t.includes('kyc');
+    }
+    return false;
+  });
+
+  if (!matched.length) return '';
+  return matched.map(b => {
+    const q = b.quote ? `"${b.quote}"` : '';
+    const n = b.note || b.why || '';
+    if (q && n) return `${q} — ${n}`;
+    return q || n || JSON.stringify(b);
+  }).join('; ');
+}
+
+function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params?: any): GateParamState {
   if (!rawGates || typeof rawGates !== 'object') {
-    return { status: 'pass', reasoning: '' };
+    const breachReason = params ? findChatBreachesForGate(params, gateKey) : '';
+    return { status: breachReason ? 'fail' : 'pass', reasoning: breachReason };
   }
   const item = rawGates[gateKey] || (altKey ? rawGates[altKey] : undefined) || rawGates[gateKey.toLowerCase()] || rawGates[gateKey.split('_')[0]];
-  if (!item) return { status: 'pass', reasoning: '' };
+  if (!item) {
+    const breachReason = params ? findChatBreachesForGate(params, gateKey) : '';
+    return { status: breachReason ? 'fail' : 'pass', reasoning: breachReason };
+  }
 
   let status: 'pass' | 'fail' | 'not_applicable' = 'pass';
   if (typeof item === 'object') {
@@ -424,7 +456,13 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateP
     status = item ? 'pass' : 'fail';
   }
 
-  const reasoning = extractGateReasoning(item);
+  let reasoning = extractGateReasoning(item);
+  if (!reasoning && params) {
+    reasoning = findChatBreachesForGate(params, gateKey);
+  }
+  if (reasoning && status === 'pass') {
+    status = 'fail';
+  }
   return { status, reasoning };
 }
 
@@ -433,10 +471,10 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateP
   const initialGateState = useMemo(() => {
     const initial: Record<string, GateParamState> = {};
     COMPLIANCE_GATES_LIST.forEach(g => {
-      initial[g.key] = resolveGateData(gatesData, g.key, g.altKey);
+      initial[g.key] = resolveGateData(gatesData, g.key, g.altKey, parameters);
     });
     return initial;
-  }, [gatesData]);
+  }, [gatesData, parameters]);
 
   const [gateState, setGateState] = useState<Record<string, GateParamState>>(initialGateState);
 
@@ -817,61 +855,111 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateP
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
                   {COMPLIANCE_GATES_LIST.map(g => {
-                    const gItem = gateState[g.key] || { status: 'pass' };
+                    const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
                     const scoreBadgeVal = gItem.status === 'pass' ? 'Yes' : gItem.status === 'fail' ? 'No' : 'NA';
+                    const showMistakeBox = gItem.status === 'fail' || Boolean(gItem.reasoning);
 
                     return (
                       <div key={g.key} style={{
                         padding: '6px 10px',
                         background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
                         border: `1px solid ${gItem.status === 'fail' ? '#fecdd3' : 'var(--qa-border-sub, #f1f5f9)'}`,
-                        borderRadius: 6,
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
+                        borderRadius: 6
                       }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
-                          {g.shortLabel}: <span style={{ fontWeight: 400, color: 'var(--qa-text-2)' }}>{g.label.split('(')[1]?.replace(')', '') || g.label}</span>
-                        </span>
-                        {isReadOnly ? (
-                          <ScoreBadge score={scoreBadgeVal} />
-                        ) : (
-                          <div style={{ display: 'flex', gap: 4 }}>
-                            {([
-                              { label: 'Pass', val: 'pass' as const },
-                              { label: 'Fail', val: 'fail' as const },
-                              { label: 'NA', val: 'not_applicable' as const },
-                            ]).map(opt => {
-                              const isSel = gItem.status === opt.val;
-                              const bg = isSel
-                                ? opt.val === 'pass'
-                                  ? '#15803d'
-                                  : opt.val === 'fail'
-                                  ? '#b91c1c'
-                                  : 'var(--qa-gray-700)'
-                                : '#fff';
-                              const color = isSel ? '#fff' : 'var(--qa-text)';
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: showMistakeBox ? 4 : 0
+                        }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
+                            {g.shortLabel}: <span style={{ fontWeight: 400, color: 'var(--qa-text-2)' }}>{g.label.split('(')[1]?.replace(')', '') || g.label}</span>
+                          </span>
+                          {isReadOnly ? (
+                            <ScoreBadge score={scoreBadgeVal} />
+                          ) : (
+                            <div style={{ display: 'flex', gap: 4 }}>
+                              {([
+                                { label: 'Pass', val: 'pass' as const },
+                                { label: 'Fail', val: 'fail' as const },
+                                { label: 'NA', val: 'not_applicable' as const },
+                              ]).map(opt => {
+                                const isSel = gItem.status === opt.val;
+                                const bg = isSel
+                                  ? opt.val === 'pass'
+                                    ? '#15803d'
+                                    : opt.val === 'fail'
+                                    ? '#b91c1c'
+                                    : 'var(--qa-gray-700)'
+                                  : '#fff';
+                                const color = isSel ? '#fff' : 'var(--qa-text)';
 
-                              return (
-                                <button
-                                  key={opt.val}
-                                  onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
-                                  style={{
-                                    padding: '2px 8px',
-                                    borderRadius: 4,
-                                    fontSize: 11,
-                                    fontWeight: isSel ? 700 : 500,
-                                    border: '1px solid var(--qa-border)',
-                                    background: bg,
-                                    color: color,
-                                    cursor: 'pointer'
-                                  }}
-                                >
-                                  {opt.label}
-                                </button>
-                              );
-                            })}
-                          </div>
+                                return (
+                                  <button
+                                    key={opt.val}
+                                    onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                                    style={{
+                                      padding: '2px 8px',
+                                      borderRadius: 4,
+                                      fontSize: 11,
+                                      fontWeight: isSel ? 700 : 500,
+                                      border: '1px solid var(--qa-border)',
+                                      background: bg,
+                                      color: color,
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Mention comments/quotes where Agent/Bot made a mistake */}
+                        {showMistakeBox && (
+                          isReadOnly ? (
+                            gItem.reasoning ? (
+                              <div style={{
+                                marginTop: 4,
+                                padding: '5px 8px',
+                                background: '#fee2e2',
+                                borderLeft: '3px solid #ef4444',
+                                borderRadius: 4,
+                                fontSize: 11,
+                                color: '#991b1b',
+                                lineHeight: 1.4,
+                                whiteSpace: 'pre-wrap'
+                              }}>
+                                <span style={{ fontWeight: 700 }}>Mistake: </span>{gItem.reasoning}
+                              </div>
+                            ) : null
+                          ) : (
+                            <div style={{ marginTop: 4 }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 2, textTransform: 'uppercase' }}>
+                                Mistake Comment (Where Agent/Bot failed):
+                              </div>
+                              <textarea
+                                value={gItem.reasoning}
+                                onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                                placeholder="Mention quote / comment where Agent/Bot made the mistake…"
+                                rows={gItem.reasoning || gItem.status === 'fail' ? 2 : 1}
+                                style={{
+                                  width: '100%',
+                                  boxSizing: 'border-box',
+                                  resize: 'vertical',
+                                  border: '1px solid #fca5a5',
+                                  borderRadius: 4,
+                                  padding: '4px 6px',
+                                  fontSize: 11,
+                                  color: '#991b1b',
+                                  background: '#fff1f2',
+                                  lineHeight: 1.4
+                                }}
+                              />
+                            </div>
+                          )
                         )}
                       </div>
                     );
