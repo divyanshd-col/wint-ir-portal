@@ -1141,13 +1141,10 @@ export default function CallEvalPanel({
                         <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
                           {g.label}
                         </span>
-                        {isReadOnly ? (
-                          <ScoreBadge score={scoreLabel} />
-                        ) : (
-                          <div style={{ display: 'flex', gap: 4 }}>
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
                             {([
-                              { label: 'Pass', val: 'pass' as const },
-                              { label: 'Fail', val: 'fail' as const },
+                              { label: 'Yes', val: 'pass' as const },
+                              { label: 'No', val: 'fail' as const },
                               { label: 'NA', val: 'not_applicable' as const },
                             ]).map(opt => {
                               const isSel = gItem.status === opt.val;
@@ -1156,23 +1153,34 @@ export default function CallEvalPanel({
                                   ? '#15803d'
                                   : opt.val === 'fail'
                                   ? '#b91c1c'
-                                  : 'var(--qa-gray-700)'
-                                : '#fff';
-                              const color = isSel ? '#fff' : 'var(--qa-text)';
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-card, #fff)';
+                              const borderColor = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-border, #e2e8f0)';
+                              const color = isSel ? '#fff' : 'var(--qa-text-2, #64748b)';
 
                               return (
                                 <button
                                   key={opt.val}
-                                  onClick={() => handleGateStatusChange(g.key, opt.val)}
+                                  onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                                  disabled={isReadOnly}
                                   style={{
-                                    padding: '2px 8px',
-                                    borderRadius: 4,
+                                    height: 24,
+                                    padding: '0 8px',
+                                    borderRadius: 6,
                                     fontSize: 11,
                                     fontWeight: isSel ? 700 : 500,
-                                    border: '1px solid var(--qa-border)',
+                                    border: `1px solid ${borderColor}`,
                                     background: bg,
                                     color: color,
-                                    cursor: 'pointer'
+                                    cursor: isReadOnly ? 'default' : 'pointer',
+                                    fontFamily: 'inherit',
+                                    transition: 'all 0.15s ease'
                                   }}
                                 >
                                   {opt.label}
@@ -1180,7 +1188,6 @@ export default function CallEvalPanel({
                               );
                             })}
                           </div>
-                        )}
                       </div>
 
                       {/* Reason for compliance gate (shown only in case of breach) */}

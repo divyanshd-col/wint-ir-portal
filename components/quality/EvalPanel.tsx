@@ -875,46 +875,53 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                           <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
                             {g.shortLabel}: <span style={{ fontWeight: 400, color: 'var(--qa-text-2)' }}>{g.label.split('(')[1]?.replace(')', '') || g.label}</span>
                           </span>
-                          {isReadOnly ? (
-                            <ScoreBadge score={scoreBadgeVal} />
-                          ) : (
-                            <div style={{ display: 'flex', gap: 4 }}>
-                              {([
-                                { label: 'Pass', val: 'pass' as const },
-                                { label: 'Fail', val: 'fail' as const },
-                                { label: 'NA', val: 'not_applicable' as const },
-                              ]).map(opt => {
-                                const isSel = gItem.status === opt.val;
-                                const bg = isSel
-                                  ? opt.val === 'pass'
-                                    ? '#15803d'
-                                    : opt.val === 'fail'
-                                    ? '#b91c1c'
-                                    : 'var(--qa-gray-700)'
-                                  : '#fff';
-                                const color = isSel ? '#fff' : 'var(--qa-text)';
+                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                            {([
+                              { label: 'Yes', val: 'pass' as const },
+                              { label: 'No', val: 'fail' as const },
+                              { label: 'NA', val: 'not_applicable' as const },
+                            ]).map(opt => {
+                              const isSel = gItem.status === opt.val;
+                              const bg = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-card, #fff)';
+                              const borderColor = isSel
+                                ? opt.val === 'pass'
+                                  ? '#15803d'
+                                  : opt.val === 'fail'
+                                  ? '#b91c1c'
+                                  : 'var(--qa-gray-700, #334155)'
+                                : 'var(--qa-border, #e2e8f0)';
+                              const color = isSel ? '#fff' : 'var(--qa-text-2, #64748b)';
 
-                                return (
-                                  <button
-                                    key={opt.val}
-                                    onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
-                                    style={{
-                                      padding: '2px 8px',
-                                      borderRadius: 4,
-                                      fontSize: 11,
-                                      fontWeight: isSel ? 700 : 500,
-                                      border: '1px solid var(--qa-border)',
-                                      background: bg,
-                                      color: color,
-                                      cursor: 'pointer'
-                                    }}
-                                  >
-                                    {opt.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
+                              return (
+                                <button
+                                  key={opt.val}
+                                  onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                                  disabled={isReadOnly}
+                                  style={{
+                                    height: 24,
+                                    padding: '0 8px',
+                                    borderRadius: 6,
+                                    fontSize: 11,
+                                    fontWeight: isSel ? 700 : 500,
+                                    border: `1px solid ${borderColor}`,
+                                    background: bg,
+                                    color: color,
+                                    cursor: isReadOnly ? 'default' : 'pointer',
+                                    fontFamily: 'inherit',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                >
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
 
                         {/* Reason for compliance gate (shown only in case of breach) */}
