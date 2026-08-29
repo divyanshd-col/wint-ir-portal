@@ -917,49 +917,47 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                           )}
                         </div>
 
-                        {/* Mention comments/quotes where Agent/Bot made a mistake */}
-                        {showMistakeBox && (
-                          isReadOnly ? (
-                            gItem.reasoning ? (
-                              <div style={{
-                                marginTop: 4,
-                                padding: '5px 8px',
-                                background: '#fee2e2',
-                                borderLeft: '3px solid #ef4444',
-                                borderRadius: 4,
-                                fontSize: 11,
-                                color: '#991b1b',
-                                lineHeight: 1.4,
-                                whiteSpace: 'pre-wrap'
-                              }}>
-                                <span style={{ fontWeight: 700 }}>Mistake: </span>{gItem.reasoning}
-                              </div>
-                            ) : null
-                          ) : (
-                            <div style={{ marginTop: 4 }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 2, textTransform: 'uppercase' }}>
-                                Mistake Comment (Where Agent/Bot failed):
-                              </div>
-                              <textarea
-                                value={gItem.reasoning}
-                                onChange={e => handleGateReasoningChange(g.key, e.target.value)}
-                                placeholder="Mention quote / comment where Agent/Bot made the mistake…"
-                                rows={gItem.reasoning || gItem.status === 'fail' ? 2 : 1}
-                                style={{
-                                  width: '100%',
-                                  boxSizing: 'border-box',
-                                  resize: 'vertical',
-                                  border: '1px solid #fca5a5',
-                                  borderRadius: 4,
-                                  padding: '4px 6px',
-                                  fontSize: 11,
-                                  color: '#991b1b',
-                                  background: '#fff1f2',
-                                  lineHeight: 1.4
-                                }}
-                              />
+                        {/* Note / Reason for compliance gate */}
+                        {isReadOnly ? (
+                          gItem.reasoning ? (
+                            <div style={{
+                              marginTop: 6,
+                              padding: '5px 8px',
+                              background: gItem.status === 'fail' ? '#fee2e2' : '#f8fafc',
+                              borderLeft: `3px solid ${gItem.status === 'fail' ? '#ef4444' : '#94a3b8'}`,
+                              borderRadius: 4,
+                              fontSize: 11,
+                              color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text-2)',
+                              lineHeight: 1.4,
+                              whiteSpace: 'pre-wrap'
+                            }}>
+                              <span style={{ fontWeight: 700 }}>Note / Reason: </span>{gItem.reasoning}
                             </div>
-                          )
+                          ) : null
+                        ) : (
+                          <div style={{ marginTop: 6 }}>
+                            <div style={{ fontSize: 10, fontWeight: 700, color: gItem.status === 'fail' ? '#b91c1c' : 'var(--qa-text-3)', marginBottom: 2, textTransform: 'uppercase' }}>
+                              Note / Reason:
+                            </div>
+                            <textarea
+                              value={gItem.reasoning}
+                              onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                              placeholder="Add note or reason for this compliance gate…"
+                              rows={gItem.reasoning || gItem.status === 'fail' ? 2 : 1}
+                              style={{
+                                width: '100%',
+                                boxSizing: 'border-box',
+                                resize: 'vertical',
+                                border: `1px solid ${gItem.status === 'fail' ? '#fca5a5' : 'var(--qa-border)'}`,
+                                borderRadius: 4,
+                                padding: '4px 6px',
+                                fontSize: 11,
+                                color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)',
+                                background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
+                                lineHeight: 1.4
+                              }}
+                            />
+                          </div>
                         )}
                       </div>
                     );
