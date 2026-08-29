@@ -364,13 +364,13 @@ function extractGateReasoning(item: any): string {
         const turnStr = ev.turn !== undefined && ev.turn !== null ? `Turn ${ev.turn}: ` : '';
         const quoteStr = ev.quote ? `"${ev.quote}"` : '';
         const whyStr = ev.why || ev.note || '';
-        if (quoteStr && whyStr) return `${turnStr}${quoteStr} — ${whyStr}`;
+        if (quoteStr && whyStr) return `${turnStr}${quoteStr} — Note: ${whyStr}`;
         if (quoteStr) return `${turnStr}${quoteStr}`;
-        if (whyStr) return `${turnStr}${whyStr}`;
+        if (whyStr) return `${turnStr}Note: ${whyStr}`;
         return typeof ev === 'object' ? JSON.stringify(ev) : String(ev);
       })
       .filter(Boolean)
-      .join('; ');
+      .join('\n');
     if (evText && !parts.some(p => p.includes(evText))) {
       parts.push(evText);
     }
@@ -399,30 +399,49 @@ function extractGateReasoning(item: any): string {
 
 function findChatBreachesForGate(params: any, gateKey: string): string {
   if (!params || typeof params !== 'object') return '';
-  const breaches: any[] = params.breaches || params.compliance?.breaches || params.__compliance?.breaches || [];
-  if (!Array.isArray(breaches) || breaches.length === 0) return '';
+  const rawBreaches: any[] = [
+    ...(Array.isArray(params.__breaches) ? params.__breaches : []),
+    ...(Array.isArray(params.breaches) ? params.breaches : []),
+    ...(Array.isArray(params.compliance?.breaches) ? params.compliance.breaches : []),
+    ...(Array.isArray(params.__compliance?.breaches) ? params.__compliance.breaches : []),
+    ...(Array.isArray(params.breach_mentions) ? params.breach_mentions : []),
+  ];
 
-  const matched = breaches.filter(b => {
-    const t = (b.type || '').toLowerCase();
+  if (!rawBreaches.length) return '';
+
+  const matched = rawBreaches.filter(b => {
+    const t = typeof b === 'string'
+      ? b.toLowerCase()
+      : ((b.type || '') + ' ' + (b.breach_type || '') + ' ' + (b.category || '') + ' ' + (b.note || '') + ' ' + (b.why || '')).toLowerCase();
+
     if (gateKey === 'G1_no_advice') {
-      return t.includes('advice') || t.includes('advisory') || t.includes('guarantee') || t.includes('return');
+      return t.includes('advice') || t.includes('advisory') || t.includes('guarantee') || t.includes('return') || t.includes('tax') || t.includes('invest');
     }
     if (gateKey === 'G2_no_fabrication') {
-      return t.includes('fabricat') || t.includes('mislead') || t.includes('fact');
+      return t.includes('fabricat') || t.includes('mislead') || t.includes('fact') || t.includes('false') || t.includes('inaccurat');
     }
     if (gateKey === 'G3_identity_first') {
-      return t.includes('data') || t.includes('identity') || t.includes('privacy') || t.includes('kyc');
+      return t.includes('data') || t.includes('identity') || t.includes('privacy') || t.includes('kyc') || t.includes('statement') || t.includes('slack') || t.includes('sheet');
     }
     return false;
   });
 
   if (!matched.length) return '';
+
   return matched.map(b => {
+    if (typeof b === 'string') {
+      // e.g. "misleading_error: The refund process may take 5–7 working days..."
+      const colonIdx = b.indexOf(':');
+      if (colonIdx > 0 && colonIdx < 30) {
+        return b.slice(colonIdx + 1).trim();
+      }
+      return b.trim();
+    }
     const q = b.quote ? `"${b.quote}"` : '';
-    const n = b.note || b.why || '';
-    if (q && n) return `${q} — ${n}`;
-    return q || n || JSON.stringify(b);
-  }).join('; ');
+    const n = b.note || b.why || b.reason || '';
+    if (q && n) return `${q} — Note: ${n}`;
+    return q || (n ? `Note: ${n}` : JSON.stringify(b));
+  }).filter(Boolean).join('\n');
 }
 
 function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params?: any): GateParamState {
