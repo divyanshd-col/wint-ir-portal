@@ -178,14 +178,21 @@ export async function completeSignup(token: string, password: string): Promise<C
 
 export async function changeStatus(userId: number, status: UserStatus, actorEmail: string): Promise<void> {
   await withTransaction(async (tx) => {
-    const rows = await tx.query<{ status: string; email: string }>(
-      `SELECT status, email FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
+    const rows = await tx.query<{ status: string; email: string; name: string }>(
+      `SELECT status, email, name FROM users WHERE user_id = $1 FOR UPDATE`, [userId]);
     const cur = rows[0];
     if (!cur) throw new Error('User not found');
     if (cur.status === status) return;
     await tx.query(
       `UPDATE users SET status = $1, status_changed_at = NOW(), status_changed_by = $2 WHERE user_id = $3`,
       [status, normalizeEmail(actorEmail), userId]);
+
+    // Keep agents table status in sync with user status
+    const agentStatus = status === 'active' ? 'active' : 'inactive';
+    await tx.query(
+      `UPDATE agents SET status = $1 WHERE user_id = $2 OR LOWER(name) = LOWER($3)`,
+      [agentStatus, userId, cur.name]);
+
     await audit('status_change', { actorEmail, targetEmail: cur.email, detail: { from: cur.status, to: status } }, tx);
   });
 }
