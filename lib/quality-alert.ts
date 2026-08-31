@@ -82,6 +82,43 @@ const CRITICAL_PARAMS: { keys: string[]; label: string }[] = [
 
 const FAIL_VALUES = new Set(['No', 'no', 'false', '0']);
 
+export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
+  harsh: 'U055PU2S4HE',
+  'neha chaturvedi': 'U031PCQ0J6A',
+  'neha c': 'U031PCQ0J6A',
+  neha: 'U031PCQ0J6A',
+  yashika: 'U066SA6DEVA',
+  puja: 'U06511Q6R46',
+  pooja: 'U06511Q6R46',
+  kriti: 'U091YMP33DF',
+  sundar: 'U08TFU5GH51',
+  'priya sundar': 'U08TFU5GH51',
+  priya: 'U08TFU5GH51',
+  anusha: 'U08LEA04YUR',
+  rishitha: 'U08LE9TLT5F',
+  vedant: 'U09HZTDQZBP',
+  'vedant g': 'U09HZTDQZBP',
+};
+
+export function getTLSlackMention(tlName?: string | null): string {
+  if (!tlName || !tlName.trim()) return 'N/A';
+  const trimmed = tlName.trim();
+  if (trimmed.startsWith('<@') && trimmed.endsWith('>')) return trimmed;
+
+  const clean = trimmed.toLowerCase();
+  if (TL_SLACK_MEMBER_MAP[clean]) {
+    return `<@${TL_SLACK_MEMBER_MAP[clean]}>`;
+  }
+
+  for (const [key, id] of Object.entries(TL_SLACK_MEMBER_MAP)) {
+    if (clean === key || clean.startsWith(key + ' ') || clean.includes(key)) {
+      return `<@${id}>`;
+    }
+  }
+
+  return trimmed;
+}
+
 export async function fireQualityAlert(opts: {
   chatId: string;
   agentName: string;
@@ -174,10 +211,12 @@ export async function fireQualityAlert(opts: {
       reasons.push(`• *TECHNICALLY / LEGALLY INCORRECT*: ${accuracyFailure.reasoning}`);
     }
 
+    const tlMention = getTLSlackMention(tlName);
+
     const lines = [
       `Chat ID: ${chatLink}`,
       `Agent: ${opts.agentName || 'Unknown'}`,
-      `TL: ${tlName || 'N/A'}`,
+      `TL: ${tlMention}`,
       `Reason for Compliance failure:`,
       reasons.join('\n'),
     ];
