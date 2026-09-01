@@ -74,5 +74,6 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     verdict: evalData?.verdict ?? null,
     reviewedBy: evalData?.reviewed_by ?? null,
     reviewNote: evalData?.review_note ?? null,
+    mobileNumber: row.mobile_number ?? null,
   });
 }

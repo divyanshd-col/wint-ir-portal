@@ -37,6 +37,7 @@ export interface TLDisputeRow {
   parameters:       Record<string, { score: boolean | null; reasoning: string }>;
   gates?:           any;
   conversationType?: 'bot' | 'agent' | 'hybrid';
+  mobileNumber?:    string | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -128,6 +129,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     call_id: string; chat_id: string | null; agent_name: string | null;
     called_at: string; disposition: string; sub_disposition: string | null;
     iqs_percent: string | null; parameters: any; gates: any;
+    mobile_number: string | null;
   }[] = [];
   if (targetCallIds.length > 0 || fallbackChatIds.length > 0) {
     callDbRows = await query(
@@ -135,10 +137,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
               cr.called_at, cr.call_disposition AS disposition,
               cr.call_sub_disposition AS sub_disposition,
               ce.iqs_percent, ce.iqs_scores AS parameters,
-              ce.gates
+              ce.gates,
+              COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
        FROM call_evaluations ce
        JOIN call_recordings cr ON cr.id = ce.call_id
+       LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
        LEFT JOIN agents a ON a.id = ce.agent_id
+       LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+       LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
        WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
       [[...targetCallIds, ...fallbackChatIds]]
     );
@@ -242,6 +248,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callIqsScore,
       closedAt:         db?.closed_at ? new Date(db.closed_at).toISOString() : (callDb?.called_at ? new Date(callDb.called_at).toISOString() : flag.flaggedAt || ''),
       csatScore:        db?.csat_score ? parseInt(db.csat_score) : null,
+      mobileNumber:     isCall ? (callDb?.mobile_number || db?.mobile_number || null) : (db?.mobile_number || null),
       disposition:      isCall ? (callDb?.disposition || '') : (db?.disposition || ''),
       subDisposition:   isCall ? (callDb?.sub_disposition || null) : (db?.sub_disposition || null),
       raisedBy:         roleTag,

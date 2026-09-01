@@ -259,6 +259,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
       rawParameters:     r.parameters,
       modelVersion:      r.modelVersion || '',
       scoredAt:          r.scoredAt || '',
+      mobileNumber:      r.mobileNumber || null,
     };
   });
 

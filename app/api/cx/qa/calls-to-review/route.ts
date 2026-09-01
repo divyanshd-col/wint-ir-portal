@@ -25,6 +25,7 @@ export interface CallToReviewRow {
   status:                 string;
   gates:                  any;
   iqsScores:              any;
+  mobileNumber:           string | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -198,10 +199,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     `SELECT ce.call_id, COALESCE(ce.chat_id, cr.chat_id) as chat_id, COALESCE(a.name, 'Unknown') as agent_name,
             ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
             cr.duration_seconds, cr.language, cr.interruption_count, cr.dead_air_count,
-            ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores
+            ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores,
+            COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
+     LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
      LEFT JOIN agents a ON a.id = ce.agent_id
+     LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+     LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}
      ORDER BY cr.called_at DESC NULLS LAST, ${reviewedMode ? 'ce.reviewed_at DESC NULLS LAST' : 'ce.scored_at DESC NULLS LAST'}
      LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
@@ -226,7 +231,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     reviewNote:             r.review_note,
     status:                 r.status,
     gates:                  r.gates,
-    iqsScores:              r.iqs_scores
+    iqsScores:              r.iqs_scores,
+    mobileNumber:           r.mobile_number || null,
   }));
 
   return NextResponse.json({ calls, total });

@@ -128,6 +128,7 @@ interface CallScoreEntry {
   failedParams: string[];
   gates?: any;
   rawParameters?: any;
+  mobileNumber?: string | null;
 }
 
 interface DisputeRow {
@@ -152,6 +153,7 @@ interface DisputeRow {
   parameters: Record<string, any> | null;
   gates?: any;
   flaggedAt: string;
+  mobileNumber?: string | null;
 }
 
 interface Props {
@@ -561,6 +563,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
+                  <th style={TH_BASE}>Mobile</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
                   <th style={TH_BASE}>Linked Chat</th>
@@ -571,13 +574,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <tbody>
                 {loadingEntries ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading evaluated calls…
                     </td>
                   </tr>
                 ) : entries.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No evaluated calls found.
                     </td>
                   </tr>
@@ -599,6 +602,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           }}
                         >
                           <td style={TD_MONO}>{call.callId}</td>
+                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
                           </td>
@@ -680,14 +684,15 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                             mode="view"
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
-                            colSpan={6}
+                            mobileNumber={call.mobileNumber}
+                            colSpan={7}
                           />
                         )}
 
                         {/* Inline Dispute Raising Form */}
                         {isExpanded && isRaising && !pendingDispute && !reviewedDispute && (
                           <tr>
-                            <td colSpan={6} style={{ padding: 20, background: '#fefce8', borderBottom: '1px solid #fef08a' }}>
+                            <td colSpan={7} style={{ padding: 20, background: '#fefce8', borderBottom: '1px solid #fef08a' }}>
                               <div style={{ maxWidth: 800, margin: '0 auto' }}>
                                 <h4 style={{ margin: '0 0 10px 0', fontSize: 15, fontWeight: 600, color: '#854d0e' }}>
                                   Raise Call Quality Dispute (ID: {call.callId})
@@ -925,6 +930,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
+                  <th style={TH_BASE}>Mobile</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
                   <th style={TH_BASE}>Linked Chat</th>
@@ -936,13 +942,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <tbody>
                 {loadingPending ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading raised disputes…
                     </td>
                   </tr>
                 ) : filteredPendingDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No pending call disputes found.
                     </td>
                   </tr>
@@ -976,6 +982,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                               callKey
                             )}
                           </td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>
@@ -1169,6 +1176,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
+                  <th style={TH_BASE}>Mobile</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
                   <th style={TH_BASE}>Linked Chat</th>
@@ -1180,13 +1188,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <tbody>
                 {loadingReviewed ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading reviewed disputes…
                     </td>
                   </tr>
                 ) : filteredReviewedDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No reviewed call disputes found.
                     </td>
                   </tr>
@@ -1220,6 +1228,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                               callKey
                             )}
                           </td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>

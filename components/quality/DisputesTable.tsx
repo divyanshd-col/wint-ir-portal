@@ -251,6 +251,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         <thead>
           <tr>
             <th style={th}>{isCallsOnly ? 'Call ID' : 'Chat ID'}</th>
+            <th style={th}>Mobile</th>
             <th style={th}>Date & Time</th>
             <th style={th}>Disposition</th>
             <th style={th}>Agent</th>
@@ -263,7 +264,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <tr key={i}>
-              {Array.from({ length: 7 }).map((_, j) => (
+              {Array.from({ length: 8 }).map((_, j) => (
                 <td key={j} style={td}>
                   <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
                 </td>
@@ -272,7 +273,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
           ))
         ) : pagedDisputes.length === 0 ? (
           <tr>
-            <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+            <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
               No disputes pending review.
             </td>
           </tr>
@@ -317,6 +318,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     ) : (
                       rowKey
                     )}
+                  </td>
+                  <td style={tdMono}>
+                    {d.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                   </td>
                   <td style={td}>
                     {d.closedAt ? `${fmtDate(d.closedAt)} ${fmtTime(d.closedAt)}` : '—'}
@@ -390,7 +394,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                 {/* Thread panel */}
                 {threadId === d.flagId && (
                   <tr>
-                    <td colSpan={7} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+                    <td colSpan={8} style={{ padding: '0 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
                       <DisputeThread
                         flagId={d.flagId}
                         agentNote={d.agentNote}
@@ -418,12 +422,13 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                       allowReevaluate={true}
                       onDone={() => removeDispute(rowKey)}
                       onClose={() => setExpandedId(null)}
-                      colSpan={7}
+                      mobileNumber={d.mobileNumber}
+                      colSpan={8}
                     />
                   ) : (
                     <React.Fragment>
                       <tr>
-                        <td colSpan={7} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
+                        <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
                           <DisputeThread
                             flagId={d.flagId}
                             agentNote={d.agentNote}
@@ -453,7 +458,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                           }}
                           onDone={() => removeDispute(d.chatId)}
                           onClose={() => setExpandedId(null)}
-                          colSpan={7}
+                          colSpan={8}
                           conversationType={d.conversationType}
                         />
                       </ErrorBoundary>
