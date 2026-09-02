@@ -129,6 +129,7 @@ interface CallScoreEntry {
   failedParams: string[];
   gates?: any;
   rawParameters?: any;
+  mobileNumber?: string | null;
 }
 
 export default function TLQualityCallsPage() {
@@ -494,6 +495,7 @@ export default function TLQualityCallsPage() {
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
                   <th style={TH_BASE}>Agent Name</th>
+                  <th style={TH_BASE}>Mobile</th>
                   <th style={TH_BASE}>Date / Time</th>
                   <th style={TH_BASE}>Disposition</th>
                   <th style={TH_BASE}>Linked Chat</th>
@@ -504,13 +506,13 @@ export default function TLQualityCallsPage() {
               <tbody>
                 {loadingEntries ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading team evaluated calls…
                     </td>
                   </tr>
                 ) : entries.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No evaluated calls found for your team.
                     </td>
                   </tr>
@@ -529,6 +531,7 @@ export default function TLQualityCallsPage() {
                         >
                           <td style={TD_MONO}>{call.callId}</td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{call.agentName}</td>
+                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
                           </td>
@@ -595,7 +598,8 @@ export default function TLQualityCallsPage() {
                             onDisputeRaised={() => fetchEvaluatedCalls()}
                             onDone={() => fetchEvaluatedCalls()}
                             onClose={() => setExpandedCallId(null)}
-                            colSpan={7}
+                            mobileNumber={call.mobileNumber}
+                            colSpan={8}
                           />
                         )}
                       </Fragment>
@@ -721,6 +725,7 @@ export default function TLQualityCallsPage() {
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
                   <th style={TH_BASE}>Agent Name</th>
+                  <th style={TH_BASE}>Mobile</th>
                   <th style={TH_BASE}>Raised By</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                   <th style={TH_BASE}>Disposition</th>
@@ -732,13 +737,13 @@ export default function TLQualityCallsPage() {
               <tbody>
                 {loadingPending ? (
                   <tr>
-                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={9} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading raised call disputes…
                     </td>
                   </tr>
                 ) : filteredPendingDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={9} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No pending call disputes raised for your team.
                     </td>
                   </tr>
@@ -771,6 +776,7 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
@@ -864,7 +870,8 @@ export default function TLQualityCallsPage() {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={8}
+                            mobileNumber={dispute.mobileNumber}
+                            colSpan={9}
                           />
                         )}
                       </Fragment>
@@ -993,6 +1000,7 @@ export default function TLQualityCallsPage() {
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
                   <th style={TH_BASE}>Agent Name</th>
+                  <th style={TH_BASE}>Mobile</th>
                   <th style={TH_BASE}>Raised By</th>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
                   <th style={TH_BASE}>Linked Chat</th>
@@ -1003,13 +1011,13 @@ export default function TLQualityCallsPage() {
               <tbody>
                 {loadingReviewed ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       Loading reviewed call disputes…
                     </td>
                   </tr>
                 ) : filteredReviewedDisputes.length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
+                    <td colSpan={8} style={{ ...TD_BASE, textAlign: 'center', color: 'var(--qa-text-2)' }}>
                       No reviewed call disputes found for your team.
                     </td>
                   </tr>
@@ -1042,6 +1050,7 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
@@ -1099,7 +1108,8 @@ export default function TLQualityCallsPage() {
                             dispute={dispute}
                             onDone={() => fetchDisputes()}
                             onClose={() => setExpandedDisputeId(null)}
-                            colSpan={7}
+                            mobileNumber={dispute.mobileNumber}
+                            colSpan={8}
                           />
                         )}
                       </Fragment>

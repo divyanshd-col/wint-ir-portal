@@ -176,10 +176,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
                 cr.call_sub_disposition AS sub_disposition,
                 ce.iqs_percent, ce.iqs_scores AS parameters,
                 ce.gates,
-                ce.reviewed_by, cr.duration_seconds
+                ce.reviewed_by, cr.duration_seconds,
+                COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
-         LEFT JOIN agents a ON a.id = ce.agent_id
+         LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
+         LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id)
+         LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+         LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
          WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
         [[...targetCallIds, ...fallbackChatIds]]
       );
@@ -391,7 +395,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       callTranscriptLabel: callInfo.label,
       closedAt:         db?.closed_at ? new Date(db.closed_at).toISOString() : (callDb?.called_at ? new Date(callDb.called_at).toISOString() : flag.flaggedAt || ''),
       csatScore:        db?.csat_score ? parseInt(db.csat_score) : null,
-      mobileNumber:     db?.mobile_number ?? null,
+      mobileNumber:     isCall ? (callDb?.mobile_number || db?.mobile_number || null) : (db?.mobile_number || null),
       disposition:      effectiveDisposition,
       subDisposition:   effectiveSubDisposition,
       agentNote:        flag.agentNote,

@@ -50,9 +50,10 @@ export async function GET(req: NextRequest) {
     const { query } = await import('@/lib/cx/db');
     if (chatIds.length > 0) {
       const rows = await query<any>(
-        `SELECT s.chat_id, s.iqs_score, c.closed_at, s.parameters, c.csat_score, c.tags
+        `SELECT s.chat_id, s.iqs_score, c.closed_at, s.parameters, c.csat_score, c.tags, ct.phone AS mobile_number
          FROM iqs_scores s
          LEFT JOIN conversations c ON c.id = s.chat_id
+         LEFT JOIN contacts ct ON ct.id = c.contact_id
          WHERE s.chat_id = ANY($1)`,
         [chatIds]
       );
@@ -62,9 +63,13 @@ export async function GET(req: NextRequest) {
     }
     if (targetCallIds.length > 0 || fallbackChatIds.length > 0) {
       const callRows = await query<any>(
-        `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, ce.gates, cr.called_at, cr.call_disposition, cr.call_sub_disposition
+        `SELECT ce.call_id, ce.chat_id, ce.iqs_percent, ce.iqs_scores, ce.gates, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
+                COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
          FROM call_evaluations ce
          JOIN call_recordings cr ON cr.id = ce.call_id
+         LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
+         LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+         LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
          WHERE ce.call_id = ANY($1) OR ce.chat_id = ANY($1)`,
         [[...targetCallIds, ...fallbackChatIds]]
       );
@@ -140,6 +145,7 @@ export async function GET(req: NextRequest) {
       reviewedAt: f.reviewedAt || '',
       parameters,
       gates: cRow?.gates ?? null,
+      mobileNumber: (isCall ? cRow?.mobile_number : row?.mobile_number) || null,
       flaggedAt: f.flaggedAt,
     };
   });

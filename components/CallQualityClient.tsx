@@ -54,6 +54,7 @@ interface CallEntry {
   reasoning: Record<string, string>;
   failedParams: string[];
   scoredAt: string;
+  mobileNumber?: string | null;
 }
 
 interface CallSegment {
@@ -191,6 +192,11 @@ function DetailModal({ entry, onClose, agentOnly }: { entry: CallEntry; onClose:
               {entry.iqs != null && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold" style={entry.iqs != null ? { background: iqsTheme(entry.iqs).bg, color: iqsTheme(entry.iqs).text } : {}}>
                   IQS: {entry.iqs}
+                </span>
+              )}
+              {entry.mobileNumber && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-medium bg-slate-100 text-slate-700">
+                  📱 {entry.mobileNumber}
                 </span>
               )}
               {entry.chatId && (
@@ -443,6 +449,7 @@ export default function CallQualityClient({ agentOnly }: Props) {
             <tr className="border-b border-slate-100 bg-slate-50">
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Call ID</th>
               {!agentOnly && <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Agent</th>}
+              <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Mobile</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Date</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Duration</th>
               <th className="px-4 py-3 text-left text-[11px] font-semibold text-slate-400 uppercase">Linked Chat</th>
@@ -464,6 +471,9 @@ export default function CallQualityClient({ agentOnly }: Props) {
                 {!agentOnly && (
                   <td className="px-4 py-2.5 font-medium text-slate-700">{entry.agentName || '—'}</td>
                 )}
+                <td className="px-4 py-2.5 font-mono text-xs text-slate-600">
+                  {entry.mobileNumber || <span className="text-slate-300">—</span>}
+                </td>
                 <td className="px-4 py-2.5 text-slate-500 text-xs">{entry.date}</td>
                 <td className="px-4 py-2.5 text-slate-500 text-xs tabular-nums">{fmtDuration(entry.durationSeconds)}</td>
                 <td className="px-4 py-2.5" onClick={e => e.stopPropagation()}>
@@ -500,7 +510,7 @@ export default function CallQualityClient({ agentOnly }: Props) {
             ))}
             {!loading && entries.length === 0 && (
               <tr>
-                <td colSpan={agentOnly ? 7 : 8} className="px-6 py-12 text-center text-slate-400 text-sm">
+                <td colSpan={agentOnly ? 8 : 9} className="px-6 py-12 text-center text-slate-400 text-sm">
                   No scored calls found for the selected filters.
                 </td>
               </tr>

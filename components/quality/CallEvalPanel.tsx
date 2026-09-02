@@ -21,6 +21,7 @@ const CALL_IQS_WEIGHTS: Record<string, number> = {
 export interface CallEvalPanelProps {
   callId:            string;
   chatId?:           string | null;
+  mobileNumber?:     string | null;
   agentName:         string;
   iqsScore:          number;
   calledAt?:         string | null;
@@ -247,6 +248,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string): GateP
 export default function CallEvalPanel({
   callId,
   chatId,
+  mobileNumber,
   agentName,
   iqsScore,
   calledAt,
@@ -354,6 +356,7 @@ export default function CallEvalPanel({
   const [hasReevaluated, setHasReevaluated] = useState(false);
   const [fetchedChatId, setFetchedChatId] = useState<string | null>(null);
   const [fetchedChatStatus, setFetchedChatStatus] = useState<string | null>(null);
+  const [fetchedMobileNumber, setFetchedMobileNumber] = useState<string | null>(null);
 
   // Load call transcript segments and fallback evaluation details
   useEffect(() => {
@@ -364,6 +367,7 @@ export default function CallEvalPanel({
         if (d.recordingUrl) setRecordingUrl(d.recordingUrl);
         if (d.chatId) setFetchedChatId(d.chatId);
         if (d.chatStatus) setFetchedChatStatus(d.chatStatus);
+        if (d.mobileNumber) setFetchedMobileNumber(d.mobileNumber);
         if (d.hasReevaluated || (d.reevalCount && d.reevalCount > 0)) {
           setHasReevaluated(true);
         }
@@ -685,13 +689,21 @@ export default function CallEvalPanel({
     ? new Date(calledAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true })
     : '';
 
+  const effectiveMobile = mobileNumber || fetchedMobileNumber;
+
   return (
     <tr>
       <td colSpan={colSpan} style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid var(--qa-border)' }}>
         {/* Header bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--qa-text)' }}>
-            Call Evaluation Panel — ID: {callId} ({agentName}){callDateStr ? ` · ${callDateStr}` : ''}
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--qa-text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span>Call Evaluation Panel — ID: {callId} ({agentName})</span>
+            {callDateStr && <span>· {callDateStr}</span>}
+            {effectiveMobile && (
+              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 500, color: 'var(--qa-text-2)', background: 'var(--qa-fill-light, #f1f5f9)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--qa-border, #e2e8f0)' }}>
+                📱 {effectiveMobile}
+              </span>
+            )}
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {effectiveChatId && (
