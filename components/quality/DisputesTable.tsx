@@ -143,6 +143,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   };
 
   const isCallsOnly = type === 'calls';
+  const isChatsOnly = type === 'chats';
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
@@ -299,7 +300,10 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
           </tr>
         ) : (
           pagedDisputes.map(d => {
-            const isCallDispute = Boolean(d.callId || isCallsOnly || d.challengedParams?.some(p => p.param.startsWith('P')));
+            const isCallDispute = isCallsOnly || (!isChatsOnly && Boolean(
+              d.callId ||
+              d.challengedParams?.some(p => /^P\d+/i.test(p.param.replace(/^(call|agent|bot):/, '')))
+            ));
             const rowKey = d.callId || d.chatId;
             const isExpanded = expandedId === rowKey;
 
