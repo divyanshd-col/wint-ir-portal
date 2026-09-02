@@ -140,6 +140,31 @@ function resolveParamData(raw: any, pKey: string): { score: string; reasoning: s
   return { score: 'NA', reasoning: '' };
 }
 
+export function calculateCallIqs(paramState: Record<string, { score: string; reasoning?: string }>): number | null {
+  let earned = 0;
+  let applicable = 0;
+  for (const [param, weight] of Object.entries(CALL_IQS_WEIGHTS)) {
+    const item = paramState[param];
+    if (!item) continue;
+    const s: any = item.score;
+    if (s === 'NA' || s === 'na' || s === null || s === undefined || s === '') continue;
+    applicable += weight;
+    let numericScore = 0;
+    if (s === 'Yes' || s === 'yes' || s === '2' || s === 2 || s === 'PASS' || s === 'pass' || s === true) {
+      numericScore = 2;
+    } else if (s === 'Half' || s === 'half' || s === 'Part' || s === 'part' || s === 'Partial' || s === 'partial' || s === '1' || s === 1 || s === 0.5 || s === '0.5') {
+      numericScore = 1;
+    } else if (s === 'No' || s === 'no' || s === '0' || s === 0 || s === 'FAIL' || s === 'fail' || s === false) {
+      numericScore = 0;
+    } else {
+      const parsed = parseFloat(String(s));
+      numericScore = isNaN(parsed) ? 0 : parsed;
+    }
+    earned += weight * (numericScore / 2);
+  }
+  return applicable === 0 ? null : Math.round((earned / applicable) * 100);
+}
+
 const COMPLIANCE_GATES_LIST = [
   { key: 'G1_no_advice', label: 'G1: Advice (No Investment / Tax Advice)', shortLabel: 'G1 Advice' },
   { key: 'G2_no_fabrication', label: 'G2: Fabrication (No Fabricated Facts)', shortLabel: 'G2 Fabrication' },
@@ -274,6 +299,16 @@ export default function CallEvalPanel({
   const [currentIqsScores, setCurrentIqsScores] = useState<any>(iqsScores || null);
   const [currentIqs, setCurrentIqs] = useState<number | null>(iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
   const [paramState, setParamState] = useState<Record<string, { score: string; reasoning: string }>>({});
+  const [hasUserEditedParams, setHasUserEditedParams] = useState(false);
+
+  const displayedIqs = useMemo(() => {
+    if (hasUserEditedParams) {
+      return calculateCallIqs(paramState);
+    }
+    return currentIqs != null && !isNaN(currentIqs)
+      ? currentIqs
+      : (iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
+  }, [hasUserEditedParams, paramState, currentIqs, iqsScore]);
 
   // Compliance Gates state
   const [gateState, setGateState] = useState<Record<string, GateParamState>>(() => {
@@ -360,6 +395,7 @@ export default function CallEvalPanel({
 
   // Load call transcript segments and fallback evaluation details
   useEffect(() => {
+    setHasUserEditedParams(false);
     fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`)
       .then(r => r.json())
       .then(d => {
@@ -396,10 +432,16 @@ export default function CallEvalPanel({
   }, [dispute]);
 
   const handleScoreChange = (param: string, val: string) => {
-    setParamState(prev => ({
-      ...prev,
-      [param]: { ...prev[param], score: val }
-    }));
+    setHasUserEditedParams(true);
+    setParamState(prev => {
+      const next = {
+        ...prev,
+        [param]: { ...(prev[param] || { reasoning: '' }), score: val }
+      };
+      const newScore = calculateCallIqs(next);
+      setCurrentIqs(newScore);
+      return next;
+    });
   };
 
   const handleReasoningChange = (param: string, text: string) => {
@@ -493,6 +535,7 @@ export default function CallEvalPanel({
           const parsed = typeof data.iqs === 'number' ? data.iqs : parseFloat(data.iqs);
           if (!isNaN(parsed)) setCurrentIqs(parsed);
         }
+        setHasUserEditedParams(false);
 
         alert('Transcript saved and call quality re-evaluated successfully!');
       } else {
@@ -546,6 +589,7 @@ export default function CallEvalPanel({
           const parsed = typeof data.iqs === 'number' ? data.iqs : parseFloat(data.iqs);
           if (!isNaN(parsed)) setCurrentIqs(parsed);
         }
+        setHasUserEditedParams(false);
 
         alert('Call re-evaluation completed successfully!');
       } else {
@@ -1104,7 +1148,7 @@ export default function CallEvalPanel({
             }}>
               <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Evaluation Parameters</h4>
               <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
-                IQS Score: <span style={{ color: '#15803d' }}>{currentIqs != null && !isNaN(currentIqs) ? `${currentIqs}%` : (iqsScore != null && !isNaN(iqsScore) ? `${iqsScore}%` : '—')}</span>
+                IQS Score: <span style={{ color: '#15803d' }}>{displayedIqs != null && !isNaN(displayedIqs) ? `${displayedIqs}%` : '—'}</span>
               </span>
             </div>
 

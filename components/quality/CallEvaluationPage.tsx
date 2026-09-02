@@ -10,6 +10,7 @@ type Tab = 'pending' | 'disputes' | 'reviewed';
 function CallEvaluationContent() {
   const searchParams = useSearchParams();
   const targetCallId = searchParams.get('callId') || searchParams.get('call_id') || '';
+  const targetMobile = searchParams.get('mobile') || searchParams.get('phone') || searchParams.get('mobile_number') || '';
 
   const [dispositions, setDispositions] = useState<string[]>([]);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
@@ -125,6 +126,7 @@ function CallEvaluationContent() {
           onCountChange={setPendingCount}
           agentFilter={agentFilter}
           initialCallId={targetCallId}
+          initialMobile={targetMobile}
           onCallNotFound={() => setTab('reviewed')}
         />
       </div>
@@ -134,6 +136,7 @@ function CallEvaluationContent() {
           type="calls"
           onCountChange={setDisputeCount}
           agentFilter={agentFilter}
+          initialMobile={targetMobile}
         />
       </div>
 
@@ -142,6 +145,7 @@ function CallEvaluationContent() {
           dispositions={loadingDisp ? [] : dispositions}
           agentFilter={agentFilter}
           initialCallId={targetCallId}
+          initialMobile={targetMobile}
         />
       </div>
 

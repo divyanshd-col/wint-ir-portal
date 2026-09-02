@@ -8,6 +8,7 @@ interface Props {
   dispositions:   string[];
   agentFilter?:   'all' | 'human_only';
   initialCallId?: string;
+  initialMobile?: string;
 }
 
 const chip: React.CSSProperties = {
@@ -166,11 +167,13 @@ const CallEvalRow = React.memo(function CallEvalRow({
 
 type SortCol = 'callId' | 'agentName' | 'iqsScore';
 
-export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', initialCallId }: Props) {
+export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', initialCallId, initialMobile }: Props) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const [callIdSearch, setCallIdSearch] = useState(initialCallId || '');
+  const [mobileSearch, setMobileSearch] = useState(initialMobile || '');
+  const [debouncedMobile, setDebouncedMobile] = useState(initialMobile || '');
   const [dispFilter, setDispFilter] = useState<string[]>([]);
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
@@ -178,6 +181,13 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [openDrop, setOpenDrop] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMobile(mobileSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [mobileSearch]);
 
   const [calls, setCalls] = useState<CallToReviewRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -192,6 +202,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
     try {
       const params = new URLSearchParams({ page: String(pg), limit: String(ps), reviewed: 'true' });
       if (callIdSearch) params.set('call_id', callIdSearch);
+      if (debouncedMobile.trim()) params.set('mobile', debouncedMobile.trim());
       params.set('agent_filter', agentFilter);
       dispFilter.forEach(d => params.append('disposition_filter', d));
       if (iqsMin) params.set('iqs_min', iqsMin);
@@ -217,7 +228,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
     } finally {
       setLoading(false);
     }
-  }, [callIdSearch, dispFilter, iqsMin, iqsMax, customFrom, customTo, pageSize, agentFilter, initialCallId]);
+  }, [callIdSearch, debouncedMobile, dispFilter, iqsMin, iqsMax, customFrom, customTo, pageSize, agentFilter, initialCallId]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -276,6 +287,17 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
           }}
         />
 
+        <input
+          placeholder="Search by mobile number…"
+          value={mobileSearch}
+          onChange={e => setMobileSearch(e.target.value)}
+          style={{
+            height: 32, padding: '0 10px', border: `1px solid ${mobileSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
+            background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
+            outline: 'none', width: 175
+          }}
+        />
+
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button style={dispFilter.length ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'disp' ? null : 'disp')}>
             {dispFilter.length > 0 ? `${dispFilter.length} dispositions` : 'Disposition'}
@@ -326,7 +348,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
         </div>
 
         <button style={chip} onClick={() => {
-          setCallIdSearch(''); setDispFilter([]); setIqsMin(''); setIqsMax(''); setCustomFrom(''); setCustomTo('');
+          setCallIdSearch(''); setMobileSearch(''); setDebouncedMobile(''); setDispFilter([]); setIqsMin(''); setIqsMax(''); setCustomFrom(''); setCustomTo('');
         }}>Reset</button>
 
         <div style={{ flex: 1 }} />
