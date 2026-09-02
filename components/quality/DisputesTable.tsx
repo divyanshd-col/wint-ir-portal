@@ -12,6 +12,7 @@ interface Props {
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
   type?: 'chats' | 'calls' | 'all';
+  initialMobile?: string;
 }
 
 interface FlagComment {
@@ -31,7 +32,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', type = 'all' }: Props) {
+export default function DisputesTable({ onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', type = 'all', initialMobile }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
@@ -39,6 +40,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   const [threads,     setThreads]     = useState<Record<string, FlagComment[]>>({});
   const [threadLoad,  setThreadLoad]  = useState<string | null>(null);
   const [chatIdSearch, setChatIdSearch] = useState('');
+  const [mobileSearch, setMobileSearch] = useState(initialMobile || '');
   const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [openDrop,     setOpenDrop]     = useState<string | null>(null);
   const [page,         setPage]         = useState(1);
@@ -50,7 +52,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
 
   useEffect(() => {
     setPage(1);
-  }, [agentFilter, callsFilter, chatIdSearch, type]);
+  }, [agentFilter, callsFilter, chatIdSearch, mobileSearch, type]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,13 +101,20 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     }
   }
 
-  const hasFilters = !!(chatIdSearch || callsFilter !== 'all');
+  const hasFilters = !!(chatIdSearch || mobileSearch || callsFilter !== 'all');
 
   let visibleDisputes = disputes;
 
   if (chatIdSearch) {
     const term = chatIdSearch.toLowerCase().trim();
     visibleDisputes = visibleDisputes.filter(d => (d.callId || d.chatId).toLowerCase().includes(term));
+  }
+
+  if (mobileSearch) {
+    const clean = mobileSearch.replace(/\D/g, '');
+    if (clean) {
+      visibleDisputes = visibleDisputes.filter(d => (d.mobileNumber || '').replace(/\D/g, '').includes(clean));
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
@@ -151,6 +160,17 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
           }}
         />
 
+        <input
+          placeholder="Search by mobile number…"
+          value={mobileSearch}
+          onChange={e => setMobileSearch(e.target.value)}
+          style={{
+            height: 32, padding: '0 10px', border: `1px solid ${mobileSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
+            background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
+            outline: 'none', width: 175
+          }}
+        />
+
         {!isCallsOnly && (
           <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
             <button style={callsFilter !== 'all' ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'calls' ? null : 'calls')}>
@@ -175,7 +195,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
 
         <button
           disabled={!hasFilters}
-          onClick={() => { setChatIdSearch(''); setCallsFilter('all'); }}
+          onClick={() => { setChatIdSearch(''); setMobileSearch(''); setCallsFilter('all'); }}
           style={{
             ...chip,
             color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',

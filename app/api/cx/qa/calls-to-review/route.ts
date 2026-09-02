@@ -77,12 +77,18 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const callId = searchParams.get('call_id');
   const hasCallId = Boolean(callId && callId.trim());
 
+  const mobile = searchParams.get('mobile') || searchParams.get('phone') || searchParams.get('mobile_number');
+  const cleanMobile = mobile ? mobile.replace(/\D/g, '') : '';
+  const hasMobile = Boolean(cleanMobile);
+
+  const isDirectLookup = hasCallId || hasMobile;
+
   // Build dynamic WHERE clauses
   const sqlParams: unknown[] = [];
   let paramIdx = 1;
   let baseWhere = '';
 
-  if (!hasCallId) {
+  if (!isDirectLookup) {
     if (role === 'admin') {
       sqlParams.push(effectiveDispositions);
       const dispParam = paramIdx++;
@@ -109,11 +115,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   let extraWhere = '';
   const filters: Record<string, unknown> = {};
 
+  if (isDirectLookup && dispositionFilters.length > 0) {
+    const pIdx = paramIdx++;
+    extraWhere += ` AND EXISTS (SELECT 1 FROM unnest($${pIdx}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d))`;
+    sqlParams.push(dispositionFilters);
+  }
+
   if (hasCallId && callId) {
     const pIdx = paramIdx++;
     extraWhere += ` AND (ce.call_id LIKE $${pIdx} OR ce.chat_id LIKE $${pIdx})`;
     sqlParams.push(`${callId.trim()}%`);
     filters.callId = callId.trim();
+  }
+
+  if (hasMobile) {
+    const pIdx = paramIdx++;
+    extraWhere += ` AND (ct_cr.phone LIKE $${pIdx} OR ct_c.phone LIKE $${pIdx})`;
+    sqlParams.push(`%${cleanMobile}%`);
+    filters.mobile = cleanMobile;
   }
 
   const subDispos = searchParams.getAll('sub_disposition');
@@ -184,7 +203,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     `SELECT COUNT(*) AS total
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
+     LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
      LEFT JOIN agents a ON a.id = ce.agent_id
+     LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+     LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}`,
     sqlParams
   );
