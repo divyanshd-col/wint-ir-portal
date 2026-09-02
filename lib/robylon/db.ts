@@ -918,6 +918,7 @@ export interface CallRecordingRow {
   interruption_count: number;
   dead_air_count: number;
   status: string;
+  mobile_number?: string | null;
 }
 
 export async function insertCallRecording(data: {
@@ -973,7 +974,14 @@ export async function updateCallRecordingMetrics(data: {
 }
 
 export async function getCallRecording(callId: string): Promise<CallRecordingRow | null> {
-  const rows = await query<CallRecordingRow>(`SELECT * FROM call_recordings WHERE id = $1`, [callId]);
+  const rows = await query<CallRecordingRow>(`
+    SELECT r.*, COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
+    FROM call_recordings r
+    LEFT JOIN conversations conv ON conv.id = r.chat_id
+    LEFT JOIN contacts ct_cr ON ct_cr.id = r.contact_id
+    LEFT JOIN contacts ct_c ON ct_c.id = conv.contact_id
+    WHERE r.id = $1
+  `, [callId]);
   return rows[0] ?? null;
 }
 
@@ -1228,12 +1236,15 @@ export async function getAllScoredCalls(opts: {
       COALESCE(ce.scored_at, s.call_scored_at) AS "scoredAt",
       COALESCE(ce.reviewed_by, s.reviewed_by) AS "reviewedBy",
       COALESCE(ce.reviewed_at, s.reviewed_at) AS "reviewedAt",
-      COALESCE(ce.review_note, s.review_note) AS "reviewNote"
+      COALESCE(ce.review_note, s.review_note) AS "reviewNote",
+      COALESCE(ct_cr.phone, ct_c.phone)       AS "mobileNumber"
     FROM call_recordings r
     LEFT JOIN call_evaluations ce ON ce.call_id = r.id
     LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
     LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, conv.agent_id, r.agent_id)
+    LEFT JOIN contacts ct_cr ON ct_cr.id = r.contact_id
+    LEFT JOIN contacts ct_c ON ct_c.id = conv.contact_id
     ${where}
     ORDER BY r.called_at DESC NULLS LAST, COALESCE(ce.scored_at, s.call_scored_at) DESC NULLS LAST
     LIMIT $${params.length - 1} OFFSET $${params.length}

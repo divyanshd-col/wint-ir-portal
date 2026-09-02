@@ -36,9 +36,14 @@ Every specific figure, rate, date, or timeline the rep states must trace to KB_C
 Fails if the rep states a specific number, date, rate, or timeline that appears in neither KB_CONTEXT nor the call context. Vague honesty ("I will confirm and get back to you") is NOT a violation and is the correct behaviour.
 Binding: any call where the rep states at least one specific claim.
 
-GATE G3: IDENTITY VERIFIED FIRST
-No account-specific information (holdings, amounts, dates of the customer's own transactions, KYC status, bank details) disclosed before an identity verification exchange (registered mobile, email, PAN, DOB, or explicit name confirmation) occurs earlier in turn order.
-Binding: only calls where account-specific information is disclosed. General product questions pass vacuously.
+GATE G3: IDENTITY VERIFIED FIRST / DATA PRIVACY
+Support calls are conducted directly with the customer on their registered mobile number. Therefore, accessing and referencing the customer's own account details, portfolio holdings, bond names (e.g., while helping with Form 121 / 15G / 15H submission, investment status, KYC, or transactions) is standard and fully authorized. Verbal identity verification (such as asking for PAN/DOB/OTP) is NOT required before mentioning or discussing the customer's own holdings or account details.
+Fails ONLY if the rep:
+(a) discloses third-party customer information (another person's account, holdings, or personal data) to the caller, OR
+(b) shares sensitive security credentials (passwords, MPINs, OTPs, full bank credentials), OR
+(c) continues to disclose confidential account details after the caller explicitly indicates they are an unauthorized third party / not the account holder.
+Not violations: stating the customer's own bond holdings (e.g., Muthoot Mercantile, Ugro Capital, CreditAccess, etc.), portfolio assets, transaction status, Form 121 / 15G / 15H details, or account status when connected with the customer on call.
+Binding: only calls where third-party data or sensitive security credentials are disclosed. Normal account assistance passes.
 
 RULES
 - Cite the exact turn index for every finding.

@@ -88,6 +88,7 @@ const CallEvalRow = React.memo(function CallEvalRow({
           )}
         </td>
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
+        <td style={tdMono}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}</td>
         <td style={td}>{call.disposition}</td>
         <td style={td} onClick={e => e.stopPropagation()}>
           {call.chatId ? (
@@ -179,7 +180,8 @@ const CallEvalRow = React.memo(function CallEvalRow({
           allowReevaluate={true}
           onDone={() => onRemoveCall(call.callId)}
           onClose={onCloseExpand}
-          colSpan={7}
+          mobileNumber={call.mobileNumber}
+          colSpan={8}
         />
       )}
     </React.Fragment>
@@ -427,6 +429,7 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
             <tr>
               <th style={th}>Call ID</th>
               <th style={th}>Agent</th>
+              <th style={th}>Mobile</th>
               <th style={th}>Disposition</th>
               <th style={th}>Linked Chat</th>
               <th style={{ ...th, textAlign: 'right' }}>IQS</th>
@@ -436,9 +439,9 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
+              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
             ) : sortedCalls.length === 0 ? (
-              <tr><td colSpan={7} style={{ ...td, textAlign: 'center' }}>No calls pending review</td></tr>
+              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>No calls pending review</td></tr>
             ) : (
               sortedCalls.map(c => (
                 <CallEvalRow
