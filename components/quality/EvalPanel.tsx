@@ -277,25 +277,7 @@ export default function EvalPanel({
     });
   }
 
-  const activeParamOrder = useMemo(() => {
-    const order = activeTab === 'bot' ? BOT_PARAM_ORDER : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
-    if (activeTab === 'agent' && isV4 && callRecordings.length === 0 && !txLoading) {
-      // For pure chats with no voice calls, if conditional call parameters were not scored (N/A)
-      // and not disputed or currently being picked, hide them so irrelevant call parameters don't pollute pure chats
-      return order.filter(pascal => {
-        if (pascal !== 'EscalationDecision' && pascal !== 'PostCallRecap') return true;
-        const st = agentParamState[pascal];
-        const pickKey = `agent:${pascal}`;
-        const disputed = (dispute?.challengedParams ?? []).some(c =>
-          c.param === pickKey || c.param === pascal || c.param.toLowerCase() === pickKey.toLowerCase()
-        );
-        if (disputed || disputePicks.has(pascal) || disputing) return true;
-        if (st && st.score !== null) return true;
-        return false;
-      });
-    }
-    return order;
-  }, [activeTab, isV4, callRecordings.length, txLoading, agentParamState, dispute?.challengedParams, disputePicks, disputing]);
+  const activeParamOrder = activeTab === 'bot' ? BOT_PARAM_ORDER : (isV4 ? PARAM_ORDER : V3_PARAM_ORDER);
 
   async function submitTLDispute() {
     if (disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting) return;
