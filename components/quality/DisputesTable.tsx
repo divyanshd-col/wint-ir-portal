@@ -111,10 +111,13 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   }
 
   if (mobileSearch) {
-    const clean = mobileSearch.replace(/\D/g, '');
-    if (clean) {
-      visibleDisputes = visibleDisputes.filter(d => (d.mobileNumber || '').replace(/\D/g, '').includes(clean));
-    }
+    const clean = mobileSearch.replace(/\D/g, '').replace(/^0+/, '');
+    const raw = mobileSearch.trim().toLowerCase();
+    visibleDisputes = visibleDisputes.filter(d => {
+      const num = (d.mobileNumber || '').toLowerCase();
+      const digits = num.replace(/\D/g, '');
+      return (clean && digits.includes(clean)) || (raw && num.includes(raw));
+    });
   }
 
   const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
@@ -143,6 +146,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   };
 
   const isCallsOnly = type === 'calls';
+  const isChatsOnly = type === 'chats';
 
   return (
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
@@ -299,7 +303,10 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
           </tr>
         ) : (
           pagedDisputes.map(d => {
-            const isCallDispute = Boolean(d.callId || isCallsOnly || d.challengedParams?.some(p => p.param.startsWith('P')));
+            const isCallDispute = isCallsOnly || (!isChatsOnly && Boolean(
+              d.callId ||
+              d.challengedParams?.some(p => /^P\d+/i.test(p.param.replace(/^(call|agent|bot):/, '')))
+            ));
             const rowKey = d.callId || d.chatId;
             const isExpanded = expandedId === rowKey;
 
@@ -419,6 +426,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                         flagId={d.flagId}
                         agentNote={d.agentNote}
                         agentName={d.agentName}
+                        raisedByRole={(d as any).raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                        raisedByName={d.raisedByName || d.agentName}
                         flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
                         compact
                       />
@@ -453,6 +462,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                             flagId={d.flagId}
                             agentNote={d.agentNote}
                             agentName={d.agentName}
+                            raisedByRole={(d as any).raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                            raisedByName={d.raisedByName || d.agentName}
                             flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
                             compact
                           />

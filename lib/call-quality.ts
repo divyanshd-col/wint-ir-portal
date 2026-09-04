@@ -521,9 +521,9 @@ Technical and legal correctness is the utmost crucial point for IQS evaluation. 
 - NA: Very rare.
 
 ### 5. Expectation Setting (10%) — key: Expectation
-- Yes: IR gave a specific timeline, next step, or commitment — e.g. "credited within 7 working days", "I'll email you by 5 PM". Covers product info, TAT, and issue updates.
-- No: Investor asked when/how long and got no specific answer. Promise made without a timeframe.
-- NA: No timeline-sensitive question asked.
+- Yes: IR gave a timeline, next step, or commitment — e.g. "credited within 7 working days", "I'll email you by 5 PM", or communicated that the issue will be raised with the concerned team/backend and an update will be provided as soon as possible ("allow us some time while our team looks into this"). Providing an exact timeline is not always possible; committing to team escalation and follow-up as soon as possible is fully sufficient. Do NOT reduce marks if the IR does not provide a specific TAT.
+- No: Investor asked when/how long or had an open/pending issue and got NO answer, no team escalation, and no follow-up path at all.
+- NA: No timeline-sensitive question asked and issue was resolved live on the call.
 
 ### 6. Process (5%) — key: Process
 - Yes: IR checked the investor's prior chat query before the call and did not ask them to repeat already-shared info. Pre-checked details on Wint Finder to assist quickly without putting investor on hold.

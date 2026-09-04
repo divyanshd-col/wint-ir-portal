@@ -149,6 +149,7 @@ List one entry per instance, even if the same type happens more than once. If gu
 - misleading_error: a factual error serious enough to push the customer toward a wrong financial decision.
 Put each breach in the breaches array with its type, the exact offending quote, and a one-line note. If there are none, breaches is an empty array and breach is false.
 Note: a misleading_error breach in the CHAT also lowers Accuracy when it stands as the final answer (if it was later corrected and the final answer is right, Accuracy follows the final answer and the change goes to the ANSWER CHANGE GATE, but the breach entry stays in this list). A breach that happened only on a CALL does not affect any chat quality parameter, since call quality is scored separately. Either way it goes in the list.
+- KB PRIORITY OVER GENERAL MARKET KNOWLEDGE: ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent (neither in quality scores like Accuracy nor as a compliance breach / misleading_error / guaranteed_returns) for stating a rule that matches KB_CONTEXT.
 
 ### Data handling over WhatsApp
 Documents may be shared over WhatsApp only if they carry no personal and no internal information.
@@ -161,6 +162,7 @@ Documents may be shared over WhatsApp only if they carry no personal and no inte
 {{WINT_POLICY}}
 
 ## SCORING GUARDRAILS (how to handle what you see, applies to Accuracy and IssueResolution)
+- ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 - Internal checks (Finder, order status, account or SIP state) are not visible to you and agents do not narrate them to customers. Do NOT assume a check was skipped, and do NOT lower Accuracy just because the agent did not say "I checked and confirmed X". The fact that a response could have been improved by a tool check is NOT enough to fail anything. Example: if the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP", that is NOT an error, the check is internal. Only lower Accuracy if the visible answer or action is provably wrong, for example the agent says a repayment was not processed but the transcript shows it was credited, or the agent gives a wrong fact or wrong process step.
 - Private Notes / Internal notes (indicated in the transcript as "Internal Note: ...", "Private Note: ...", or containing internal Slack links/tool URLs like "https://...slack.com/..."), Slack links, and internal tool URLs are internal working notes and context references. TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or status updates, but EXCLUDE them while judging/scoring the chat. Do NOT evaluate their tone, language, grammar, or response quality, and NEVER flag them as compliance breaches or lower/score any quality parameter based on private notes or internal links. Evaluate only what was communicated to the customer.
 - If the chat references a prior conversation (phrases such as "previous chat", "previous conversation", "previous text", "last time", "last conversation", "earlier ticket", "as discussed before", "as discussed earlier", "as mentioned earlier", "referred earlier", "as per our last chat", "continuing from before"), note it in summary and be lenient on Accuracy and IssueResolution. Missing context may live in that earlier chat. Do not fail for information gaps a prior chat could explain.
@@ -203,9 +205,12 @@ Were the agent's factual claims correct per the Wint KB and policy (product rule
 ### ExpectationFollowThrough (graded 0 / 0.5 / 1)
 Does the customer leave knowing what happens next, and does the closing fit the real state of the issue.
 - 1: clear timeline or next step where needed, and a closing that matches the outcome.
-- 0.5: a next step given but vague, or a closing slightly off.
-- 0: the customer asked "when" and got nothing, or the chat closed cheerfully on an unresolved or anxious issue.
-- This is about whether a next step was communicated, not whether the timeline quoted was correct. Correctness is Accuracy.
+  - **TAT / Timeline Leniency**: Providing an exact timeline or specific TAT is NOT always possible (especially for issues requiring investigation by tech/backend teams, bank dependencies, external RTAs, lien removals, or partner escalations). If the agent communicates that they will raise or have raised the issue with the concerned team and will get back to the customer with an update as soon as possible (or communicates something along those lines, e.g. "allow us some time while our team investigates", "I am escalating this to our team and will keep you posted as soon as possible"), that IS FULLY SUFFICIENT expectation setting (score 1).
+  - Do NOT reduce marks (do NOT score 0.5 or 0) if the agent does not mention a specific TAT, as providing an exact timeline is not always possible.
+  - Even if the customer explicitly asks "when?", "how long?", or shows impatience, if an exact resolution timeline is unconfirmed, acknowledging the issue and stating that the team is looking into it and will update them as soon as possible is acceptable and sufficient (score 1).
+- 0.5: a next step was given but without clear ownership or escalation path, or a closing slightly off. (Never score 0.5 solely because an exact numeric TAT was omitted when the agent promised to check with the team and follow up).
+- 0: the customer asked "when" or had an unresolved issue and got nothing at all (no next step, no team escalation, and no follow-up path communicated), or the chat closed cheerfully on an unresolved or anxious issue with no ongoing follow-up path.
+- This is about whether a next step or path was communicated, not whether the timeline quoted was correct. Correctness is Accuracy.
 
 ### Personalization (graded 0 / 0.5 / 1)
 Was the response built around this customer's situation.
@@ -326,8 +331,8 @@ Does not cover: correctness (Accuracy) or readability (Clarity).
 
 ### ExpectationSetting (conditional, graded 0 / 0.5 / 1, else "NA")
 When something is pending, did the bot tell the customer what happens next and by when.
-- 1: a clear next step or timeline was given (for example "being processed today, will be credited to account ...").
-- 0.5: implied but vague on an ongoing issue handled by the bot where a specific timeframe could be given.
+- 1: a clear next step or timeline was given (for example "being processed today, will be credited to account ..."). Communicating that the issue is being checked with the team and an update will be shared as soon as possible is sufficient expectation setting; an exact numeric TAT is not mandatory.
+- 0.5: implied but vague on an ongoing issue handled entirely by the bot where a specific timeframe from the KB could easily be given.
 - 0: left the customer not knowing what happens next on a pending item.
 - "NA" (unsure false): the query was fully resolved on the spot with nothing pending.
 - **TRANSFER / HANDOVER**: When transferring a chat to a human executive, standard transfer phrasing (e.g. "I'm transferring your chat to an executive", "please allow them some time to connect", "connecting you at the earliest", "an executive will assist you shortly") is FULLY ACCEPTABLE expectation setting for a bot handover. Do NOT penalize or score 0.5 for vague timeline on bot transfer messages. A bot cannot predict human agent queue wait times; informing the user of the transfer is sufficient (score 1).
@@ -518,7 +523,7 @@ export function buildScoringPrompt(
   }
 
   const kb = opts.kbContext
-    ? '\n## WINT KNOWLEDGE BASE REFERENCE\nUse these KB excerpts to judge Accuracy.\n\n' + opts.kbContext
+    ? '\n## WINT KNOWLEDGE BASE REFERENCE (KB_CONTEXT)\nUse these KB excerpts to judge Accuracy and Compliance.\n\n' + opts.kbContext
     : ''
   const slack = opts.slackThread ? '\n## SLACK THREAD (context)\n' + opts.slackThread : ''
   const callBlocks = calls.map((c, i) =>

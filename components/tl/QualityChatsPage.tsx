@@ -840,7 +840,9 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                     <td colSpan={colCount} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
                       {d.agentNote && (
                         <div style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginRight: 8 }}>Agent Note</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginRight: 8 }}>
+                            {d.raisedBy === 'TL' ? 'Team Lead Note' : 'Agent Note'}
+                          </span>
                           <span style={{ fontSize: 13, color: 'var(--qa-text)' }}>{d.agentNote}</span>
                         </div>
                       )}
@@ -869,6 +871,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         agentNote={d.agentNote}
                         reviewNote={d.reviewNote}
                         agentName={d.agentName}
+                        raisedByRole={d.raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                        raisedByName={d.raisedByName || d.agentName}
                         reviewedBy={(d as any).reviewedBy}
                         reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
                         flaggedAt={(d as any).flaggedAt || d.raisedAt}

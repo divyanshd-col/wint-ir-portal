@@ -47,7 +47,7 @@ const rawList = [
   'Varshini',
   'Sravanti',
   'Dheeraj',
-  'Anushka',
+  'Anushka Bagul',
   'Nishant',
   'Sahil Joshi',
   'Saksham',
@@ -85,8 +85,7 @@ async function run() {
       29,  // Nandini
       33,  // Bismita
       38,  // Varshini
-      5,   // Anushka Chowdhary
-      885, // Anushka choudhary
+      940, // Anushka Bagul
       32,  // Sahil Joshi
       22,  // Saksham
       28,  // Anjana
@@ -143,7 +142,6 @@ async function run() {
       1033, // Bismita
       1051, // Varshini
       1032, // Anushka Bagul
-      1088, // Anushka Chowdhary
       1013, // Sahil Joshi
       1028, // Saksham
       1022, // Anjana

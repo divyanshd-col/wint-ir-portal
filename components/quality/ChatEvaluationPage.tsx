@@ -150,6 +150,7 @@ export default function ChatEvaluationPage({ role }: Props) {
 
       <div style={{ display: tab === 'disputes' ? 'block' : 'none' }}>
         <DisputesTable
+          type="chats"
           onCountChange={setDisputeCount}
           agentFilter={agentFilter}
         />
