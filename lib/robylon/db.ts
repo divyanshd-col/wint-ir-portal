@@ -26,28 +26,46 @@ function buildParamFailColumns(): { columns: string; pairs: Array<{ db: string; 
 // ── Agent helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Merges any duplicate agent rows matching `name` (case-insensitive or prefix) into `primaryId`.
+ * Merges any duplicate agent rows matching `name` (case-insensitive) into `primaryId`.
  * Reassigns conversations and call_recordings to `primaryId` and removes duplicate rows.
+ * Only merges if candidate does not belong to a different registered user.
  */
 export async function mergeAgentDuplicates(primaryId: number, name: string): Promise<void> {
   if (!primaryId || !name) return;
   const trimmed = name.trim();
 
-  const duplicates = await query<{ id: number; tl_name: string | null; qa_name: string | null }>(
-    `SELECT id, tl_name, qa_name FROM agents 
+  // Get primary agent info to prevent cross-user merging
+  const primaryRows = await query<{ id: number; user_id: number | null; status: string }>(
+    `SELECT id, user_id, status FROM agents WHERE id = $1`,
+    [primaryId]
+  );
+  if (!primaryRows.length) return;
+  const primaryUser = primaryRows[0].user_id;
+
+  // Find candidate duplicates with EXACT same name (case-insensitive) or same non-null user_id.
+  // NEVER use loose prefix wildcard (e.g. 'Anushka' swallowing 'Anushka choudhary').
+  const duplicates = await query<{ id: number; user_id: number | null; tl_name: string | null; qa_name: string | null }>(
+    `SELECT id, user_id, tl_name, qa_name FROM agents 
      WHERE id != $1 AND (
-       LOWER(name) = LOWER($2) OR 
-       LOWER(name) LIKE LOWER($2 || ' %') OR 
-       LOWER($2) LIKE LOWER(name || ' %')
+       LOWER(name) = LOWER($2)
+       OR (user_id IS NOT NULL AND user_id = $3)
      )`,
-    [primaryId, trimmed]
+    [primaryId, trimmed, primaryUser ?? -1]
   );
 
-  if (duplicates.length === 0) return;
-  const dupIds = duplicates.map(d => d.id);
+  // Safety filter: never merge if candidate has a different non-null user_id
+  const safeDuplicates = duplicates.filter(d => {
+    if (primaryUser != null && d.user_id != null && d.user_id !== primaryUser) {
+      return false;
+    }
+    return true;
+  });
 
-  const firstWithTL = duplicates.find(d => d.tl_name)?.tl_name;
-  const firstWithQA = duplicates.find(d => d.qa_name)?.qa_name;
+  if (safeDuplicates.length === 0) return;
+  const dupIds = safeDuplicates.map(d => d.id);
+
+  const firstWithTL = safeDuplicates.find(d => d.tl_name)?.tl_name;
+  const firstWithQA = safeDuplicates.find(d => d.qa_name)?.qa_name;
   if (firstWithTL || firstWithQA) {
     await query(
       `UPDATE agents 
@@ -71,18 +89,17 @@ export async function upsertAgent(name: string): Promise<number | null> {
   // 1. Exact match
   const existing = await query<{ id: number }>(`SELECT id FROM agents WHERE name = $1`, [trimmed]);
   if (existing.length) {
-    await mergeAgentDuplicates(existing[0].id, trimmed);
     return existing[0].id;
   }
 
-  // 2. Case-insensitive or prefix match (e.g. 'Vedant' matching 'Vedant G', 'Aksa' matching 'Aksa Jacob')
-  const fuzzy = await query<{ id: number }>(
-    `SELECT id FROM agents WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($1 || ' %') OR LOWER($1) LIKE LOWER(name || ' %') LIMIT 1`,
+  // 2. Case-insensitive exact match (e.g. 'anushka choudhary' matching 'Anushka choudhary')
+  // Order active agents first
+  const caseMatch = await query<{ id: number }>(
+    `SELECT id FROM agents WHERE LOWER(name) = LOWER($1) ORDER BY (status = 'active') DESC, id ASC LIMIT 1`,
     [trimmed],
   );
-  if (fuzzy.length) {
-    await mergeAgentDuplicates(fuzzy[0].id, trimmed);
-    return fuzzy[0].id;
+  if (caseMatch.length) {
+    return caseMatch[0].id;
   }
 
   // 3. Fallback insert
@@ -90,11 +107,7 @@ export async function upsertAgent(name: string): Promise<number | null> {
     `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
     [trimmed],
   );
-  const newId = rows[0]?.id ?? null;
-  if (newId) {
-    await mergeAgentDuplicates(newId, trimmed);
-  }
-  return newId;
+  return rows[0]?.id ?? null;
 }
 
 export async function getAgentName(agentId: number): Promise<string> {
@@ -1140,6 +1153,7 @@ export async function getLinkedUnscoredCallsForChat(chatId: string): Promise<Cal
 }
 
 export async function getAllScoredCalls(opts: {
+  agentId?: number;
   agentName?: string;
   agentNames?: string[];
   dateFrom?: string;
@@ -1177,15 +1191,15 @@ export async function getAllScoredCalls(opts: {
     params.push(opts.maxScore);
     conditions.push(`COALESCE(ce.iqs_percent, s.call_iqs_score) <= $${params.length}`);
   }
-  if (opts.agentName) {
-    params.push(opts.agentName);
-    conditions.push(`(COALESCE(a.name, '') = $${params.length} OR a.name ILIKE $${params.length} || ' %')`);
+  if (opts.agentId !== undefined) {
+    params.push(opts.agentId);
+    conditions.push(`COALESCE(ce.agent_id, conv.agent_id, r.agent_id) = $${params.length}`);
+  } else if (opts.agentName) {
+    params.push(opts.agentName.trim());
+    conditions.push(`LOWER(COALESCE(a.name, '')) = LOWER($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
-    params.push(opts.agentNames);
-    conditions.push(`(COALESCE(a.name, '') = ANY($${params.length}) OR EXISTS (
-      SELECT 1 FROM unnest($${params.length}::text[]) elem
-      WHERE a.name = elem OR a.name ILIKE elem || ' %'
-    ))`);
+    params.push(opts.agentNames.map(n => n.trim().toLowerCase()));
+    conditions.push(`LOWER(COALESCE(a.name, '')) = ANY($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');
   }

@@ -867,6 +867,8 @@ export default function CallEvalPanel({
               agentNote={dispute.agentNote}
               reviewNote={dispute.reviewNote || note}
               agentName={dispute.agentName || agentName}
+              raisedByRole={dispute.raisedByRole || (dispute.raisedBy === 'TL' ? 'tl' : 'agent')}
+              raisedByName={dispute.raisedByName}
               reviewedBy={dispute.reviewedBy || dispute.resolvedBy || dispute.qaName}
               reviewerRole="quality"
               flaggedAt={dispute.flaggedAt || dispute.raisedAt}

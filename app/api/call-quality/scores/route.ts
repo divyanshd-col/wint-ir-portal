@@ -105,6 +105,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const maxScore    = url.searchParams.get('maxScore') ? parseInt(url.searchParams.get('maxScore')!, 10) : undefined;
 
   // Role-based agent scoping
+  let scopedAgentId: number | undefined;
   let agentNames: string[] | undefined;
   let availableAgents: string[] = [];
   let dispositions: string[] | undefined;
@@ -117,10 +118,21 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   if (role === 'agent') {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === userEmail.toLowerCase());
     let selfName = configUser?.agentName || user?.agentName || '';
-    if (!selfName && userEmail) {
+    if (userEmail) {
       const { getUserByEmail } = await import('@/lib/users');
       const dbUser = await getUserByEmail(userEmail).catch(() => null);
-      if (dbUser?.name) selfName = dbUser.name;
+      if (dbUser?.name && !selfName) selfName = dbUser.name;
+      if (dbUser?.user_id) {
+        const { query } = await import('@/lib/cx/db');
+        const agentRows = await query<{ id: number; name: string }>(
+          `SELECT id, name FROM agents WHERE user_id = $1 LIMIT 1`,
+          [dbUser.user_id]
+        );
+        if (agentRows.length > 0) {
+          scopedAgentId = agentRows[0].id;
+          selfName = agentRows[0].name;
+        }
+      }
     }
     if (!selfName) selfName = userEmail.split('@')[0];
     agentNames = selfName ? [selfName] : [];
@@ -219,8 +231,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let total = 0;
   try {
     ({ rows, total } = await getAllScoredCalls({
-      agentName: !agentNames && agentFilter ? agentFilter : undefined,
-      agentNames: agentNames,
+      agentId: scopedAgentId,
+      agentName: !scopedAgentId && !agentNames && agentFilter ? agentFilter : undefined,
+      agentNames: scopedAgentId ? undefined : agentNames,
       callId: callId || undefined,
       dispositions: dispositions,
       dateFrom: dateFrom || undefined,

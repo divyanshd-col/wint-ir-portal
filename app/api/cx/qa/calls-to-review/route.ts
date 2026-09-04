@@ -62,7 +62,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     dispositions = explicit.filter(d => dispositions.includes(d));
   }
 
-  if (!dispositions.length) {
+  const callId = searchParams.get('call_id');
+  const hasCallId = Boolean(callId && callId.trim());
+
+  const mobile = searchParams.get('mobile') || searchParams.get('phone') || searchParams.get('mobile_number');
+  const cleanMobile = mobile ? mobile.replace(/\D/g, '') : '';
+  const hasMobile = Boolean(cleanMobile);
+
+  const isDirectLookup = hasCallId || hasMobile;
+
+  if (!dispositions.length && !isDirectLookup) {
     log.warn(ROUTE, 'no dispositions assigned to QA', { email, role });
     return NextResponse.json({ calls: [], total: 0 });
   }
@@ -73,15 +82,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // Optional narrowing by one or more dispositions within the QA's set
   const dispositionFilters = searchParams.getAll('disposition_filter').filter(d => dispositions.includes(d));
   const effectiveDispositions = dispositionFilters.length ? dispositionFilters : dispositions;
-
-  const callId = searchParams.get('call_id');
-  const hasCallId = Boolean(callId && callId.trim());
-
-  const mobile = searchParams.get('mobile') || searchParams.get('phone') || searchParams.get('mobile_number');
-  const cleanMobile = mobile ? mobile.replace(/\D/g, '') : '';
-  const hasMobile = Boolean(cleanMobile);
-
-  const isDirectLookup = hasCallId || hasMobile;
 
   // Build dynamic WHERE clauses
   const sqlParams: unknown[] = [];
@@ -107,9 +107,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       }
     }
   } else {
-    baseWhere = reviewedMode
-      ? `ce.status = 'reviewed'`
-      : `ce.status IN ('pending', 'reopened') AND (a.status IS NULL OR a.status != 'inactive')`;
+    // When searching directly by mobile number or call ID, match ALL calls across statuses, agents, and dispositions
+    baseWhere = '1=1';
   }
 
   let extraWhere = '';
@@ -124,15 +123,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   if (hasCallId && callId) {
     const pIdx = paramIdx++;
     extraWhere += ` AND (ce.call_id LIKE $${pIdx} OR ce.chat_id LIKE $${pIdx})`;
-    sqlParams.push(`${callId.trim()}%`);
+    sqlParams.push(`%${callId.trim()}%`);
     filters.callId = callId.trim();
   }
 
   if (hasMobile) {
     const pIdx = paramIdx++;
-    extraWhere += ` AND (ct_cr.phone LIKE $${pIdx} OR ct_c.phone LIKE $${pIdx})`;
-    sqlParams.push(`%${cleanMobile}%`);
-    filters.mobile = cleanMobile;
+    const noLeadingZero = cleanMobile.replace(/^0+/, '') || cleanMobile;
+    extraWhere += ` AND (ct_cr.phone LIKE $${pIdx} OR ct_c.phone LIKE $${pIdx} OR c.phone_number LIKE $${pIdx})`;
+    sqlParams.push(`%${noLeadingZero}%`);
+    filters.mobile = noLeadingZero;
   }
 
   const subDispos = searchParams.getAll('sub_disposition');
@@ -222,7 +222,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
             ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
             cr.duration_seconds, cr.language, cr.interruption_count, cr.dead_air_count,
             ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores,
-            COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
+            COALESCE(ct_cr.phone, ct_c.phone, c.phone_number) AS mobile_number
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
      LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
