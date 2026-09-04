@@ -166,6 +166,7 @@ interface DisputeRow {
   closedAt: string;
   status: string;
   raisedByRole?: 'ir' | 'tl' | string;
+  raisedByName?: string;
   challengedParams: { param: string; note: string }[];
   agentNote: string;
   reviewNote: string;
@@ -1239,6 +1240,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                                 agentNote={row.agentNote}
                                 reviewNote={row.reviewNote}
                                 agentName={agentName}
+                                raisedByRole={row.raisedByRole || 'agent'}
+                                raisedByName={row.raisedByName || agentName}
                                 reviewedBy={row.reviewedBy}
                                 reviewerRole={row.status === 'tl_resolved' ? 'tl' : 'quality'}
                                 flaggedAt={row.flaggedAt}
@@ -1633,6 +1636,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                                 agentNote={row.agentNote}
                                 reviewNote={row.reviewNote}
                                 agentName={agentName}
+                                raisedByRole={row.raisedByRole || 'agent'}
+                                raisedByName={row.raisedByName || agentName}
                                 reviewedBy={row.reviewedBy}
                                 reviewerRole={row.status === 'tl_resolved' ? 'tl' : 'quality'}
                                 flaggedAt={row.flaggedAt}

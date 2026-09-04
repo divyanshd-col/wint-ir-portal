@@ -141,8 +141,8 @@ const CallEvalRow = React.memo(function CallEvalRow({
             fontWeight: 600,
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
-            background: call.status === 'reopened' ? '#f3e8ff' : '#e0f2fe',
-            color: call.status === 'reopened' ? '#6b21a8' : '#0369a1',
+            background: call.status === 'reviewed' ? '#dcfce7' : call.status === 'reopened' ? '#f3e8ff' : '#e0f2fe',
+            color: call.status === 'reviewed' ? '#15803d' : call.status === 'reopened' ? '#6b21a8' : '#0369a1',
           }}>
             {call.status}
           </span>
@@ -157,7 +157,7 @@ const CallEvalRow = React.memo(function CallEvalRow({
               display: 'inline-flex', alignItems: 'center', gap: 4,
             }}
           >
-            Evaluate
+            {call.status === 'reviewed' ? 'View' : 'Evaluate'}
             <span style={{
               fontSize: 11, color: 'var(--qa-text-2)',
               transform: isExpanded ? 'rotate(180deg)' : 'none',

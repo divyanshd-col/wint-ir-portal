@@ -28,7 +28,7 @@ Fails if the rep, anywhere on the call:
 (b) guarantees or assures returns or safety ("guaranteed", "assured returns", "zero risk", "your money is completely safe, nothing can happen"), OR
 (c) interprets tax treatment beyond what KB_CONTEXT states: explains how the customer should treat something in their filing, reasons about deduction rules, rates, or 26AS mechanics not present in KB_CONTEXT, without explicitly escalating.
 Reason codes: "advice_investment" for (a)/(b), "advice_tax" for (c).
-Not violations: stating verified product facts, reading the KB answer, saying "I cannot advise on that, but factually X", escalating a tax question.
+Not violations: stating verified product facts, reading the KB answer, saying "I cannot advise on that, but factually X", escalating a tax question, stating platform-specific product rules from KB_CONTEXT (e.g., Wint Wealth facilitating 100% principal return on MLD early exits).
 Binding: (a)/(b) can occur on any call. (c) binds only if tax/TDS is discussed.
 
 GATE G2: NO FABRICATED FACTS
@@ -46,6 +46,7 @@ Not violations: stating the customer's own bond holdings (e.g., Muthoot Mercanti
 Binding: only calls where third-party data or sensitive security credentials are disclosed. Normal account assistance passes.
 
 RULES
+- ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 - Cite the exact turn index for every finding.
 - When a claim is ambiguous between fact and advice, quote it and mark "borderline": true rather than failing the gate. Borderline items route to human review, they do not fail the call.
 - Judge the rep's words, never the customer's.
@@ -97,14 +98,15 @@ Every substantive answer matches KB_CONTEXT.
 2 = all claims correct. 1 = minor imprecision, no material impact.
 0 = any materially wrong answer.
 NA = KB_CONTEXT has no entry covering the topics answered. When NA, list the uncovered topics in "kb_gaps". A KB gap is never scored against the rep.
+ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 
 P2 ALL QUESTIONS ADDRESSED
 Every query the customer raised got an answer or an explicit committed action before the call ended. First enumerate every distinct customer question or issue (calls are often multi-topic). An issue handled by struggling through an evident language barrier, instead of offering a language-matched callback, counts as partially addressed.
 2 = all addressed. 1 = exactly one dropped or only-partially addressed. 0 = more than one dropped.
 
 P3 EXPECTATION SETTING AND FOLLOW-UP SPECIFICITY
-Every open (unresolved on call) item leaves with a concrete what-happens-next: a specific timeline or TAT and, where relevant, a named owner ("our finance team will contact you by Friday"). Vague assurances ("soon", "shortly", "someone will look into it") are not specific.
-2 = all open items have specific commitments. 1 = commitments exist but vague, or one open item lacks one. 0 = open items left with nothing.
+Every open (unresolved on call) item leaves with a concrete what-happens-next: a timeline or TAT, OR a clear commitment to escalate to the concerned team/owner and get back with an update as soon as possible ("our operations/tech team will look into this and update you as soon as possible"). Providing an exact timeline or specific TAT is not always possible; escalating to the team with a commitment to follow up is fully sufficient. Do NOT penalize or reduce marks solely because an exact numeric timeline was not quoted when a team escalation and follow-up commitment was made.
+2 = all open items have specific commitments or team escalation with follow-up commitments. 1 = commitments exist but vague without team ownership or follow-up path, or one open item lacks one. 0 = open items left with nothing.
 NA = the call had no open items (everything resolved live).
 
 P5 CALL OPENING

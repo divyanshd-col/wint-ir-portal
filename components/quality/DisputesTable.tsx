@@ -111,10 +111,13 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   }
 
   if (mobileSearch) {
-    const clean = mobileSearch.replace(/\D/g, '');
-    if (clean) {
-      visibleDisputes = visibleDisputes.filter(d => (d.mobileNumber || '').replace(/\D/g, '').includes(clean));
-    }
+    const clean = mobileSearch.replace(/\D/g, '').replace(/^0+/, '');
+    const raw = mobileSearch.trim().toLowerCase();
+    visibleDisputes = visibleDisputes.filter(d => {
+      const num = (d.mobileNumber || '').toLowerCase();
+      const digits = num.replace(/\D/g, '');
+      return (clean && digits.includes(clean)) || (raw && num.includes(raw));
+    });
   }
 
   const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
@@ -423,6 +426,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                         flagId={d.flagId}
                         agentNote={d.agentNote}
                         agentName={d.agentName}
+                        raisedByRole={(d as any).raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                        raisedByName={d.raisedByName || d.agentName}
                         flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
                         compact
                       />
@@ -457,6 +462,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                             flagId={d.flagId}
                             agentNote={d.agentNote}
                             agentName={d.agentName}
+                            raisedByRole={(d as any).raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                            raisedByName={d.raisedByName || d.agentName}
                             flaggedAt={(d as any).raisedAt || (d as any).flaggedAt}
                             compact
                           />

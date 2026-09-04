@@ -388,6 +388,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       agentEmail:       flag.agentEmail,
       raisedBy:         submitterRole,
       raisedByName:     effectiveRaisedByName,
+      raisedByRole:     flag.raisedByRole || (submitterRole === 'TL' ? 'tl' : 'agent'),
       iqsScore,
       botIqsScore,
       callIqsScore,

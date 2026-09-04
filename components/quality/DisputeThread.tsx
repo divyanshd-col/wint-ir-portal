@@ -17,6 +17,8 @@ interface Props {
   agentNote?: string | null;
   reviewNote?: string | null;
   agentName?: string | null;
+  raisedByRole?: string | null;
+  raisedByName?: string | null;
   reviewedBy?: string | null;
   reviewerRole?: string | null;
   flaggedAt?: string | null;
@@ -88,6 +90,8 @@ export function DisputeThread({
   agentNote,
   reviewNote,
   agentName,
+  raisedByRole,
+  raisedByName,
   reviewedBy,
   reviewerRole,
   flaggedAt,
@@ -183,40 +187,51 @@ export function DisputeThread({
       {/* Message History Container */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
         {/* Initial Dispute Note (from Agent/TL) */}
-        {agentNote && (
-          <div style={{
-            background: 'var(--qa-fill-light, #F8FAFC)',
-            border: '1px solid var(--qa-border, #E2E8F0)',
-            borderRadius: 8,
-            padding: '10px 12px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #0F172A)' }}>
-                {agentName || 'Dispute Creator'}
-              </span>
-              <RoleBadge role="agent" />
-              <span style={{
-                fontSize: 10,
-                fontWeight: 600,
-                background: '#fef3c7',
-                color: '#92400e',
-                border: '1px solid #fde68a',
-                borderRadius: 4,
-                padding: '1px 5px',
-              }}>
-                DISPUTE RAISED
-              </span>
-              {flaggedAt && (
-                <span style={{ fontSize: 11, color: 'var(--qa-text-3, #64748B)', marginLeft: 'auto' }}>
-                  {fmtDateTime(flaggedAt)}
+        {agentNote && (() => {
+          const isTL = (raisedByRole || '').toLowerCase() === 'tl' || (raisedByRole || '').toLowerCase() === 'team lead';
+          const displayName = isTL ? (raisedByName || 'Team Lead') : (agentName || 'Dispute Creator');
+          const showOnBehalf = isTL && agentName && raisedByName && agentName.toLowerCase() !== raisedByName.toLowerCase();
+
+          return (
+            <div style={{
+              background: 'var(--qa-fill-light, #F8FAFC)',
+              border: '1px solid var(--qa-border, #E2E8F0)',
+              borderRadius: 8,
+              padding: '10px 12px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #0F172A)' }}>
+                  {displayName}
                 </span>
-              )}
+                <RoleBadge role={isTL ? 'tl' : 'agent'} />
+                {showOnBehalf && (
+                  <span style={{ fontSize: 12, color: 'var(--qa-text-2, #475569)' }}>
+                    on behalf of <strong>{agentName}</strong>
+                  </span>
+                )}
+                <span style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  background: '#fef3c7',
+                  color: '#92400e',
+                  border: '1px solid #fde68a',
+                  borderRadius: 4,
+                  padding: '1px 5px',
+                }}>
+                  DISPUTE RAISED
+                </span>
+                {flaggedAt && (
+                  <span style={{ fontSize: 11, color: 'var(--qa-text-3, #64748B)', marginLeft: 'auto' }}>
+                    {fmtDateTime(flaggedAt)}
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--qa-text, #334155)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                {agentNote}
+              </div>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--qa-text, #334155)', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-              {agentNote}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Thread Comments */}
         {loading ? (
