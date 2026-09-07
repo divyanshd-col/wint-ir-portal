@@ -144,6 +144,8 @@ export async function POST(req: NextRequest) {
       uncertainParameters: entry.uncertainParameters,
       breaches:            (parsed as any).breaches,
       complianceFlag:      (parsed as any).complianceFlag,
+      conversationType:    conversationType || undefined,
+      isBot:               conversationType === 'bot',
     }).catch(() => {});
 
     return NextResponse.json({ ok: true, entry });
