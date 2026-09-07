@@ -370,6 +370,8 @@ export async function executeScoring(
     uncertainParameters,
     breaches:            primaryPass.breaches,
     complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
+    conversationType:    timing.conversationType,
+    isBot:               timing.conversationType === 'bot',
   }).catch(() => {});
 
   // BOT flag channel alert: only for pure bot chats that were not transferred

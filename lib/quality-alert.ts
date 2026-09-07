@@ -82,6 +82,18 @@ const CRITICAL_PARAMS: { keys: string[]; label: string }[] = [
 
 const FAIL_VALUES = new Set(['No', 'no', 'false', '0']);
 
+export const BOT_DEFAULT_TL_SLACK_ID = 'U09LS1TSY5T';
+
+export const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot', 'robylon', 'robylon ai']);
+
+export function isBotAgentName(name?: string | null): boolean {
+  if (!name) return false;
+  const clean = name.trim().toLowerCase();
+  if (BOT_NAMES.has(clean)) return true;
+  if (clean.includes('bot') || clean.includes('myra') || clean.includes('robylon')) return true;
+  return false;
+}
+
 export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
   harsh: 'U055PU2S4HE',
   'neha chaturvedi': 'U031PCQ0J6A',
@@ -98,6 +110,11 @@ export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
   rishitha: 'U08LE9TLT5F',
   vedant: 'U09HZTDQZBP',
   'vedant g': 'U09HZTDQZBP',
+  bot: BOT_DEFAULT_TL_SLACK_ID,
+  myra: BOT_DEFAULT_TL_SLACK_ID,
+  'wint bot': BOT_DEFAULT_TL_SLACK_ID,
+  'wintbot': BOT_DEFAULT_TL_SLACK_ID,
+  'robylon ai': BOT_DEFAULT_TL_SLACK_ID,
 };
 
 export function getTLSlackMention(tlName?: string | null): string {
@@ -133,6 +150,8 @@ export async function fireQualityAlert(opts: {
   uncertainParameters?: Array<{ parameter: string; question: string }>;
   breaches?: Array<{ type?: string; breach_type?: string; quote?: string; note?: string } | string>;
   complianceFlag?: boolean;
+  conversationType?: string;
+  isBot?: boolean;
 }): Promise<void> {
   let complianceToken = process.env.COMPLIANCE_SLACK_BOT_TOKEN || '';
   let token = process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
@@ -191,6 +210,24 @@ export async function fireQualityAlert(opts: {
       ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
       : opts.chatId;
 
+    let isBot = opts.isBot === true;
+    if (!isBot) {
+      if (opts.conversationType) {
+        isBot = opts.conversationType === 'bot';
+      } else {
+        isBot = isBotAgentName(opts.agentName);
+      }
+    }
+    if (!isBot && !opts.conversationType && opts.chatId) {
+      try {
+        const { getConversation } = await import('./robylon/db');
+        const conv = await getConversation(opts.chatId);
+        if (conv?.conversation_type === 'bot' || (!conv?.conversation_type && isBotAgentName(conv?.agent_name))) {
+          isBot = true;
+        }
+      } catch {}
+    }
+
     let tlName = opts.tlName || '';
     if (!tlName && opts.agentName) {
       try {
@@ -211,7 +248,10 @@ export async function fireQualityAlert(opts: {
       reasons.push(`• *TECHNICALLY / LEGALLY INCORRECT*: ${accuracyFailure.reasoning}`);
     }
 
-    const tlMention = getTLSlackMention(tlName);
+    let tlMention = getTLSlackMention(tlName);
+    if (isBot && (tlMention === 'N/A' || !tlMention)) {
+      tlMention = `<@${BOT_DEFAULT_TL_SLACK_ID}>`;
+    }
 
     const lines = [
       `Chat ID: ${chatLink}`,
