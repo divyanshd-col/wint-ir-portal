@@ -1,21 +1,24 @@
+import './_load-env';
 import { fireQualityAlert } from '../lib/quality-alert';
 
 async function main() {
-  const testChatId = `test_${Date.now()}`;
-  console.log(`Sending test compliance alert for chat ${testChatId}...`);
+  const testChatId = `test_bot_${Date.now()}`;
+  console.log(`Sending test compliance alert for bot chat ${testChatId}...`);
 
   await fireQualityAlert({
     chatId: testChatId,
-    agentName: 'Aksa Jacob',
+    agentName: 'Myra',
+    conversationType: 'bot',
+    isBot: true,
     scores: { Accuracy: 'false' },
-    reasoning: { Accuracy: 'Agent guaranteed returns on a fixed income product.' },
+    reasoning: { Accuracy: 'Bot shared incorrect compliance info.' },
     iqs: 40,
     disposition: 'Product Query',
     breaches: [
       {
-        type: 'guaranteed_returns',
-        quote: 'Your investment gives guaranteed 14% returns with zero risk.',
-        note: 'Stated assured returns',
+        type: 'TEST_BOT_COMPLIANCE',
+        quote: 'Testing compliance alert for bot handled chat.',
+        note: 'Test trigger: verifying TL tags <@U09LS1TSY5T>',
       },
     ],
     complianceFlag: true,

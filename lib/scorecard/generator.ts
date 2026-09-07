@@ -136,6 +136,59 @@ export function getStrongestParameters(rows: any[]) {
 }
 
 /**
+ * Safely parses AI JSON response, stripping markdown wrappers and extracting
+ * balanced JSON structures if extra trailing tokens or duplicate closing braces exist.
+ */
+function safeParseAiJson(raw: string): any {
+  const cleaned = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {}
+
+  const start = cleaned.indexOf('{');
+  if (start >= 0) {
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    for (let i = start; i < cleaned.length; i++) {
+      const char = cleaned[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{') depth++;
+        else if (char === '}') {
+          depth--;
+          if (depth === 0) {
+            try {
+              return JSON.parse(cleaned.slice(start, i + 1));
+            } catch {}
+          }
+        }
+      }
+    }
+
+    const lastEnd = cleaned.lastIndexOf('}');
+    if (lastEnd > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, lastEnd + 1));
+      } catch {}
+    }
+  }
+
+  throw new Error(`Invalid JSON format`);
+}
+
+/**
  * Generates a scorecard for a single agent.
  */
 export async function generateScorecard(input: ScorecardInput): Promise<GeneratedScorecard> {
@@ -286,7 +339,7 @@ CRITICAL RULES:
 
     let parsed: any;
     try {
-      parsed = JSON.parse(responseText);
+      parsed = safeParseAiJson(responseText);
     } catch (err: any) {
       throw new Error(`Failed to parse AI response as JSON: ${err.message}. Response was: ${responseText}`);
     }
