@@ -79,6 +79,25 @@ export async function diarizeAudioWithPyannote(
       onProgress?.('Pyannote diarization job completed successfully.');
       const output = (statusData.output || []) as PyannoteSegment[];
       console.log(`[Pyannote Output] Job ${jobId}:`, JSON.stringify(output, null, 2));
+
+      // Record token & cost tracking for Pyannote
+      try {
+        const maxEnd = output.reduce((m, s) => Math.max(m, s.end), 0);
+        const audioSeconds = Math.round(maxEnd) || 120;
+        const inputTokens = audioSeconds * 30; // audio token equivalent (~30 tokens/sec)
+        const outputTokens = output.length * 4;
+        const { recordTokenUsage } = await import('@/lib/tokens/tracker');
+        recordTokenUsage({
+          provider: 'pyannote',
+          model: 'pyannote-precision-2',
+          feature: 'call_analysis',
+          inputTokens,
+          outputTokens,
+          latencyMs: attempt * 2000,
+          metadata: { jobId, audioSeconds, segments: output.length },
+        });
+      } catch {}
+
       return output;
     } else if (status === 'failed') {
       throw new Error(`Pyannote job failed: ${statusData.error ?? 'Unknown error'}`);

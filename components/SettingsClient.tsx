@@ -38,6 +38,7 @@ const ADMIN_SECTIONS = [
   { id: 'kb', label: 'Knowledge Base' },
   { id: 'prompt', label: 'Prompts' },
   { id: 'users', label: 'Users' },
+  { id: 'tokens', label: 'Token Usage' },
   { id: 'integrations', label: 'Integrations' },
 ];
 const SECURITY_SECTION = { id: 'security', label: 'Security' };
@@ -995,6 +996,43 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
           />
         )}
 
+        {/* ── TOKEN USAGE ── */}
+        {activeSection === 'tokens' && (
+          <div className="space-y-8">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Token Usage &amp; Cost Intelligence</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Track input/output tokens, identify top-consuming models, and monitor LLM expenses.
+                </p>
+              </div>
+              <a
+                href="/tokens"
+                className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] transition inline-flex items-center gap-2 shadow-xs"
+              >
+                <span>Open Full Dashboard</span>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 3l5 5-5 5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </a>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
+              <h3 className="text-sm font-bold text-gray-900">Dedicated Admin Token Dashboard</h3>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                The Token Usage tab tracks exact input and output token consumption for each model across all Wint IR Portal systems (Quality Scoring, Knowledge Chat, Call Quality Diarization, and Analytics).
+              </p>
+              <div className="pt-2">
+                <a
+                  href="/tokens"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-[#2d9e4f] hover:underline"
+                >
+                  View Model Breakdown, Cost Calculations &amp; Charts →
+                </a>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── INTEGRATIONS ── */}
         {activeSection === 'integrations' && (

@@ -210,6 +210,19 @@ export default function PageNav({ username, role, isAdmin, flags, analytics }: P
         )}
         {isAdmin && (
           <NavLink
+            href="/tokens"
+            label="Token Usage"
+            icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="3" y="3" width="10" height="10" rx="2" />
+                <path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2" strokeLinecap="round" />
+                <circle cx="8" cy="8" r="1.5" />
+              </svg>
+            }
+          />
+        )}
+        {isAdmin && (
+          <NavLink
             href="/settings"
             label="Settings"
             icon={
