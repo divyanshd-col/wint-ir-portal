@@ -10,6 +10,7 @@
 import { sendSlackMessage } from './slack';
 import { storeHasQualityAlert, storeMarkQualityAlert, storeHasBotQualityAlert, storeMarkBotQualityAlert } from './store';
 import { appendQualityAlertToSheet } from './quality-sheet';
+import { appendComplianceAlertToSheet } from './compliance-sheet';
 
 const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
 
@@ -110,6 +111,8 @@ export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
   rishitha: 'U08LE9TLT5F',
   vedant: 'U09HZTDQZBP',
   'vedant g': 'U09HZTDQZBP',
+  sivaranjini: BOT_DEFAULT_TL_SLACK_ID,
+  sivranjini: BOT_DEFAULT_TL_SLACK_ID,
   bot: BOT_DEFAULT_TL_SLACK_ID,
   myra: BOT_DEFAULT_TL_SLACK_ID,
   'wint bot': BOT_DEFAULT_TL_SLACK_ID,
@@ -264,6 +267,19 @@ export async function fireQualityAlert(opts: {
     const targetToken = complianceToken || token;
     const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), targetToken);
     console.log(`[quality-alert] Compliance failure Slack alert for chat ${opts.chatId}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+
+    // Auto-append to Compliance Google Sheet (Sheet1)
+    appendComplianceAlertToSheet({
+      chatId: opts.chatId,
+      agentName: opts.agentName || 'Unknown',
+      tl: tlMention,
+      contactPhone: opts.contactPhone,
+      iqs: opts.iqs,
+      disposition: opts.disposition,
+      subDisposition: opts.subDisposition,
+      breaches: breachesList,
+      accuracyFailure,
+    }).catch(err => console.error('[quality-alert] Compliance sheet append failed:', err?.message));
   }
   // ── 2. Slack — Non-compliance Quality Parameter Alert ───────────────────────
   else if (failedParams.length && token && qualityChannel) {
