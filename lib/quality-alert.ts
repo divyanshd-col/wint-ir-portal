@@ -223,10 +223,15 @@ export async function fireQualityAlert(opts: {
     }
     if (!isBot && !opts.conversationType && opts.chatId) {
       try {
-        const { getConversation } = await import('./robylon/db');
+        const { getConversation, getAgentName } = await import('./robylon/db');
         const conv = await getConversation(opts.chatId);
-        if (conv?.conversation_type === 'bot' || (!conv?.conversation_type && isBotAgentName(conv?.agent_name))) {
+        if (conv?.conversation_type === 'bot') {
           isBot = true;
+        } else if (conv?.agent_id) {
+          const name = await getAgentName(conv.agent_id);
+          if (isBotAgentName(name)) {
+            isBot = true;
+          }
         }
       } catch {}
     }
