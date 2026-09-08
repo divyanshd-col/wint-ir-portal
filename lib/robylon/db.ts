@@ -121,7 +121,10 @@ export async function getAgentTLByName(agentName: string): Promise<string | null
   const trimmed = agentName.trim();
   try {
     const rows = await query<{ tl_name: string | null }>(
-      `SELECT tl_name FROM agents WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($1 || ' %') OR LOWER($1) LIKE LOWER(name || ' %') LIMIT 1`,
+      `SELECT tl_name FROM agents 
+       WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($1 || ' %') OR LOWER($1) LIKE LOWER(name || ' %') 
+       ORDER BY (CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END), (tl_name IS NOT NULL) DESC, id DESC 
+       LIMIT 1`,
       [trimmed]
     );
     return rows[0]?.tl_name || null;
