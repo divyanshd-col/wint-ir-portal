@@ -80,6 +80,7 @@ export async function geminiGenerate(
           ...(systemInstruction ? { systemInstruction } : {}),
           ...(extraConfig ?? {}),
         };
+        const startTime = Date.now();
         const response = await Promise.race([
           ai.models.generateContent({
             model: currentModel,
@@ -89,7 +90,28 @@ export async function geminiGenerate(
           }),
           timeoutPromise,
         ]);
+        const latencyMs = Date.now() - startTime;
         if (currentModel !== model) console.warn(`[gemini] ${model} unavailable — used ${currentModel} fallback`);
+
+        // Record token usage if metadata is returned
+        try {
+          const usage = (response as any)?.usageMetadata;
+          if (usage) {
+            const { recordTokenUsage } = await import('@/lib/tokens/tracker');
+            const inputTokens = usage.promptTokenCount || 0;
+            const outputTokens = usage.candidatesTokenCount || 0;
+            const feature = (extra as any)?.feature || 'general';
+            recordTokenUsage({
+              provider: 'gemini',
+              model: currentModel,
+              feature,
+              inputTokens,
+              outputTokens,
+              latencyMs,
+            });
+          }
+        } catch {}
+
         return response.text || '';
       } catch (err: any) {
         if (isRetryable(err)) { lastError = err; continue; }
@@ -165,6 +187,20 @@ export async function callGeminiForCall(
           if (isDeprecated) { skipModel = true; break; }
           if (isCapacity)   { lastError = new Error(errMsg || `HTTP ${res.status}`); break; }
           if (!res.ok)      throw new Error(errMsg || `API error ${res.status}`);
+
+          // Record token usage if usageMetadata present
+          try {
+            if (data.usageMetadata) {
+              const { recordTokenUsage } = await import('@/lib/tokens/tracker');
+              recordTokenUsage({
+                provider: 'gemini',
+                model,
+                feature: 'call_analysis',
+                inputTokens: data.usageMetadata.promptTokenCount || 0,
+                outputTokens: data.usageMetadata.candidatesTokenCount || 0,
+              });
+            }
+          } catch {}
 
           // Reverse-iterate parts to skip thought:true entries (Gemini 3.5 Pro)
           const parts: any[] = data.candidates?.[0]?.content?.parts ?? [];

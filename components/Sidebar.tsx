@@ -184,6 +184,22 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
 
         {/* Footer */}
         <div className={`border-t border-white/10 ${isExpanded ? 'px-4 py-4 space-y-2' : 'px-2 py-4 flex flex-col items-center gap-3'}`}>
+          {isAdmin && (
+            <NavLink
+              href="/tokens"
+              icon={
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="3" y="3" width="10" height="10" rx="2" />
+                  <path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2" strokeLinecap="round" />
+                  <circle cx="8" cy="8" r="1.5" />
+                </svg>
+              }
+              label="Token Usage"
+              active={pathname === '/tokens'}
+              expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)}
+            />
+          )}
           <NavLink href="/settings" icon={
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
               <circle cx="8" cy="8" r="2.5"/>

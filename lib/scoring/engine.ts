@@ -252,17 +252,32 @@ export async function executeScoring(
     });
     let raw = '';
     if (provider === 'claude' && anthropicKey) {
+      const startTime = Date.now();
       const client = new Anthropic({ apiKey: anthropicKey });
       const resp = await client.messages.create({
         model: 'claude-sonnet-4-6', max_tokens: 2000,
         system, messages: [{ role: 'user', content: user }],
       });
+      const latencyMs = Date.now() - startTime;
+      if (resp.usage) {
+        try {
+          const { recordTokenUsage } = await import('@/lib/tokens/tracker');
+          recordTokenUsage({
+            provider: 'anthropic',
+            model: 'claude-sonnet-4-6',
+            feature: 'quality_scoring',
+            inputTokens: resp.usage.input_tokens,
+            outputTokens: resp.usage.output_tokens,
+            latencyMs,
+          });
+        } catch {}
+      }
       raw = resp.content[0].type === 'text' ? resp.content[0].text : '';
     } else if (geminiKeys.length) {
       raw = await geminiGenerate(
         geminiKeys, 'gemini-3.5-flash',
-        [{ role: 'user', parts: [{ text: system + '\\n\\n' + user }] }],
-        {}, 60000,
+        [{ role: 'user', parts: [{ text: system + '\n\n' + user }] }],
+        { feature: 'quality_scoring' }, 60000,
       );
     } else {
       throw new Error('No LLM API key configured');
