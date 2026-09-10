@@ -136,9 +136,19 @@ export default function MemberAnalyticsDashboard() {
     if (period === 'custom' && customFrom && customTo) { qs.set('from', customFrom); qs.set('to', customTo); }
 
     fetch(`/api/cx/tl/member-analytics?${qs}`)
-      .then(r => r.json())
+      .then(async r => {
+        if (!r.ok) {
+          const errData = await r.json().catch(() => ({}));
+          throw new Error(errData.error || `HTTP ${r.status}`);
+        }
+        return r.json();
+      })
       .then((json: MemberData) => {
         if (cancelled) return;
+        if (!json || !json.channels) {
+          setLoading(false);
+          return;
+        }
         setData(json);
         if (json.agents?.length) setAgents(json.agents);
         if (!selectedAgent && json.agentName) {
@@ -146,7 +156,10 @@ export default function MemberAnalyticsDashboard() {
         }
         setLoading(false);
       })
-      .catch(() => { if (!cancelled) setLoading(false); });
+      .catch((err) => {
+        console.error('[MemberAnalytics] fetch error:', err);
+        if (!cancelled) setLoading(false);
+      });
 
     return () => { cancelled = true; };
   }, [selectedAgent, period, customFrom, customTo]);
@@ -216,8 +229,8 @@ export default function MemberAnalyticsDashboard() {
   }, [aiChannel, period, selectedAgent, customFrom, customTo]);
 
   // ── Derived data ───────────────────────────────────────────────────────────────
-  const chats   = data?.channels.chats;
-  const calls   = data?.channels.calls;
+  const chats   = data?.channels?.chats;
+  const calls   = data?.channels?.calls;
   const wowData = (wowChannel === 'chats' ? chats : calls)?.wow ?? [];
   const wowWeeks = data?.wowWeekStarts ?? [];
   const categories = chats?.categories ?? [];
@@ -347,9 +360,9 @@ export default function MemberAnalyticsDashboard() {
             ) : (
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
                 {[
-                  { cap: 'CSAT',   val: cd ? fmtPct(cd.stats.csat_pct) : '—', empty: !cd },
-                  { cap: 'IQS',    val: cd ? fmtPct(cd.stats.iqs)      : '—', empty: !cd },
-                  { cap: 'Volume', val: cd ? fmtVol(cd.stats.volume)    : '—', empty: !cd },
+                  { cap: 'CSAT',   val: cd?.stats ? fmtPct(cd.stats.csat_pct) : '—', empty: !cd?.stats },
+                  { cap: 'IQS',    val: cd?.stats ? fmtPct(cd.stats.iqs)      : '—', empty: !cd?.stats },
+                  { cap: 'Volume', val: cd?.stats ? fmtVol(cd.stats.volume)    : '—', empty: !cd?.stats },
                 ].map((item, i) => (
                   <div key={item.cap} style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
                     {i > 0 && <div style={{ width: 1, alignSelf: 'stretch', background: 'var(--qa-border)', marginBottom: 2, marginLeft: 0 }} />}
