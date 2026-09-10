@@ -183,8 +183,14 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const userAny = session.user as Record<string, string | undefined>;
-  const role = userAny.role;
-  const email = userAny.email ?? '';
+  const email = (userAny.email ?? '').toLowerCase().trim();
+
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = email ? await getUserByEmail(email).catch(() => null) : null;
+  const config = await readConfig();
+  const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email);
+  const role = dbUser?.role || configUser?.role || userAny.role || (userAny.isAdmin ? 'admin' : 'agent');
+
   if (role !== 'tl' && role !== 'admin' && role !== 'agent') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
@@ -194,16 +200,13 @@ export async function GET(req: NextRequest) {
 
   let tlAgentNames: string[];
   if (role === 'tl') {
-    const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let tlAgentName = configUser?.agentName;
-    if (!tlAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) tlAgentName = dbUser.name;
-    }
+    let tlAgentName = dbUser?.name || configUser?.agentName;
     if (!tlAgentName) tlAgentName = email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
+  } else if (role === 'agent') {
+    let selfAgentName = dbUser?.name || configUser?.agentName;
+    if (!selfAgentName && email) selfAgentName = email.split('@')[0];
+    tlAgentNames = selfAgentName ? [selfAgentName] : [];
   } else {
     const rows = await query<{ name: string }>(`
       SELECT a.name
@@ -221,27 +224,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (role === 'agent') {
-    const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let selfAgentName = configUser?.agentName;
-    if (!selfAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) selfAgentName = dbUser.name;
-    }
-    if (!selfAgentName) selfAgentName = email.split('@')[0];
-    tlAgentNames = selfAgentName ? [selfAgentName] : tlAgentNames.slice(0, 1);
-  }
-
   if (tlAgentNames.length === 0) {
     return NextResponse.json({ agentName: null, agents: [], wowWeekStarts: wowWeeks, channels: { chats: null, calls: null, emails: null } });
   }
 
   const requestedAgent = searchParams.get('agent');
-  const agentName = (requestedAgent && (tlAgentNames.includes(requestedAgent) || requestedAgent.length > 0))
-    ? requestedAgent
-    : tlAgentNames[0];
+  let agentName: string;
+  if (role === 'agent') {
+    agentName = tlAgentNames[0];
+  } else {
+    agentName = (requestedAgent && tlAgentNames.includes(requestedAgent))
+      ? requestedAgent
+      : tlAgentNames[0];
+  }
 
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([

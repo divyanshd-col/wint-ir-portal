@@ -96,8 +96,7 @@ async function run() {
       19,  // Pranav
       14,  // Kashika
       25,  // Srishti
-      819, // Aishwarya Gupta
-      851  // Kashvi Sethi
+      819  // Aishwarya Gupta
     ];
 
     const agentRes = await client.query(
@@ -150,8 +149,7 @@ async function run() {
       1023, // Sakshi
       1003, // Kanika
       1018, // Pranav
-      1016, // Srishti
-      1093  // Kashvi Sethi
+      1016 // Srishti
     ];
 
     const userRes = await client.query(
@@ -174,7 +172,7 @@ async function run() {
       SET status = 'inactive'
       WHERE user_id IN (
         SELECT user_id FROM cx_users
-        WHERE name ILIKE ANY(ARRAY['%Priya%', '%Vikrant%', '%Purvi%', '%Shubhangini%', '%Shayari%', '%Gajal%', '%Nandini%', '%Bismita%', '%Varshini%', '%Anushka%', '%Sahil%', '%Saksham%', '%Anjana%', '%Harsh Soni%', '%Jatin%', '%Sakshi%', '%Kanika%', '%Pranav%', '%Kashika%', '%Srishti%', '%Kashvi%'])
+        WHERE name ILIKE ANY(ARRAY['%Priya%', '%Vikrant%', '%Purvi%', '%Shubhangini%', '%Shayari%', '%Gajal%', '%Nandini%', '%Bismita%', '%Varshini%', '%Anushka%', '%Sahil%', '%Saksham%', '%Anjana%', '%Harsh Soni%', '%Jatin%', '%Sakshi%', '%Kanika%', '%Pranav%', '%Kashika%', '%Srishti%', '%Kashvi Mehta%'])
       )
       RETURNING agent_id, status
     `);

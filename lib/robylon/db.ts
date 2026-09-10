@@ -80,32 +80,54 @@ export async function mergeAgentDuplicates(primaryId: number, name: string): Pro
   await query(`DELETE FROM agents WHERE id = ANY($1)`, [dupIds]);
 }
 
-/** Get or create an agent by name. Returns agent.id */
-export async function upsertAgent(name: string): Promise<number | null> {
-  if (!name) return null;
-  const trimmed = name.trim();
-  if (!trimmed) return null;
+/** Get or create an agent by name (and optional email). Returns agent.id */
+export async function upsertAgent(name?: string | null, email?: string | null): Promise<number | null> {
+  const trimmedName = (name || '').trim();
+  const trimmedEmail = (email || '').trim().toLowerCase();
 
-  // 1. Exact match
-  const existing = await query<{ id: number }>(`SELECT id FROM agents WHERE name = $1`, [trimmed]);
+  if (!trimmedName && !trimmedEmail) return null;
+
+  // 1. If email is provided, check if a registered user in `users` has an agent row
+  if (trimmedEmail) {
+    try {
+      const byEmail = await query<{ id: number }>(
+        `SELECT a.id FROM agents a 
+         JOIN users u ON a.user_id = u.user_id 
+         WHERE LOWER(u.email) = $1 
+         ORDER BY (a.status = 'active') DESC, a.id ASC 
+         LIMIT 1`,
+        [trimmedEmail]
+      );
+      if (byEmail.length) {
+        return byEmail[0].id;
+      }
+    } catch (err) {
+      console.warn('[db] upsertAgent email lookup failed:', err);
+    }
+  }
+
+  if (!trimmedName) return null;
+
+  // 2. Exact match
+  const existing = await query<{ id: number }>(`SELECT id FROM agents WHERE name = $1`, [trimmedName]);
   if (existing.length) {
     return existing[0].id;
   }
 
-  // 2. Case-insensitive exact match (e.g. 'anushka choudhary' matching 'Anushka choudhary')
+  // 3. Case-insensitive exact match (e.g. 'anushka choudhary' matching 'Anushka choudhary')
   // Order active agents first
   const caseMatch = await query<{ id: number }>(
     `SELECT id FROM agents WHERE LOWER(name) = LOWER($1) ORDER BY (status = 'active') DESC, id ASC LIMIT 1`,
-    [trimmed],
+    [trimmedName],
   );
   if (caseMatch.length) {
     return caseMatch[0].id;
   }
 
-  // 3. Fallback insert
+  // 4. Fallback insert
   const rows = await query<{ id: number }>(
     `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-    [trimmed],
+    [trimmedName],
   );
   return rows[0]?.id ?? null;
 }
@@ -935,6 +957,7 @@ export interface CallRecordingRow {
   dead_air_count: number;
   status: string;
   mobile_number?: string | null;
+  raw_payload?: any;
 }
 
 export async function insertCallRecording(data: {
@@ -947,12 +970,13 @@ export async function insertCallRecording(data: {
   calledAt?: string | null;
   language?: string | null;
   transcript?: any;
+  rawPayload?: any;
 }): Promise<void> {
   await query(`
     INSERT INTO call_recordings (
       id, chat_id, agent_id, contact_id, recording_url,
-      duration_seconds, called_at, language, transcript, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transcribed')
+      duration_seconds, called_at, language, transcript, raw_payload, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'transcribed')
     ON CONFLICT (id) DO UPDATE SET
       chat_id          = COALESCE(EXCLUDED.chat_id, call_recordings.chat_id),
       agent_id         = COALESCE(EXCLUDED.agent_id, call_recordings.agent_id),
@@ -962,6 +986,7 @@ export async function insertCallRecording(data: {
       called_at        = COALESCE(EXCLUDED.called_at, call_recordings.called_at),
       language         = COALESCE(EXCLUDED.language, call_recordings.language),
       transcript       = COALESCE(EXCLUDED.transcript, call_recordings.transcript),
+      raw_payload      = COALESCE(EXCLUDED.raw_payload, call_recordings.raw_payload),
       updated_at       = NOW()
   `, [
     data.id,
@@ -973,6 +998,7 @@ export async function insertCallRecording(data: {
     data.calledAt ?? null,
     data.language ?? null,
     data.transcript ? JSON.stringify(data.transcript) : null,
+    data.rawPayload ? JSON.stringify(data.rawPayload) : null,
   ]);
 }
 
