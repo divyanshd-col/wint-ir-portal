@@ -61,11 +61,24 @@ function mimeFromUrl(url: string): string {
 async function processCallWebhook(body: any): Promise<void> {
   const callId        = String(body.call_id || `call_${Date.now()}`);
   const chatId        = body.chat_id ? String(body.chat_id) : null;
-  const recordingUrl  = body.recording_url || body.recording_link || '';
-  const agentName     = String(body.agent_name || '');
+  const recordingUrl  = body.recording_url || body.recording_link || body.data?.recording_url || '';
+  const agentName = String(
+    body.human_agent_info?.name ||
+    body.data?.human_agent_info?.name ||
+    body.agent_name ||
+    body.data?.agent_name ||
+    ''
+  );
+  const agentEmail = String(
+    body.human_agent_info?.email ||
+    body.data?.human_agent_info?.email ||
+    body.agent_email ||
+    body.data?.agent_email ||
+    ''
+  );
   const durationSeconds = body.duration_seconds ? Number(body.duration_seconds) : null;
   const calledAt      = body.called_at || body.timestamp || new Date().toISOString();
-  const customerPhone = body.customer_phone || body.phone || undefined;
+  const customerPhone = body.customer_phone || body.phone || body.requester_info?.phone_number || undefined;
 
   if (!recordingUrl) {
     console.warn(`[call-webhook] call_id=${callId} has no recording_url — skipping`);
@@ -73,9 +86,21 @@ async function processCallWebhook(body: any): Promise<void> {
   }
 
   const [agentId, contactId] = await Promise.all([
-    upsertAgent(agentName),
+    (agentName || agentEmail) ? upsertAgent(agentName, agentEmail) : Promise.resolve(null),
     upsertContact(customerPhone),
   ]);
+
+  // Store placeholder row immediately with raw_payload so call is tracked even if transcription fails
+  await insertCallRecording({
+    id: callId,
+    chatId,
+    agentId,
+    contactId,
+    recordingUrl,
+    durationSeconds,
+    calledAt,
+    rawPayload: body,
+  });
 
   // ── STEP 1: Fetch audio → Gemini transcription ─────────────────────────────
   let audioBase64 = '';
@@ -129,6 +154,7 @@ async function processCallWebhook(body: any): Promise<void> {
     calledAt,
     language,
     transcript: segments,
+    rawPayload: body,
   });
 
   // ── STEP 2: Derive metrics, advance status to pending_link ─────────────────

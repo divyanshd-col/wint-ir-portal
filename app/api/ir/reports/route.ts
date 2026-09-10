@@ -16,6 +16,7 @@ async function resolveAgentId(dbUser: any, agentName: string): Promise<number | 
      WHERE LOWER(name) = LOWER($1) 
         OR LOWER($1) LIKE LOWER(name || ' %') 
         OR LOWER(name) LIKE LOWER($1 || ' %')
+     ORDER BY (CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END), (status = 'active') DESC, id ASC
      LIMIT 1`,
     [nameTrimmed]
   );
