@@ -137,6 +137,20 @@ export async function getAgentName(agentId: number): Promise<string> {
   return rows[0]?.name ?? '';
 }
 
+export async function getAgentTLById(agentId: number): Promise<string | null> {
+  if (!agentId) return null;
+  try {
+    const rows = await query<{ tl_name: string | null }>(
+      `SELECT tl_name FROM agents WHERE id = $1 LIMIT 1`,
+      [agentId]
+    );
+    return rows[0]?.tl_name || null;
+  } catch (err) {
+    console.error('[db] getAgentTLById failed:', err);
+    return null;
+  }
+}
+
 /** Returns the TL name (tl_name) for a given agent name. */
 export async function getAgentTLByName(agentName: string): Promise<string | null> {
   if (!agentName?.trim()) return null;
@@ -149,11 +163,17 @@ export async function getAgentTLByName(agentName: string): Promise<string | null
        LIMIT 1`,
       [trimmed]
     );
-    return rows[0]?.tl_name || null;
+    if (rows[0]?.tl_name) return rows[0].tl_name;
   } catch (err) {
     console.error('[db] getAgentTLByName failed:', err);
-    return null;
   }
+
+  // Fallback map for known agents to prevent missing TL tags if DB lookup fails or is unpopulated
+  const clean = trimmed.toLowerCase();
+  if (clean.includes('hasan')) return 'Vedant G';
+  if (clean.includes('nitya') && !clean.includes('nityaa')) return 'Kriti';
+
+  return null;
 }
 
 
@@ -1222,7 +1242,7 @@ export async function getAllScoredCalls(opts: {
   }
   if (opts.agentId !== undefined) {
     params.push(opts.agentId);
-    conditions.push(`COALESCE(ce.agent_id, conv.agent_id, r.agent_id) = $${params.length}`);
+    conditions.push(`COALESCE(ce.agent_id, r.agent_id, conv.agent_id) = $${params.length}`);
   } else if (opts.agentName) {
     params.push(opts.agentName.trim());
     conditions.push(`LOWER(COALESCE(a.name, '')) = LOWER($${params.length})`);
@@ -1248,7 +1268,7 @@ export async function getAllScoredCalls(opts: {
     LEFT JOIN call_evaluations ce ON ce.call_id = r.id
     LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, conv.agent_id, r.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, r.agent_id, conv.agent_id)
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
@@ -1285,7 +1305,7 @@ export async function getAllScoredCalls(opts: {
     LEFT JOIN call_evaluations ce ON ce.call_id = r.id
     LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, conv.agent_id, r.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, r.agent_id, conv.agent_id)
     LEFT JOIN contacts ct_cr ON ct_cr.id = r.contact_id
     LEFT JOIN contacts ct_c ON ct_c.id = conv.contact_id
     ${where}

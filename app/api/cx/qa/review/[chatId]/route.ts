@@ -113,6 +113,12 @@ export async function PATCH(
           } else if (key === '__gates') {
             merged['__gates'] = val;
             paramChanges++;
+            if (val?.gate_result === 'PASS' || val?.chat_gate_result === 'PASS') {
+              merged['__breaches'] = [];
+              if (merged.breaches) merged.breaches = [];
+            }
+          } else if (key === '__breaches' || key === 'breaches') {
+            merged[key] = val;
           } else if (!key.startsWith('__')) {
             const prev = existingParams[key];
             if (!prev || prev.score !== val.score || prev.reasoning !== val.reasoning) paramChanges++;

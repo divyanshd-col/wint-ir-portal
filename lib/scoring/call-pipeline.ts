@@ -15,9 +15,10 @@ import { randomUUID } from 'crypto';
 export const CALL_GATES_SYSTEM_PROMPT = `You are a compliance auditor for Wint Wealth, a SEBI-regulated fixed-income investment platform. You are auditing ONE support call by the IR (support rep, speaker IR_EXECUTIVE) against three critical gates. Gates are tripwires: a gate binds only when its triggering content occurs on the call. If the content never occurs, the gate passes vacuously (status "not_applicable"). Never mark a gate failed merely because its topic was absent.
 
 INPUT
-- TRANSCRIPT: numbered turns with speaker roles. Judge ONLY IR_EXECUTIVE turns.
+- TRANSCRIPT: numbered turns with speaker roles (IR_EXECUTIVE for support rep, INVESTOR for customer).
+  SPEAKER ATTRIBUTION NOTICE: The upstream diarizer assigns speaker roles automatically. If speaker roles appear inverted, mixed, or confidence is low (for example, the speaker labelled INVESTOR introduces themselves as Wint Wealth, explains platform/bond safety, links, or procedures, while the speaker labelled IR_EXECUTIVE asks questions and uses honorifics like sir/ma'am), identify who is acting as the Wint support representative and audit the representative's statements, regardless of the raw label.
 - KB_CONTEXT: the verified knowledge base entries relevant to this call. This is the ONLY source of truth for facts and for tax scope.
-- SPEAKER_ID_CONFIDENCE: how confident the upstream system is that roles are correctly assigned. This is informational. Audit as normal at every level.
+- SPEAKER_ID_CONFIDENCE: how confident the upstream system is that roles are correctly assigned. When confidence is low or roles appear switched, prioritize conversational evidence of who is the representative.
 
 THE THREE GATES
 
@@ -25,7 +26,7 @@ GATE G1: NO ADVICE
 The rep states verified facts only.
 Fails if the rep, anywhere on the call:
 (a) recommends whether, what, when, or how much to invest ("you should invest", "this is a good time to buy", "I would put it in X"), OR
-(b) guarantees or assures returns or safety ("guaranteed", "assured returns", "zero risk", "your money is completely safe, nothing can happen"), OR
+(b) guarantees or assures returns or safety ("guaranteed", "assured returns", "zero risk", "your money is completely safe, nothing can happen", or stating/implying that principal is guaranteed/assured to be returned in the event of default or for senior secured bonds), OR
 (c) interprets tax treatment beyond what KB_CONTEXT states: explains how the customer should treat something in their filing, reasons about deduction rules, rates, or 26AS mechanics not present in KB_CONTEXT, without explicitly escalating.
 Reason codes: "advice_investment" for (a)/(b), "advice_tax" for (c).
 Not violations: stating verified product facts, reading the KB answer, saying "I cannot advise on that, but factually X", escalating a tax question, stating platform-specific product rules from KB_CONTEXT (e.g., Wint Wealth facilitating 100% principal return on MLD early exits).
@@ -774,6 +775,8 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     JSON.stringify(gatesResult.borderline || [])
   ]);
 
+  const effectiveCallAgentId = call.agent_id ?? call.conv_agent_id ?? null;
+
   // Update call recording status to scored and populate agent_id if missing
   await query(`
     UPDATE call_recordings
@@ -781,12 +784,12 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         agent_id = COALESCE(agent_id, $2),
         updated_at = NOW()
     WHERE id = $1
-  `, [callId, call.conv_agent_id ?? null]);
+  `, [callId, effectiveCallAgentId]);
 
   log.info('call-pipeline', `Pipeline complete for call ${callId} — IQS ${iqs_percent}% — Verdict: ${finalVer}`);
 
-  // Trigger compliance alert for linked chat if call gate failed
-  if (gateVerdict === 'FAIL' && call.chat_id) {
+  // Trigger compliance alert for call if call gate failed
+  if (gateVerdict === 'FAIL') {
     try {
       const { fireQualityAlert } = await import('@/lib/quality-alert');
       const { getAgentName } = await import('@/lib/robylon/db');
@@ -808,14 +811,18 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
       }
 
       fireQualityAlert({
-        chatId: String(call.chat_id),
+        callId: String(callId),
+        chatId: call.chat_id ? String(call.chat_id) : undefined,
+        channel: 'call',
         agentName,
         scores: {},
         reasoning: {},
         iqs: iqs_percent ?? undefined,
         breaches: breaches.length ? breaches : [{ type: 'CALL_GATE_FAILURE', quote: 'Call compliance gate audit failed' }],
         complianceFlag: true,
-      }).catch(() => {});
+      }).catch((err) => {
+        log.error('call-pipeline', `fireQualityAlert error for call ${callId}: ${err?.message}`);
+      });
     } catch (alertErr: any) {
       log.error('call-pipeline', `Failed to fire compliance alert for call ${callId}: ${alertErr.message}`);
     }

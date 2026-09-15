@@ -104,6 +104,7 @@ export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
   puja: 'U06511Q6R46',
   pooja: 'U06511Q6R46',
   kriti: 'U091YMP33DF',
+  'kriti patait': 'U091YMP33DF',
   sundar: 'U08TFU5GH51',
   'priya sundar': 'U08TFU5GH51',
   priya: 'U08TFU5GH51',
@@ -120,12 +121,22 @@ export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
   'robylon ai': BOT_DEFAULT_TL_SLACK_ID,
 };
 
-export function getTLSlackMention(tlName?: string | null): string {
-  if (!tlName || !tlName.trim()) return 'N/A';
-  const trimmed = tlName.trim();
-  if (trimmed.startsWith('<@') && trimmed.endsWith('>')) return trimmed;
+export function getTLSlackMention(tlName?: string | null, agentName?: string | null): string {
+  // If tlName is missing or N/A, try known agent-to-TL mapping
+  let effectiveTL = (tlName || '').trim();
+  if ((!effectiveTL || effectiveTL.toUpperCase() === 'N/A') && agentName) {
+    const cleanAgent = agentName.trim().toLowerCase();
+    if (cleanAgent.includes('hasan')) {
+      effectiveTL = 'Vedant G';
+    } else if (cleanAgent.includes('nitya') && !cleanAgent.includes('nityaa')) {
+      effectiveTL = 'Kriti';
+    }
+  }
 
-  const clean = trimmed.toLowerCase();
+  if (!effectiveTL || effectiveTL.toUpperCase() === 'N/A') return 'N/A';
+  if (effectiveTL.startsWith('<@') && effectiveTL.endsWith('>')) return effectiveTL;
+
+  const clean = effectiveTL.toLowerCase();
   if (TL_SLACK_MEMBER_MAP[clean]) {
     return `<@${TL_SLACK_MEMBER_MAP[clean]}>`;
   }
@@ -136,11 +147,13 @@ export function getTLSlackMention(tlName?: string | null): string {
     }
   }
 
-  return trimmed;
+  return effectiveTL;
 }
 
 export async function fireQualityAlert(opts: {
-  chatId: string;
+  chatId?: string;
+  callId?: string;
+  channel?: 'chat' | 'call';
   agentName: string;
   tlName?: string;
   contactPhone?: string;
@@ -200,18 +213,21 @@ export async function fireQualityAlert(opts: {
   // Nothing to report at all — skip everything
   if (!failedParams.length && !hasUncertain && !hasComplianceBreaches) return;
 
-  // Deduplicate — one alert per chat per 24 h
-  if (await storeHasQualityAlert(opts.chatId)) {
-    console.log(`[quality-alert] Skipping duplicate alert for chat ${opts.chatId}`);
+  const isCallAlert = opts.channel === 'call' || !!opts.callId;
+  const dedupeKey = opts.callId ? `call_${opts.callId}` : `chat_${opts.chatId}`;
+
+  // Deduplicate — one alert per interaction per 24 h
+  if (await storeHasQualityAlert(dedupeKey)) {
+    console.log(`[quality-alert] Skipping duplicate alert for ${dedupeKey}`);
     return;
   }
-  await storeMarkQualityAlert(opts.chatId);
+  await storeMarkQualityAlert(dedupeKey);
 
   // ── 1. Slack — Compliance Failure Alert ─────────────────────────────────────
   if (isComplianceFailure && (complianceToken || token) && complianceChannel) {
-    const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    const chatLink = opts.chatId && /^\d+$/.test(opts.chatId.trim())
       ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
-      : opts.chatId;
+      : (opts.chatId || '');
 
     let isBot = opts.isBot === true;
     if (!isBot) {
@@ -221,7 +237,7 @@ export async function fireQualityAlert(opts: {
         isBot = isBotAgentName(opts.agentName);
       }
     }
-    if (!isBot && !opts.conversationType && opts.chatId) {
+    if (!isBot && !opts.conversationType && opts.chatId && !isCallAlert) {
       try {
         const { getConversation, getAgentName } = await import('./robylon/db');
         const conv = await getConversation(opts.chatId);
@@ -237,11 +253,34 @@ export async function fireQualityAlert(opts: {
     }
 
     let tlName = opts.tlName || '';
+    if (!tlName && opts.chatId && !isCallAlert) {
+      try {
+        const { query } = await import('./cx/db');
+        const rows = await query<{ tl_name: string | null }>(
+          `SELECT a.tl_name FROM conversations c
+           JOIN agents a ON a.id = c.agent_id
+           WHERE c.id = $1 AND a.tl_name IS NOT NULL
+           LIMIT 1`,
+          [opts.chatId]
+        );
+        if (rows[0]?.tl_name) tlName = rows[0].tl_name;
+      } catch {}
+    }
+
     if (!tlName && opts.agentName) {
       try {
         const { getAgentTLByName } = await import('./robylon/db');
         tlName = (await getAgentTLByName(opts.agentName)) || '';
       } catch {}
+    }
+
+    if (!tlName && opts.agentName) {
+      const cleanAgent = opts.agentName.trim().toLowerCase();
+      if (cleanAgent.includes('hasan')) {
+        tlName = 'Vedant G';
+      } else if (cleanAgent.includes('nitya') && !cleanAgent.includes('nityaa')) {
+        tlName = 'Kriti';
+      }
     }
 
     const reasons: string[] = [];
@@ -256,26 +295,35 @@ export async function fireQualityAlert(opts: {
       reasons.push(`• *TECHNICALLY / LEGALLY INCORRECT*: ${accuracyFailure.reasoning}`);
     }
 
-    let tlMention = getTLSlackMention(tlName);
+    let tlMention = getTLSlackMention(tlName, opts.agentName);
     if (isBot && (tlMention === 'N/A' || !tlMention)) {
       tlMention = `<@${BOT_DEFAULT_TL_SLACK_ID}>`;
     }
 
-    const lines = [
-      `Chat ID: ${chatLink}`,
-      `Agent: ${opts.agentName || 'Unknown'}`,
-      `TL: ${tlMention}`,
-      `Reason for Compliance failure:`,
-      reasons.join('\n'),
-    ];
+    const lines: string[] = [];
+    if (isCallAlert) {
+      lines.push(`🚨 *Call Compliance Failure Alert*`);
+      lines.push(`Call ID: ${opts.callId || 'Unknown'}`);
+      if (opts.chatId) {
+        lines.push(`Linked Chat ID: ${chatLink}`);
+      }
+    } else {
+      lines.push(`Chat ID: ${chatLink}`);
+    }
+    lines.push(`Agent: ${opts.agentName || 'Unknown'}`);
+    lines.push(`TL: ${tlMention}`);
+    lines.push(`Reason for Compliance failure:`);
+    lines.push(reasons.join('\n'));
 
     const targetToken = complianceToken || token;
     const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), targetToken);
-    console.log(`[quality-alert] Compliance failure Slack alert for chat ${opts.chatId}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+    console.log(`[quality-alert] Compliance failure Slack alert for ${isCallAlert ? `call ${opts.callId}` : `chat ${opts.chatId}`}: ${sent ? 'SUCCESS' : 'FAILED'}`);
 
     // Auto-append to Compliance Google Sheet (Sheet1)
     appendComplianceAlertToSheet({
       chatId: opts.chatId,
+      callId: opts.callId,
+      channel: isCallAlert ? 'call' : 'chat',
       agentName: opts.agentName || 'Unknown',
       tl: tlMention,
       contactPhone: opts.contactPhone,
@@ -321,7 +369,7 @@ export async function fireQualityAlert(opts: {
     : (opts.uncertainParameters ?? []).map(u => ({ label: u.parameter, reasoning: `Needs QA review: ${u.question}` }));
 
   appendQualityAlertToSheet({
-    chatId:         opts.chatId,
+    chatId:         opts.chatId || (opts.callId ? `CALL_${opts.callId}` : ''),
     agentName:      opts.agentName,
     contactPhone:   opts.contactPhone,
     iqs:            opts.iqs,

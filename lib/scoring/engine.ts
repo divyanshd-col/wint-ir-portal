@@ -222,7 +222,21 @@ export async function executeScoring(
     ? analyzeConversationTiming(timedMessages, conv.closed_at ?? undefined)
     : { conversationType: 'agent' as const, frt: undefined, botToTeamSecs: undefined, resolutionTime: undefined, closureTime: undefined };
 
-  const effectiveAgentName = agentName || (timing.conversationType === 'bot' ? 'Myra' : '');
+  let effectiveAgentName = agentName;
+  if (!effectiveAgentName && conv.agent_id) {
+    try {
+      const { getAgentName } = await import('@/lib/robylon/db');
+      effectiveAgentName = await getAgentName(conv.agent_id);
+    } catch {}
+  }
+  if (!effectiveAgentName && transcriptMessages.length) {
+    const { extractAgentName } = await import('@/lib/scoring/transcript');
+    effectiveAgentName = extractAgentName(transcriptMessages);
+  }
+  if (!effectiveAgentName && timing.conversationType === 'bot') {
+    effectiveAgentName = 'Myra';
+  }
+
   const effectiveTranscript = timing.conversationType === 'bot'
     ? `[BOT-HANDLED CHAT — No human agent involved. Score Opening, Call, Empathy as NA unless the bot explicitly performed them.]\n\n${transcriptText}`
     : transcriptText;
@@ -361,6 +375,21 @@ export async function executeScoring(
   const finalAgentName = effectiveAgentName;
   console.log(`[scoring-engine] Scored chat ${chatId} → IQS ${primaryPass.iqs_score}% type=${timing.conversationType}`);
 
+  // Resolve TL name directly via agent_id or agent name
+  let resolvedTlName: string | undefined;
+  if (conv.agent_id) {
+    try {
+      const { getAgentTLById } = await import('@/lib/robylon/db');
+      resolvedTlName = (await getAgentTLById(conv.agent_id)) || undefined;
+    } catch {}
+  }
+  if (!resolvedTlName && finalAgentName) {
+    try {
+      const { getAgentTLByName } = await import('@/lib/robylon/db');
+      resolvedTlName = (await getAgentTLByName(finalAgentName)) || undefined;
+    } catch {}
+  }
+
   // Audit: log every scoring event for full traceability
   storeAppendAuditEntry({
     id: crypto.randomUUID(),
@@ -376,6 +405,7 @@ export async function executeScoring(
   fireQualityAlert({
     chatId,
     agentName:           finalAgentName,
+    tlName:              resolvedTlName,
     contactPhone,
     scores:              Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, String(v.score)])),
     reasoning:           Object.fromEntries(Object.entries(parameters).map(([k,v]) => [k, v.reasoning])),

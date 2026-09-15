@@ -141,14 +141,14 @@ Do NOT let one problem cascade into many low scores. A factual error lowers Accu
 Today's date is in CHAT METADATA. A date on or before today has already happened. Never treat a past date as a missed future commitment.
 
 ## COMPLIANCE FLAGS (separate from the score)
-Independently of the quality dimensions, capture EVERY compliance breach that occurred ANYWHERE in the interaction, as a list. Read the whole interaction: the chat, and if a CALL TRANSCRIPT is present in context, the call too. A breach is a breach wherever it happened. Do not trace who said it or which leg it came from, the flags are about the interaction, not about blaming an agent. This does NOT change the quality score. It marks the interaction for separate compliance or QA review.
-List one entry per instance, even if the same type happens more than once. If guaranteed-returns language appears in two different messages, that is two entries, each with its own quote, so a reviewer can see every mistake. Breach types:
+Independently of the quality dimensions, capture EVERY compliance breach that occurred in the CHAT messages (by the bot or chat agent), as a list. Do NOT evaluate or flag compliance breaches from voice calls here; voice calls are scored and audited separately by the Call QA system under the call and the IR who made the call, and attributing call breaches to the chat incorrectly penalizes the chat agent. This does NOT change the quality score. It marks the interaction for separate compliance or QA review.
+List one entry per instance, even if the same type happens more than once. If guaranteed-returns language appears in two different chat messages, that is two entries, each with its own quote, so a reviewer can see every mistake. Breach types:
 - advisory: gave a personalised investment recommendation ("you should invest in X bond") or acted as an investment advisor.
 - guaranteed_returns: implied or stated assured or guaranteed returns.
 - data_handling: shared a personal, KYC, or internal document over WhatsApp, see the data-handling rule below.
-- misleading_error: a factual error serious enough to push the customer toward a wrong financial decision.
-Put each breach in the breaches array with its type, the exact offending quote, and a one-line note. If there are none, breaches is an empty array and breach is false.
-Note: a misleading_error breach in the CHAT also lowers Accuracy when it stands as the final answer (if it was later corrected and the final answer is right, Accuracy follows the final answer and the change goes to the ANSWER CHANGE GATE, but the breach entry stays in this list). A breach that happened only on a CALL does not affect any chat quality parameter, since call quality is scored separately. Either way it goes in the list.
+- misleading_error: a factual error in chat serious enough to push the customer toward a wrong financial decision.
+Put each breach in the breaches array with its type, the exact offending quote from the chat, and a one-line note. If there are none in the chat, breaches is an empty array and breach is false.
+Note: a misleading_error breach in the CHAT also lowers Accuracy when it stands as the final answer (if it was later corrected and the final answer is right, Accuracy follows the final answer and the change goes to the ANSWER CHANGE GATE, but the breach entry stays in this list). Statements made on a CALL do not affect any chat quality parameter and must NOT be added to this breaches list, since call compliance and quality are audited separately under the call.
 - KB PRIORITY OVER GENERAL MARKET KNOWLEDGE: ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent (neither in quality scores like Accuracy nor as a compliance breach / misleading_error / guaranteed_returns) for stating a rule that matches KB_CONTEXT.
 
 ### Data handling over WhatsApp
@@ -182,8 +182,8 @@ Each dimension's reasoning must discuss only that dimension's own criteria. Neve
 // ── Human rubric ──────────────────────────────────────────────────────────────
 const HUMAN_RUBRIC = `
 ## RUBRIC: HUMAN AGENT (the bot escalated, a human took over)
-Score ONLY the human agent's text turns, from handover onward. Everything else in the interaction is context: the bot's earlier messages, and any voice call transcripts. There may be MULTIPLE calls, interleaved with text (text, then a call, then text, then another call). Read everything in order of occurrence to understand the full flow, but score only the agent's text messages.
-Calls are scored by a separate call QA system, NOT here. Call transcripts are AI-generated and imperfect: speaker attribution and individual words can be wrong, so treat call content as approximate evidence, never as certain. Use call context to: (1) avoid penalizing IssueResolution or ExpectationFollowThrough for something that was resolved or explained on a call, (2) verify the PostCallRecap, (3) detect answer changes for the ANSWER CHANGE GATE below, and (4) apply the capped call-only accuracy rule inside Accuracy. Never score call quality or tone.
+Score ONLY the human agent's text turns in the chat, from handover onward. Everything else in the interaction is context: the bot's earlier messages, and any voice call transcripts. There may be MULTIPLE calls, interleaved with text (text, then a call, then text, then another call). Read everything in order of occurrence to understand the full flow, but score only the agent's text messages.
+Calls are scored by a separate call QA system, NOT here. Call transcripts are AI-generated and imperfect: speaker attribution and individual words can be wrong, so treat call content as approximate evidence, never as certain. Use call context to: (1) avoid penalizing IssueResolution or ExpectationFollowThrough for something that was resolved or explained on a call, (2) verify the PostCallRecap, and (3) detect answer changes for the ANSWER CHANGE GATE below. Never score call quality, call tone, or call errors against the chat agent.
 UNRELATED-CALL FLAG: if a call transcript is about something unrelated to the chat context, set unrelated_call_flag = true and explain, EXCEPT when it is clearly the customer choosing to raise a different question on the call, which is intended behaviour and not flagged.
 
 ### IssueResolution (graded 0 / 0.5 / 1)
@@ -194,13 +194,13 @@ Did the agent address every question the customer raised (including questions ra
 - CRITICAL: if resolution moved to a call or an offline step, that is a valid resolution. Do NOT lower this because the outcome is not fully visible in the chat text.
 
 ### Accuracy (graded 0 / 0.5 / 1)
-Were the agent's factual claims correct per the Wint KB and policy (product rules, timelines, tax and form guidance, process steps, amounts).
-- Judge on the FINAL answer the customer was left with. If the agent gave a wrong or different answer earlier (in text or on a call) and later corrected it, and the final answer matches the KB, Accuracy can still be 1. The change itself is NOT an Accuracy failure; record it in the ANSWER CHANGE GATE instead.
-- 1: the final claims are accurate.
-- 0.5: a minor inaccuracy that does not change the customer's decision or action.
-- 0: a clearly wrong final fact, amount, rule, or process step that a KB check would contradict.
-- CALL-ONLY ERROR CAP: an uncorrected error that appears ONLY in a call transcript, with no corroboration in text and not repeated, can lower Accuracy to at most 0.5, never 0, and must set unsure = true with the QA question in the comment, because call transcripts are AI-generated and the attribution or wording may be wrong. An error corroborated in the agent's text, or repeated across the interaction, takes the normal penalty.
-- Serious misleading or regulatory errors go to the compliance flag, not here. Apply all Wint policy guardrails above.
+Were the agent's factual claims in the chat correct per the Wint KB and policy (product rules, timelines, tax and form guidance, process steps, amounts).
+- Judge on the FINAL answer the customer was left with in the chat. If the agent gave a wrong or different answer earlier in the chat and later corrected it, and the final answer matches the KB, Accuracy can still be 1. The change itself is NOT an Accuracy failure; record it in the ANSWER CHANGE GATE instead.
+- 1: the final claims in the chat are accurate.
+- 0.5: a minor inaccuracy in chat that does not change the customer's decision or action.
+- 0: a clearly wrong final fact, amount, rule, or process step in chat that a KB check would contradict.
+- CALL ISOLATION: Statements made on a voice call are evaluated separately by the call QA system under the agent who handled the call. An error that appeared on a call transcript must NEVER lower the chat agent's Accuracy, nor result in an unsure flag on the chat agent. Judge the chat agent's Accuracy strictly based on what was written in the chat messages.
+- Serious misleading or regulatory errors in chat go to the compliance flag, not here. Apply all Wint policy guardrails above.
 
 ### ExpectationFollowThrough (graded 0 / 0.5 / 1)
 Does the customer leave knowing what happens next, and does the closing fit the real state of the issue.
@@ -519,7 +519,7 @@ export function buildScoringPrompt(
   } else if (scenario === 2) {
     scenarioLine = 'SCENARIO: Type 2, bot then human chat, HUMAN LEG. The bot escalated to a human agent, who resolved by text only. No voice call took place, so PostCallRecap is NA and there are no call transcripts. Apply the HUMAN rubric and score only the human agent\'s text turns from handover onward. The bot\'s portion is context and is scored separately.'
   } else {
-    scenarioLine = `SCENARIO: Type 3, bot then human chat with voice call(s), HUMAN LEG. The bot escalated to a human agent, and ${calls.length === 1 ? 'one voice call' : calls.length + ' voice calls'} also happened, possibly interleaved with text (text, call, text, another call). The call transcripts below are numbered in order of occurrence and are CONTEXT ONLY, each call is scored individually by the separate call QA system. Apply the HUMAN rubric to the human agent's text turns only. PostCallRecap applies after each call. Detect answer changes across the whole flow for the ANSWER CHANGE GATE. Call transcripts are AI-generated and may misattribute speakers or words.`
+    scenarioLine = `SCENARIO: Type 3, bot then human chat with voice call(s), HUMAN LEG. The bot escalated to a human agent, and ${calls.length === 1 ? 'one voice call' : calls.length + ' voice calls'} also happened, possibly interleaved with text (text, call, text, another call). The call transcripts below are numbered in order of occurrence and are CONTEXT ONLY. Each call is scored and audited individually by the separate call QA system. Apply the HUMAN rubric to the human agent's text turns only. Do NOT penalize the chat agent or flag compliance breaches for statements made on calls. PostCallRecap applies after each call. Detect answer changes across the whole flow for the ANSWER CHANGE GATE. Call transcripts are AI-generated and may misattribute speakers or words.`
   }
 
   const kb = opts.kbContext

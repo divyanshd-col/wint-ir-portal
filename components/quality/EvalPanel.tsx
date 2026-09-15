@@ -477,11 +477,8 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
   }
 
   let reasoning = extractGateReasoning(item);
-  if (!reasoning && params) {
+  if (!reasoning && params && status === 'fail') {
     reasoning = findChatBreachesForGate(params, gateKey);
-  }
-  if (reasoning && status === 'pass') {
-    status = 'fail';
   }
   return { status, reasoning };
 }
@@ -686,6 +683,25 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
         };
         params['__gates'] = gatesPayload;
 
+        const rawExistingBreaches: any[] = [
+          ...(Array.isArray((parameters as any)?.__breaches) ? (parameters as any).__breaches : []),
+          ...(Array.isArray((parameters as any)?.breaches) ? (parameters as any).breaches : []),
+        ];
+        const survivingBreaches = overallGateResult === 'PASS' ? [] : rawExistingBreaches.filter(b => {
+          const t = typeof b === 'string'
+            ? b.toLowerCase()
+            : ((b.type || '') + ' ' + (b.breach_type || '') + ' ' + (b.category || '') + ' ' + (b.note || '') + ' ' + (b.why || '')).toLowerCase();
+          const isG1 = t.includes('advice') || t.includes('advisory') || t.includes('guarantee') || t.includes('return') || t.includes('tax') || t.includes('invest');
+          const isG2 = t.includes('fabricat') || t.includes('mislead') || t.includes('fact') || t.includes('false') || t.includes('inaccurat');
+          const isG3 = t.includes('data') || t.includes('identity') || t.includes('privacy') || t.includes('kyc') || t.includes('statement') || t.includes('slack') || t.includes('sheet');
+          if (isG1 && gateState['G1_no_advice']?.status === 'pass') return false;
+          if (isG2 && gateState['G2_no_fabrication']?.status === 'pass') return false;
+          if (isG3 && gateState['G3_identity_first']?.status === 'pass') return false;
+          return true;
+        });
+        params['__breaches'] = survivingBreaches;
+        params['breaches'] = survivingBreaches;
+
         body.parameters = params;
       }
 
@@ -852,28 +868,37 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {/* Compliance Gates — scrolls away with the params to free space for them */}
               <div style={{
-                margin: '12px 16px', background: '#f8fafc',
-                border: `1px solid ${overallGateResult === 'FAIL' ? '#fecaca' : 'var(--qa-border)'}`,
-                borderRadius: 8, padding: '10px 12px',
+                margin: '12px 16px',
+                background: overallGateResult === 'FAIL' ? '#fff5f5' : '#f8fafc',
+                border: `1.5px solid ${overallGateResult === 'FAIL' ? '#f87171' : 'var(--qa-border)'}`,
+                borderRadius: 10,
+                padding: '14px 16px',
+                boxShadow: overallGateResult === 'FAIL' ? '0 2px 8px rgba(239, 68, 68, 0.08)' : '0 1px 3px rgba(0, 0, 0, 0.02)',
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                    Compliance Gates: <span style={{
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--qa-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                      Compliance Gates:
+                    </span>
+                    <span style={{
+                      fontSize: 12,
+                      fontWeight: 800,
+                      letterSpacing: '0.04em',
                       color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d',
                       background: overallGateResult === 'FAIL' ? '#fee2e2' : '#dcfce7',
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      marginLeft: 4
+                      border: `1px solid ${overallGateResult === 'FAIL' ? '#fca5a5' : '#86efac'}`,
+                      padding: '3px 10px',
+                      borderRadius: 6,
                     }}>{overallGateResult}</span>
-                  </span>
+                  </div>
                   {!isReadOnly && (
-                    <span style={{ fontSize: 10, color: 'var(--qa-text-3)', fontWeight: 500 }}>
+                    <span style={{ fontSize: 11.5, color: overallGateResult === 'FAIL' ? '#b91c1c' : 'var(--qa-text-3)', fontWeight: 500 }}>
                       Fail on any gate flags interaction
                     </span>
                   )}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {COMPLIANCE_GATES_LIST.map(g => {
                     const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
                     const scoreBadgeVal = gItem.status === 'pass' ? 'Yes' : gItem.status === 'fail' ? 'No' : 'NA';
@@ -881,21 +906,23 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
 
                     return (
                       <div key={g.key} style={{
-                        padding: '6px 10px',
+                        padding: '10px 12px',
                         background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
-                        border: `1px solid ${gItem.status === 'fail' ? '#fecdd3' : 'var(--qa-border-sub, #f1f5f9)'}`,
-                        borderRadius: 6
+                        border: `1.5px solid ${gItem.status === 'fail' ? '#fca5a5' : 'var(--qa-border-sub, #f1f5f9)'}`,
+                        borderRadius: 8,
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                       }}>
                         <div style={{
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
-                          marginBottom: showMistakeBox ? 4 : 0
+                          marginBottom: showMistakeBox ? 6 : 0,
+                          gap: 12,
                         }}>
-                          <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)', lineHeight: 1.4 }}>
                             {g.shortLabel}: <span style={{ fontWeight: 400, color: 'var(--qa-text-2)' }}>{g.label.split('(')[1]?.replace(')', '') || g.label}</span>
                           </span>
-                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                             {([
                               { label: 'Yes', val: 'pass' as const },
                               { label: 'No', val: 'fail' as const },
@@ -924,10 +951,10 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                                   onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
                                   disabled={isReadOnly}
                                   style={{
-                                    height: 24,
-                                    padding: '0 8px',
+                                    height: 28,
+                                    padding: '0 12px',
                                     borderRadius: 6,
-                                    fontSize: 11,
+                                    fontSize: 12,
                                     fontWeight: isSel ? 700 : 500,
                                     border: `1px solid ${borderColor}`,
                                     background: bg,
@@ -949,22 +976,22 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                           isReadOnly ? (
                             gItem.reasoning ? (
                               <div style={{
-                                marginTop: 6,
-                                padding: '5px 8px',
+                                marginTop: 8,
+                                padding: '8px 10px',
                                 background: '#fee2e2',
                                 borderLeft: '3px solid #ef4444',
-                                borderRadius: 4,
-                                fontSize: 11,
+                                borderRadius: 6,
+                                fontSize: 12.5,
                                 color: '#991b1b',
-                                lineHeight: 1.4,
+                                lineHeight: 1.5,
                                 whiteSpace: 'pre-wrap'
                               }}>
                                 <span style={{ fontWeight: 700 }}>Reason: </span>{gItem.reasoning}
                               </div>
                             ) : null
                           ) : (
-                            <div style={{ marginTop: 6 }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 2, textTransform: 'uppercase' }}>
+                            <div style={{ marginTop: 8 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                 Reason for Breach:
                               </div>
                               <textarea
@@ -977,12 +1004,12 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                                   boxSizing: 'border-box',
                                   resize: 'vertical',
                                   border: '1px solid #fca5a5',
-                                  borderRadius: 4,
-                                  padding: '4px 6px',
-                                  fontSize: 11,
+                                  borderRadius: 6,
+                                  padding: '6px 8px',
+                                  fontSize: 12.5,
                                   color: '#991b1b',
                                   background: '#fff1f2',
-                                  lineHeight: 1.4
+                                  lineHeight: 1.5
                                 }}
                               />
                             </div>
