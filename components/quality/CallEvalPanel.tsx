@@ -1156,96 +1156,107 @@ export default function CallEvalPanel({
 
             {/* Compliance Gates Card */}
             <div style={{
-              background: '#f8fafc',
-              border: `1px solid ${overallGateResult === 'FAIL' ? '#fecaca' : 'var(--qa-border)'}`,
-              borderRadius: 8,
-              padding: 12,
-              marginBottom: 12
+              background: overallGateResult === 'FAIL' ? '#fff5f5' : '#f8fafc',
+              border: `1.5px solid ${overallGateResult === 'FAIL' ? '#f87171' : 'var(--qa-border)'}`,
+              borderRadius: 10,
+              padding: '14px 16px',
+              marginBottom: 16,
+              boxShadow: overallGateResult === 'FAIL' ? '0 2px 8px rgba(239, 68, 68, 0.08)' : '0 1px 3px rgba(0, 0, 0, 0.02)',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <h5 style={{ margin: 0, fontSize: 12, fontWeight: 700, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>
-                  Compliance Gates: <span style={{
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--qa-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Compliance Gates:
+                  </h5>
+                  <span style={{
+                    fontSize: 12,
+                    fontWeight: 800,
+                    letterSpacing: '0.04em',
                     color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d',
                     background: overallGateResult === 'FAIL' ? '#fee2e2' : '#dcfce7',
-                    padding: '2px 8px',
-                    borderRadius: 4,
-                    marginLeft: 4
+                    border: `1px solid ${overallGateResult === 'FAIL' ? '#fca5a5' : '#86efac'}`,
+                    padding: '3px 10px',
+                    borderRadius: 6,
                   }}>{overallGateResult}</span>
-                </h5>
+                </div>
                 {!isReadOnly && (
-                  <span style={{ fontSize: 10, color: 'var(--qa-text-3)', fontWeight: 500 }}>
+                  <span style={{ fontSize: 11.5, color: overallGateResult === 'FAIL' ? '#b91c1c' : 'var(--qa-text-3)', fontWeight: 500 }}>
                     Fail on any gate marks call as Critical Fail
                   </span>
                 )}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {COMPLIANCE_GATES_LIST.map(g => {
                   const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
                   const scoreLabel = gItem.status === 'pass' ? 'Yes' : gItem.status === 'fail' ? 'No' : 'NA';
+                  const showMistakeBox = gItem.status === 'fail' || Boolean(gItem.reasoning);
 
                   return (
                     <div key={g.key} style={{
-                      padding: '8px 10px',
+                      padding: '10px 12px',
                       background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
-                      border: `1px solid ${gItem.status === 'fail' ? '#fecdd3' : 'var(--qa-border-sub, #f1f5f9)'}`,
-                      borderRadius: 6
+                      border: `1.5px solid ${gItem.status === 'fail' ? '#fca5a5' : 'var(--qa-border-sub, #f1f5f9)'}`,
+                      borderRadius: 8,
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
                     }}>
                       <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        marginBottom: showMistakeBox ? 6 : 0,
+                        gap: 12,
                       }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)', lineHeight: 1.4 }}>
                           {g.label}
                         </span>
-                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                            {([
-                              { label: 'Yes', val: 'pass' as const },
-                              { label: 'No', val: 'fail' as const },
-                              { label: 'NA', val: 'not_applicable' as const },
-                            ]).map(opt => {
-                              const isSel = gItem.status === opt.val;
-                              const bg = isSel
-                                ? opt.val === 'pass'
-                                  ? '#15803d'
-                                  : opt.val === 'fail'
-                                  ? '#b91c1c'
-                                  : 'var(--qa-gray-700, #334155)'
-                                : 'var(--qa-card, #fff)';
-                              const borderColor = isSel
-                                ? opt.val === 'pass'
-                                  ? '#15803d'
-                                  : opt.val === 'fail'
-                                  ? '#b91c1c'
-                                  : 'var(--qa-gray-700, #334155)'
-                                : 'var(--qa-border, #e2e8f0)';
-                              const color = isSel ? '#fff' : 'var(--qa-text-2, #64748b)';
+                        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                          {([
+                            { label: 'Yes', val: 'pass' as const },
+                            { label: 'No', val: 'fail' as const },
+                            { label: 'NA', val: 'not_applicable' as const },
+                          ]).map(opt => {
+                            const isSel = gItem.status === opt.val;
+                            const bg = isSel
+                              ? opt.val === 'pass'
+                                ? '#15803d'
+                                : opt.val === 'fail'
+                                ? '#b91c1c'
+                                : 'var(--qa-gray-700, #334155)'
+                              : 'var(--qa-card, #fff)';
+                            const borderColor = isSel
+                              ? opt.val === 'pass'
+                                ? '#15803d'
+                                : opt.val === 'fail'
+                                ? '#b91c1c'
+                                : 'var(--qa-gray-700, #334155)'
+                              : 'var(--qa-border, #e2e8f0)';
+                            const color = isSel ? '#fff' : 'var(--qa-text-2, #64748b)';
 
-                              return (
-                                <button
-                                  key={opt.val}
-                                  onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
-                                  disabled={isReadOnly}
-                                  style={{
-                                    height: 24,
-                                    padding: '0 8px',
-                                    borderRadius: 6,
-                                    fontSize: 11,
-                                    fontWeight: isSel ? 700 : 500,
-                                    border: `1px solid ${borderColor}`,
-                                    background: bg,
-                                    color: color,
-                                    cursor: isReadOnly ? 'default' : 'pointer',
-                                    fontFamily: 'inherit',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                >
-                                  {opt.label}
-                                </button>
-                              );
-                            })}
-                          </div>
+                            return (
+                              <button
+                                key={opt.val}
+                                onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                                disabled={isReadOnly}
+                                style={{
+                                  height: 28,
+                                  padding: '0 12px',
+                                  borderRadius: 6,
+                                  fontSize: 12,
+                                  fontWeight: isSel ? 700 : 500,
+                                  border: `1px solid ${borderColor}`,
+                                  background: bg,
+                                  color: color,
+                                  cursor: isReadOnly ? 'default' : 'pointer',
+                                  fontFamily: 'inherit',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       {/* Reason for compliance gate (shown only in case of breach) */}
@@ -1253,22 +1264,22 @@ export default function CallEvalPanel({
                         isReadOnly ? (
                           gItem.reasoning ? (
                             <div style={{
-                              marginTop: 6,
-                              padding: '5px 8px',
+                              marginTop: 8,
+                              padding: '8px 10px',
                               background: '#fee2e2',
                               borderLeft: '3px solid #ef4444',
-                              borderRadius: 4,
-                              fontSize: 11,
+                              borderRadius: 6,
+                              fontSize: 12.5,
                               color: '#991b1b',
-                              lineHeight: 1.4,
+                              lineHeight: 1.5,
                               whiteSpace: 'pre-wrap'
                             }}>
                               <span style={{ fontWeight: 700 }}>Reason: </span>{gItem.reasoning}
                             </div>
                           ) : null
                         ) : (
-                          <div style={{ marginTop: 6 }}>
-                            <div style={{ fontSize: 10, fontWeight: 700, color: '#b91c1c', marginBottom: 2, textTransform: 'uppercase' }}>
+                          <div style={{ marginTop: 8 }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                               Reason for Breach:
                             </div>
                             <textarea
@@ -1281,12 +1292,12 @@ export default function CallEvalPanel({
                                 boxSizing: 'border-box',
                                 resize: 'vertical',
                                 border: '1px solid #fca5a5',
-                                borderRadius: 4,
-                                padding: '4px 8px',
-                                fontSize: 11,
+                                borderRadius: 6,
+                                padding: '6px 8px',
+                                fontSize: 12.5,
                                 color: '#991b1b',
                                 background: '#fff1f2',
-                                lineHeight: 1.4
+                                lineHeight: 1.5
                               }}
                             />
                           </div>
