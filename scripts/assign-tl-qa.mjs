@@ -73,7 +73,6 @@ async function main() {
     ['Dhanush%',    'Harsh'],
     ['Vaibhavi%',   'Harsh'],
     // TL: Yashika
-    ['Vedant%',        'Yashika'],
     ['Aksa%',          'Yashika'],
     ['Yashvi%',        'Yashika'],
     ['Varshini%',      'Yashika'],
@@ -81,11 +80,8 @@ async function main() {
     ['Bhavna Sharma%', 'Yashika'],
     ['Bhavna%',        'Yashika'],
     // TL: Neha C
-    ['Anwesha%',    'Neha C'],
     ['Purvi%',      'Neha C'],
     ['Shayari%',    'Neha C'],
-    ['Sneha%',      'Neha C'],
-    ['Elton%',      'Neha C'],
     // TL: Puja
     ['Nandini%',    'Puja'],
     ['Nirmit%',     'Puja'],   // Nirmiti / Nirmithi
@@ -93,7 +89,7 @@ async function main() {
     ['Srishti%',    'Puja'],
     ['Ashwitha%',   'Puja'],
     // TL: Rishitha
-    ['Anushka%',    'Rishitha'],
+    ['Anushka%',    'Rishitha', { exclude: ['Anushka choudhary%'] }],
     ['Aditya%',     'Rishitha'],
     ['Sahil%',      'Rishitha'],
     ['Tushar%',     'Rishitha'],
@@ -106,7 +102,6 @@ async function main() {
     ['Priyadharshini%',  'Priya Sundar'],
     ['Ritik%',           'Priya Sundar'],
     ['Sakshi%',          'Priya Sundar'],
-    ['Viraj%',           'Priya Sundar'],
     ['Jatin%',           'Priya Sundar'],
     // TL: Anusha
     ['Anjai%',    'Anusha'],
@@ -115,10 +110,25 @@ async function main() {
     ['Ekdant%',   'Anusha'],
     ['Bhavana%',  'Anusha'],
     ['Pranav%',   'Anusha'],
+    // TL: Vedant G
+    ['Hasan Merchant%',     'Vedant G'],
+    ['Hasan%',              'Vedant G'],
+    ['Arpit Jaggi%',        'Vedant G'],
+    ['Elton%',              'Vedant G'],
+    ['Viraj%',              'Vedant G'],
+    ['Anushka choudhary%',  'Vedant G'],
+    ['Devansh Dalmia%',     'Vedant G'],
+    // TL: Kriti
+    ['Nitya Sharma%',       'Kriti'],
+    ['Divya Dalmia%',       'Kriti'],
+    ['Anwesha Mandal%',     'Kriti'],
+    ['Sneha%',              'Kriti'],
+    ['Nishant Raj%',        'Kriti'],
+    ['Aishwarya Gupta%',    'Kriti'],
   ];
 
-  for (const [pattern, tl] of tlMap) {
-    const updated = await setTL(pattern, tl);
+  for (const [pattern, tl, opts] of tlMap) {
+    const updated = await setTL(pattern, tl, opts || {});
     if (updated.length) console.log(`  TL=${tl}: ${updated.join(', ')}`);
   }
 

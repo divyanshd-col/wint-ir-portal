@@ -63,7 +63,11 @@ export const CHAT_PARAM_LATERAL = `
 
 export const CALL_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
-    CASE WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb ELSE '{}'::jsonb END
+    CASE
+      WHEN ce.iqs_scores::text LIKE '{%' THEN ce.iqs_scores::jsonb
+      WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb
+      ELSE '{}'::jsonb
+    END
   ) AS p(key, val)
 `;
 
@@ -325,40 +329,43 @@ export async function GET(req: NextRequest) {
       query<{ csat_pct: number|null; iqs: number|null; volume: number }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = $3
       `, [dateFrom, dateTo, agentName]),
 
       query<FlatCatRow>(`
-        SELECT c.tags->>'disposition' AS disposition,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+        SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
+          AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
         GROUP BY 1 ORDER BY COUNT(cr.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
       query<FlatCatRow>(`
-        SELECT c.tags->>'disposition' AS disposition,
-               c.tags->>'sub_disposition' AS sub_disposition,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+        SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
+               COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') AS sub_disposition,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
-          AND c.tags->>'sub_disposition' IS NOT NULL
+          AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
+          AND COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') IS NOT NULL
         GROUP BY 1, 2 ORDER BY 1, COUNT(cr.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
@@ -366,12 +373,13 @@ export async function GET(req: NextRequest) {
         SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2 AND a.name = $3
         GROUP BY 1 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
@@ -379,13 +387,14 @@ export async function GET(req: NextRequest) {
       query<{ week_start: string; param_key: string; pass_rate: number|null }>(`
         SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
                ${PASS_RATE_SELECT}
-        FROM iqs_scores s
-        JOIN call_recordings cr ON cr.chat_id = s.chat_id
+        FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
         LEFT JOIN conversations c ON c.id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         ${CALL_PARAM_LATERAL}
         WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2
-          AND a.name = $3 AND s.call_parameters IS NOT NULL
+          AND a.name = $3 AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
         GROUP BY 1, 2 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
     ]),

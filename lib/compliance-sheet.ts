@@ -12,7 +12,9 @@ import { readConfig } from './config';
 export const COMPLIANCE_DEFAULT_SHEET_ID = '1IgPoXykhI9dSswVDGxto_hfmvhmhNaNKDmwqXggGmGY';
 
 export interface ComplianceAlertSheetOpts {
-  chatId: string;
+  chatId?: string;
+  callId?: string;
+  channel?: 'chat' | 'call';
   agentName: string;
   tl?: string;
   contactPhone?: string;
@@ -70,9 +72,15 @@ export async function appendComplianceAlertToSheet(opts: ComplianceAlertSheetOpt
 
   const dateStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
 
+  const interactionId = opts.callId 
+    ? `CALL_${opts.callId}${opts.chatId ? ` (Chat: ${opts.chatId})` : ''}` 
+    : (opts.chatId || '');
+
   const payload = {
     date:           dateStr,
-    chatId:         opts.chatId,
+    chatId:         interactionId,
+    callId:         opts.callId || '',
+    channel:        opts.channel || (opts.callId ? 'call' : 'chat'),
     agentName:      opts.agentName || 'Unknown',
     tl:             opts.tl || 'N/A',
     contactPhone:   opts.contactPhone || '',

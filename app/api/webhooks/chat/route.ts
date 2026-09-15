@@ -258,7 +258,7 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
 
   if (conv?.transcript && !alreadyScored) {
     const agentId = conv.agent_id;
-    const agentName = agentId
+    let agentName = agentId
       ? (await import('@/lib/robylon/db').then(m => m.getAgentName(agentId)))
       : '';
 
@@ -267,6 +267,10 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
     const transcriptMessages = Array.isArray(conv.transcript) ? conv.transcript
       : Array.isArray((conv.transcript as any)?.messages) ? (conv.transcript as any).messages : [];
     chatTranscriptText = transcriptFromJsonb(transcriptMessages);
+
+    if (!agentName && transcriptMessages.length) {
+      agentName = extractAgentName(transcriptMessages);
+    }
 
     const config = await readConfig();
     const [scoredResult] = await Promise.allSettled([

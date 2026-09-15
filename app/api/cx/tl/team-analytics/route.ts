@@ -92,7 +92,11 @@ const CHAT_PARAM_LATERAL = `
 
 const CALL_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
-    CASE WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb ELSE '{}'::jsonb END
+    CASE
+      WHEN ce.iqs_scores::text LIKE '{%' THEN ce.iqs_scores::jsonb
+      WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb
+      ELSE '{}'::jsonb
+    END
   ) AS p(key, val)
 `;
 
@@ -227,12 +231,13 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label = 'good' THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS csat_pct,
-      ROUND(AVG(s.call_iqs_score)::numeric, 1)::float AS iqs,
+      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
     LEFT JOIN conversations c ON c.id = cr.chat_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+    JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = ANY($3)
   `, [dateFrom, dateTo, agentNames]);
 
@@ -242,9 +247,10 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label = 'good' THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS csat_pct,
-      ROUND(AVG(s.call_iqs_score)::numeric, 1)::float AS iqs,
+      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
     LEFT JOIN conversations c ON c.id = cr.chat_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
@@ -252,22 +258,24 @@ export async function GET(req: NextRequest) {
 
   const teamCallParams = await query<{ param_key: string; pass_rate: number | null }>(`
     SELECT ${CHAT_PARAM_SELECT}
-    FROM iqs_scores s
-    JOIN call_recordings cr ON cr.chat_id = s.chat_id
+    FROM call_recordings cr
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+    LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
     LEFT JOIN conversations c ON c.id = cr.chat_id
-    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+    JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
     ${CALL_PARAM_LATERAL}
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-      AND a.name = ANY($3) AND s.call_parameters IS NOT NULL
+      AND a.name = ANY($3) AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
     GROUP BY p.key
   `, [dateFrom, dateTo, agentNames]);
 
   const cxCallParams = await query<{ param_key: string; pass_rate: number | null }>(`
     SELECT ${CHAT_PARAM_SELECT}
-    FROM iqs_scores s
-    JOIN call_recordings cr ON cr.chat_id = s.chat_id
+    FROM call_recordings cr
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+    LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
     ${CALL_PARAM_LATERAL}
-    WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND s.call_parameters IS NOT NULL
+    WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
     GROUP BY p.key
   `, [dateFrom, dateTo]);
 
@@ -278,25 +286,27 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN c.csat_label = 'good' THEN 1 END)::numeric
         / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END), 0) * 100, 1
       )::float AS csat_pct,
-      ROUND(AVG(s.call_iqs_score)::numeric, 1)::float AS iqs,
+      ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric, 1)::float AS iqs,
       COUNT(cr.id)::int AS volume
     FROM call_recordings cr
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
     LEFT JOIN conversations c ON c.id = cr.chat_id
     LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+    JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = ANY($3)
     GROUP BY a.name ORDER BY a.name
   `, [dateFrom, dateTo, agentNames]);
 
   const agentCallParamRows = await query<{ agent_name: string; param_key: string; pass_rate: number | null }>(`
     SELECT a.name AS agent_name, ${CHAT_PARAM_SELECT}
-    FROM iqs_scores s
-    JOIN call_recordings cr ON cr.chat_id = s.chat_id
+    FROM call_recordings cr
+    LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+    LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
     LEFT JOIN conversations c ON c.id = cr.chat_id
-    JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+    JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
     ${CALL_PARAM_LATERAL}
     WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-      AND a.name = ANY($3) AND s.call_parameters IS NOT NULL
+      AND a.name = ANY($3) AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
     GROUP BY a.name, p.key
   `, [dateFrom, dateTo, agentNames]);
 
