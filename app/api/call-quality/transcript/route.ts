@@ -17,10 +17,10 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   let evalData: any = null;
   try {
     const evalRows = await query<any>(
-      `SELECT gates, iqs_scores, iqs_percent, verdict, status, reviewed_by, review_note 
+      `SELECT chat_id, gates, iqs_scores, iqs_percent, verdict, status, reviewed_by, review_note 
        FROM call_evaluations 
        WHERE call_id = $1 OR chat_id = $1 
-       ORDER BY id DESC LIMIT 1`,
+       ORDER BY scored_at DESC NULLS LAST LIMIT 1`,
       [callId]
     );
     if (evalRows.length > 0) {
