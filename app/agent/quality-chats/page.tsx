@@ -9,7 +9,9 @@ export default async function AgentQualityChatsPage() {
   if (!session) redirect('/login');
 
   const role = (session.user as any)?.role || '';
-  if (!['agent', 'admin'].includes(role)) redirect('/quality');
+  const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
+  const skills = (session.user as any)?.skills || (await getSkillsForPersona(role));
+  if (!hasSkill({ ...(session.user as any), skills }, 'agent:my_chats:access')) redirect('/quality');
 
   const email = (session.user as any)?.email || '';
   const config = await readConfig();

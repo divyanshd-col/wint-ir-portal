@@ -7,19 +7,9 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || !session.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const role = (session.user as any)?.role;
-    const isAdmin = !!(session.user as any)?.isAdmin || role === 'admin';
-    if (!isAdmin) {
-      return NextResponse.json(
-        { error: 'Forbidden. Token usage metrics are only accessible to administrators.' },
-        { status: 403 }
-      );
-    }
+    const { requireSkill } = await import('@/lib/skills');
+    const auth = await requireSkill('tokens:view:access');
+    if (auth.error) return auth.error;
 
     const searchParams = req.nextUrl.searchParams;
     const timeframe = (searchParams.get('timeframe') || '30d') as MetricsFilter['timeframe'];

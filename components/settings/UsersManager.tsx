@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import TimeAgo from '../TimeAgo';
 
+import SkillsManager from './SkillsManager';
+
 export interface User {
   userId?: number;
   email: string;
@@ -45,6 +47,7 @@ const TABS: [string, string][] = [
   ['users', 'Users'],
   ['teams', 'Teams'],
   ['qa', 'QA Dispositions'],
+  ['skills', 'Skills & Permissions'],
 ];
 
 function roleLabel(role: string): string {
@@ -69,7 +72,7 @@ function Avatar({ name, email }: { name: string; email: string }) {
 export default function UsersManager({
   users, setUsers, agentAssignments, setAgentAssignments, loadingUsers, reloadUsers, showToast,
 }: UsersManagerProps) {
-  const [tab, setTab] = useState<'users' | 'teams' | 'qa'>('users');
+  const [tab, setTab] = useState<'users' | 'teams' | 'qa' | 'skills'>('users');
 
   const inputCls = 'border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30';
 
@@ -638,6 +641,11 @@ export default function UsersManager({
             </div>
           )}
         </div>
+      )}
+
+      {/* ══════════════ SKILLS & PERMISSIONS ══════════════ */}
+      {tab === 'skills' && (
+        <SkillsManager showToast={showToast} />
       )}
 
       {/* ── Invite modal ── */}

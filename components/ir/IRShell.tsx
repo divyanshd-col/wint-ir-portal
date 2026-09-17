@@ -6,6 +6,7 @@ import RoleShell from '../RoleShell';
 interface IRShellProps {
   role: string;
   name: string;
+  skills?: string[];
   children: React.ReactNode;
 }
 
@@ -44,16 +45,16 @@ const DocumentIcon = () => (
 );
 
 const NAV = [
-  { label: 'Analytics', href: '/quality', icon: StarIcon },
-  { label: 'My Analytics', href: '/tl/member-analytics', icon: UserIcon },
-  { label: 'My Quality Chats', href: '/agent/quality-chats', icon: ChatIcon },
-  { label: 'My Quality Calls', href: '/agent/quality-calls', icon: PhoneIcon },
-  { label: 'My Reports', href: '/agent/reports', icon: DocumentIcon },
+  { label: 'Analytics', href: '/quality', icon: StarIcon, skill: 'quality:analytics:access' },
+  { label: 'My Analytics', href: '/tl/member-analytics', icon: UserIcon, skill: 'agent:my_analytics:access' },
+  { label: 'My Quality Chats', href: '/agent/quality-chats', icon: ChatIcon, skill: 'agent:my_chats:access' },
+  { label: 'My Quality Calls', href: '/agent/quality-calls', icon: PhoneIcon, skill: 'agent:my_calls:access' },
+  { label: 'My Reports', href: '/agent/reports', icon: DocumentIcon, skill: 'agent:reports:access' },
 ];
 
-export default function IRShell({ role, name, children }: IRShellProps) {
+export default function IRShell({ role, name, skills, children }: IRShellProps) {
   return (
-    <RoleShell role={role} name={name} navItems={NAV} roleLabel="IR Agent" mainStyle={{ overflow: 'auto' }}>
+    <RoleShell role={role} name={name} skills={skills} navItems={NAV} roleLabel="IR Agent" mainStyle={{ overflow: 'auto' }}>
       {children}
     </RoleShell>
   );

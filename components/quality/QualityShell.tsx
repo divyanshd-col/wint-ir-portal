@@ -1,12 +1,13 @@
 'use client';
 
 import React from 'react';
-import RoleShell from '../RoleShell';
+import RoleShell, { type NavItem } from '../RoleShell';
 
 interface Props {
   role:     string;
   email?:   string;
   name:     string;
+  skills?:  string[];
   children: React.ReactNode;
 }
 
@@ -57,19 +58,19 @@ const DocumentIcon = () => (
   </svg>
 );
 
-export const NAV_ALL = [
-  { label: 'Analytics',        href: '/quality',                icon: StarIcon,       roles: ['admin', 'quality', 'tl', 'agent'] },
-  { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'] },
-  { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'] },
-  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin', 'tl'] },
-  { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'] },
-  { label: 'My Analytics',     href: '/tl/member-analytics',    icon: UserIcon,       roles: ['agent'] },
-  { label: 'My Quality Chats', href: '/agent/quality-chats',    icon: ChatIcon,       roles: ['agent'] },
-  { label: 'My Quality Calls', href: '/agent/quality-calls',    icon: PhoneIcon,      roles: ['agent'] },
-  { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['admin', 'tl'] },
-  { label: 'Quality Calls',    href: '/tl/quality-calls',       icon: PhoneIcon,      roles: ['admin', 'tl'] },
-  { label: 'My Reports',       href: '/agent/reports',          icon: DocumentIcon,   roles: ['agent'] },
-  { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin', 'tl'] },
+export const NAV_ALL: NavItem[] = [
+  { label: 'Analytics',        href: '/quality',                icon: StarIcon,       roles: ['admin', 'quality', 'tl', 'agent'], skill: 'quality:analytics:access' },
+  { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'],                skill: 'quality:chat_eval:access' },
+  { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'],                skill: 'quality:call_eval:access' },
+  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin', 'tl'],                     skill: 'tl:team_analytics:access' },
+  { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'],                     skill: 'tl:member_analytics:access' },
+  { label: 'My Analytics',     href: '/tl/member-analytics',    icon: UserIcon,       roles: ['agent'],                           skill: 'agent:my_analytics:access' },
+  { label: 'My Quality Chats', href: '/agent/quality-chats',    icon: ChatIcon,       roles: ['agent'],                           skill: 'agent:my_chats:access' },
+  { label: 'My Quality Calls', href: '/agent/quality-calls',    icon: PhoneIcon,      roles: ['agent'],                           skill: 'agent:my_calls:access' },
+  { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['admin', 'tl'],                     skill: 'tl:quality_chats:access' },
+  { label: 'Quality Calls',    href: '/tl/quality-calls',       icon: PhoneIcon,      roles: ['admin', 'tl'],                     skill: 'tl:quality_calls:access' },
+  { label: 'My Reports',       href: '/agent/reports',          icon: DocumentIcon,   roles: ['agent'],                           skill: 'agent:reports:access' },
+  { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin', 'tl'],                     skill: 'tl:reports:access' },
 ];
 
 const ROLE_LABELS: Record<string, string> = {
@@ -79,11 +80,12 @@ const ROLE_LABELS: Record<string, string> = {
   agent:   'IR Agent',
 };
 
-export default function QualityShell({ role, name, children }: Props) {
+export default function QualityShell({ role, name, skills, children }: Props) {
   return (
     <RoleShell
       role={role}
       name={name}
+      skills={skills}
       navItems={NAV_ALL}
       roleLabel={ROLE_LABELS[role] ?? role}
     >

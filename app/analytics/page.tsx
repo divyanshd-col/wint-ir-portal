@@ -8,8 +8,10 @@ import AnalyticsMcpClient from '@/components/AnalyticsMcpClient';
 export default async function AnalyticsPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
-  const user = session.user as { isAdmin?: boolean; role?: string; email?: string };
-  if (!user?.isAdmin && user?.role !== 'tl') redirect('/');
+  const user = session.user as { isAdmin?: boolean; role?: string; email?: string; skills?: string[] };
+  const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
+  const skills = user?.skills || (await getSkillsForPersona(user?.role));
+  if (!hasSkill({ ...user, skills }, 'analytics:access')) redirect('/');
 
   const config = await readConfig();
   const flags = {
