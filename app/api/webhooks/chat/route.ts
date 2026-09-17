@@ -41,6 +41,7 @@ import {
   insertCallRecording,
   updateCallRecordingMetrics,
   updateCallDisposition,
+  saveRobylonWebhookPayload,
 } from '@/lib/robylon/db';
 import { storeHasProcessedEvent, storeMarkProcessedEvent } from '@/lib/store';
 import { query } from '@/lib/cx/db';
@@ -548,6 +549,15 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
+
+  // Persist raw incoming webhook payload immediately as received
+  await saveRobylonWebhookPayload({
+    source: 'chat',
+    eventType: body?.event_type ? String(body.event_type) : null,
+    eventId: body?.event_id ? String(body.event_id) : null,
+    chatId: body?.chat_id ? String(body.chat_id) : (body?.conversation_id ? String(body.conversation_id) : null),
+    payload: body,
+  });
 
   // Log only non-sensitive metadata — never dump full payload in production
   if (process.env.NODE_ENV !== 'production') {
