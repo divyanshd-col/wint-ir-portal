@@ -17,7 +17,10 @@ export default async function TLReportsPage() {
   const dbUser = await getUserByEmail(email).catch(() => null);
   const resolvedRole = dbUser?.role || role;
 
-  if (resolvedRole !== 'admin' && resolvedRole !== 'tl') redirect('/quality');
+  const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
+  const skills = (session.user as any)?.skills || (await getSkillsForPersona(resolvedRole));
+
+  if (!hasSkill({ ...userAny, role: resolvedRole, skills }, 'tl:reports:access')) redirect('/quality');
 
   const config = await readConfig();
   const configUser = config.users.find((u: any) => (u.email || u.username).toLowerCase() === email.toLowerCase());

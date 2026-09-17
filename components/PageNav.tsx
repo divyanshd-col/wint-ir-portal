@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 
 export interface AnalyticsNavData {
   sessions: { id: string; title: string }[];
@@ -18,10 +18,24 @@ interface PageNavProps {
   username: string;
   role?: string;
   isAdmin?: boolean;
+  skills?: string[];
   flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
   /** When provided (Analytics page), the Analytics item expands to show sessions. */
   analytics?: AnalyticsNavData;
 }
+
+const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
+  admin: [
+    'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
+    'quality:analytics:access', 'tokens:view:access', 'settings:manage:access',
+  ],
+  tl: [
+    'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
+    'quality:analytics:access',
+  ],
+  quality: ['chat:access', 'cx_dashboard:access', 'quality:analytics:access'],
+  agent: ['chat:access', 'quality:analytics:access'],
+};
 
 const AnalyticsIcon = (
   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -139,9 +153,24 @@ function NavLink({
   );
 }
 
-export default function PageNav({ username, role, isAdmin, flags, analytics }: PageNavProps) {
-  const canSeeQuality         = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
-  const canSeeAnalytics       = isAdmin || role === 'tl';
+export default function PageNav({ username, role, isAdmin, skills: propSkills, flags, analytics }: PageNavProps) {
+  const { data: session } = useSession();
+  const sessionSkills = (session?.user as any)?.skills as string[] | undefined;
+  const userRole = role || (session?.user as any)?.role || (isAdmin ? 'admin' : 'agent');
+  const effectiveSkills = Array.isArray(propSkills) && propSkills.length
+    ? propSkills
+    : Array.isArray(sessionSkills) && sessionSkills.length
+    ? sessionSkills
+    : (DEFAULT_ROLE_SKILLS[userRole] || []);
+
+  const checkSkill = (req: string) => isAdmin || userRole === 'admin' || effectiveSkills.includes(req);
+
+  const canSeeAnalytics    = checkSkill('analytics:access');
+  const canSeeQuality      = checkSkill('quality:analytics:access');
+  const canSeeCx           = checkSkill('cx_dashboard:access');
+  const canSeeCallAnalysis = checkSkill('call_analysis:access');
+  const canSeeTokens       = checkSkill('tokens:view:access');
+  const canSeeSettings     = checkSkill('settings:manage:access');
 
   return (
     <aside className="w-64 bg-[#1a1a1a] flex-col shrink-0 hidden lg:flex h-screen sticky top-0">
@@ -184,7 +213,7 @@ export default function PageNav({ username, role, isAdmin, flags, analytics }: P
             }
           />
         )}
-        {flags?.cxDashboard && role !== 'agent' && (
+        {flags?.cxDashboard && canSeeCx && (
           <NavLink
             href="/cx"
             label="CX Dashboard"
@@ -197,7 +226,7 @@ export default function PageNav({ username, role, isAdmin, flags, analytics }: P
             }
           />
         )}
-        {flags?.callAnalysis && canSeeAnalytics && (
+        {flags?.callAnalysis && canSeeCallAnalysis && (
           <NavLink
             href="/call-analysis"
             label="Call Analysis"
@@ -208,7 +237,7 @@ export default function PageNav({ username, role, isAdmin, flags, analytics }: P
             }
           />
         )}
-        {isAdmin && (
+        {canSeeTokens && (
           <NavLink
             href="/tokens"
             label="Token Usage"
@@ -221,7 +250,7 @@ export default function PageNav({ username, role, isAdmin, flags, analytics }: P
             }
           />
         )}
-        {isAdmin && (
+        {canSeeSettings && (
           <NavLink
             href="/settings"
             label="Settings"

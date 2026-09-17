@@ -37,7 +37,7 @@ const ADMIN_SECTIONS = [
   { id: 'general', label: 'General' },
   { id: 'kb', label: 'Knowledge Base' },
   { id: 'prompt', label: 'Prompts' },
-  { id: 'users', label: 'Users' },
+  { id: 'users', label: 'Users & Permissions' },
   { id: 'tokens', label: 'Token Usage' },
   { id: 'integrations', label: 'Integrations' },
 ];
