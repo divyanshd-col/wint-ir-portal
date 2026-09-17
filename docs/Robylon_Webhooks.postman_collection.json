@@ -1,0 +1,251 @@
+{
+  "info": {
+    "_postman_id": "8b51ef40-3fc7-4cb2-9d32-d1beadcb3519",
+    "name": "Robylon Webhooks (Wint IR Portal)",
+    "description": "Collection of incoming webhook events from Robylon for the Wint Wealth IR Portal.\n\nEvents included:\n1. TICKET_CLOSED (Transcript & Chat Ingestion)\n2. CLASSIFICATION_UPDATED (Dispositions L1/L2 - triggers scoring)\n3. CSAT_SUBMITTED (Customer Rating)\n4. CC_VOICE_CALL_COMPLETE (Call recording via chat webhook)\n5. Direct Call Webhook (/api/webhooks/call)\n6. Legacy Flat Webhook (/api/webhooks/chat)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "webhookSecret",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "chatId",
+      "value": "chat_postman_demo_01",
+      "type": "string"
+    },
+    {
+      "key": "customerPhone",
+      "value": "+919876543210",
+      "type": "string"
+    },
+    {
+      "key": "agentName",
+      "value": "Priya Sharma",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{webhookSecret}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "1. TICKET_CLOSED (Transcript & Chat Ingestion)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_type\": \"TICKET_CLOSED\",\n  \"event_id\": \"evt_ticket_{{$timestamp}}\",\n  \"chat_id\": \"{{chatId}}\",\n  \"created_at\": \"{{$isoTimestamp}}\",\n  \"data\": {\n    \"closed_at\": \"{{$isoTimestamp}}\",\n    \"requester_info\": {\n      \"phone_number\": \"{{customerPhone}}\"\n    },\n    \"transcript\": {\n      \"conversation_started\": \"{{$isoTimestamp}}\",\n      \"conversation_ended\": \"{{$isoTimestamp}}\",\n      \"messages\": [\n        {\n          \"sender\": \"Customer\",\n          \"content\": \"Hi, I completed my KYC but my bank account is still showing pending verification.\",\n          \"timestamp\": \"Sep 16, 12:00 PM\"\n        },\n        {\n          \"sender\": \"Robylon AI\",\n          \"content\": \"Auto-Assigned chat to {{agentName}}\",\n          \"timestamp\": \"Sep 16, 12:01 PM\"\n        },\n        {\n          \"sender\": \"{{agentName}}\",\n          \"content\": \"Hello! Thank you for reaching out to Wint Wealth. Let me check your bank verification status right away.\",\n          \"timestamp\": \"Sep 16, 12:02 PM\"\n        },\n        {\n          \"sender\": \"Customer\",\n          \"content\": \"Sure, please let me know if you need penny drop statement.\",\n          \"timestamp\": \"Sep 16, 12:03 PM\"\n        },\n        {\n          \"sender\": \"{{agentName}}\",\n          \"content\": \"I checked your account. The penny drop verification has succeeded and your profile is now active.\",\n          \"timestamp\": \"Sep 16, 12:05 PM\"\n        }\n      ]\n    }\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/webhooks/chat",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "webhooks",
+            "chat"
+          ]
+        },
+        "description": "Robylon TICKET_CLOSED event.\n- Extracts transcript messages, timestamps, and customer phone number\n- Calculates First Response Time (FRT) and handling times\n- Upserts contact and agent in PostgreSQL\n- If classifications are already present, immediately triggers IQS scoring"
+      },
+      "response": []
+    },
+    {
+      "name": "2. CLASSIFICATION_UPDATED (Dispositions L1 & L2)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_type\": \"CLASSIFICATION_UPDATED\",\n  \"event_id\": \"evt_cls_{{$timestamp}}\",\n  \"chat_id\": \"{{chatId}}\",\n  \"data\": {\n    \"classifications\": [\n      {\n        \"level_number\": 2,\n        \"names\": {\n          \"l1\": \"KYC & Onboarding\",\n          \"l2\": \"Bank Verification\"\n        }\n      }\n    ]\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/webhooks/chat",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "webhooks",
+            "chat"
+          ]
+        },
+        "description": "Robylon CLASSIFICATION_UPDATED event.\n- Sets disposition (L1) and sub_disposition (L2) tags on the conversation\n- If transcript already exists from TICKET_CLOSED, immediately executes LLM scoring"
+      },
+      "response": []
+    },
+    {
+      "name": "3. CSAT_SUBMITTED (Customer Rating)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_type\": \"CSAT_SUBMITTED\",\n  \"event_id\": \"evt_csat_{{$timestamp}}\",\n  \"chat_id\": \"{{chatId}}\",\n  \"data\": {\n    \"rating\": \"good\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/webhooks/chat",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "webhooks",
+            "chat"
+          ]
+        },
+        "description": "Robylon CSAT_SUBMITTED event.\n- Supported ratings: \"good\" / \"5\", \"could be better\" / \"ok\" / \"3\", \"bad\" / \"1\"\n- Updates csat_score and csat_label on conversations"
+      },
+      "response": []
+    },
+    {
+      "name": "4. CC_VOICE_CALL_COMPLETE (Voice Call via Chat Webhook)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_type\": \"CC_VOICE_CALL_COMPLETE\",\n  \"event_id\": \"evt_voice_{{$timestamp}}\",\n  \"chat_id\": \"call_rec_{{$timestamp}}\",\n  \"data\": {\n    \"recording_url\": \"https://www.w3schools.com/html/horse.mp3\",\n    \"call_duration\": 85,\n    \"started_at\": \"{{$isoTimestamp}}\",\n    \"ended_at\": \"{{$isoTimestamp}}\",\n    \"human_agent_info\": {\n      \"name\": \"{{agentName}}\",\n      \"email\": \"priya.sharma@wintwealth.com\"\n    }\n  },\n  \"requester_info\": {\n    \"phone_number\": \"{{customerPhone}}\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/webhooks/chat",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "webhooks",
+            "chat"
+          ]
+        },
+        "description": "Robylon CC_VOICE_CALL_COMPLETE event.\n- Sent when an agent finishes a voice call linked to a customer\n- Kicks off background audio download & Gemini multimodal transcription"
+      },
+      "response": []
+    },
+    {
+      "name": "5. Dedicated Call Recording Webhook",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"call_id\": \"call_direct_{{$timestamp}}\",\n  \"chat_id\": \"{{chatId}}\",\n  \"recording_url\": \"https://www.w3schools.com/html/horse.mp3\",\n  \"agent_name\": \"{{agentName}}\",\n  \"duration_seconds\": 120,\n  \"customer_phone\": \"{{customerPhone}}\",\n  \"called_at\": \"{{$isoTimestamp}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/webhooks/call",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "webhooks",
+            "call"
+          ]
+        },
+        "description": "Dedicated call recording endpoint (/api/webhooks/call).\n- Returns 202 status: processing\n- Processes audio transcription and dead air / interruption metrics"
+      },
+      "response": []
+    },
+    {
+      "name": "6. Legacy Flat Chat Webhook",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"chat_id\": \"legacy_{{$timestamp}}\",\n  \"agent_name\": \"{{agentName}}\",\n  \"tags\": \"KYC & Onboarding\",\n  \"csat\": \"good\",\n  \"conversation_started\": \"{{$isoTimestamp}}\",\n  \"conversation_ended\": \"{{$isoTimestamp}}\",\n  \"transcript\": \"Customer: Is the bond allotment complete?\\nAgent: Yes, allotment has been confirmed.\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/webhooks/chat",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "webhooks",
+            "chat"
+          ]
+        },
+        "description": "Legacy flat payload structure supported by /api/webhooks/chat for backward compatibility."
+      },
+      "response": []
+    }
+  ]
+}

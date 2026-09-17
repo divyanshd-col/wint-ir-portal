@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "npx tsx --test scripts/qa-resolver.test.ts scripts/quality-alert-tl.test.ts"
+    "test": "npx tsx --test scripts/qa-resolver.test.ts scripts/quality-alert-tl.test.ts scripts/skills.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

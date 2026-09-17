@@ -29,10 +29,10 @@ function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; 
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const role = session.user.role;
-  if (role !== 'tl' && role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const { requireSkill } = await import('@/lib/skills');
+  const auth = await requireSkill('tl:team_analytics:access');
+  if (auth.error) return auth.error;
+  const session = auth.session!;
 
   const { searchParams } = new URL(req.url);
   const dateFrom = searchParams.get('dateFrom') || new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
