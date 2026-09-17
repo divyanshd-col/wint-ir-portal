@@ -1,5 +1,4 @@
-import { randomUUID } from 'crypto';
-import type { Pass1Result, StructureEvent, SpeakerLabel } from './call-analyzer';
+import { logLlmTokenUsage } from './token-tracker';
 
 export interface PyannoteSegment {
   start: number;
@@ -7,11 +6,14 @@ export interface PyannoteSegment {
   speaker: string;
 }
 
+import type { Pass1Result, StructureEvent } from './call-analyzer';
+export type { Pass1Result, StructureEvent };
+
 /**
  * Gets a pre-signed temporary upload URL from Pyannote API.
  */
 export async function getPyannoteUploadUrl(apiKey: string): Promise<{ pyannoteUri: string; uploadUrl: string }> {
-  const objectKey = randomUUID();
+  const objectKey = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
   const pyannoteUri = `media://${objectKey}`;
   const res = await fetch('https://api.pyannote.ai/v1/media/input', {
     method: 'POST',
@@ -29,14 +31,21 @@ export async function getPyannoteUploadUrl(apiKey: string): Promise<{ pyannoteUr
   return { pyannoteUri, uploadUrl: data.url };
 }
 
+export interface DiarizeOptions {
+  entityId?: string;
+  userEmail?: string;
+}
+
 /**
  * Sends a diarization job request to Pyannote and polls status until it completes.
  */
 export async function diarizeAudioWithPyannote(
   audioUrl: string,
   apiKey: string,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  opts?: DiarizeOptions
 ): Promise<PyannoteSegment[]> {
+  const t0 = Date.now();
   onProgress?.('Initiating Pyannote diarization job…');
   const initRes = await fetch('https://api.pyannote.ai/v1/diarize', {
     method: 'POST',
@@ -79,6 +88,24 @@ export async function diarizeAudioWithPyannote(
       onProgress?.('Pyannote diarization job completed successfully.');
       const output = (statusData.output || []) as PyannoteSegment[];
       console.log(`[Pyannote Output] Job ${jobId}:`, JSON.stringify(output, null, 2));
+
+      // Calculate audio duration in seconds from max segment end
+      const duration = output.length ? Math.max(...output.map(s => s.end || 0)) : 0;
+      const latencyMs = Date.now() - t0;
+
+      // Log token/duration usage
+      logLlmTokenUsage({
+        jobType: 'call_diarization_pass1',
+        featureGroup: 'Calls',
+        modelName: 'pyannote-precision-2',
+        inputTokens: 0,
+        outputTokens: 0,
+        durationSeconds: duration,
+        latencyMs,
+        entityId: opts?.entityId,
+        userEmail: opts?.userEmail,
+      }).catch(() => {});
+
       return output;
     } else if (status === 'failed') {
       throw new Error(`Pyannote job failed: ${statusData.error ?? 'Unknown error'}`);
@@ -90,6 +117,8 @@ export async function diarizeAudioWithPyannote(
   }
   throw new Error('Pyannote diarization job timed out after 5 minutes');
 }
+
+type SpeakerLabel = 'A' | 'B';
 
 /**
  * Converts Pyannote diarization segments to the generic Pass1Result format.
@@ -108,53 +137,46 @@ export function pyannoteToPass1(pyannoteSegments: any): Pass1Result {
     if (!speakerMap[seg.speaker]) {
       if (nextLabelCode === 65) {
         speakerMap[seg.speaker] = 'A';
-        nextLabelCode = 66;
+        nextLabelCode++;
+      } else if (nextLabelCode === 66) {
+        speakerMap[seg.speaker] = 'B';
+        nextLabelCode++;
       } else {
         speakerMap[seg.speaker] = 'B';
       }
     }
-    const currentSpeaker = speakerMap[seg.speaker];
+  }
 
-    // Check for silence (gap >= 2.0s) with previous segment
+  for (let i = 0; i < sorted.length; i++) {
+    const current = sorted[i];
+    const speaker = speakerMap[current.speaker] ?? 'A';
     if (i > 0) {
       const prev = sorted[i - 1];
-      const gap = seg.start - prev.end;
-      if (gap >= 2.0) {
+      if (current.start < prev.end) {
+        events.push({
+          type: 'overlap',
+          start: current.start,
+          end: Math.min(prev.end, current.end),
+          speaker_continuing: speakerMap[prev.speaker] ?? 'A',
+          speaker_interrupting: speaker,
+        });
+      } else if (current.start > prev.end + 0.5) {
         events.push({
           type: 'silence',
           start: prev.end,
-          end: seg.start,
-          duration: gap
-        });
-      }
-      
-      // Check for overlap
-      if (seg.start < prev.end) {
-        const prevSpeaker = speakerMap[prev.speaker];
-        events.push({
-          type: 'overlap',
-          start: seg.start,
-          end: Math.min(seg.end, prev.end),
-          speaker_continuing: prevSpeaker,
-          speaker_interrupting: currentSpeaker
+          end: current.start,
+          duration: current.start - prev.end,
         });
       }
     }
-
     events.push({
       type: 'turn',
-      speaker: currentSpeaker,
-      start: seg.start,
-      end: seg.end
+      speaker,
+      start: current.start,
+      end: current.end,
     });
   }
 
-  events.sort((a, b) => a.start - b.start);
-
   const duration_seconds = sorted.length > 0 ? sorted[sorted.length - 1].end : 0;
-
-  return {
-    duration_seconds,
-    events
-  };
+  return { duration_seconds, events };
 }

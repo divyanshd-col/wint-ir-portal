@@ -33,7 +33,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
 
   // Restore collapsed preference
   useEffect(() => {
-    try { setCollapsed(localStorage.getItem(STORAGE_KEY) === '1'); } catch {}
+    try { setCollapsed(localStorage.getItem(STORAGE_KEY) === '1'); } catch { }
   }, []);
 
   useEffect(() => {
@@ -41,12 +41,12 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
     fetch('/api/conversations')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setConversations(data); })
-      .catch(() => {});
+      .catch(() => { });
   }, [historyEnabled]);
 
   const setAndPersistCollapsed = (v: boolean) => {
     setCollapsed(v);
-    try { localStorage.setItem(STORAGE_KEY, v ? '1' : '0'); } catch {}
+    try { localStorage.setItem(STORAGE_KEY, v ? '1' : '0'); } catch { }
   };
 
   const handleMouseEnter = () => {
@@ -69,7 +69,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         className="lg:hidden fixed top-4 left-4 z-50 bg-white border border-gray-200 rounded-lg p-2 shadow-sm"
       >
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="#1a1a1a" strokeWidth="1.5">
-          <path d="M2 4h14M2 9h14M2 14h14"/>
+          <path d="M2 4h14M2 9h14M2 14h14" />
         </svg>
       </button>
 
@@ -94,8 +94,8 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
                 >
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                     {collapsed
-                      ? <path d="M6 3l5 5-5 5M2 8h9"/>
-                      : <path d="M10 3L5 8l5 5M14 8H5"/>}
+                      ? <path d="M6 3l5 5-5 5M2 8h9" />
+                      : <path d="M10 3L5 8l5 5M14 8H5" />}
                   </svg>
                 </button>
               </div>
@@ -117,7 +117,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           {flags?.callAnalysis && canSeeAnalytics && (
             <NavLink href="/call-analysis" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
+                <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z" />
               </svg>
             } label="Call Analysis" active={pathname === '/call-analysis'} expanded={isExpanded}
               onClick={() => setAndPersistCollapsed(true)} />
@@ -125,7 +125,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           {canSeeAnalytics && (
             <NavLink href="/analytics" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M2 12l3-4 3 2 3-5 3 3"/><rect x="1" y="1" width="14" height="14" rx="1.5"/>
+                <path d="M2 12l3-4 3 2 3-5 3 3" /><rect x="1" y="1" width="14" height="14" rx="1.5" />
               </svg>
             } label="Analytics" active={pathname === '/analytics'} expanded={isExpanded}
               onClick={() => setAndPersistCollapsed(true)} />
@@ -134,7 +134,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           {canSeeQuality && (
             <NavLink href="/quality" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z"/>
+                <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z" />
               </svg>
             } label="Quality Tool" active={pathname === '/quality'} expanded={isExpanded}
               onClick={() => setAndPersistCollapsed(true)} />
@@ -143,7 +143,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
           {flags?.cxDashboard && (
             <NavLink href="/cx" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="1" y="9" width="3" height="6" rx="0.5"/><rect x="6" y="5" width="3" height="10" rx="0.5"/><rect x="11" y="1" width="3" height="14" rx="0.5"/>
+                <rect x="1" y="9" width="3" height="6" rx="0.5" /><rect x="6" y="5" width="3" height="10" rx="0.5" /><rect x="11" y="1" width="3" height="14" rx="0.5" />
               </svg>
             } label="CX Dashboard" active={pathname === '/cx'} expanded={isExpanded}
               onClick={() => setAndPersistCollapsed(true)} />
@@ -156,7 +156,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
               className={`flex items-center gap-3 bg-[#2d9e4f]/20 text-[#2d9e4f] rounded-lg text-sm font-medium hover:bg-[#2d9e4f]/30 transition ${isExpanded ? 'w-full px-3 min-h-[44px]' : 'w-10 h-10 justify-center'}`}
             >
               <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" className="shrink-0">
-                <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z"/>
+                <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z" />
               </svg>
               {isExpanded && 'New Chat'}
             </button>
@@ -186,8 +186,8 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         <div className={`border-t border-white/10 ${isExpanded ? 'px-4 py-4 space-y-2' : 'px-2 py-4 flex flex-col items-center gap-3'}`}>
           <NavLink href="/settings" icon={
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="2.5"/>
-              <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
+              <circle cx="8" cy="8" r="2.5" />
+              <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
             </svg>
           } label="Settings" active={pathname === '/settings'} expanded={isExpanded}
             onClick={() => setAndPersistCollapsed(true)} />
@@ -204,7 +204,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
               </div>
               <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-gray-500 hover:text-white transition text-xs" title="Sign out">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7"/>
+                  <path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" />
                 </svg>
               </button>
             </div>
@@ -215,7 +215,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
               </div>
               <button onClick={() => signOut({ callbackUrl: '/login' })} className="text-gray-500 hover:text-white transition" title="Sign out">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7"/>
+                  <path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" />
                 </svg>
               </button>
             </>
@@ -232,13 +232,11 @@ function NavLink({ href, icon, label, active, expanded, onClick }: {
 }) {
   return (
     <Link href={href} onClick={onClick} title={!expanded ? label : undefined}
-      className={`flex items-center gap-3 rounded-lg text-sm font-medium transition relative ${
-        expanded ? 'w-full px-3 min-h-[44px]' : 'w-10 h-10 justify-center'
-      } ${
-        active
+      className={`flex items-center gap-3 rounded-lg text-sm font-medium transition relative ${expanded ? 'w-full px-3 min-h-[44px]' : 'w-10 h-10 justify-center'
+        } ${active
           ? `${expanded ? 'bg-white/10' : 'bg-[#2d9e4f]/12'} text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full`
           : 'text-gray-400 hover:text-white hover:bg-white/5'
-      }`}>
+        }`}>
       {icon}
       {expanded && label}
     </Link>
