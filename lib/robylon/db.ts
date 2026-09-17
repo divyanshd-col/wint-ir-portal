@@ -1397,3 +1397,35 @@ export async function getRelevantCallChunks(opts: {
     [limit],
   );
 }
+
+export interface RobylonWebhookPayloadRecord {
+  source?: string;
+  eventType?: string | null;
+  eventId?: string | null;
+  chatId?: string | null;
+  payload: any;
+  headers?: any;
+}
+
+/**
+ * Stores incoming Robylon webhook payloads as-is into `robylon_webhook_payloads`.
+ * Catches and logs errors so that failure to log never interrupts webhook processing.
+ */
+export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<void> {
+  try {
+    await query(
+      `INSERT INTO robylon_webhook_payloads (source, event_type, event_id, chat_id, payload, headers)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        record.source || 'chat',
+        record.eventType ?? null,
+        record.eventId ?? null,
+        record.chatId ?? null,
+        JSON.stringify(record.payload),
+        record.headers ? JSON.stringify(record.headers) : null,
+      ]
+    );
+  } catch (err: any) {
+    console.error('[db] Failed to save Robylon webhook payload:', err.message);
+  }
+}

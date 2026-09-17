@@ -33,6 +33,7 @@ import {
   updateCallRecordingMetrics,
   findClosedConversationForCall,
   linkCallToChat,
+  saveRobylonWebhookPayload,
 } from '@/lib/robylon/db';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -198,11 +199,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   const callId = String(body.call_id || '');
+  const eventId = body.event_id || (callId || null);
+
+  // Persist raw incoming webhook payload immediately as received
+  await saveRobylonWebhookPayload({
+    source: 'call',
+    eventType: body?.event_type || 'CC_VOICE_CALL_COMPLETE',
+    eventId: eventId ? String(eventId) : null,
+    chatId: body?.chat_id ? String(body.chat_id) : (callId || null),
+    payload: body,
+  });
+
   if (!callId) {
     return NextResponse.json({ error: 'call_id required' }, { status: 400 });
   }
 
-  const eventId = body.event_id || callId;
   if (await storeHasProcessedEvent(`call_${eventId}`)) {
     console.log(`[call-webhook] Duplicate event ${eventId} — skipped`);
     return NextResponse.json({ ok: true, duplicate: true });
