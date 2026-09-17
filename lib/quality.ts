@@ -233,18 +233,18 @@ export function normalizeScore(val: number | boolean | string | null): {
   badgeBg: string;
   badgeText: string;
 } {
-  // 1. Match 'Yes' / true / 1.0 / 2 (legacy Yes)
-  if (val === true || val === 1 || val === '1' || val === 2 || val === '2' || val === 'Yes') {
+  // 1. Match 'Yes' / true / 1 / '1' / 2 / '2' / 'PASS' / 'pass'
+  if (val === true || val === 1 || val === '1' || val === 2 || val === '2' || val === 'Yes' || val === 'yes' || val === 'PASS' || val === 'pass') {
     return { label: 'Yes', value: 1.0, badgeBg: '#dcfce7', badgeText: '#15803d' };
   }
   
-  // 2. Match 'No' / false / 0.0 / 0
-  if (val === false || val === 0 || val === '0' || val === 'No') {
+  // 2. Match 'No' / false / 0.0 / 0 / '0' / 'FAIL' / 'fail'
+  if (val === false || val === 0 || val === '0' || val === 0.0 || val === 'No' || val === 'no' || val === 'FAIL' || val === 'fail') {
     return { label: 'No', value: 0.0, badgeBg: '#fee2e2', badgeText: '#b91c1c' };
   }
   
-  // 3. Match 'Half' / 0.5 / 1 (legacy Half) / 'Partial'
-  if (val === 0.5 || val === '0.5' || val === 'Half' || val === 'Partial') {
+  // 3. Match 'Half' / 0.5 / '0.5' / 'Partial' / 'partial' / 'Part' / 'part'
+  if (val === 0.5 || val === '0.5' || val === 'Half' || val === 'half' || val === 'Partial' || val === 'partial' || val === 'Part' || val === 'part') {
     return { label: 'Half', value: 0.5, badgeBg: '#fef3c7', badgeText: '#b45309' };
   }
   
@@ -375,7 +375,7 @@ export function analyzeConversationTiming(
 // every key would miss and the old `?? 'Yes'` default silently returned 100.
 // Skipping instead surfaces the mismatch as an obviously-wrong low score.
 // Pass the correct isV4 flag at every call site so the weight set matches the scores.
-export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number {
+export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean, isV4 = true): number | null {
   const activeWeights = isBot ? BOT_WEIGHTS : (isV4 ? WEIGHTS : V3_WEIGHTS);
   let total = 0, possible = 0;
   for (const [param, weight] of Object.entries(activeWeights)) {
@@ -388,7 +388,7 @@ export function calculateIQS(scores: Record<string, ParamScore>, isBot?: boolean
       total += weight * 0.5;
     }
   }
-  return possible > 0 ? Math.round((total / possible) * 100) : null as any;
+  return possible > 0 ? Math.round((total / possible) * 100) : null;
 }
 
 export type PooledParamInput =
@@ -539,18 +539,44 @@ export function extractPooledParams(paramsArray: any[]): Record<string, { yes: n
 export function computeIqsFromRawParams(paramsObj: any, isBot = false): number | null {
   if (!paramsObj || typeof paramsObj !== 'object') return null;
 
-  const isBotParams = !!(
-    paramsObj.__bot_parameters ||
-    paramsObj.issue_resolution !== undefined ||
-    paramsObj.IssueResolution !== undefined ||
-    paramsObj.bot_handover !== undefined ||
-    paramsObj.BotHandover !== undefined ||
-    (paramsObj.__scores && paramsObj.__scores.bot_iqs !== undefined && paramsObj.__scores.agent_iqs === undefined)
-  );
+  const BOT_ONLY_KEYS = [
+    'correct_escalation', 'no_repetition', 'expectation_setting', 'clarity',
+    'CorrectEscalation', 'NoRepetition', 'ExpectationSetting', 'Clarity',
+    'bot_handover', 'BotHandover'
+  ];
+  const HUMAN_ONLY_KEYS = [
+    'expectation_follow_through', 'dissatisfaction_handling', 'dissatisfactionhandling',
+    'escalation_decision', 'escalationdecision', 'readability', 'greeting_handover',
+    'greetinghandover', 'post_call_recap', 'postcallrecap', 'empathy',
+    'ExpectationFollowThrough', 'DissatisfactionHandling', 'EscalationDecision',
+    'Readability', 'GreetingHandover', 'PostCallRecap', 'Empathy',
+    'Technical', 'AllQuestions', 'Expectation', 'Contextual', 'FollowUp', 'Sentences', 'Process', 'Opening', 'Call', 'Grammar'
+  ];
 
-  const targetParams = isBot
-    ? (paramsObj.__bot_parameters || (paramsObj.issue_resolution !== undefined || paramsObj.IssueResolution !== undefined ? paramsObj : null))
-    : (paramsObj.__agent_parameters || (isBotParams ? null : paramsObj));
+  let targetParams: any = null;
+  if (isBot) {
+    if (paramsObj.__bot_parameters) {
+      targetParams = paramsObj.__bot_parameters;
+    } else if (!paramsObj.__agent_parameters) {
+      // Flat object - only treat as bot if it contains bot-only keys and no human-only keys
+      const hasBotOnlyKey = Object.keys(paramsObj).some(k => BOT_ONLY_KEYS.includes(k));
+      const hasHumanOnlyKey = Object.keys(paramsObj).some(k => HUMAN_ONLY_KEYS.includes(k));
+      if (hasBotOnlyKey && !hasHumanOnlyKey) {
+        targetParams = paramsObj;
+      }
+    }
+  } else {
+    if (paramsObj.__agent_parameters) {
+      targetParams = paramsObj.__agent_parameters;
+    } else if (!paramsObj.__bot_parameters) {
+      // Flat object - treat as agent/human if it has human-only keys or does not have exclusive bot-only keys
+      const hasBotOnlyKey = Object.keys(paramsObj).some(k => BOT_ONLY_KEYS.includes(k));
+      const hasHumanOnlyKey = Object.keys(paramsObj).some(k => HUMAN_ONLY_KEYS.includes(k));
+      if (hasHumanOnlyKey || !hasBotOnlyKey) {
+        targetParams = paramsObj;
+      }
+    }
+  }
 
   if (!targetParams || typeof targetParams !== 'object') return null;
 
@@ -563,9 +589,7 @@ export function computeIqsFromRawParams(paramsObj: any, isBot = false): number |
   let hasValidParam = false;
 
   for (const pascal of paramKeys) {
-    const rawVal = (isBot || !isV4)
-      ? (targetParams[PASCAL_TO_DB[pascal] || pascal] ?? targetParams[pascal])
-      : resolveParamCell(targetParams, pascal);
+    const rawVal = resolveParamCell(targetParams, pascal);
     const hasData = rawVal !== undefined && rawVal !== null
       && !(typeof rawVal === 'object' && rawVal.score === undefined);
     if (hasData) {
@@ -636,6 +660,7 @@ Independently of the quality dimensions, raise a compliance flag (set compliance
 - Data handling over WhatsApp: see the data-handling rule below.
 - Misleading error: a factual error serious enough to push the customer toward a wrong financial decision.
 If none apply, set compliance.breach = false.
+- ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 Note: a misleading-error breach that happened in the CHAT also lowers Accuracy. A breach that happened only on the CALL does not affect any chat quality parameter, since call quality is scored separately. Either way the flag fires.
 
 ### Data handling over WhatsApp
@@ -651,6 +676,7 @@ Documents may be shared over WhatsApp only if they carry no personal and no inte
 - Skip Instalment before cancellation is optional. An agent going straight to cancellation without offering Skip Instalment is not a failure.
 
 ## SCORING GUARDRAILS (how to handle what you see, applies to Accuracy and IssueResolution)
+- ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 - Internal checks (Finder, order status, account or SIP state) are not visible to you and agents do not narrate them to customers. Do NOT assume a check was skipped, and do NOT lower Accuracy just because the agent did not say "I checked and confirmed X". The fact that a response could have been improved by a tool check is NOT enough to fail anything. Example: if the process KB says "check if there is an active SIP" and the agent proceeds with cancellation without stating "I verified you have an active SIP", that is NOT an error, the check is internal. Only lower Accuracy if the visible answer or action is provably wrong, for example the agent says a repayment was not processed but the transcript shows it was credited, or the agent gives a wrong fact or wrong process step.
 - Private Notes / Internal notes (indicated in the transcript as "Internal Note: [content]" or "Private Note: [content]"), Slack links, and internal tool URLs in the transcript are internal working notes and were never sent to the customer. TREAT THEM AS BACKGROUND CONTEXT ONLY: use them to understand internal actions, background checks, or status updates, but EXCLUDE them while judging/scoring the customer chat. Do NOT evaluate their tone, grammar, or language as customer-facing messages, and NEVER score or penalize the agent on any quality parameter based on private notes.
 - If the chat references a prior conversation (phrases such as "previous chat", "previous conversation", "previous text", "last time", "last conversation", "earlier ticket", "as discussed before", "as discussed earlier", "as mentioned earlier", "referred earlier", "as per our last chat", "continuing from before"), note it in summary and be lenient on Accuracy and IssueResolution. Missing context may live in that earlier chat. Do not fail for information gaps a prior chat could explain.
@@ -710,8 +736,8 @@ Does not cover: correctness (Accuracy) or readability (Clarity).
 
 ### ExpectationSetting (conditional, graded 0 / 0.5 / 1, else "NA")
 When something is pending, did the bot tell the customer what happens next and by when.
-- 1: a clear next step or timeline was given (for example "being processed today, will be credited to account...").
-- 0.5: implied but vague on an ongoing issue handled by the bot where a specific timeframe could be given.
+- 1: a clear next step or timeline was given (for example "being processed today, will be credited to account..."). Communicating that the issue is being checked with the team and an update will be shared as soon as possible is sufficient expectation setting; an exact numeric TAT is not mandatory.
+- 0.5: implied but vague on an ongoing issue handled entirely by the bot where a specific timeframe could easily be given from the KB.
 - 0: left the customer not knowing what happens next on a pending item.
 - "NA" (unsure false): the query was fully resolved on the spot with nothing pending.
 - **TRANSFER / HANDOVER**: When transferring a chat to a human executive, standard transfer phrasing (e.g. "I'm transferring your chat to an executive", "please allow them some time to connect", "connecting you at the earliest", "an executive will assist you shortly") is FULLY ACCEPTABLE expectation setting for a bot handover. Do NOT penalize or score 0.5 for vague timeline on bot transfer messages. A bot cannot predict human agent queue wait times; informing the user of the transfer is sufficient (score 1).
@@ -758,9 +784,15 @@ Before scoring ANY parameter, read the COMPLETE transcript from the very first m
 - Being too strict is as bad as being too lenient.
 - When in doubt, give the agent the benefit of the doubt → score Yes.
 - A single factual error can cascade into No on multiple parameters.
-- NA parameters are treated as Yes (pass) in the final IQS calculation.
+- NA parameters are excluded from the IQS calculation (both numerator and denominator). If all parameters are NA, the IQS score is NIL (null).
 - **NEVER assume a failure when the transcript is ambiguous.** If you are not certain the agent did something wrong, score NA and flag for QA review.
 - **Date awareness**: Today's date is provided in CHAT METADATA. Any date on or before today is a PAST event that has already occurred. Do NOT treat a past date as a missed future commitment when scoring Expectation Setting. Only fail Expectation Setting for missing or vague timelines on genuinely unresolved future issues — never for referencing dates that have already passed.
+
+## EMPTY OR NON-CHATS / JUNK CHATS / CALLS THAT DID NOT CONNECT
+If there is no substantive interaction (a customer message with no agent reply, an instant drop, a call that did not go through or connect, or Junk Chats with no query asked / no conversation):
+- Set EVERY parameter score to "NA".
+- Explain in the summary that the interaction did not take place or no query was raised.
+- Do NOT score parameters as "No" or penalize the agent with 0 for non-interactions. All "NA" will evaluate to NIL (null).
 
 ## WINT WEALTH SPECIFIC POLICIES
 
@@ -797,6 +829,12 @@ Agents routinely perform backend verifications (e.g., confirming an active SIP, 
 
 ### Skip Instalment before Cancellation — Not mandatory
 The KB mentions "Skip Instalment" as an option before cancellation, but this is **not a mandatory step**. An agent proceeding directly to cancellation without first offering "Skip Instalment" is NOT a process failure. Do not penalize.
+
+### Expectation Setting & TAT — Exact Timelines Not Mandatory
+Providing an exact timeline or specific TAT is not always possible (especially for issues requiring investigation by tech/backend teams, bank dependencies, external RTAs, lien removals, or partner escalations).
+- If the agent communicates that they will raise or have raised the issue with the concerned team and will get back to the customer with an update as soon as possible (or communicates something along those lines, e.g. "please allow us some time while our team looks into this", "I will update you as soon as I receive word from the team"), this is **SUFFICIENT expectation setting** (score Yes).
+- The evaluator must NOT reduce marks or mark Expectation Setting as No simply because the agent did not mention a specific TAT or numerical timeframe, as providing an exact timeline is not always possible.
+- Even if the customer explicitly asks "when?", "how long?", or shows impatience, if an exact resolution timeline is unconfirmed, acknowledging the issue, explaining that the team is investigating, and promising an update as soon as possible is acceptable and must score **Yes**.
 
 ### Calls — Only a violation if no prior customer request
 - If the customer explicitly requested a call anywhere in the chat transcript → agent initiating a call is **CORRECT**. Do NOT penalize.
@@ -863,7 +901,7 @@ Score based on whether the agent's information is factually correct per Wint Wea
 - **No** — mark No if ANY of these failures are visible:
   - **Technically wrong**: Agent stated a wrong fact, wrong amount, wrong formula, wrong product rule, or wrong process step — a clear factual error (not just a communication gap).
   - **Dependent upon KB but contradicts it**: Agent gave guidance that directly contradicts what the Wint Wealth KB or Slack resolution says about the topic.
-  - **SEBI / Regulatory violation**: Agent gave a personalised investment recommendation (e.g. "You should invest in X bond"), implied guaranteed returns, or provided investment advisory services — this is an automatic No regardless of KB. It is a standalone regulatory compliance failure under SEBI.
+  - **SEBI / Regulatory violation**: Agent gave a personalised investment recommendation (e.g. "You should invest in X bond"), implied guaranteed returns on unprotected market instruments, or provided investment advisory services — this is an automatic No. Note: ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 - **NA**: Only if the chat has zero substantive information exchange.
 - **RULE**: Must be a CLEAR, VERIFIABLE factual error or regulatory violation. Do not fail for ambiguity.
 
@@ -875,14 +913,14 @@ Score based on whether the agent's information is factually correct per Wint Wea
 - **NA**: Very rare.
 
 ### 3. Expectation Setting (10%)
-Score whether the agent set a clear, specific expectation about timeline, next steps, or resolution path.
-- **Yes**: Agent gave a specific timeline, commitment, or next step (e.g. "credited within 7 working days", "our team will contact you by 3rd Feb"). "Please allow me/them some time" or informing the customer about a team transfer or escalation ("at the earliest") counts.
+Score whether the agent set a clear expectation about timeline, next steps, or resolution path.
+- **Yes**: Agent gave a timeline, commitment, or next step (e.g. "credited within 7 working days", "our team will contact you by 3rd Feb"). Communicating that the issue is being raised with the concerned team and that they will get back with an update as soon as possible (e.g. "please allow us some time while our team investigates", "will update at the earliest", "team is actively looking into this") is FULLY SUFFICIENT expectation setting. Do NOT reduce marks if the agent does not provide a specific TAT, as providing an exact timeline is not always possible.
 - **No** — mark No if ANY of these are visible:
-  - **Exp – TAT missing**: Customer asked "how long?", "when?", or showed impatience about timing — and got no specific timeline or even a ballpark.
+  - **Exp – No next step**: The issue is unresolved / pending and the agent gave NO next step, no team escalation, and no follow-up path at all, leaving the customer completely stranded.
   - **Exp – No education**: Agent resolved an issue but did not explain what happened or what the customer should expect next — leaving the customer without context on the outcome.
-  - **Exp – Others**: Agent made a promise or commitment but gave no timeline or follow-up structure around it.
+  - NOTE: Do NOT mark Expectation Setting as No or trigger "TAT missing" if the agent explained that the matter is raised with the team / being investigated and they will provide an update as soon as possible.
 - **NA**: Very rare.
-- **IMPORTANT**: Distinguish from Technical. Expectation Setting is about whether a timeline/next-step was communicated — NOT about whether the timeline given was correct (that is Technical).
+- **IMPORTANT**: Distinguish from Technical. Expectation Setting is about whether a next-step or timeline was communicated — NOT about whether the timeline given was correct (that is Technical).
 
 ### 4. Contextual & Personal (10%)
 - **Yes**: Response includes customer-specific details — their bond name, their specific amounts, their exact dates, their account details.
@@ -894,7 +932,7 @@ Score whether the agent set a clear, specific expectation about timeline, next s
 - **NA**: Very rare.
 
 ### 5. Follow-up & Closing (10%)
-- **Yes**: Closing is personalised to the outcome — resolved / ticket raised / on wait — with a warm sign-off and relevant next step.
+- **Yes**: Closing is personalised to the outcome — resolved / ticket raised / on wait — with a warm sign-off and relevant next step. When an issue is escalated to an internal team, reassuring the customer that the ticket/chat will remain open and being tracked for an update as soon as possible counts as proper follow-up.
 - **No** — mark No if ANY of these are visible:
   - **PF – Closing sentence missing or generic**: Closing does not reflect the actual outcome (resolved / ticket raised / custom). Generic template with no personalisation.
   - **PF – Chat on wait not handled**: Chat needed to go on wait (pending resolution, raised case) but agent did not put it on wait or explain the status.
@@ -1086,8 +1124,8 @@ Today (scoring date): ${today}
 - Disposition (L1): ${tags || 'none'}
 - Sub-disposition (L2): ${subDisposition || 'none'}
 ${kbContext ? `
-## WINT KNOWLEDGE BASE REFERENCE
-Use these KB excerpts to judge Accuracy.
+## WINT KNOWLEDGE BASE REFERENCE (KB_CONTEXT)
+Use these KB excerpts to judge Accuracy and Compliance.
 ${kbContext}
 ` : ''}
 ## TRANSCRIPT
@@ -1265,6 +1303,9 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     ? data.kbCitation
     : null;
 
+  const breaches = (data.compliance && data.compliance.breaches) || data.breaches || [];
+  const complianceFlag = !!(data.compliance && (data.compliance.breach || (data.compliance.breaches || []).length > 0)) || !!data.compliance_flag || breaches.length > 0;
+
   return {
     chatId,
     scores,
@@ -1273,6 +1314,8 @@ export function parseScoringResponse(raw: string, chatId: string, conversationTy
     summary: data.summary || '',
     extractedAgentName: (data.agentName || '').trim(),
     conversationType: conversationType as 'bot' | 'agent' | 'hybrid' | undefined,
+    breaches,
+    complianceFlag,
     ...(uncertainParameters && { uncertainParameters }),
     ...(kbCitation && { kbCitation }),
   };

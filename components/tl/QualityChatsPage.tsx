@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'next/navigation';
 import EvalPanel from '@/components/quality/EvalPanel';
 import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
@@ -147,11 +148,14 @@ export function DisputeStatusPill({
 
 // ─── Chat ID cell ─────────────────────────────────────────────────────────────
 function ChatIdCell({ chatId }: { chatId: string }) {
-  if (/^\d+$/.test(chatId.trim())) {
+  const id = String(chatId ?? '').trim();
+  if (/^\d+$/.test(id)) {
     return (
       <a
-        href={`https://app.robylon.ai/unified-inbox/share/${chatId}`}
-        target="_blank" rel="noopener noreferrer"
+        href={`https://app.robylon.ai/unified-inbox/share/${id}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
         style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
         onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
         onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
@@ -163,6 +167,9 @@ function ChatIdCell({ chatId }: { chatId: string }) {
 
 // ─── Section A — Evaluated Chats ──────────────────────────────────────────────
 function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: number) => void }) {
+  const searchParams = useSearchParams();
+  const targetChatId = searchParams.get('chatId') || searchParams.get('chat_id') || '';
+
   const [chats,      setChats]      = useState<TLChatRow[]>([]);
   const [total,      setTotal]      = useState(0);
   const [agents,     setAgents]     = useState<string[]>([]);
@@ -173,6 +180,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   const [pageSizeDrop, setPageSizeDrop] = useState(false);
 
   // Filters
+  const [chatIdSearch, setChatIdSearch] = useState(targetChatId);
   const [agent,   setAgent]   = useState('');
   const [from,    setFrom]    = useState('');
   const [to,      setTo]      = useState('');
@@ -180,12 +188,25 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   const [iqsMax,  setIqsMax]  = useState('');
   const [csat,    setCsat]    = useState<string[]>([]);
 
+  // Auto-expand target chat
+  const autoExpandedRef = React.useRef(false);
+  useEffect(() => {
+    if (targetChatId && !autoExpandedRef.current && chats.length > 0) {
+      const matching = chats.find(c => c.chatId.toLowerCase().includes(targetChatId.toLowerCase()));
+      if (matching) {
+        setExpandedId(matching.chatId);
+        autoExpandedRef.current = true;
+      }
+    }
+  }, [chats, targetChatId]);
+
   const fetchChats = useCallback(async (pg: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       params.set('page', String(pg));
       params.set('limit', String(limit));
+      if (chatIdSearch) params.set('chatId', chatIdSearch);
       if (agent)  params.set('agent', agent);
       if (from)   params.set('from', from);
       if (to)     params.set('to', to);
@@ -203,7 +224,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
     } finally {
       setLoading(false);
     }
-  }, [agent, from, to, iqsMin, iqsMax, csat, limit, onTotalChange]);
+  }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit, onTotalChange]);
 
   useEffect(() => { fetchChats(page); }, [fetchChats, page]);
 
@@ -223,6 +244,13 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
         display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
         padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
       }}>
+        <input
+          type="text"
+          value={chatIdSearch}
+          onChange={e => setChatIdSearch(e.target.value)}
+          placeholder="Search Chat ID…"
+          style={{ ...inputStyle, width: 130 }}
+        />
         {agents.length > 0 && (
           <select value={agent} onChange={e => setAgent(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
             <option value="">All Agents</option>
@@ -468,7 +496,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/cx/tl/disputes?status=${status}`);
+        const res = await fetch(`/api/cx/tl/disputes?status=${status}&type=chats`);
         if (!res.ok) return;
         const data = await res.json();
         if (!cancelled) {
@@ -812,7 +840,9 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                     <td colSpan={colCount} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
                       {d.agentNote && (
                         <div style={{ marginBottom: 8 }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginRight: 8 }}>Agent Note</span>
+                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)', marginRight: 8 }}>
+                            {d.raisedBy === 'TL' ? 'Team Lead Note' : 'Agent Note'}
+                          </span>
                           <span style={{ fontSize: 13, color: 'var(--qa-text)' }}>{d.agentNote}</span>
                         </div>
                       )}
@@ -841,6 +871,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         agentNote={d.agentNote}
                         reviewNote={d.reviewNote}
                         agentName={d.agentName}
+                        raisedByRole={d.raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
+                        raisedByName={d.raisedByName || d.agentName}
                         reviewedBy={(d as any).reviewedBy}
                         reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
                         flaggedAt={(d as any).flaggedAt || d.raisedAt}
@@ -911,7 +943,12 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
 
 // ─── Root page ────────────────────────────────────────────────────────────────
 export default function QualityChatsPage() {
-  const [tab, setTab] = useState<Tab>('evaluated');
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') as Tab | null;
+
+  const [tab, setTab] = useState<Tab>(
+    initialTab && ['evaluated', 'disputes', 'reviewed'].includes(initialTab) ? initialTab : 'evaluated'
+  );
   const [evaluatedCount, setEvaluatedCount] = useState<number | null>(null);
   const [disputeCount,   setDisputeCount]   = useState<number | null>(null);
   const [reviewedCount,  setReviewedCount]  = useState<number | null>(null);

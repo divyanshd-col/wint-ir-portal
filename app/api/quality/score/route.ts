@@ -142,6 +142,10 @@ export async function POST(req: NextRequest) {
       disposition:         typeof tags === 'object' ? (tags as any)?.disposition  : (tags || undefined),
       subDisposition:      typeof tags === 'object' ? (tags as any)?.sub_disposition : undefined,
       uncertainParameters: entry.uncertainParameters,
+      breaches:            (parsed as any).breaches,
+      complianceFlag:      (parsed as any).complianceFlag,
+      conversationType:    conversationType || undefined,
+      isBot:               conversationType === 'bot',
     }).catch(() => {});
 
     return NextResponse.json({ ok: true, entry });

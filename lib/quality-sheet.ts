@@ -16,7 +16,7 @@ export async function appendQualityAlertToSheet(opts: {
   chatId: string;
   agentName: string;
   contactPhone?: string;
-  iqs?: number;
+  iqs?: number | null;
   csat?: string;
   disposition?: string;
   subDisposition?: string;

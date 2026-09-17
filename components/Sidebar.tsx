@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import type { SavedConversation } from '@/lib/types';
 import TimeAgo from '@/components/TimeAgo';
 
@@ -11,18 +11,46 @@ interface SidebarProps {
   username: string;
   isAdmin?: boolean;
   role?: string;
+  skills?: string[];
   historyEnabled?: boolean;
   flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
   onRestoreConversation?: (conv: SavedConversation) => void;
   onNewChat?: () => void;
 }
 
+const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
+  admin: [
+    'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
+    'quality:analytics:access', 'tokens:view:access', 'settings:manage:access',
+  ],
+  tl: [
+    'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
+    'quality:analytics:access',
+  ],
+  quality: ['chat:access', 'cx_dashboard:access', 'quality:analytics:access'],
+  agent: ['chat:access', 'quality:analytics:access'],
+};
+
 const STORAGE_KEY = 'wint_sidebar_collapsed';
 
+export default function Sidebar({ username, isAdmin, role, skills: propSkills, historyEnabled = false, flags, onRestoreConversation, onNewChat }: SidebarProps) {
+  const { data: session } = useSession();
+  const sessionSkills = (session?.user as any)?.skills as string[] | undefined;
+  const userRole = role || (session?.user as any)?.role || (isAdmin ? 'admin' : 'agent');
+  const effectiveSkills = Array.isArray(propSkills) && propSkills.length
+    ? propSkills
+    : Array.isArray(sessionSkills) && sessionSkills.length
+    ? sessionSkills
+    : (DEFAULT_ROLE_SKILLS[userRole] || []);
 
-export default function Sidebar({ username, isAdmin, role, historyEnabled = false, flags, onRestoreConversation, onNewChat }: SidebarProps) {
-  const canSeeQuality = isAdmin || role === 'quality' || role === 'tl' || role === 'agent';
-  const canSeeAnalytics = isAdmin || role === 'tl';
+  const checkSkill = (req: string) => isAdmin || userRole === 'admin' || effectiveSkills.includes(req);
+
+  const canSeeAnalytics    = checkSkill('analytics:access');
+  const canSeeQuality      = checkSkill('quality:analytics:access');
+  const canSeeCx           = checkSkill('cx_dashboard:access');
+  const canSeeCallAnalysis = checkSkill('call_analysis:access');
+  const canSeeTokens       = checkSkill('tokens:view:access');
+  const canSeeSettings     = checkSkill('settings:manage:access');
   const [open, setOpen] = useState(true); // mobile drawer
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -114,7 +142,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
         {/* Nav */}
         <nav className={`py-4 flex-1 overflow-y-auto space-y-1 ${isExpanded ? 'px-4' : 'px-2'}`}>
 
-          {flags?.callAnalysis && canSeeAnalytics && (
+          {flags?.callAnalysis && canSeeCallAnalysis && (
             <NavLink href="/call-analysis" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z" />
@@ -140,7 +168,7 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
               onClick={() => setAndPersistCollapsed(true)} />
           )}
 
-          {flags?.cxDashboard && (
+          {flags?.cxDashboard && canSeeCx && (
             <NavLink href="/cx" icon={
               <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="1" y="9" width="3" height="6" rx="0.5" /><rect x="6" y="5" width="3" height="10" rx="0.5" /><rect x="11" y="1" width="3" height="14" rx="0.5" />
@@ -184,13 +212,31 @@ export default function Sidebar({ username, isAdmin, role, historyEnabled = fals
 
         {/* Footer */}
         <div className={`border-t border-white/10 ${isExpanded ? 'px-4 py-4 space-y-2' : 'px-2 py-4 flex flex-col items-center gap-3'}`}>
-          <NavLink href="/settings" icon={
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="8" cy="8" r="2.5" />
-              <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
-            </svg>
-          } label="Settings" active={pathname === '/settings'} expanded={isExpanded}
-            onClick={() => setAndPersistCollapsed(true)} />
+          {canSeeTokens && (
+            <NavLink
+              href="/tokens"
+              icon={
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="3" y="3" width="10" height="10" rx="2" />
+                  <path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2" strokeLinecap="round" />
+                  <circle cx="8" cy="8" r="1.5" />
+                </svg>
+              }
+              label="Token Usage"
+              active={pathname === '/tokens'}
+              expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)}
+            />
+          )}
+          {canSeeSettings && (
+            <NavLink href="/settings" icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="8" cy="8" r="2.5"/>
+                <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06"/>
+              </svg>
+            } label="Settings" active={pathname === '/settings'} expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)} />
+          )}
           {isExpanded ? (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

@@ -258,7 +258,7 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
 
   if (conv?.transcript && !alreadyScored) {
     const agentId = conv.agent_id;
-    const agentName = agentId
+    let agentName = agentId
       ? (await import('@/lib/robylon/db').then(m => m.getAgentName(agentId)))
       : '';
 
@@ -267,6 +267,10 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
     const transcriptMessages = Array.isArray(conv.transcript) ? conv.transcript
       : Array.isArray((conv.transcript as any)?.messages) ? (conv.transcript as any).messages : [];
     chatTranscriptText = transcriptFromJsonb(transcriptMessages);
+
+    if (!agentName && transcriptMessages.length) {
+      agentName = extractAgentName(transcriptMessages);
+    }
 
     const config = await readConfig();
     const [scoredResult] = await Promise.allSettled([
@@ -422,20 +426,38 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
     return NextResponse.json({ ok: true, skipped: true, reason: 'no recording_url' });
   }
 
+  // Extract agent info from human_agent_info or top-level/data agent fields
+  const agentName =
+    body.human_agent_info?.name ||
+    body.data?.human_agent_info?.name ||
+    body.agent_name ||
+    body.data?.agent_name ||
+    '';
+  const agentEmail =
+    body.human_agent_info?.email ||
+    body.data?.human_agent_info?.email ||
+    body.agent_email ||
+    body.data?.agent_email ||
+    '';
+
   // Respond immediately — transcription is slow (10–30s), do it async
-  const contactId = await upsertContact(phone);
+  const [contactId, agentId] = await Promise.all([
+    upsertContact(phone),
+    (agentName || agentEmail) ? upsertAgent(agentName, agentEmail) : Promise.resolve(null),
+  ]);
 
   // Store a placeholder row now so the call is tracked even if transcription fails
   await insertCallRecording({
     id: callId,
     chatId: null,         // linked at TICKET_CLOSED via phone number
-    agentId: null,        // agent name not available in this event
+    agentId,
     contactId,
     recordingUrl,         // S3 URL stored permanently for reference / re-transcription
     durationSeconds,
     calledAt,
     language: null,
     transcript: null,
+    rawPayload: body,
   });
 
   // Keep the function alive after responding so Vercel doesn't kill the background work
@@ -456,17 +478,18 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
       await insertCallRecording({
         id: callId,
         chatId: null,
-        agentId: null,
+        agentId,
         contactId,
         recordingUrl,
         durationSeconds,
         calledAt,
         language,
         transcript: segments,
+        rawPayload: body,
       });
       await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
 
-      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, status=pending_link`);
+      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, agent=${agentName || agentEmail || 'none'}, status=pending_link`);
 
       // ── Step 4: Classify disposition (constrained to official 14-category list) ──
       const callTranscriptText = segmentsToText(segments);

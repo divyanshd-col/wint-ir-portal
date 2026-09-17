@@ -84,8 +84,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  // For QA (or mapped admins), restrict by assigned dispositions (except Manorathi)
-  if ((role === 'quality' || qaEntry) && email.toLowerCase() !== 'manorathi@wintwealth.com' && email.toLowerCase() !== 'manorathi.t@wintwealth.com') {
+  // For QA (or mapped admins), restrict by assigned dispositions
+  if (role === 'quality' || qaEntry) {
     const configUser = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
     const strictDispositions = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
     if (strictDispositions.length > 0) {
@@ -95,6 +95,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       // If no dispositions assigned, show nothing
       extraWhere += ` AND 1 = 0`;
     }
+  }
+
+  const chatId = searchParams.get('chatId') || searchParams.get('chat_id');
+  if (chatId) {
+    extraWhere += ` AND c.id LIKE $${paramIdx++}`;
+    sqlParams.push(`${chatId.trim()}%`);
   }
 
   const from = searchParams.get('from');
@@ -208,12 +214,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
     if (iqsScore === null && !isBotOnly) {
       iqsScore = computeIqsFromRawParams(params, false);
+      if (iqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
+        iqsScore = parseFloat(r.iqs_score);
+      }
     }
     if (botIqsScore === null) {
       botIqsScore = computeIqsFromRawParams(params, true);
     }
     if (botIqsScore === null && r.iqs_score !== null && r.iqs_score !== undefined) {
-      if (r.conversation_type !== 'agent' || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
+      if (r.conversation_type === 'bot' || isBotOnly || params.__bot_parameters || params.__scores?.bot_iqs !== undefined) {
         botIqsScore = parseFloat(r.iqs_score);
       }
     }

@@ -25,6 +25,7 @@ export interface CallToReviewRow {
   status:                 string;
   gates:                  any;
   iqsScores:              any;
+  mobileNumber:           string | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -42,26 +43,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const map = config.qaDispositionMap ?? [];
   const qaEntry = map.find(e => e.email.toLowerCase() === email.toLowerCase());
 
-  if (email.toLowerCase() === 'manorathi@wintwealth.com' || email.toLowerCase() === 'manorathi.t@wintwealth.com') {
-    const explicit = searchParams.getAll('disposition');
-    if (explicit.length) {
-      dispositions = explicit;
-    } else {
-      const rows = await query<{ d: string }>(
-        `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
-      );
-      dispositions = rows.map(r => r.d);
-    }
-  } else if (qaEntry && qaEntry.dispositions.length > 0) {
-    dispositions = qaEntry.dispositions;
+  const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
+  const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions;
+
+  if (role === 'quality') {
+    dispositions = userDisps ?? [];
   } else if (role === 'admin') {
     const rows = await query<{ d: string }>(
       `SELECT DISTINCT call_disposition AS d FROM call_recordings WHERE call_disposition IS NOT NULL AND call_disposition != ''`
     );
     dispositions = rows.map(r => r.d);
-  } else if (role === 'quality') {
-    const configUser = config.users.find((u: any) => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    dispositions = (configUser as any)?.assignedCallDispositions ?? [];
   } else {
     return NextResponse.json({ calls: [], total: 0 });
   }
@@ -71,7 +62,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     dispositions = explicit.filter(d => dispositions.includes(d));
   }
 
-  if (!dispositions.length) {
+  const callId = searchParams.get('call_id');
+  const hasCallId = Boolean(callId && callId.trim());
+
+  const mobile = searchParams.get('mobile') || searchParams.get('phone') || searchParams.get('mobile_number');
+  const cleanMobile = mobile ? mobile.replace(/\D/g, '') : '';
+  const hasMobile = Boolean(cleanMobile);
+
+  const isDirectLookup = hasCallId || hasMobile;
+
+  if (!dispositions.length && !isDirectLookup) {
     log.warn(ROUTE, 'no dispositions assigned to QA', { email, role });
     return NextResponse.json({ calls: [], total: 0 });
   }
@@ -83,33 +83,56 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const dispositionFilters = searchParams.getAll('disposition_filter').filter(d => dispositions.includes(d));
   const effectiveDispositions = dispositionFilters.length ? dispositionFilters : dispositions;
 
-  const callId = searchParams.get('call_id');
-  const hasCallId = Boolean(callId && callId.trim());
-
   // Build dynamic WHERE clauses
   const sqlParams: unknown[] = [];
   let paramIdx = 1;
   let baseWhere = '';
 
-  if (!hasCallId) {
-    sqlParams.push(effectiveDispositions);
-    const dispParam = paramIdx++;
-    baseWhere = reviewedMode
-      ? `cr.call_disposition = ANY($${dispParam}) AND ce.status = 'reviewed'`
-      : `cr.call_disposition = ANY($${dispParam}) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL')`;
+  if (!isDirectLookup) {
+    if (role === 'admin') {
+      sqlParams.push(effectiveDispositions);
+      const dispParam = paramIdx++;
+      baseWhere = reviewedMode
+        ? `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR ce.reviewed_by IS NOT NULL)`
+        : `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL') AND (a.status IS NULL OR a.status != 'inactive')`;
+    } else {
+      sqlParams.push(effectiveDispositions);
+      const dispParam = paramIdx++;
+      if (reviewedMode) {
+        const emailIdx = paramIdx++;
+        sqlParams.push(email.toLowerCase());
+        baseWhere = `ce.status = 'reviewed' AND (EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) OR LOWER(COALESCE(ce.reviewed_by, '')) = $${emailIdx})`;
+      } else {
+        baseWhere = `EXISTS (SELECT 1 FROM unnest($${dispParam}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d)) AND ce.status IN ('pending', 'reopened') AND ce.iqs_percent IS NOT NULL AND (ce.iqs_percent <= 85 OR ce.verdict = 'FAILED_CRITICAL') AND (a.status IS NULL OR a.status != 'inactive')`;
+      }
+    }
   } else {
-    baseWhere = reviewedMode
-      ? `ce.status = 'reviewed'`
-      : `ce.status IN ('pending', 'reopened')`;
+    // When searching directly by mobile number or call ID, match ALL calls across statuses, agents, and dispositions
+    baseWhere = '1=1';
   }
 
   let extraWhere = '';
   const filters: Record<string, unknown> = {};
 
+  if (isDirectLookup && dispositionFilters.length > 0) {
+    const pIdx = paramIdx++;
+    extraWhere += ` AND EXISTS (SELECT 1 FROM unnest($${pIdx}::text[]) d WHERE LOWER(cr.call_disposition) = LOWER(d))`;
+    sqlParams.push(dispositionFilters);
+  }
+
   if (hasCallId && callId) {
-    extraWhere += ` AND ce.call_id LIKE $${paramIdx++}`;
-    sqlParams.push(`${callId.trim()}%`);
+    const pIdx = paramIdx++;
+    extraWhere += ` AND (ce.call_id LIKE $${pIdx} OR ce.chat_id LIKE $${pIdx})`;
+    sqlParams.push(`%${callId.trim()}%`);
     filters.callId = callId.trim();
+  }
+
+  if (hasMobile) {
+    const pIdx = paramIdx++;
+    const noLeadingZero = cleanMobile.replace(/^0+/, '') || cleanMobile;
+    extraWhere += ` AND (ct_cr.phone LIKE $${pIdx} OR ct_c.phone LIKE $${pIdx} OR c.phone_number LIKE $${pIdx})`;
+    sqlParams.push(`%${noLeadingZero}%`);
+    filters.mobile = noLeadingZero;
   }
 
   const subDispos = searchParams.getAll('sub_disposition');
@@ -164,6 +187,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filters.status = statusParam;
   }
 
+  // Agent / Interaction filter: all | human_only (default: human_only for QA if applicable or 'all')
+  const agentFilter = searchParams.get('agent_filter') || 'all';
+  if (agentFilter === 'human_only') {
+    extraWhere += ` AND (a.name IS NULL OR a.name NOT IN ('Robylon AI', 'Robylon Automation')) AND (ce.agent_id IS NULL OR ce.agent_id NOT IN (15, 447, 784))`;
+    filters.agentFilter = 'human_only';
+  }
+
   const page  = Math.max(1, parseInt(searchParams.get('page')  ?? '1'));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
@@ -173,6 +203,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     `SELECT COUNT(*) AS total
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
+     LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
+     LEFT JOIN agents a ON a.id = ce.agent_id
+     LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+     LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}`,
     sqlParams
   );
@@ -184,15 +218,19 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const offsetParamIdx = paramIdx++;
 
   const rows = await query<any>(
-    `SELECT ce.call_id, ce.chat_id, COALESCE(a.name, 'Unknown') as agent_name,
+    `SELECT ce.call_id, COALESCE(ce.chat_id, cr.chat_id) as chat_id, COALESCE(a.name, 'Unknown') as agent_name,
             ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
             cr.duration_seconds, cr.language, cr.interruption_count, cr.dead_air_count,
-            ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores
+            ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores,
+            COALESCE(ct_cr.phone, ct_c.phone, c.phone_number) AS mobile_number
      FROM call_evaluations ce
      JOIN call_recordings cr ON cr.id = ce.call_id
+     LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
      LEFT JOIN agents a ON a.id = ce.agent_id
+     LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+     LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
      WHERE ${baseWhere}${extraWhere}
-     ORDER BY ${reviewedMode ? 'ce.reviewed_at DESC' : 'ce.scored_at DESC'}
+     ORDER BY cr.called_at DESC NULLS LAST, ${reviewedMode ? 'ce.reviewed_at DESC NULLS LAST' : 'ce.scored_at DESC NULLS LAST'}
      LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
     dataSqlParams
   );
@@ -215,7 +253,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     reviewNote:             r.review_note,
     status:                 r.status,
     gates:                  r.gates,
-    iqsScores:              r.iqs_scores
+    iqsScores:              r.iqs_scores,
+    mobileNumber:           r.mobile_number || null,
   }));
 
   return NextResponse.json({ calls, total });

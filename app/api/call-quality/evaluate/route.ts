@@ -6,7 +6,7 @@ import { runCallPipeline } from '@/lib/scoring/call-pipeline';
 import { query } from '@/lib/cx/db';
 
 async function _POST(req: NextRequest): Promise<NextResponse> {
-  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
+  const { session, response } = await requireRole(['admin', 'quality']);
   if (response) return response;
 
   let body: { callId?: string; forceTranscript?: boolean; reevaluate?: boolean };

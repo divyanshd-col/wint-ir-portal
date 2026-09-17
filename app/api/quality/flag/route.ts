@@ -17,15 +17,22 @@ export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
-  const { scoreId, chatId, agentNote, challengedParams, raisedByRole } = await req.json();
-  if (!chatId) return NextResponse.json({ error: 'chatId required' }, { status: 400 });
+  const { scoreId, chatId, callId, agentNote, challengedParams, raisedByRole } = await req.json();
+  const effectiveChatId = chatId || callId;
+  if (!effectiveChatId) return NextResponse.json({ error: 'chatId or callId required' }, { status: 400 });
 
   const { readConfig } = await import('@/lib/config');
   const config = await readConfig();
   const email = (session.user as any)?.email || '';
   const role  = (session.user as any)?.role  || '';
   const configUser = config.users.find(u => (u.email || u.username)?.toLowerCase() === email.toLowerCase());
-  const agentName = configUser?.agentName || email.split('@')[0];
+  let submitterName = configUser?.agentName || '';
+  if (!submitterName && email) {
+    const { getUserByEmail } = await import('@/lib/users');
+    const dbUser = await getUserByEmail(email).catch(() => null);
+    if (dbUser?.name) submitterName = dbUser.name;
+  }
+  if (!submitterName) submitterName = email.split('@')[0];
 
   const params: IQSChallengedParam[] = Array.isArray(challengedParams) ? challengedParams : [];
   const now = new Date().toISOString();
@@ -34,8 +41,34 @@ export async function POST(req: NextRequest) {
   const effectiveRaisedByRole = isTL ? 'tl' : 'ir';
   const initialStatus = isTL ? 'tl_forwarded' : 'pending';
 
+  // If raised by TL on behalf of an agent, look up the actual agent from the conversation/call
+  let targetAgentName = submitterName;
+  if (isTL) {
+    try {
+      const { query } = await import('@/lib/cx/db');
+      if (callId) {
+        const callRows = await query<{ agent_name: string | null }>(
+          `SELECT cr.agent_name FROM call_recordings cr WHERE cr.id = $1 OR cr.chat_id = $1 LIMIT 1`,
+          [callId]
+        );
+        if (callRows[0]?.agent_name) {
+          targetAgentName = callRows[0].agent_name;
+        }
+      } else if (chatId) {
+        const chatRows = await query<{ agent_name: string | null }>(
+          `SELECT a.name AS agent_name FROM conversations c LEFT JOIN agents a ON a.id = c.agent_id WHERE c.id = $1 LIMIT 1`,
+          [chatId]
+        );
+        if (chatRows[0]?.agent_name) {
+          targetAgentName = chatRows[0].agent_name;
+        }
+      }
+    } catch {}
+  }
+
   const flag: IQSFlag = {
-    id: randomUUID(), scoreId, chatId, agentName, agentEmail: email,
+    id: randomUUID(), scoreId, chatId: effectiveChatId, callId: callId || undefined,
+    agentName: targetAgentName, agentEmail: email,
     agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
     raisedByRole: effectiveRaisedByRole, paramCategory: 'qa', status: initialStatus,
   };
@@ -47,12 +80,12 @@ export async function POST(req: NextRequest) {
   }
 
   if (isTL) {
-    const qaName = await resolveQANameForChat(chatId);
+    const qaName = await resolveQANameForChat(effectiveChatId, undefined, callId);
     await storeAppendFlagComment({
       id: randomUUID(),
       flagId: flag.id,
       authorEmail: email,
-      authorName: agentName,
+      authorName: submitterName,
       role: 'tl',
       content: `Forwarded to ${qaName}`,
       createdAt: now,
@@ -60,7 +93,7 @@ export async function POST(req: NextRequest) {
   }
 
   const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
-  await storeAppendAuditEntry({ id: randomUUID(), action: auditAction, chatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName } } as IQSAuditEntry);
+  await storeAppendAuditEntry({ id: randomUUID(), action: auditAction, chatId: effectiveChatId, actorEmail: email, actorRole: role, ts: now, meta: { challengedParams: params, agentName: targetAgentName, submitterName } } as IQSAuditEntry);
   return NextResponse.json({ ok: true, flagId: flag.id });
 }
 

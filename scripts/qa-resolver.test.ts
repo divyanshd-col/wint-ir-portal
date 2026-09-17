@@ -119,13 +119,45 @@ test('Tier 4: Fallback - returns Manorathi when no match found', async () => {
   assert.equal(result, 'Manorathi');
 });
 
-test('Error Resilience - returns Manorathi fallback on database exception', async () => {
-  const mockQuery: any = async () => {
-    throw new Error('Database connection timeout');
+test('Call dispute with callId - resolves from call_recordings disposition over parent chat disposition', async () => {
+  const mockQuery: any = async (sql: string, params?: any[]) => {
+    if (sql.includes('FROM call_recordings') && params?.[0] === 'call_129923') {
+      return [{ reviewed_by: null, agent_id: 18, disposition: 'Junk Chats' }];
+    }
+    if (sql.includes('FROM conversations') && params?.[0] === 'chat_129790') {
+      return [{ reviewed_by: null, agent_id: 18, disposition: 'Bond Purchase' }];
+    }
+    return [];
   };
 
-  const mockReadConfig: any = async () => ({ users: [] });
+  const mockReadConfig: any = async () => ({
+    users: [
+      { email: 'sindhu@wintwealth.com', agentName: 'Sindhu' },
+      { email: 'manorathi@wintwealth.com', agentName: 'Manorathi' },
+    ],
+    qaDispositionMap: [
+      { email: 'sindhu@wintwealth.com', dispositions: ['Bond Purchase'] },
+      { email: 'manorathi@wintwealth.com', dispositions: ['Junk Chats'] },
+    ],
+  });
 
-  const result = await resolveQANameForChat('108', { query: mockQuery, readConfig: mockReadConfig });
+  const result = await resolveQANameForChat('chat_129790', { query: mockQuery, readConfig: mockReadConfig }, 'call_129923');
+  assert.equal(result, 'Manorathi');
+});
+
+test('Call dispute with "Junk" disposition alias resolves to Manorathi', async () => {
+  const mockQuery: any = async (sql: string, params?: any[]) => {
+    if (sql.includes('FROM call_recordings') && params?.[0] === 'call_129924') {
+      return [{ reviewed_by: null, agent_id: 18, disposition: 'Junk' }];
+    }
+    return [];
+  };
+
+  const mockReadConfig: any = async () => ({
+    users: [{ email: 'manorathi@wintwealth.com', agentName: 'Manorathi' }],
+    qaDispositionMap: [{ email: 'manorathi@wintwealth.com', dispositions: ['Junk Chats'] }],
+  });
+
+  const result = await resolveQANameForChat('', { query: mockQuery, readConfig: mockReadConfig }, 'call_129924');
   assert.equal(result, 'Manorathi');
 });

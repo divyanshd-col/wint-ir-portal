@@ -611,8 +611,12 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                     Compliance Flags Surfaced
                   </h2>
                 </div>
-                <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-xl text-xs font-semibold leading-relaxed">
-                  ⚠️ <strong>Note on compliance flags:</strong> These are flagged by the AI classifier for a human to review, not proven violations. The classifier over-fires on ordinary file sharing and Slack URLs.
+                <div className="bg-amber-50/90 border border-amber-300 text-amber-900 p-4 sm:p-5 rounded-2xl text-sm sm:text-base font-medium leading-relaxed shadow-sm flex items-start gap-3.5">
+                  <span className="text-xl sm:text-2xl flex-shrink-0 mt-0.5" role="img" aria-label="warning">⚠️</span>
+                  <div>
+                    <strong className="font-bold text-amber-950">Note on compliance flags: </strong>
+                    <span>These are flagged by the AI classifier for a human to review, not proven violations. The classifier over-fires on ordinary file sharing and Slack URLs.</span>
+                  </div>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden">

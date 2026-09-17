@@ -63,7 +63,11 @@ export const CHAT_PARAM_LATERAL = `
 
 export const CALL_PARAM_LATERAL = `
   CROSS JOIN LATERAL jsonb_each(
-    CASE WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb ELSE '{}'::jsonb END
+    CASE
+      WHEN ce.iqs_scores::text LIKE '{%' THEN ce.iqs_scores::jsonb
+      WHEN s.call_parameters::text LIKE '{%' THEN s.call_parameters::jsonb
+      ELSE '{}'::jsonb
+    END
   ) AS p(key, val)
 `;
 
@@ -183,8 +187,14 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const userAny = session.user as Record<string, string | undefined>;
-  const role = userAny.role;
-  const email = userAny.email ?? '';
+  const email = (userAny.email ?? '').toLowerCase().trim();
+
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = email ? await getUserByEmail(email).catch(() => null) : null;
+  const config = await readConfig();
+  const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email);
+  const role = dbUser?.role || configUser?.role || userAny.role || (userAny.isAdmin ? 'admin' : 'agent');
+
   if (role !== 'tl' && role !== 'admin' && role !== 'agent') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
@@ -194,16 +204,13 @@ export async function GET(req: NextRequest) {
 
   let tlAgentNames: string[];
   if (role === 'tl') {
-    const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let tlAgentName = configUser?.agentName;
-    if (!tlAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) tlAgentName = dbUser.name;
-    }
+    let tlAgentName = dbUser?.name || configUser?.agentName;
     if (!tlAgentName) tlAgentName = email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
+  } else if (role === 'agent') {
+    let selfAgentName = dbUser?.name || configUser?.agentName;
+    if (!selfAgentName && email) selfAgentName = email.split('@')[0];
+    tlAgentNames = selfAgentName ? [selfAgentName] : [];
   } else {
     const rows = await query<{ name: string }>(`
       SELECT a.name
@@ -221,27 +228,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  if (role === 'agent') {
-    const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let selfAgentName = configUser?.agentName;
-    if (!selfAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) selfAgentName = dbUser.name;
-    }
-    if (!selfAgentName) selfAgentName = email.split('@')[0];
-    tlAgentNames = selfAgentName ? [selfAgentName] : tlAgentNames.slice(0, 1);
-  }
-
   if (tlAgentNames.length === 0) {
     return NextResponse.json({ agentName: null, agents: [], wowWeekStarts: wowWeeks, channels: { chats: null, calls: null, emails: null } });
   }
 
   const requestedAgent = searchParams.get('agent');
-  const agentName = (requestedAgent && (tlAgentNames.includes(requestedAgent) || requestedAgent.length > 0))
-    ? requestedAgent
-    : tlAgentNames[0];
+  let agentName: string;
+  if (role === 'agent') {
+    agentName = tlAgentNames[0];
+  } else {
+    agentName = (requestedAgent && tlAgentNames.includes(requestedAgent))
+      ? requestedAgent
+      : tlAgentNames[0];
+  }
 
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([
@@ -330,40 +329,43 @@ export async function GET(req: NextRequest) {
       query<{ csat_pct: number|null; iqs: number|null; volume: number }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = $3
       `, [dateFrom, dateTo, agentName]),
 
       query<FlatCatRow>(`
-        SELECT c.tags->>'disposition' AS disposition,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+        SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
+          AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
         GROUP BY 1 ORDER BY COUNT(cr.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
       query<FlatCatRow>(`
-        SELECT c.tags->>'disposition' AS disposition,
-               c.tags->>'sub_disposition' AS sub_disposition,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+        SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
+               COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') AS sub_disposition,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
-          AND c.tags->>'sub_disposition' IS NOT NULL
+          AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
+          AND COALESCE(cr.call_sub_disposition, c.tags->>'sub_disposition') IS NOT NULL
         GROUP BY 1, 2 ORDER BY 1, COUNT(cr.id) DESC
       `, [dateFrom, dateTo, agentName]),
 
@@ -371,12 +373,13 @@ export async function GET(req: NextRequest) {
         SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
                ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric /
                      NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2 AND a.name = $3
         GROUP BY 1 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
@@ -384,13 +387,14 @@ export async function GET(req: NextRequest) {
       query<{ week_start: string; param_key: string; pass_rate: number|null }>(`
         SELECT date_trunc('week', cr.called_at)::date::text AS week_start,
                ${PASS_RATE_SELECT}
-        FROM iqs_scores s
-        JOIN call_recordings cr ON cr.chat_id = s.chat_id
+        FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
         LEFT JOIN conversations c ON c.id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         ${CALL_PARAM_LATERAL}
         WHERE cr.called_at::date >= $1 AND cr.called_at::date < $2
-          AND a.name = $3 AND s.call_parameters IS NOT NULL
+          AND a.name = $3 AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
         GROUP BY 1, 2 ORDER BY 1
       `, [wowFrom, wowTo, agentName]),
     ]),

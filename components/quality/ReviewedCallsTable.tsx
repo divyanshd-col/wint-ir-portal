@@ -8,6 +8,7 @@ interface Props {
   dispositions:   string[];
   agentFilter?:   'all' | 'human_only';
   initialCallId?: string;
+  initialMobile?: string;
 }
 
 const chip: React.CSSProperties = {
@@ -71,10 +72,45 @@ const CallEvalRow = React.memo(function CallEvalRow({
         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
       >
-        <td style={tdMono}>{call.callId}</td>
+        <td style={tdMono}>
+          <div>{call.callId}</div>
+          {call.calledAt && (
+            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2 }}>
+              {new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
+            </div>
+          )}
+        </td>
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
+        <td style={tdMono}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}</td>
         <td style={td}>{call.disposition}</td>
-        <td style={td}>{fmtDuration(call.durationSeconds)}</td>
+        <td style={td} onClick={e => e.stopPropagation()}>
+          {call.chatId ? (
+            <a
+              href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                fontSize: 12,
+                fontWeight: 500,
+                borderRadius: 6,
+                border: '1px solid var(--qa-border)',
+                background: 'var(--qa-card)',
+                color: '#2563eb',
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+              title={`Open chat ${call.chatId} in Robylon`}
+            >
+              Show chat ↗
+            </a>
+          ) : (
+            <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+          )}
+        </td>
         <td style={tdNum}>
           <span style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -118,20 +154,26 @@ const CallEvalRow = React.memo(function CallEvalRow({
           gates={call.gates}
           iqsScores={call.iqsScores}
           mode="view"
+          allowReevaluate={true}
           onDone={() => onRemoveCall(call.callId)}
           onClose={onCloseExpand}
-          colSpan={7}
+          mobileNumber={call.mobileNumber}
+          colSpan={8}
         />
       )}
     </React.Fragment>
   );
 });
 
-export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', initialCallId }: Props) {
-  const [sortCol, setSortCol] = useState<'callId' | 'agentName' | 'iqsScore'>('callId');
+type SortCol = 'callId' | 'agentName' | 'iqsScore';
+
+export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', initialCallId, initialMobile }: Props) {
+  const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
   const [callIdSearch, setCallIdSearch] = useState(initialCallId || '');
+  const [mobileSearch, setMobileSearch] = useState(initialMobile || '');
+  const [debouncedMobile, setDebouncedMobile] = useState(initialMobile || '');
   const [dispFilter, setDispFilter] = useState<string[]>([]);
   const [iqsMin, setIqsMin] = useState('');
   const [iqsMax, setIqsMax] = useState('');
@@ -139,6 +181,13 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [openDrop, setOpenDrop] = useState<string | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedMobile(mobileSearch);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [mobileSearch]);
 
   const [calls, setCalls] = useState<CallToReviewRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -153,6 +202,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
     try {
       const params = new URLSearchParams({ page: String(pg), limit: String(ps), reviewed: 'true' });
       if (callIdSearch) params.set('call_id', callIdSearch);
+      if (debouncedMobile.trim()) params.set('mobile', debouncedMobile.trim());
       params.set('agent_filter', agentFilter);
       dispFilter.forEach(d => params.append('disposition_filter', d));
       if (iqsMin) params.set('iqs_min', iqsMin);
@@ -178,7 +228,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
     } finally {
       setLoading(false);
     }
-  }, [callIdSearch, dispFilter, iqsMin, iqsMax, customFrom, customTo, pageSize, agentFilter, initialCallId]);
+  }, [callIdSearch, debouncedMobile, dispFilter, iqsMin, iqsMax, customFrom, customTo, pageSize, agentFilter, initialCallId]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
@@ -197,6 +247,7 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
   }, []);
 
   const sortedCalls = [...calls].sort((a, b) => {
+    if (!sortCol) return 0;
     let cmp = 0;
     if (sortCol === 'callId') cmp = a.callId.localeCompare(b.callId);
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
@@ -233,6 +284,17 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
             height: 32, padding: '0 10px', border: `1px solid ${callIdSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
             background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
             outline: 'none', width: 140
+          }}
+        />
+
+        <input
+          placeholder="Search by mobile number…"
+          value={mobileSearch}
+          onChange={e => setMobileSearch(e.target.value)}
+          style={{
+            height: 32, padding: '0 10px', border: `1px solid ${mobileSearch ? 'var(--qa-gray-700)' : 'var(--qa-border)'}`, borderRadius: 8,
+            background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit',
+            outline: 'none', width: 175
           }}
         />
 
@@ -286,13 +348,49 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
         </div>
 
         <button style={chip} onClick={() => {
-          setCallIdSearch(''); setDispFilter([]); setIqsMin(''); setIqsMax(''); setCustomFrom(''); setCustomTo('');
+          setCallIdSearch(''); setMobileSearch(''); setDebouncedMobile(''); setDispFilter([]); setIqsMin(''); setIqsMax(''); setCustomFrom(''); setCustomTo('');
         }}>Reset</button>
 
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
-          {loading ? 'Loading…' : `Total: ${total}`}
-        </span>
+
+        {/* Rows per page selector + count */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
+            {loading ? 'Loading…' : `Showing ${calls.length} of ${total}`}
+          </span>
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button
+              title="Rows per page"
+              onClick={() => setOpenDrop(openDrop === 'pagesize' ? null : 'pagesize')}
+              style={{
+                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            {openDrop === 'pagesize' && (
+              <div style={{ ...dropdown, right: 0, left: 'auto', minWidth: 120 }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                  Rows per page
+                </div>
+                {[20, 50, 100].map(n => (
+                  <div
+                    key={n}
+                    style={{ ...dropItem, fontWeight: pageSize === n ? 600 : 400 }}
+                    onClick={() => { setPageSize(n); fetchData(1, n); setOpenDrop(null); }}
+                  >
+                    {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div style={{ overflowX: 'auto' }}>
@@ -301,8 +399,9 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
             <tr>
               <th style={th}>Call ID</th>
               <th style={th}>Agent</th>
+              <th style={th}>Mobile</th>
               <th style={th}>Disposition</th>
-              <th style={th}>Duration</th>
+              <th style={th}>Linked Chat</th>
               <th style={{ ...th, textAlign: 'right' }}>IQS</th>
               <th style={th}>Reviewed By</th>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
@@ -310,9 +409,9 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={7} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
+              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>Loading…</td></tr>
             ) : sortedCalls.length === 0 ? (
-              <tr><td colSpan={7} style={{ ...td, textAlign: 'center' }}>No reviewed calls</td></tr>
+              <tr><td colSpan={8} style={{ ...td, textAlign: 'center' }}>No reviewed calls</td></tr>
             ) : (
               sortedCalls.map(c => (
                 <CallEvalRow
@@ -332,6 +431,25 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Footer */}
+      {total > pageSize && !loading && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Page {page} of {Math.ceil(total / pageSize)}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button disabled={page <= 1} onClick={() => fetchData(page - 1)} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page <= 1 ? 'not-allowed' : 'pointer',
+              color: page <= 1 ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>← Prev</button>
+            <button disabled={page >= Math.ceil(total / pageSize)} onClick={() => fetchData(page + 1)} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page >= Math.ceil(total / pageSize) ? 'not-allowed' : 'pointer',
+              color: page >= Math.ceil(total / pageSize) ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>Next →</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

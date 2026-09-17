@@ -20,8 +20,14 @@ export default async function CXPage() {
 
   const isAdmin = !!user.isAdmin;
 
+  const { getSkillsForPersona, hasSkill } = await import('@/lib/skills');
+  const skills = user.skills || (await getSkillsForPersona(role));
+
   const config = await readConfig();
-  if (!config.cxDashboardEnabled) redirect('/');
+  if (!config.cxDashboardEnabled || !hasSkill({ ...user, skills }, 'cx_dashboard:access')) {
+    redirect('/');
+  }
+
   const flags = {
     callAnalysis: config.callAnalysisEnabled ?? false,
     cxDashboard: config.cxDashboardEnabled ?? false,
@@ -34,6 +40,7 @@ export default async function CXPage() {
         username={user.email ?? ''}
         role={role}
         isAdmin={isAdmin}
+        skills={skills}
         flags={flags}
       />
 
@@ -59,7 +66,9 @@ export default async function CXPage() {
           {role === 'quality' && <QADashboard />}
           {role === 'agent'   && <AgentDashboard />}
           {!['admin', 'tl', 'quality', 'agent'].includes(role) && (
-            <p className="text-stone-400 text-sm mt-8">Access not available for your role.</p>
+            skills.includes('tl:team_analytics:access') ? <TLDashboard /> :
+            skills.includes('quality:chat_eval:access') ? <QADashboard /> :
+            <AgentDashboard />
           )}
         </main>
       </div>

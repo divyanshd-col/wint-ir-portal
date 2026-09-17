@@ -36,7 +36,8 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
   const [unscoredCount, setUnscoredCount] = useState(0);
   const [skippedCount, setSkippedCount] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(20);
+  const [openDrop, setOpenDrop] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [scoringChatId, setScoringChatId] = useState<string | null>(null);
   const [scoringBatch, setScoringBatch] = useState(false);
@@ -50,10 +51,10 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const fetchData = useCallback(async (pg = 1) => {
+  const fetchData = useCallback(async (pg = 1, ps = pageSize) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: String(pg), limit: String(pageSize) });
+      const params = new URLSearchParams({ page: String(pg), limit: String(ps) });
       params.set('agent_filter', agentFilter);
       params.set('status_filter', statusFilter);
       if (chatIdSearch) params.set('chat_id', chatIdSearch);
@@ -189,7 +190,7 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
           </div>
         </div>
 
-        {/* Action Button */}
+        {/* Action Button & Rows selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {batchStatus && (
             <span style={{ fontSize: 12, color: 'var(--qa-text-2)', fontStyle: 'italic' }}>
@@ -208,6 +209,49 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
           >
             {scoringBatch ? 'Running Batch...' : '⚡ Score Pending Batch'}
           </button>
+
+          {/* Rows per page selector */}
+          <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+            <button
+              title="Rows per page"
+              onClick={() => setOpenDrop(openDrop === 'pagesize' ? null : 'pagesize')}
+              style={{
+                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 6,
+                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+              </svg>
+            </button>
+            {openDrop === 'pagesize' && (
+              <div style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50,
+                background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
+                boxShadow: '0 4px 16px rgba(0,0,0,0.08)', minWidth: 130, overflow: 'hidden',
+              }} onClick={e => e.stopPropagation()}>
+                <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                  Rows per page
+                </div>
+                {[20, 50, 100].map(n => (
+                  <div
+                    key={n}
+                    style={{
+                      padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: 'var(--qa-text)',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontWeight: pageSize === n ? 600 : 400,
+                      background: pageSize === n ? 'var(--qa-gray-50)' : 'transparent',
+                    }}
+                    onClick={() => { setPageSize(n); fetchData(1, n); setOpenDrop(null); }}
+                  >
+                    {pageSize === n && <span style={{ fontSize: 10 }}>✓</span>} {n}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -360,39 +404,23 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
       </div>
 
       {/* Pagination Footer */}
-      <div style={{
-        height: 48, padding: '0 16px', borderTop: '1px solid var(--qa-border)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        fontSize: 13, color: 'var(--qa-text-2)',
-      }}>
-        <div>
-          Showing {chats.length ? (page - 1) * pageSize + 1 : 0} to {Math.min(page * pageSize, total)} of {total} items
+      {total > pageSize && !loading && (
+        <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>Page {page} of {Math.ceil(total / pageSize)}</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button disabled={page <= 1} onClick={() => fetchData(page - 1)} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page <= 1 ? 'not-allowed' : 'pointer',
+              color: page <= 1 ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>← Prev</button>
+            <button disabled={page >= Math.ceil(total / pageSize)} onClick={() => fetchData(page + 1)} style={{
+              height: 30, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 6,
+              background: 'var(--qa-card)', fontSize: 13, fontFamily: 'inherit', cursor: page >= Math.ceil(total / pageSize) ? 'not-allowed' : 'pointer',
+              color: page >= Math.ceil(total / pageSize) ? 'var(--qa-text-3)' : 'var(--qa-text)',
+            }}>Next →</button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
-          <button
-            onClick={() => fetchData(page - 1)}
-            disabled={page <= 1 || loading}
-            style={{
-              height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 6,
-              background: 'var(--qa-card)', color: 'var(--qa-text)', cursor: page <= 1 ? 'not-allowed' : 'pointer',
-              opacity: page <= 1 ? 0.5 : 1,
-            }}
-          >
-            Previous
-          </button>
-          <button
-            onClick={() => fetchData(page + 1)}
-            disabled={page * pageSize >= total || loading}
-            style={{
-              height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 6,
-              background: 'var(--qa-card)', color: 'var(--qa-text)', cursor: page * pageSize >= total ? 'not-allowed' : 'pointer',
-              opacity: page * pageSize >= total ? 0.5 : 1,
-            }}
-          >
-            Next
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

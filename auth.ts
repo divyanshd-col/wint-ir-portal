@@ -90,6 +90,12 @@ export const authOptions: NextAuthOptions = {
       if (account && user) {
         token.role = (user as any).role ?? 'agent';
         token.isAdmin = token.role === 'admin';
+        try {
+          const { getSkillsForPersona } = await import('./lib/skills');
+          token.skills = await getSkillsForPersona(token.role);
+        } catch {
+          token.skills = [];
+        }
       }
       return token;
     },
@@ -98,6 +104,12 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.role = token.role as UserRole | undefined;
         session.user.isAdmin = token.isAdmin ?? false;
+        try {
+          const { getSkillsForPersona } = await import('./lib/skills');
+          session.user.skills = await getSkillsForPersona(token.role as string);
+        } catch {
+          session.user.skills = token.skills || [];
+        }
       }
       return session;
     },

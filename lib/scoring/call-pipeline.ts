@@ -15,9 +15,10 @@ import { randomUUID } from 'crypto';
 export const CALL_GATES_SYSTEM_PROMPT = `You are a compliance auditor for Wint Wealth, a SEBI-regulated fixed-income investment platform. You are auditing ONE support call by the IR (support rep, speaker IR_EXECUTIVE) against three critical gates. Gates are tripwires: a gate binds only when its triggering content occurs on the call. If the content never occurs, the gate passes vacuously (status "not_applicable"). Never mark a gate failed merely because its topic was absent.
 
 INPUT
-- TRANSCRIPT: numbered turns with speaker roles. Judge ONLY IR_EXECUTIVE turns.
+- TRANSCRIPT: numbered turns with speaker roles (IR_EXECUTIVE for support rep, INVESTOR for customer).
+  SPEAKER ATTRIBUTION NOTICE: The upstream diarizer assigns speaker roles automatically. If speaker roles appear inverted, mixed, or confidence is low (for example, the speaker labelled INVESTOR introduces themselves as Wint Wealth, explains platform/bond safety, links, or procedures, while the speaker labelled IR_EXECUTIVE asks questions and uses honorifics like sir/ma'am), identify who is acting as the Wint support representative and audit the representative's statements, regardless of the raw label.
 - KB_CONTEXT: the verified knowledge base entries relevant to this call. This is the ONLY source of truth for facts and for tax scope.
-- SPEAKER_ID_CONFIDENCE: how confident the upstream system is that roles are correctly assigned. This is informational. Audit as normal at every level.
+- SPEAKER_ID_CONFIDENCE: how confident the upstream system is that roles are correctly assigned. When confidence is low or roles appear switched, prioritize conversational evidence of who is the representative.
 
 THE THREE GATES
 
@@ -25,10 +26,10 @@ GATE G1: NO ADVICE
 The rep states verified facts only.
 Fails if the rep, anywhere on the call:
 (a) recommends whether, what, when, or how much to invest ("you should invest", "this is a good time to buy", "I would put it in X"), OR
-(b) guarantees or assures returns or safety ("guaranteed", "assured returns", "zero risk", "your money is completely safe, nothing can happen"), OR
+(b) guarantees or assures returns or safety ("guaranteed", "assured returns", "zero risk", "your money is completely safe, nothing can happen", or stating/implying that principal is guaranteed/assured to be returned in the event of default or for senior secured bonds), OR
 (c) interprets tax treatment beyond what KB_CONTEXT states: explains how the customer should treat something in their filing, reasons about deduction rules, rates, or 26AS mechanics not present in KB_CONTEXT, without explicitly escalating.
 Reason codes: "advice_investment" for (a)/(b), "advice_tax" for (c).
-Not violations: stating verified product facts, reading the KB answer, saying "I cannot advise on that, but factually X", escalating a tax question.
+Not violations: stating verified product facts, reading the KB answer, saying "I cannot advise on that, but factually X", escalating a tax question, stating platform-specific product rules from KB_CONTEXT (e.g., Wint Wealth facilitating 100% principal return on MLD early exits).
 Binding: (a)/(b) can occur on any call. (c) binds only if tax/TDS is discussed.
 
 GATE G2: NO FABRICATED FACTS
@@ -36,11 +37,17 @@ Every specific figure, rate, date, or timeline the rep states must trace to KB_C
 Fails if the rep states a specific number, date, rate, or timeline that appears in neither KB_CONTEXT nor the call context. Vague honesty ("I will confirm and get back to you") is NOT a violation and is the correct behaviour.
 Binding: any call where the rep states at least one specific claim.
 
-GATE G3: IDENTITY VERIFIED FIRST
-No account-specific information (holdings, amounts, dates of the customer's own transactions, KYC status, bank details) disclosed before an identity verification exchange (registered mobile, email, PAN, DOB, or explicit name confirmation) occurs earlier in turn order.
-Binding: only calls where account-specific information is disclosed. General product questions pass vacuously.
+GATE G3: IDENTITY VERIFIED FIRST / DATA PRIVACY
+Support calls are conducted directly with the customer on their registered mobile number. Therefore, accessing and referencing the customer's own account details, portfolio holdings, bond names (e.g., while helping with Form 121 / 15G / 15H submission, investment status, KYC, or transactions) is standard and fully authorized. Verbal identity verification (such as asking for PAN/DOB/OTP) is NOT required before mentioning or discussing the customer's own holdings or account details.
+Fails ONLY if the rep:
+(a) discloses third-party customer information (another person's account, holdings, or personal data) to the caller, OR
+(b) shares sensitive security credentials (passwords, MPINs, OTPs, full bank credentials), OR
+(c) continues to disclose confidential account details after the caller explicitly indicates they are an unauthorized third party / not the account holder.
+Not violations: stating the customer's own bond holdings (e.g., Muthoot Mercantile, Ugro Capital, CreditAccess, etc.), portfolio assets, transaction status, Form 121 / 15G / 15H details, or account status when connected with the customer on call.
+Binding: only calls where third-party data or sensitive security credentials are disclosed. Normal account assistance passes.
 
 RULES
+- ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 - Cite the exact turn index for every finding.
 - When a claim is ambiguous between fact and advice, quote it and mark "borderline": true rather than failing the gate. Borderline items route to human review, they do not fail the call.
 - Judge the rep's words, never the customer's.
@@ -92,14 +99,15 @@ Every substantive answer matches KB_CONTEXT.
 2 = all claims correct. 1 = minor imprecision, no material impact.
 0 = any materially wrong answer.
 NA = KB_CONTEXT has no entry covering the topics answered. When NA, list the uncovered topics in "kb_gaps". A KB gap is never scored against the rep.
+ALWAYS prioritize KB_CONTEXT over general external market knowledge. Platform-specific product rules (e.g., Wint Wealth facilitating 100% principal return on MLD early exits) supersede standard secondary market conventions. Never penalize an agent for stating a rule that matches KB_CONTEXT.
 
 P2 ALL QUESTIONS ADDRESSED
 Every query the customer raised got an answer or an explicit committed action before the call ended. First enumerate every distinct customer question or issue (calls are often multi-topic). An issue handled by struggling through an evident language barrier, instead of offering a language-matched callback, counts as partially addressed.
 2 = all addressed. 1 = exactly one dropped or only-partially addressed. 0 = more than one dropped.
 
 P3 EXPECTATION SETTING AND FOLLOW-UP SPECIFICITY
-Every open (unresolved on call) item leaves with a concrete what-happens-next: a specific timeline or TAT and, where relevant, a named owner ("our finance team will contact you by Friday"). Vague assurances ("soon", "shortly", "someone will look into it") are not specific.
-2 = all open items have specific commitments. 1 = commitments exist but vague, or one open item lacks one. 0 = open items left with nothing.
+Every open (unresolved on call) item leaves with a concrete what-happens-next: a timeline or TAT, OR a clear commitment to escalate to the concerned team/owner and get back with an update as soon as possible ("our operations/tech team will look into this and update you as soon as possible"). Providing an exact timeline or specific TAT is not always possible; escalating to the team with a commitment to follow up is fully sufficient. Do NOT penalize or reduce marks solely because an exact numeric timeline was not quoted when a team escalation and follow-up commitment was made.
+2 = all open items have specific commitments or team escalation with follow-up commitments. 1 = commitments exist but vague without team ownership or follow-up path, or one open item lacks one. 0 = open items left with nothing.
 NA = the call had no open items (everything resolved live).
 
 P5 CALL OPENING
@@ -140,6 +148,12 @@ NA = TONE_SUMMARY is null (transcript-only call). Never infer tone from text.
 
 ALSO EXTRACT (does not affect scores)
 breach_mentions: every customer statement implying a previously promised action was not done ("I was told this would be resolved last week"). If PRIOR_CALL_TRANSCRIPTS is present, also check whether the broken promise matches a specific commitment made on a prior call and cite that prior call's turn where found.
+
+EVIDENCE RULES:
+- You MUST provide a non-empty string in "note" for EVERY parameter (P1, P2, P3, P5, P6, P7, P8, P9, P10, P11) in the "evidence" object.
+- Never leave "note": "" or empty arrays. Every score (whether 2, 1, 0, or "NA") must have a clear explanation of what happened or why it was scored as such.
+- For P11 (Tone/Energy): state the confidence/empathy ratings or specify if tone analysis was unavailable.
+- For NA parameters: explain why the condition was not applicable.
 
 OUTPUT: return ONLY this JSON, no other text, no markdown fences:
 {
@@ -192,11 +206,24 @@ export function computeCallIQS(scores: Record<string, any>) {
   let earned = 0;
   let applicable = 0;
   for (const [param, weight] of Object.entries(CALL_IQS_WEIGHTS)) {
-    const s = scores[param];
-    if (s === 'NA' || s === null || s === undefined) continue;
+    let s = scores[param];
+    if (typeof s === 'object' && s !== null) {
+      s = s.score;
+    }
+    if (s === 'NA' || s === 'na' || s === null || s === undefined || s === '') continue;
     applicable += weight;
-    const numericScore = typeof s === 'string' ? parseFloat(s) : s;
-    earned += weight * (numericScore / 2); // s is 0, 1, or 2
+    let numericScore = 0;
+    if (s === 2 || s === '2' || s === 'Yes' || s === 'yes' || s === 'PASS' || s === 'pass' || s === true) {
+      numericScore = 2;
+    } else if (s === 1 || s === '1' || s === 'Part' || s === 'part' || s === 'Half' || s === 'half' || s === 'Partial' || s === 'partial' || s === 0.5 || s === '0.5') {
+      numericScore = 1;
+    } else if (s === 0 || s === '0' || s === 'No' || s === 'no' || s === 'FAIL' || s === 'fail' || s === false) {
+      numericScore = 0;
+    } else {
+      const parsed = parseFloat(String(s));
+      numericScore = isNaN(parsed) ? 0 : parsed;
+    }
+    earned += weight * (numericScore / 2);
   }
   return {
     iqs_percent: applicable === 0 ? null : Math.round((earned / applicable) * 100),
@@ -380,7 +407,13 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
   }
   const apiKey = geminiKeys[0];
 
-  let segments = call.transcript ? (Array.isArray(call.transcript) ? call.transcript : call.transcript.segments || []) : [];
+  const rawTranscript = typeof call.transcript === 'string'
+    ? (() => { try { return JSON.parse(call.transcript); } catch { return call.transcript; } })()
+    : call.transcript;
+
+  let segments = Array.isArray(rawTranscript)
+    ? rawTranscript
+    : (rawTranscript && typeof rawTranscript === 'object' && Array.isArray(rawTranscript.segments) ? rawTranscript.segments : []);
   let duration = call.duration_seconds;
   let language = call.language || 'English';
   let status = call.status;
@@ -457,8 +490,16 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     }
 
     if (!transcriptionSuccess) {
-      await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
-      throw new Error(`Transcription stage failed after 3 attempts: ${transcriptionError.message}`);
+      const existingSegments = call.transcript ? (Array.isArray(call.transcript) ? call.transcript : call.transcript.segments || []) : [];
+      if (existingSegments.length > 0) {
+        log.warn('call-pipeline', `Transcription failed (${transcriptionError.message}), falling back to existing transcript with ${existingSegments.length} segments`);
+        segments = existingSegments;
+        duration = call.duration_seconds || duration;
+        language = call.language || language;
+      } else {
+        await query(`UPDATE call_recordings SET status = 'failed_transcription', updated_at = NOW() WHERE id = $1`, [callId]);
+        throw new Error(`Transcription stage failed after 3 attempts: ${transcriptionError.message}`);
+      }
     }
   }
 
@@ -520,7 +561,10 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     `, [call.chat_id, call.called_at || new Date().toISOString()]);
 
     priorCallTranscripts = priorCalls.map((c: any) => {
-      const segs = Array.isArray(c.transcript) ? c.transcript : c.transcript.segments || [];
+      const raw = typeof c.transcript === 'string'
+        ? (() => { try { return JSON.parse(c.transcript); } catch { return c.transcript; } })()
+        : c.transcript;
+      const segs = Array.isArray(raw) ? raw : (raw?.segments || []);
       const lines = segs
         .filter((s: any) => s.type === 'speech' || s.type === 'turn')
         .map((s: any) => `[${s.speaker}]: ${s.text || ''}`);
@@ -731,6 +775,8 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
     JSON.stringify(gatesResult.borderline || [])
   ]);
 
+  const effectiveCallAgentId = call.agent_id ?? call.conv_agent_id ?? null;
+
   // Update call recording status to scored and populate agent_id if missing
   await query(`
     UPDATE call_recordings
@@ -738,9 +784,50 @@ export async function runCallPipeline(callId: string, options?: { forceTranscrip
         agent_id = COALESCE(agent_id, $2),
         updated_at = NOW()
     WHERE id = $1
-  `, [callId, call.conv_agent_id ?? null]);
+  `, [callId, effectiveCallAgentId]);
 
   log.info('call-pipeline', `Pipeline complete for call ${callId} — IQS ${iqs_percent}% — Verdict: ${finalVer}`);
+
+  // Trigger compliance alert for call if call gate failed
+  if (gateVerdict === 'FAIL') {
+    try {
+      const { fireQualityAlert } = await import('@/lib/quality-alert');
+      const { getAgentName } = await import('@/lib/robylon/db');
+      const agentId = call.agent_id ?? call.conv_agent_id;
+      const agentName = agentId ? await getAgentName(agentId) : '';
+
+      const breaches: Array<{ type: string; quote: string; note: string }> = [];
+      const gates = gatesResult.gates || {};
+      for (const [gKey, gObj] of Object.entries<any>(gates)) {
+        if (gObj?.status === 'fail') {
+          const evList = gObj.evidence || [];
+          const quote = evList.map((e: any) => e.quote || e.why).join('; ') || 'Call gate requirement failed';
+          breaches.push({
+            type: gKey,
+            quote,
+            note: gObj.reason_code ? `Reason code: ${gObj.reason_code}` : 'Call gate failure',
+          });
+        }
+      }
+
+      fireQualityAlert({
+        callId: String(callId),
+        chatId: call.chat_id ? String(call.chat_id) : undefined,
+        channel: 'call',
+        agentName,
+        scores: {},
+        reasoning: {},
+        iqs: iqs_percent ?? undefined,
+        breaches: breaches.length ? breaches : [{ type: 'CALL_GATE_FAILURE', quote: 'Call compliance gate audit failed' }],
+        complianceFlag: true,
+      }).catch((err) => {
+        log.error('call-pipeline', `fireQualityAlert error for call ${callId}: ${err?.message}`);
+      });
+    } catch (alertErr: any) {
+      log.error('call-pipeline', `Failed to fire compliance alert for call ${callId}: ${alertErr.message}`);
+    }
+  }
+
   return {
     callId,
     iqs: iqs_percent,

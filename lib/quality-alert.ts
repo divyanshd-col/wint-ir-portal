@@ -8,8 +8,9 @@
  */
 
 import { sendSlackMessage } from './slack';
-import { storeHasQualityAlert, storeMarkQualityAlert } from './store';
+import { storeHasQualityAlert, storeMarkQualityAlert, storeHasBotQualityAlert, storeMarkBotQualityAlert } from './store';
 import { appendQualityAlertToSheet } from './quality-sheet';
+import { appendComplianceAlertToSheet } from './compliance-sheet';
 
 const ROBYLON_BASE = 'https://app.robylon.ai/unified-inbox/share';
 
@@ -82,20 +83,104 @@ const CRITICAL_PARAMS: { keys: string[]; label: string }[] = [
 
 const FAIL_VALUES = new Set(['No', 'no', 'false', '0']);
 
+export const BOT_DEFAULT_TL_SLACK_ID = 'U09LS1TSY5T';
+
+export const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot', 'robylon', 'robylon ai']);
+
+export function isBotAgentName(name?: string | null): boolean {
+  if (!name) return false;
+  const clean = name.trim().toLowerCase();
+  if (BOT_NAMES.has(clean)) return true;
+  if (clean.includes('bot') || clean.includes('myra') || clean.includes('robylon')) return true;
+  return false;
+}
+
+export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
+  harsh: 'U055PU2S4HE',
+  'neha chaturvedi': 'U031PCQ0J6A',
+  'neha c': 'U031PCQ0J6A',
+  neha: 'U031PCQ0J6A',
+  yashika: 'U066SA6DEVA',
+  puja: 'U06511Q6R46',
+  pooja: 'U06511Q6R46',
+  kriti: 'U091YMP33DF',
+  'kriti patait': 'U091YMP33DF',
+  sundar: 'U08TFU5GH51',
+  'priya sundar': 'U08TFU5GH51',
+  priya: 'U08TFU5GH51',
+  anusha: 'U08LEA04YUR',
+  rishitha: 'U08LE9TLT5F',
+  vedant: 'U09HZTDQZBP',
+  'vedant g': 'U09HZTDQZBP',
+  sivaranjini: BOT_DEFAULT_TL_SLACK_ID,
+  sivranjini: BOT_DEFAULT_TL_SLACK_ID,
+  bot: BOT_DEFAULT_TL_SLACK_ID,
+  myra: BOT_DEFAULT_TL_SLACK_ID,
+  'wint bot': BOT_DEFAULT_TL_SLACK_ID,
+  'wintbot': BOT_DEFAULT_TL_SLACK_ID,
+  'robylon ai': BOT_DEFAULT_TL_SLACK_ID,
+};
+
+export function getTLSlackMention(tlName?: string | null, agentName?: string | null): string {
+  // If tlName is missing or N/A, try known agent-to-TL mapping
+  let effectiveTL = (tlName || '').trim();
+  if ((!effectiveTL || effectiveTL.toUpperCase() === 'N/A') && agentName) {
+    const cleanAgent = agentName.trim().toLowerCase();
+    if (cleanAgent.includes('hasan')) {
+      effectiveTL = 'Vedant G';
+    } else if (cleanAgent.includes('nitya') && !cleanAgent.includes('nityaa')) {
+      effectiveTL = 'Kriti';
+    }
+  }
+
+  if (!effectiveTL || effectiveTL.toUpperCase() === 'N/A') return 'N/A';
+  if (effectiveTL.startsWith('<@') && effectiveTL.endsWith('>')) return effectiveTL;
+
+  const clean = effectiveTL.toLowerCase();
+  if (TL_SLACK_MEMBER_MAP[clean]) {
+    return `<@${TL_SLACK_MEMBER_MAP[clean]}>`;
+  }
+
+  for (const [key, id] of Object.entries(TL_SLACK_MEMBER_MAP)) {
+    if (clean === key || clean.startsWith(key + ' ') || clean.includes(key)) {
+      return `<@${id}>`;
+    }
+  }
+
+  return effectiveTL;
+}
+
 export async function fireQualityAlert(opts: {
-  chatId: string;
+  chatId?: string;
+  callId?: string;
+  channel?: 'chat' | 'call';
   agentName: string;
+  tlName?: string;
   contactPhone?: string;
   scores: Record<string, string>;
   reasoning: Record<string, string>;
-  iqs?: number;
+  iqs?: number | null;
   csat?: string;
   disposition?: string;
   subDisposition?: string;
   uncertainParameters?: Array<{ parameter: string; question: string }>;
+  breaches?: Array<{ type?: string; breach_type?: string; quote?: string; note?: string } | string>;
+  complianceFlag?: boolean;
+  conversationType?: string;
+  isBot?: boolean;
 }): Promise<void> {
-  const token   = process.env.SLACK_BOT_TOKEN   || '';
-  const channel = process.env.QUALITY_SLACK_CHANNEL || '';
+  let complianceToken = process.env.COMPLIANCE_SLACK_BOT_TOKEN || '';
+  let token = process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!complianceToken || !token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      if (!complianceToken) complianceToken = (config as any).complianceSlackBotToken || '';
+      if (!token) token = (config as any).slackBotToken || config.slackUserToken || '';
+    } catch {}
+  }
+  const complianceChannel = process.env.COMPLIANCE_SLACK_CHANNEL || process.env.QUALITY_SLACK_CHANNEL || 'C0BRLHDDGQ0';
+  const qualityChannel = process.env.QUALITY_SLACK_CHANNEL || complianceChannel;
 
   const failedParams = CRITICAL_PARAMS
     .map(p => {
@@ -104,20 +189,153 @@ export async function fireQualityAlert(opts: {
     })
     .filter((p): p is { label: string; reasoning: string } => p !== null);
 
+  const breachesList: Array<{ type: string; quote: string; note?: string }> = (opts.breaches || []).map(b => {
+    if (typeof b === 'string') {
+      const idx = b.indexOf(':');
+      if (idx !== -1) {
+        return { type: b.substring(0, idx).trim(), quote: b.substring(idx + 1).trim() };
+      }
+      return { type: 'Compliance Breach', quote: b };
+    }
+    return {
+      type: b.type || b.breach_type || 'Compliance Breach',
+      quote: b.quote || '',
+      note: b.note || '',
+    };
+  });
+
+  const hasComplianceBreaches = !!(opts.complianceFlag || breachesList.length > 0);
+  const accuracyFailure = failedParams.find(p => p.label === 'Technically / Legally Incorrect');
+  const isComplianceFailure = hasComplianceBreaches || !!accuracyFailure;
+
   const hasUncertain = !!(opts.uncertainParameters && opts.uncertainParameters.length > 0);
 
   // Nothing to report at all — skip everything
-  if (!failedParams.length && !hasUncertain) return;
+  if (!failedParams.length && !hasUncertain && !hasComplianceBreaches) return;
 
-  // Deduplicate — one alert per chat per 24 h
-  if (await storeHasQualityAlert(opts.chatId)) {
-    console.log(`[quality-alert] Skipping duplicate alert for chat ${opts.chatId}`);
+  const isCallAlert = opts.channel === 'call' || !!opts.callId;
+  const dedupeKey = opts.callId ? `call_${opts.callId}` : `chat_${opts.chatId}`;
+
+  // Deduplicate — one alert per interaction per 24 h
+  if (await storeHasQualityAlert(dedupeKey)) {
+    console.log(`[quality-alert] Skipping duplicate alert for ${dedupeKey}`);
     return;
   }
-  await storeMarkQualityAlert(opts.chatId);
+  await storeMarkQualityAlert(dedupeKey);
 
-  // ── Slack — critical failures only (uncertain chats surface via Pending tab) ──
-  if (failedParams.length && token && channel) {
+  // ── 1. Slack — Compliance Failure Alert ─────────────────────────────────────
+  if (isComplianceFailure && (complianceToken || token) && complianceChannel) {
+    const chatLink = opts.chatId && /^\d+$/.test(opts.chatId.trim())
+      ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+      : (opts.chatId || '');
+
+    let isBot = opts.isBot === true;
+    if (!isBot) {
+      if (opts.conversationType) {
+        isBot = opts.conversationType === 'bot';
+      } else {
+        isBot = isBotAgentName(opts.agentName);
+      }
+    }
+    if (!isBot && !opts.conversationType && opts.chatId && !isCallAlert) {
+      try {
+        const { getConversation, getAgentName } = await import('./robylon/db');
+        const conv = await getConversation(opts.chatId);
+        if (conv?.conversation_type === 'bot') {
+          isBot = true;
+        } else if (conv?.agent_id) {
+          const name = await getAgentName(conv.agent_id);
+          if (isBotAgentName(name)) {
+            isBot = true;
+          }
+        }
+      } catch {}
+    }
+
+    let tlName = opts.tlName || '';
+    if (!tlName && opts.chatId && !isCallAlert) {
+      try {
+        const { query } = await import('./cx/db');
+        const rows = await query<{ tl_name: string | null }>(
+          `SELECT a.tl_name FROM conversations c
+           JOIN agents a ON a.id = c.agent_id
+           WHERE c.id = $1 AND a.tl_name IS NOT NULL
+           LIMIT 1`,
+          [opts.chatId]
+        );
+        if (rows[0]?.tl_name) tlName = rows[0].tl_name;
+      } catch {}
+    }
+
+    if (!tlName && opts.agentName) {
+      try {
+        const { getAgentTLByName } = await import('./robylon/db');
+        tlName = (await getAgentTLByName(opts.agentName)) || '';
+      } catch {}
+    }
+
+    if (!tlName && opts.agentName) {
+      const cleanAgent = opts.agentName.trim().toLowerCase();
+      if (cleanAgent.includes('hasan')) {
+        tlName = 'Vedant G';
+      } else if (cleanAgent.includes('nitya') && !cleanAgent.includes('nityaa')) {
+        tlName = 'Kriti';
+      }
+    }
+
+    const reasons: string[] = [];
+    if (breachesList.length > 0) {
+      for (const b of breachesList) {
+        const noteStr = b.note ? ` (${b.note})` : '';
+        const quoteStr = b.quote ? `: "${b.quote}"` : '';
+        reasons.push(`• *${b.type.toUpperCase()}*${quoteStr}${noteStr}`);
+      }
+    }
+    if (accuracyFailure && !breachesList.some(b => b.type.toLowerCase().includes('accuracy') || b.type.toLowerCase().includes('technical'))) {
+      reasons.push(`• *TECHNICALLY / LEGALLY INCORRECT*: ${accuracyFailure.reasoning}`);
+    }
+
+    let tlMention = getTLSlackMention(tlName, opts.agentName);
+    if (isBot && (tlMention === 'N/A' || !tlMention)) {
+      tlMention = `<@${BOT_DEFAULT_TL_SLACK_ID}>`;
+    }
+
+    const lines: string[] = [];
+    if (isCallAlert) {
+      lines.push(`🚨 *Call Compliance Failure Alert*`);
+      lines.push(`Call ID: ${opts.callId || 'Unknown'}`);
+      if (opts.chatId) {
+        lines.push(`Linked Chat ID: ${chatLink}`);
+      }
+    } else {
+      lines.push(`Chat ID: ${chatLink}`);
+    }
+    lines.push(`Agent: ${opts.agentName || 'Unknown'}`);
+    lines.push(`TL: ${tlMention}`);
+    lines.push(`Reason for Compliance failure:`);
+    lines.push(reasons.join('\n'));
+
+    const targetToken = complianceToken || token;
+    const sent = await sendSlackMessage(complianceChannel, lines.join('\n'), targetToken);
+    console.log(`[quality-alert] Compliance failure Slack alert for ${isCallAlert ? `call ${opts.callId}` : `chat ${opts.chatId}`}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+
+    // Auto-append to Compliance Google Sheet (Sheet1)
+    appendComplianceAlertToSheet({
+      chatId: opts.chatId,
+      callId: opts.callId,
+      channel: isCallAlert ? 'call' : 'chat',
+      agentName: opts.agentName || 'Unknown',
+      tl: tlMention,
+      contactPhone: opts.contactPhone,
+      iqs: opts.iqs,
+      disposition: opts.disposition,
+      subDisposition: opts.subDisposition,
+      breaches: breachesList,
+      accuracyFailure,
+    }).catch(err => console.error('[quality-alert] Compliance sheet append failed:', err?.message));
+  }
+  // ── 2. Slack — Non-compliance Quality Parameter Alert ───────────────────────
+  else if (failedParams.length && token && qualityChannel) {
     const chatLink = /^\d+$/.test((opts.chatId || '').trim())
       ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
       : opts.chatId;
@@ -136,16 +354,22 @@ export async function fireQualityAlert(opts: {
       failLines,
     ].filter((l): l is string => l !== null);
 
-    sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
+    const sent = await sendSlackMessage(qualityChannel, lines.join('\n'), token, undefined, {
+      username: 'Wint Quality Alert',
+      icon_emoji: ':warning:',
+    });
+    console.log(`[quality-alert] Quality parameter Slack alert for chat ${opts.chatId}: ${sent ? 'SUCCESS' : 'FAILED'}`);
   }
 
-  // ── Google Sheet — critical failures + uncertain chats ────────────────────
-  const sheetParams = failedParams.length
+  // ── Google Sheet — critical failures + compliance breaches + uncertain chats ─
+  const sheetParams = breachesList.length
+    ? breachesList.map(b => ({ label: `Compliance Breach (${b.type})`, reasoning: b.quote || b.note || 'Compliance breach' }))
+    : failedParams.length
     ? failedParams
     : (opts.uncertainParameters ?? []).map(u => ({ label: u.parameter, reasoning: `Needs QA review: ${u.question}` }));
 
   appendQualityAlertToSheet({
-    chatId:         opts.chatId,
+    chatId:         opts.chatId || (opts.callId ? `CALL_${opts.callId}` : ''),
     agentName:      opts.agentName,
     contactPhone:   opts.contactPhone,
     iqs:            opts.iqs,
@@ -184,3 +408,158 @@ export async function fireCallSkipAlert(opts: {
 
   sendSlackMessage(channel, lines.join('\n'), token).catch(() => {});
 }
+
+// ── KB Change Alert ──────────────────────────────────────────────────────────
+
+export async function fireKbChangeAlert(opts: {
+  chatId: string;
+  reviewerEmail: string;
+  reviewNote?: string;
+  agentName?: string;
+  disposition?: string;
+  subDisposition?: string;
+}): Promise<void> {
+  let token = process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      token = config.slackUserToken || '';
+    } catch {}
+  }
+  const channel = process.env.KB_CHANGE_SLACK_CHANNEL || 'C0BRLHR1KCY';
+  if (!token || !channel) {
+    console.warn(`[quality-alert] Cannot send KB change alert for chat ${opts.chatId}: token=${!!token}, channel=${channel}`);
+    return;
+  }
+
+  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+    : opts.chatId;
+
+  const lines = [
+    `📖 *Knowledge Base (KB) Change Noted by QA*`,
+    `*Chat ID:* ${chatLink}`,
+    `*QA Reviewer:* ${opts.reviewerEmail || 'Unknown'}`,
+    opts.agentName ? `*Agent:* ${opts.agentName}` : null,
+    opts.disposition ? `*Disposition:* ${opts.disposition}${opts.subDisposition ? ` (${opts.subDisposition})` : ''}` : null,
+    `*KB Change Comment / Details:*`,
+    `> ${opts.reviewNote?.trim() ? opts.reviewNote.trim().replace(/\n/g, '\n> ') : '_No specific comment provided_'}`,
+  ].filter((l): l is string => l !== null);
+
+  const sent = await sendSlackMessage(channel, lines.join('\n'), token, undefined, {
+    username: 'QA KB Change Notifier',
+    icon_emoji: ':books:',
+  });
+  console.log(`[quality-alert] KB change Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+}
+
+// ── BOT Parameter Evaluation Failure Alert ─────────────────────────────────
+
+function isParamNoValue(val: any): boolean {
+  if (val === undefined || val === null) return false;
+  if (val === false || val === 0) return true;
+  if (typeof val === 'string') {
+    const s = val.trim().toLowerCase();
+    return s === 'no' || s === 'false' || s === '0';
+  }
+  if (typeof val === 'object' && val !== null) {
+    return isParamNoValue(val.score);
+  }
+  return false;
+}
+
+export function checkBotFailure(scores: Record<string, any>): {
+  isFailure: boolean;
+  issueResolutionReasoning?: string;
+  correctEscalationReasoning?: string;
+} {
+  if (!scores || typeof scores !== 'object') return { isFailure: false };
+
+  const issueResKey = ['issue_resolution', 'IssueResolution', 'all_questions'].find(k => k in scores);
+  const correctEscKey = ['correct_escalation', 'CorrectEscalation'].find(k => k in scores);
+
+  if (!issueResKey || !correctEscKey) return { isFailure: false };
+
+  const issueResCell = scores[issueResKey];
+  const correctEscCell = scores[correctEscKey];
+
+  if (isParamNoValue(issueResCell) && isParamNoValue(correctEscCell)) {
+    const getReasoning = (cell: any) => typeof cell === 'object' && cell?.reasoning ? cell.reasoning : String(cell);
+    return {
+      isFailure: true,
+      issueResolutionReasoning: getReasoning(issueResCell),
+      correctEscalationReasoning: getReasoning(correctEscCell),
+    };
+  }
+
+  return { isFailure: false };
+}
+
+export async function fireBotQualityAlert(opts: {
+  chatId: string;
+  agentName?: string;
+  contactPhone?: string;
+  scores?: Record<string, any>;
+  reasoning?: Record<string, string>;
+  iqs?: number | null;
+  disposition?: string;
+  subDisposition?: string;
+  conversationType?: string;
+  isTransferred?: boolean;
+}): Promise<boolean> {
+  // 1. Guard against transferred chats or human agent chats explicitly passed
+  if (opts.isTransferred || opts.conversationType === 'hybrid' || opts.conversationType === 'agent' || (opts.conversationType && opts.conversationType !== 'bot')) {
+    console.log(`[quality-alert] Skipping BOT alert for transferred/agent chat ${opts.chatId} (type=${opts.conversationType}, transferred=${opts.isTransferred})`);
+    return false;
+  }
+
+  // 2. Fallback check: verify conversation_type from DB if not provided
+  if (!opts.conversationType && opts.chatId) {
+    try {
+      const { getConversation } = await import('./robylon/db');
+      const conv = await getConversation(opts.chatId);
+      if (conv?.conversation_type && conv.conversation_type !== 'bot') {
+        console.log(`[quality-alert] Skipping BOT alert for transferred/agent chat ${opts.chatId} (db conversation_type=${conv.conversation_type})`);
+        return false;
+      }
+    } catch (e) {
+      console.warn(`[quality-alert] Could not fetch conversation_type for chat ${opts.chatId}:`, e);
+    }
+  }
+
+  const botFailure = checkBotFailure(opts.scores || {});
+  if (!botFailure.isFailure) return false;
+
+  let token = process.env.BOT_FAIL_SLACK_BOT_TOKEN || process.env.BOT_SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
+  if (!token) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      token = config.slackUserToken || '';
+    } catch {}
+  }
+
+  const channel = process.env.BOT_FAIL_SLACK_CHANNEL || process.env.BOT_SLACK_CHANNEL || 'C0BRE1U3X62';
+  if (!token || !channel) return false;
+
+  if (await storeHasBotQualityAlert(opts.chatId)) {
+    console.log(`[quality-alert] Skipping duplicate BOT alert for chat ${opts.chatId}`);
+    return false;
+  }
+  await storeMarkBotQualityAlert(opts.chatId);
+
+  const chatLink = /^\d+$/.test((opts.chatId || '').trim())
+    ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
+    : opts.chatId;
+
+  const messageText = `Bot failed to resolve this chat : ${chatLink}`;
+
+  const sent = await sendSlackMessage(channel, messageText, token, undefined, {
+    username: 'Wint BOT Quality Alert',
+    icon_emoji: ':robot_face:',
+  });
+  console.log(`[quality-alert] BOT quality failure Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+  return sent;
+}
+

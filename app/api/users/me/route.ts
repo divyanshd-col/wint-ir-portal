@@ -11,10 +11,15 @@ export async function GET() {
   const config = await readConfig();
   const user   = config.users.find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
 
+  const role = user?.role ?? (session.user as any)?.role ?? 'agent';
+  const { getSkillsForPersona } = await import('@/lib/skills');
+  const skills = await getSkillsForPersona(role).catch(() => []);
+
   return NextResponse.json({
     email,
-    role:      user?.role ?? (session.user as any)?.role ?? 'agent',
+    role,
     agentName: user?.agentName ?? (session.user as any)?.agentName ?? '',
-    isAdmin:   user?.role === 'admin' || !!(session.user as any)?.isAdmin,
+    isAdmin:   role === 'admin' || !!(session.user as any)?.isAdmin,
+    skills,
   });
 }

@@ -12,7 +12,9 @@ export default async function Page() {
   const userAny = session.user as any;
   const rawRole = userAny?.role as string | undefined;
   const role = rawRole || (userAny?.isAdmin ? 'admin' : '');
-  if (!['admin', 'quality'].includes(role)) redirect('/quality');
+  const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
+  const skills = userAny?.skills || (await getSkillsForPersona(role));
+  if (!hasSkill({ ...userAny, skills }, 'quality:chat_eval:access')) redirect('/quality');
 
   return <ChatEvaluationPage role={role} />;
 }

@@ -27,8 +27,14 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const userAny = session.user as Record<string, string | undefined>;
-  const role = userAny.role;
-  const email = userAny.email ?? '';
+  const email = (userAny.email ?? '').toLowerCase().trim();
+
+  const { getUserByEmail } = await import('@/lib/users');
+  const dbUser = email ? await getUserByEmail(email).catch(() => null) : null;
+  const config = await readConfig();
+  const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email);
+  const role = dbUser?.role || configUser?.role || userAny.role || (userAny.isAdmin ? 'admin' : 'agent');
+
   if (role !== 'tl' && role !== 'admin' && role !== 'agent') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   const { searchParams } = new URL(req.url);
@@ -39,37 +45,28 @@ export async function GET(req: NextRequest) {
   // ── Resolve agent ─────────────────────────────────────────────────────────────
   let tlAgentNames: string[];
   if (role === 'tl') {
-    const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let tlAgentName = configUser?.agentName;
-    if (!tlAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) tlAgentName = dbUser.name;
-    }
+    let tlAgentName = dbUser?.name || configUser?.agentName;
     if (!tlAgentName) tlAgentName = email;
     tlAgentNames = await getAgentNamesByTL(tlAgentName);
   } else if (role === 'agent') {
-    const config = await readConfig();
-    const configUser = (config.users as any[]).find(u => (u.email || u.username || '').toLowerCase() === email.toLowerCase());
-    let selfAgentName = configUser?.agentName;
-    if (!selfAgentName && email) {
-      const { getUserByEmail } = await import('@/lib/users');
-      const dbUser = await getUserByEmail(email).catch(() => null);
-      if (dbUser?.name) selfAgentName = dbUser.name;
-    }
-    if (!selfAgentName) selfAgentName = email.split('@')[0];
-    tlAgentNames = [selfAgentName];
+    let selfAgentName = dbUser?.name || configUser?.agentName;
+    if (!selfAgentName && email) selfAgentName = email.split('@')[0];
+    tlAgentNames = selfAgentName ? [selfAgentName] : [];
   } else {
     const rows = await query<{ name: string }>(`SELECT name FROM agents WHERE status = 'active'`, []);
     tlAgentNames = rows.map(r => r.name).sort();
   }
 
   const requestedAgent = searchParams.get('agent');
-  if (!requestedAgent || !tlAgentNames.includes(requestedAgent)) {
-    return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+  let agentName: string;
+  if (role === 'agent') {
+    agentName = tlAgentNames[0];
+  } else {
+    if (!requestedAgent || !tlAgentNames.includes(requestedAgent)) {
+      return NextResponse.json({ error: 'Agent not found' }, { status: 404 });
+    }
+    agentName = requestedAgent;
   }
-  const agentName = requestedAgent;
 
   // ── Fetch data for prompt ─────────────────────────────────────────────────────
   let stats: { csat_pct: number|null; iqs: number|null; volume: number } = { csat_pct: null, iqs: null, volume: 0 };
@@ -121,37 +118,40 @@ export async function GET(req: NextRequest) {
       query<{ csat_pct: number|null; iqs: number|null; volume: number }>(`
         SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
                      / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs,
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
                COUNT(cr.id)::int AS volume
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name = $3
       `, [dateFrom, dateTo, agentName]),
 
       query<{ param_key: string; pass_rate: number|null }>(`
         SELECT ${PASS_RATE_SELECT}
-        FROM iqs_scores s
-        JOIN call_recordings cr ON cr.chat_id = s.chat_id
+        FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+        LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
         LEFT JOIN conversations c ON c.id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         ${CALL_PARAM_LATERAL}
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND s.call_parameters IS NOT NULL
+          AND a.name = $3 AND (ce.iqs_scores IS NOT NULL OR s.call_parameters IS NOT NULL)
         GROUP BY p.key
       `, [dateFrom, dateTo, agentName]),
 
       query<{ disposition: string; volume: number; iqs: number|null }>(`
-        SELECT c.tags->>'disposition' AS disposition,
+        SELECT COALESCE(cr.call_disposition, c.tags->>'disposition') AS disposition,
                COUNT(cr.id)::int AS volume,
-               ROUND(AVG(s.call_iqs_score)::numeric,1)::float AS iqs
+               ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs
         FROM call_recordings cr
+        LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
         LEFT JOIN conversations c ON c.id = cr.chat_id
         LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
-        JOIN agents a ON a.id = COALESCE(cr.agent_id, c.agent_id)
+        JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
         WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2
-          AND a.name = $3 AND c.tags->>'disposition' IS NOT NULL
+          AND a.name = $3 AND COALESCE(cr.call_disposition, c.tags->>'disposition') IS NOT NULL
         GROUP BY 1 ORDER BY COUNT(cr.id) DESC LIMIT 5
       `, [dateFrom, dateTo, agentName]),
     ]);

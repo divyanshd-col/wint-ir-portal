@@ -26,28 +26,46 @@ function buildParamFailColumns(): { columns: string; pairs: Array<{ db: string; 
 // ── Agent helpers ─────────────────────────────────────────────────────────────
 
 /**
- * Merges any duplicate agent rows matching `name` (case-insensitive or prefix) into `primaryId`.
+ * Merges any duplicate agent rows matching `name` (case-insensitive) into `primaryId`.
  * Reassigns conversations and call_recordings to `primaryId` and removes duplicate rows.
+ * Only merges if candidate does not belong to a different registered user.
  */
 export async function mergeAgentDuplicates(primaryId: number, name: string): Promise<void> {
   if (!primaryId || !name) return;
   const trimmed = name.trim();
 
-  const duplicates = await query<{ id: number; tl_name: string | null; qa_name: string | null }>(
-    `SELECT id, tl_name, qa_name FROM agents 
+  // Get primary agent info to prevent cross-user merging
+  const primaryRows = await query<{ id: number; user_id: number | null; status: string }>(
+    `SELECT id, user_id, status FROM agents WHERE id = $1`,
+    [primaryId]
+  );
+  if (!primaryRows.length) return;
+  const primaryUser = primaryRows[0].user_id;
+
+  // Find candidate duplicates with EXACT same name (case-insensitive) or same non-null user_id.
+  // NEVER use loose prefix wildcard (e.g. 'Anushka' swallowing 'Anushka choudhary').
+  const duplicates = await query<{ id: number; user_id: number | null; tl_name: string | null; qa_name: string | null }>(
+    `SELECT id, user_id, tl_name, qa_name FROM agents 
      WHERE id != $1 AND (
-       LOWER(name) = LOWER($2) OR 
-       LOWER(name) LIKE LOWER($2 || ' %') OR 
-       LOWER($2) LIKE LOWER(name || ' %')
+       LOWER(name) = LOWER($2)
+       OR (user_id IS NOT NULL AND user_id = $3)
      )`,
-    [primaryId, trimmed]
+    [primaryId, trimmed, primaryUser ?? -1]
   );
 
-  if (duplicates.length === 0) return;
-  const dupIds = duplicates.map(d => d.id);
+  // Safety filter: never merge if candidate has a different non-null user_id
+  const safeDuplicates = duplicates.filter(d => {
+    if (primaryUser != null && d.user_id != null && d.user_id !== primaryUser) {
+      return false;
+    }
+    return true;
+  });
 
-  const firstWithTL = duplicates.find(d => d.tl_name)?.tl_name;
-  const firstWithQA = duplicates.find(d => d.qa_name)?.qa_name;
+  if (safeDuplicates.length === 0) return;
+  const dupIds = safeDuplicates.map(d => d.id);
+
+  const firstWithTL = safeDuplicates.find(d => d.tl_name)?.tl_name;
+  const firstWithQA = safeDuplicates.find(d => d.qa_name)?.qa_name;
   if (firstWithTL || firstWithQA) {
     await query(
       `UPDATE agents 
@@ -62,39 +80,56 @@ export async function mergeAgentDuplicates(primaryId: number, name: string): Pro
   await query(`DELETE FROM agents WHERE id = ANY($1)`, [dupIds]);
 }
 
-/** Get or create an agent by name. Returns agent.id */
-export async function upsertAgent(name: string): Promise<number | null> {
-  if (!name) return null;
-  const trimmed = name.trim();
-  if (!trimmed) return null;
+/** Get or create an agent by name (and optional email). Returns agent.id */
+export async function upsertAgent(name?: string | null, email?: string | null): Promise<number | null> {
+  const trimmedName = (name || '').trim();
+  const trimmedEmail = (email || '').trim().toLowerCase();
 
-  // 1. Exact match
-  const existing = await query<{ id: number }>(`SELECT id FROM agents WHERE name = $1`, [trimmed]);
+  if (!trimmedName && !trimmedEmail) return null;
+
+  // 1. If email is provided, check if a registered user in `users` has an agent row
+  if (trimmedEmail) {
+    try {
+      const byEmail = await query<{ id: number }>(
+        `SELECT a.id FROM agents a 
+         JOIN users u ON a.user_id = u.user_id 
+         WHERE LOWER(u.email) = $1 
+         ORDER BY (a.status = 'active') DESC, a.id ASC 
+         LIMIT 1`,
+        [trimmedEmail]
+      );
+      if (byEmail.length) {
+        return byEmail[0].id;
+      }
+    } catch (err) {
+      console.warn('[db] upsertAgent email lookup failed:', err);
+    }
+  }
+
+  if (!trimmedName) return null;
+
+  // 2. Exact match
+  const existing = await query<{ id: number }>(`SELECT id FROM agents WHERE name = $1`, [trimmedName]);
   if (existing.length) {
-    await mergeAgentDuplicates(existing[0].id, trimmed);
     return existing[0].id;
   }
 
-  // 2. Case-insensitive or prefix match (e.g. 'Vedant' matching 'Vedant G', 'Aksa' matching 'Aksa Jacob')
-  const fuzzy = await query<{ id: number }>(
-    `SELECT id FROM agents WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($1 || ' %') OR LOWER($1) LIKE LOWER(name || ' %') LIMIT 1`,
-    [trimmed],
+  // 3. Case-insensitive exact match (e.g. 'anushka choudhary' matching 'Anushka choudhary')
+  // Order active agents first
+  const caseMatch = await query<{ id: number }>(
+    `SELECT id FROM agents WHERE LOWER(name) = LOWER($1) ORDER BY (status = 'active') DESC, id ASC LIMIT 1`,
+    [trimmedName],
   );
-  if (fuzzy.length) {
-    await mergeAgentDuplicates(fuzzy[0].id, trimmed);
-    return fuzzy[0].id;
+  if (caseMatch.length) {
+    return caseMatch[0].id;
   }
 
-  // 3. Fallback insert
+  // 4. Fallback insert
   const rows = await query<{ id: number }>(
     `INSERT INTO agents (name) VALUES ($1) ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
-    [trimmed],
+    [trimmedName],
   );
-  const newId = rows[0]?.id ?? null;
-  if (newId) {
-    await mergeAgentDuplicates(newId, trimmed);
-  }
-  return newId;
+  return rows[0]?.id ?? null;
 }
 
 export async function getAgentName(agentId: number): Promise<string> {
@@ -102,38 +137,99 @@ export async function getAgentName(agentId: number): Promise<string> {
   return rows[0]?.name ?? '';
 }
 
+export async function getAgentTLById(agentId: number): Promise<string | null> {
+  if (!agentId) return null;
+  try {
+    const rows = await query<{ tl_name: string | null }>(
+      `SELECT tl_name FROM agents WHERE id = $1 LIMIT 1`,
+      [agentId]
+    );
+    return rows[0]?.tl_name || null;
+  } catch (err) {
+    console.error('[db] getAgentTLById failed:', err);
+    return null;
+  }
+}
+
+/** Returns the TL name (tl_name) for a given agent name. */
+export async function getAgentTLByName(agentName: string): Promise<string | null> {
+  if (!agentName?.trim()) return null;
+  const trimmed = agentName.trim();
+  try {
+    const rows = await query<{ tl_name: string | null }>(
+      `SELECT tl_name FROM agents 
+       WHERE LOWER(name) = LOWER($1) OR LOWER(name) LIKE LOWER($1 || ' %') OR LOWER($1) LIKE LOWER(name || ' %') 
+       ORDER BY (CASE WHEN LOWER(name) = LOWER($1) THEN 0 ELSE 1 END), (tl_name IS NOT NULL) DESC, id DESC 
+       LIMIT 1`,
+      [trimmed]
+    );
+    if (rows[0]?.tl_name) return rows[0].tl_name;
+  } catch (err) {
+    console.error('[db] getAgentTLByName failed:', err);
+  }
+
+  // Fallback map for known agents to prevent missing TL tags if DB lookup fails or is unpopulated
+  const clean = trimmed.toLowerCase();
+  if (clean.includes('hasan')) return 'Vedant G';
+  if (clean.includes('nitya') && !clean.includes('nityaa')) return 'Kriti';
+
+  return null;
+}
+
+
 /** Returns agent names whose tl_name matches (case-insensitive, handles email or user name). */
 export async function getAgentNamesByTL(tlIdentifier: string): Promise<string[]> {
   if (!tlIdentifier) return [];
   const normalized = tlIdentifier.trim().toLowerCase();
-  
-  const prefix = normalized.includes('@') ? normalized.split('@')[0] : normalized;
-  const firstName = prefix.split('.')[0];
-  
-  let dbUserName = '';
-  if (normalized.includes('@')) {
-    const userRows = await query<{ name: string }>(`SELECT name FROM users WHERE email = $1`, [normalized]);
-    dbUserName = userRows[0]?.name?.toLowerCase() || '';
-  }
 
-  const tokens = Array.from(new Set([normalized, prefix, firstName, dbUserName].filter(Boolean)));
+  const { readConfig } = await import('@/lib/config');
+  const config = await readConfig().catch(() => ({ users: [] }));
+  const configUser = config.users?.find((u: any) =>
+    (u.email || '').toLowerCase() === normalized ||
+    (u.username || '').toLowerCase() === normalized ||
+    (u.agentName || '').trim().toLowerCase() === normalized
+  );
+
+  let dbUserName = '';
+  try {
+    const userRows = await query<{ name: string; email: string }>(
+      `SELECT name, email FROM users WHERE LOWER(email) = $1 OR LOWER(name) = $1 LIMIT 1`,
+      [normalized]
+    );
+    if (userRows[0]?.name) dbUserName = userRows[0].name.toLowerCase();
+  } catch {}
+
+  const rawTokens = [
+    normalized,
+    normalized.includes('@') ? normalized.split('@')[0] : '',
+    normalized.includes('@') ? normalized.split('@')[0].split('.')[0] : '',
+    configUser?.email?.toLowerCase(),
+    configUser?.email ? configUser.email.split('@')[0].toLowerCase() : '',
+    configUser?.email ? configUser.email.split('@')[0].split('.')[0].toLowerCase() : '',
+    configUser?.agentName?.trim().toLowerCase(),
+    ...(configUser?.agentName ? configUser.agentName.trim().toLowerCase().split(/\s+/) : []),
+    configUser?.username?.toLowerCase(),
+    (configUser as any)?.name?.toLowerCase(),
+    dbUserName,
+    ...(dbUserName ? dbUserName.split(/\s+/) : []),
+    ...(normalized.split(/\s+/)),
+  ].filter(Boolean).map(s => s!.trim()).filter(s => s.length >= 3);
+
+  const tokens = Array.from(new Set(rawTokens));
 
   const rows = await query<{ name: string }>(
     `SELECT a.name
      FROM agents a
-     JOIN conversations c ON c.agent_id = a.id AND c.closed_at >= NOW() - INTERVAL '14 days'
      WHERE a.status = 'active'
        AND (
          LOWER(TRIM(a.tl_name)) = ANY($1::text[])
          OR EXISTS (
            SELECT 1 FROM unnest($1::text[]) t
-           WHERE LOWER(a.tl_name) LIKE LOWER(t || '%')
-              OR LOWER(t) LIKE LOWER(TRIM(a.tl_name) || '%')
+           WHERE LOWER(a.tl_name) LIKE '%' || t || '%'
+              OR t LIKE '%' || LOWER(TRIM(a.tl_name)) || '%'
          )
        )
-     GROUP BY a.id, a.name
-     HAVING COUNT(c.id) > 0
-     ORDER BY COUNT(c.id) DESC, a.name ASC`,
+     ORDER BY a.name ASC`,
     [tokens]
   );
   return rows.map(r => r.name);
@@ -458,12 +554,12 @@ function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: s
   }
   if (opts.agentName) {
     params.push(opts.agentName);
-    conditions.push(`(a.name = $${params.length} OR a.name ILIKE $${params.length} || ' %' OR $${params.length} ILIKE a.name || ' %')`);
+    conditions.push(`(a.name = $${params.length} OR a.name ILIKE $${params.length} || ' %')`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
     params.push(opts.agentNames);
     conditions.push(`(a.name = ANY($${params.length}) OR EXISTS (
       SELECT 1 FROM unnest($${params.length}::text[]) elem
-      WHERE a.name ILIKE elem || ' %' OR elem ILIKE a.name || ' %'
+      WHERE a.name = elem OR a.name ILIKE elem || ' %'
     ))`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push(`1=0`);
@@ -880,6 +976,8 @@ export interface CallRecordingRow {
   interruption_count: number;
   dead_air_count: number;
   status: string;
+  mobile_number?: string | null;
+  raw_payload?: any;
 }
 
 export async function insertCallRecording(data: {
@@ -892,12 +990,13 @@ export async function insertCallRecording(data: {
   calledAt?: string | null;
   language?: string | null;
   transcript?: any;
+  rawPayload?: any;
 }): Promise<void> {
   await query(`
     INSERT INTO call_recordings (
       id, chat_id, agent_id, contact_id, recording_url,
-      duration_seconds, called_at, language, transcript, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'transcribed')
+      duration_seconds, called_at, language, transcript, raw_payload, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'transcribed')
     ON CONFLICT (id) DO UPDATE SET
       chat_id          = COALESCE(EXCLUDED.chat_id, call_recordings.chat_id),
       agent_id         = COALESCE(EXCLUDED.agent_id, call_recordings.agent_id),
@@ -907,6 +1006,7 @@ export async function insertCallRecording(data: {
       called_at        = COALESCE(EXCLUDED.called_at, call_recordings.called_at),
       language         = COALESCE(EXCLUDED.language, call_recordings.language),
       transcript       = COALESCE(EXCLUDED.transcript, call_recordings.transcript),
+      raw_payload      = COALESCE(EXCLUDED.raw_payload, call_recordings.raw_payload),
       updated_at       = NOW()
   `, [
     data.id,
@@ -918,6 +1018,7 @@ export async function insertCallRecording(data: {
     data.calledAt ?? null,
     data.language ?? null,
     data.transcript ? JSON.stringify(data.transcript) : null,
+    data.rawPayload ? JSON.stringify(data.rawPayload) : null,
   ]);
 }
 
@@ -935,7 +1036,14 @@ export async function updateCallRecordingMetrics(data: {
 }
 
 export async function getCallRecording(callId: string): Promise<CallRecordingRow | null> {
-  const rows = await query<CallRecordingRow>(`SELECT * FROM call_recordings WHERE id = $1`, [callId]);
+  const rows = await query<CallRecordingRow>(`
+    SELECT r.*, COALESCE(ct_cr.phone, ct_c.phone) AS mobile_number
+    FROM call_recordings r
+    LEFT JOIN conversations conv ON conv.id = r.chat_id
+    LEFT JOIN contacts ct_cr ON ct_cr.id = r.contact_id
+    LEFT JOIN contacts ct_c ON ct_c.id = conv.contact_id
+    WHERE r.id = $1
+  `, [callId]);
   return rows[0] ?? null;
 }
 
@@ -943,7 +1051,7 @@ export async function getCallRecording(callId: string): Promise<CallRecordingRow
  *  Safe to call before or after the chat IQS row is created — ON CONFLICT merges. */
 export async function updateCallIQSScore(data: {
   chatId: string;
-  callIqsScore: number;
+  callIqsScore: number | null;
   callParameters: Record<string, IQSParameterResult>;
   callModelVersion: string;
 }): Promise<void> {
@@ -1094,10 +1202,12 @@ export async function getLinkedUnscoredCallsForChat(chatId: string): Promise<Cal
 }
 
 export async function getAllScoredCalls(opts: {
+  agentId?: number;
   agentName?: string;
   agentNames?: string[];
   dateFrom?: string;
   dateTo?: string;
+  callId?: string;
   minScore?: number;
   maxScore?: number;
   unreviewedOnly?: boolean;
@@ -1105,9 +1215,14 @@ export async function getAllScoredCalls(opts: {
   page?: number;
   pageSize?: number;
 } = {}): Promise<{ rows: any[]; total: number }> {
-  // Join call_recordings → iqs_scores (via chat_id) — call_iqs_score must exist
-  const conditions: string[] = ['s.call_iqs_score IS NOT NULL'];
+  // Join call_recordings → call_evaluations (via call_id) or iqs_scores (via chat_id)
+  const conditions: string[] = ['(ce.iqs_percent IS NOT NULL OR s.call_iqs_score IS NOT NULL)'];
   const params: any[] = [];
+
+  if (opts.callId) {
+    params.push(`%${opts.callId.trim()}%`);
+    conditions.push(`r.id ILIKE $${params.length}`);
+  }
 
   if (opts.dateFrom) {
     params.push(opts.dateFrom);
@@ -1119,23 +1234,26 @@ export async function getAllScoredCalls(opts: {
   }
   if (opts.minScore !== undefined) {
     params.push(opts.minScore);
-    conditions.push(`s.call_iqs_score >= $${params.length}`);
+    conditions.push(`COALESCE(ce.iqs_percent, s.call_iqs_score) >= $${params.length}`);
   }
   if (opts.maxScore !== undefined) {
     params.push(opts.maxScore);
-    conditions.push(`s.call_iqs_score <= $${params.length}`);
+    conditions.push(`COALESCE(ce.iqs_percent, s.call_iqs_score) <= $${params.length}`);
   }
-  if (opts.agentName) {
-    params.push(opts.agentName);
-    conditions.push(`COALESCE(a.name, '') = $${params.length}`);
+  if (opts.agentId !== undefined) {
+    params.push(opts.agentId);
+    conditions.push(`COALESCE(ce.agent_id, r.agent_id, conv.agent_id) = $${params.length}`);
+  } else if (opts.agentName) {
+    params.push(opts.agentName.trim());
+    conditions.push(`LOWER(COALESCE(a.name, '')) = LOWER($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length > 0) {
-    params.push(opts.agentNames);
-    conditions.push(`COALESCE(a.name, '') = ANY($${params.length})`);
+    params.push(opts.agentNames.map(n => n.trim().toLowerCase()));
+    conditions.push(`LOWER(COALESCE(a.name, '')) = ANY($${params.length})`);
   } else if (opts.agentNames && opts.agentNames.length === 0) {
     conditions.push('1=0');
   }
   if (opts.unreviewedOnly) {
-    conditions.push(`s.reviewed_at IS NULL`);
+    conditions.push(`COALESCE(ce.reviewed_at, s.reviewed_at) IS NULL`);
   }
   if (opts.dispositions?.length) {
     params.push(opts.dispositions);
@@ -1147,9 +1265,10 @@ export async function getAllScoredCalls(opts: {
   const countRows = await query<{ count: string }>(`
     SELECT COUNT(*) AS count
     FROM call_recordings r
-    JOIN iqs_scores s ON s.chat_id = r.chat_id
+    LEFT JOIN call_evaluations ce ON ce.call_id = r.id
+    LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, r.agent_id, conv.agent_id)
     ${where}
   `, params);
   const total = parseInt(countRows[0]?.count ?? '0', 10);
@@ -1162,27 +1281,35 @@ export async function getAllScoredCalls(opts: {
   const rows = await query(`
     SELECT
       r.id                                    AS "callId",
-      r.chat_id                               AS "chatId",
+      COALESCE(ce.chat_id, r.chat_id)         AS "chatId",
       r.called_at                             AS "calledAt",
       r.called_at::date                       AS "date",
       r.duration_seconds                      AS "durationSeconds",
       r.language,
       r.interruption_count                    AS "interruptionCount",
       r.dead_air_count                        AS "deadAirCount",
+      r.call_disposition                     AS "disposition",
+      r.call_sub_disposition                 AS "subDisposition",
       NULLIF(COALESCE(a.name, ''), 'Robylon Automation') AS "agentName",
-      s.call_iqs_score                        AS "iqs",
-      s.call_parameters                       AS "parameters",
+      COALESCE(ce.iqs_percent, s.call_iqs_score) AS "iqs",
+      COALESCE(ce.iqs_scores, s.call_parameters) AS "parameters",
+      ce.verdict                              AS "verdict",
+      ce.gates                                AS "gates",
       s.call_model_version                    AS "modelVersion",
-      s.call_scored_at                        AS "scoredAt",
-      s.reviewed_by                           AS "reviewedBy",
-      s.reviewed_at                           AS "reviewedAt",
-      s.review_note                           AS "reviewNote"
+      COALESCE(ce.scored_at, s.call_scored_at) AS "scoredAt",
+      COALESCE(ce.reviewed_by, s.reviewed_by) AS "reviewedBy",
+      COALESCE(ce.reviewed_at, s.reviewed_at) AS "reviewedAt",
+      COALESCE(ce.review_note, s.review_note) AS "reviewNote",
+      COALESCE(ct_cr.phone, ct_c.phone)       AS "mobileNumber"
     FROM call_recordings r
-    JOIN iqs_scores s ON s.chat_id = r.chat_id
+    LEFT JOIN call_evaluations ce ON ce.call_id = r.id
+    LEFT JOIN iqs_scores s ON s.chat_id = r.chat_id
     LEFT JOIN conversations conv ON conv.id = r.chat_id
-    LEFT JOIN agents a ON a.id = COALESCE(conv.agent_id, r.agent_id)
+    LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, r.agent_id, conv.agent_id)
+    LEFT JOIN contacts ct_cr ON ct_cr.id = r.contact_id
+    LEFT JOIN contacts ct_c ON ct_c.id = conv.contact_id
     ${where}
-    ORDER BY r.called_at DESC
+    ORDER BY r.called_at DESC NULLS LAST, COALESCE(ce.scored_at, s.call_scored_at) DESC NULLS LAST
     LIMIT $${params.length - 1} OFFSET $${params.length}
   `, params);
 

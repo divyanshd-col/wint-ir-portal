@@ -186,6 +186,7 @@ Block 3 — Escalation: exact channel + POC + what to include
 #### Key Scoring Policies baked into the prompt
 
 - **Parameter Isolation** — Each parameter's reasoning must stay within its own criteria only; never cross-reference other parameter names.
+- **Expectation Setting & TAT Leniency** — Exact timeline/TAT is not always possible (e.g. backend/tech investigation, bank/RTA dependencies). If an agent communicates that they are raising the issue with the concerned team and will update the customer as soon as possible, this is sufficient expectation setting; never reduce marks for omitting a specific TAT.
 - **Date awareness** — Dates on or before today are past events; never fail Expectation for referencing already-passed dates.
 - **Documents via WhatsApp** — Always incorrect. Redirecting to email is correct behavior.
 - **Form 15G/H vs Form 121** — Form 121 has replaced 15G/H. Directing customers to submit directly with the entity is correct.

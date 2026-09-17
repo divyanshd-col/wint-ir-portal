@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import {
-  PARAM_ORDER, PARAM_NAMES, WEIGHTS,
+  PARAM_ORDER, PARAM_NAMES, WEIGHTS, calculateIQS, ParamScore,
   BOT_PARAM_ORDER, BOT_PARAM_NAMES, BOT_WEIGHTS,
   V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS,
   isV4Evaluation, getDisputeClassification, formatParamLabel,
@@ -116,6 +116,15 @@ export default function IRScorePanel({
     ? (botIqsScore ?? parameters?.__scores?.bot_iqs ?? null)
     : (iqsScore ?? parameters?.__scores?.agent_iqs ?? null);
 
+  const fallbackScore = (() => {
+    const scMap: Record<string, ParamScore> = {};
+    for (const [k, v] of Object.entries(params)) {
+      scMap[k] = v.score;
+    }
+    return calculateIQS(scMap, activeTab === 'bot', isV4);
+  })();
+  const displayedScore = currentScore ?? fallbackScore;
+
   const [transcript, setTranscript] = useState<TranscriptMsg[]>([]);
   const [txLoading, setTxLoading] = useState(true);
   const [disputing, setDisputing] = useState(false);
@@ -211,7 +220,7 @@ export default function IRScorePanel({
             {/* Header */}
             <div style={{ padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <ScoreRing score={currentScore} />
+                <ScoreRing score={displayedScore} />
                 <div>
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#111111' }}>{agentName || '—'}</div>
                   <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 6 }}>

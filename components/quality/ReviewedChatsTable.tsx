@@ -9,6 +9,7 @@ interface Props {
   dispositions: string[];
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
+  initialChatId?: string;
 }
 
 function fmtDate(iso: string) {
@@ -18,7 +19,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCallsFilter = 'all' }: Props) {
+export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId }: Props) {
   const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
   const [total,         setTotal]         = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
@@ -29,7 +30,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
   const [reopeningId,   setReopeningId]   = useState<string | null>(null);
 
   // Filters
-  const [chatIdSearch, setChatIdSearch] = useState('');
+  const [chatIdSearch, setChatIdSearch] = useState(initialChatId || '');
   const [agentSearch,  setAgentSearch]  = useState('');
   const [callsFilter,  setCallsFilter]  = useState<'all' | 'has_calls' | 'no_calls'>(hasCallsFilter);
   const [customFrom,   setCustomFrom]   = useState('');
@@ -40,6 +41,18 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
   useEffect(() => {
     setCallsFilter(hasCallsFilter);
   }, [hasCallsFilter]);
+
+  // Auto-expand initial target chat
+  const autoExpandedRef = React.useRef(false);
+  useEffect(() => {
+    if (initialChatId && !autoExpandedRef.current && chats.length > 0) {
+      const matching = chats.find(c => c.chatId.toLowerCase().includes(initialChatId.toLowerCase()));
+      if (matching) {
+        setExpandedId(matching.chatId);
+        autoExpandedRef.current = true;
+      }
+    }
+  }, [chats, initialChatId]);
 
   const fetchData = useCallback(async (pg = 1, ps = pageSize) => {
     setLoading(true);

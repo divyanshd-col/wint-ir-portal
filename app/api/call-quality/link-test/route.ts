@@ -128,7 +128,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         { text: CALL_TRANSCRIPTION_PROMPT },
       ]}],
       undefined,
-      120_000,
+      270_000,
     );
     transcriptionMs = Date.now() - t1;
     const parsed = parseTranscriptionResponse(raw);

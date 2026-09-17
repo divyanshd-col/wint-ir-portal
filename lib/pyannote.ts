@@ -93,7 +93,7 @@ export async function diarizeAudioWithPyannote(
       const duration = output.length ? Math.max(...output.map(s => s.end || 0)) : 0;
       const latencyMs = Date.now() - t0;
 
-      // Log token/duration usage
+      // Log token/duration usage to llm_token_logs for bifurcation analytics
       logLlmTokenUsage({
         jobType: 'call_diarization_pass1',
         featureGroup: 'Calls',
@@ -105,6 +105,24 @@ export async function diarizeAudioWithPyannote(
         entityId: opts?.entityId,
         userEmail: opts?.userEmail,
       }).catch(() => {});
+
+      // Record token & cost tracking for Pyannote (main token tracker)
+      try {
+        const maxEnd = output.reduce((m, s) => Math.max(m, s.end), 0);
+        const audioSeconds = Math.round(maxEnd) || 120;
+        const inputTokens = audioSeconds * 30; // audio token equivalent (~30 tokens/sec)
+        const outputTokens = output.length * 4;
+        const { recordTokenUsage } = await import('@/lib/tokens/tracker');
+        recordTokenUsage({
+          provider: 'pyannote',
+          model: 'pyannote-precision-2',
+          feature: 'call_analysis',
+          inputTokens,
+          outputTokens,
+          latencyMs: attempt * 2000,
+          metadata: { jobId, audioSeconds, segments: output.length },
+        });
+      } catch {}
 
       return output;
     } else if (status === 'failed') {

@@ -7,8 +7,10 @@ export default async function CallEvaluationPage() {
   // QA/admin surface — gate here since the /quality layout admits agent and tl too.
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
-  const role = ((session.user as any)?.role as string) || '';
-  if (!['admin', 'quality'].includes(role)) redirect('/quality');
+  const user = session.user as any;
+  const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
+  const skills = user?.skills || (await getSkillsForPersona(user?.role));
+  if (!hasSkill({ ...user, skills }, 'quality:call_eval:access')) redirect('/quality');
 
   return <CallEvaluationPageClient />;
 }
