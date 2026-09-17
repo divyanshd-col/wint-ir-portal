@@ -1,4 +1,4 @@
--- Migration 015: llm_token_logs table for tracking real AI usage & spend per job
+-- Migration 020: llm_token_logs table for tracking real AI usage & spend per job
 CREATE TABLE IF NOT EXISTS llm_token_logs (
   id                  BIGSERIAL PRIMARY KEY,
   job_type            VARCHAR(60) NOT NULL,
