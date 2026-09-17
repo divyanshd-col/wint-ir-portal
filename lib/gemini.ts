@@ -38,8 +38,8 @@ function isRetryable(err: any): boolean {
 // Fallback chain: follow links until no next entry or a cycle is detected.
 // gemini-3.5-flash → gemini-3-flash-preview → gemini-3.5-flash → gemini-3.5-pro
 const FALLBACK_MODEL: Record<string, string> = {
-  'gemini-3.5-flash':              'gemini-3.5-pro',
-  'gemini-3.5-pro':                'gemini-1.5-pro',
+  'gemini-3.5-flash': 'gemini-3.5-pro',
+  'gemini-3.5-pro': 'gemini-1.5-pro',
 };
 
 function buildModelChain(model: string): string[] {
@@ -168,7 +168,7 @@ export async function callGeminiForCall(
           const timeoutPromise = new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('callGeminiForCall timeout')), timeoutMs)
           );
-          const res  = await Promise.race([fetchPromise, timeoutPromise]);
+          const res = await Promise.race([fetchPromise, timeoutPromise]);
           const data = await res.json() as any;
 
           const finishReason = data.candidates?.[0]?.finishReason;
@@ -177,7 +177,7 @@ export async function callGeminiForCall(
           }
 
           const errMsg = (data.error?.message) ?? '';
-          const isCapacity   = res.status === 503 || res.status === 429
+          const isCapacity = res.status === 503 || res.status === 429
             || errMsg.includes('demand') || errMsg.includes('overload');
           const isDeprecated = errMsg.includes('no longer available')
             || errMsg.includes('deprecated')
@@ -185,8 +185,8 @@ export async function callGeminiForCall(
             || res.status === 404;
 
           if (isDeprecated) { skipModel = true; break; }
-          if (isCapacity)   { lastError = new Error(errMsg || `HTTP ${res.status}`); break; }
-          if (!res.ok)      throw new Error(errMsg || `API error ${res.status}`);
+          if (isCapacity) { lastError = new Error(errMsg || `HTTP ${res.status}`); break; }
+          if (!res.ok) throw new Error(errMsg || `API error ${res.status}`);
 
           // Record token usage if usageMetadata present
           try {
@@ -261,10 +261,10 @@ export async function geminiStream(
 
 export function mimeFromUrl(url: string): string {
   const u = url.toLowerCase().split('?')[0];
-  if (u.endsWith('.mp3'))  return 'audio/mpeg';
-  if (u.endsWith('.wav'))  return 'audio/wav';
-  if (u.endsWith('.m4a'))  return 'audio/mp4';
-  if (u.endsWith('.ogg'))  return 'audio/ogg';
+  if (u.endsWith('.mp3')) return 'audio/mpeg';
+  if (u.endsWith('.wav')) return 'audio/wav';
+  if (u.endsWith('.m4a')) return 'audio/mp4';
+  if (u.endsWith('.ogg')) return 'audio/ogg';
   if (u.endsWith('.flac')) return 'audio/flac';
   return 'audio/mpeg';
 }
@@ -378,7 +378,7 @@ export async function fetchAndTranscribeAudio(
     });
   } catch (err: any) {
     // Clean up local file on upload error
-    try { await fs.unlink(tempFilePath); } catch {}
+    try { await fs.unlink(tempFilePath); } catch { }
     throw new Error(`Failed to upload audio to Gemini Files API: ${err?.message || err}`);
   }
 
@@ -390,7 +390,7 @@ export async function fetchAndTranscribeAudio(
     try {
       const config = await readConfig();
       pyKey = config.pyannoteApiKey || '';
-    } catch {}
+    } catch { }
     if (!pyKey) {
       pyKey = process.env.PYANNOTE_API_KEY || process.env.PYANNOTEAI_API_KEY || '';
     }
@@ -408,10 +408,12 @@ export async function fetchAndTranscribeAudio(
     const pass2Prompt = buildPass2TranscriptionPrompt(pass1);
     const raw = await callGeminiForCall(
       geminiKeys,
-      [{ parts: [
-        { file_data: { mime_type: mimeType, file_uri: uploadResult.uri } },
-        { text: pass2Prompt },
-      ]}],
+      [{
+        parts: [
+          { file_data: { mime_type: mimeType, file_uri: uploadResult.uri } },
+          { text: pass2Prompt },
+        ]
+      }],
       undefined,
       timeoutMs,
     );
