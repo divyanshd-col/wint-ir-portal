@@ -11,6 +11,7 @@ interface KBDraftRow {
   suggested_kb_content: string;
   target_kb: string;
   tag: 'Educational' | 'Non-Educational';
+  chat_type: 'Bot Handled' | 'Transferred to Agent';
   created_at: string;
 }
 
@@ -19,6 +20,7 @@ const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 export default function KBGapsPage() {
   const [activeTab, setActiveTab] = useState<'Educational' | 'Non-Educational'>('Educational');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [chatTypeFilter, setChatTypeFilter] = useState<string>('all');
   const [rows, setRows] = useState<KBDraftRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [runningAnalysis, setRunningAnalysis] = useState(false);
@@ -28,7 +30,7 @@ export default function KBGapsPage() {
   const fetchRows = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/kb-gaps?tag=${activeTab}&category=${categoryFilter}&limit=100`);
+      const res = await fetch(`/api/kb-gaps?tag=${activeTab}&category=${categoryFilter}&chat_type=${chatTypeFilter}&limit=100`);
       if (res.ok) {
         const data = await res.json();
         setRows(data.rows || []);
@@ -38,7 +40,7 @@ export default function KBGapsPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, categoryFilter]);
+  }, [activeTab, categoryFilter, chatTypeFilter]);
 
   useEffect(() => {
     fetchRows();
@@ -75,7 +77,8 @@ export default function KBGapsPage() {
   };
 
   const educationalCount = rows.filter((r) => r.tag === 'Educational').length;
-  const nonEducationalCount = rows.filter((r) => r.tag === 'Non-Educational').length;
+  const botHandledCount = rows.filter((r) => r.chat_type === 'Bot Handled').length;
+  const transferredCount = rows.filter((r) => r.chat_type === 'Transferred to Agent').length;
 
   return (
     <div style={{ minHeight: '100vh', background: '#F9FAFB', color: '#111827', padding: '24px 32px' }}>
@@ -92,13 +95,33 @@ export default function KBGapsPage() {
             </span>
           </div>
           <p style={{ margin: 0, fontSize: 14, color: '#6B7280' }}>
-            Automated pipeline reading full transcripts to detect KB gaps, extract agent answers, draft KB articles, and tag entries.
+            Automated pipeline reading full transcripts to detect KB gaps, extract agent answers, draft KB articles, and categorize chat handling types.
           </p>
         </div>
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           
+          {/* Chat Type Filter */}
+          <select
+            value={chatTypeFilter}
+            onChange={(e) => setChatTypeFilter(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 8,
+              border: '1px solid #E5E7EB',
+              background: '#FFFFFF',
+              fontSize: 13,
+              color: '#374151',
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            <option value="all">All Chat Types</option>
+            <option value="Bot Handled">🤖 Bot Handled</option>
+            <option value="Transferred to Agent">👨‍💼 Transferred to Agent</option>
+          </select>
+
           {/* Category Filter */}
           <select
             value={categoryFilter}
@@ -111,6 +134,7 @@ export default function KBGapsPage() {
               fontSize: 13,
               color: '#374151',
               cursor: 'pointer',
+              fontWeight: 500,
             }}
           >
             <option value="all">All Categories</option>
@@ -167,15 +191,15 @@ export default function KBGapsPage() {
         </div>
 
         <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' }}>🟢 EDUCATIONAL DRAFTS</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: '#059669', marginTop: 4 }}>{educationalCount}</div>
-          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Static rules & facts → Ready for KB</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' }}>🤖 BOT HANDLED CHATS</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: '#1D4ED8', marginTop: 4 }}>{botHandledCount}</div>
+          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Answered by Bot without agent transfer</div>
         </div>
 
         <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' }}>🟠 NON-EDUCATIONAL BACKLOG</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: '#D97706', marginTop: 4 }}>{nonEducationalCount}</div>
-          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Account/data dependent → API integration</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' }}>👨‍💼 TRANSFERRED TO AGENTS</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: '#6B21A8', marginTop: 4 }}>{transferredCount}</div>
+          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Escalated to human IR support agents</div>
         </div>
       </div>
 
@@ -194,7 +218,7 @@ export default function KBGapsPage() {
             color: activeTab === 'Educational' ? '#059669' : '#6B7280',
           }}
         >
-          🟢 Educational Drafts (Ready for KB)
+          🟢 Educational Drafts ({educationalCount})
         </button>
 
         <button
@@ -210,7 +234,7 @@ export default function KBGapsPage() {
             color: activeTab === 'Non-Educational' ? '#D97706' : '#6B7280',
           }}
         >
-          🟠 Non-Educational (API & System Integration Backlog)
+          🟠 Non-Educational ({rows.length - educationalCount})
         </button>
       </div>
 
@@ -228,10 +252,11 @@ export default function KBGapsPage() {
               <thead>
                 <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', textTransform: 'uppercase', fontSize: 11, color: '#6B7280', letterSpacing: '0.05em' }}>
                   <th style={{ padding: '10px 12px', textAlign: 'left' }}>Week & Category</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', width: '22%' }}>Investor Question</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', width: '13%' }}>Chat Type</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', width: '20%' }}>Investor Question</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left' }}>Chat IDs</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', width: '24%' }}>Agent Answer (Transcript)</th>
-                  <th style={{ padding: '10px 12px', textAlign: 'left', width: '24%' }}>Suggested KB Content / Answer</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', width: '22%' }}>Agent Answer (Transcript)</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', width: '22%' }}>Suggested KB Content / Answer</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left' }}>Target KB</th>
                   <th style={{ padding: '10px 12px', textAlign: 'center' }}>Action</th>
                 </tr>
@@ -239,11 +264,31 @@ export default function KBGapsPage() {
               <tbody>
                 {rows.map((r, idx) => {
                   const itemKey = `${r.created_at || idx}_${r.question.slice(0, 10)}`;
+                  const isBot = r.chat_type === 'Bot Handled';
                   return (
                     <tr key={itemKey} style={{ borderBottom: '1px solid #F3F4F6' }}>
                       <td style={{ padding: '12px' }}>
                         <div style={{ fontWeight: 600, color: '#111827' }}>{r.category}</div>
                         <div style={{ fontSize: 11, color: '#6B7280', fontFamily: MONO, marginTop: 2 }}>{r.week_number}</div>
+                      </td>
+
+                      <td style={{ padding: '12px' }}>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            background: isBot ? '#EFF6FF' : '#F3E8FF',
+                            color: isBot ? '#1D4ED8' : '#6B21A8',
+                            border: `1px solid ${isBot ? '#BFDBFE' : '#E9D5FF'}`,
+                          }}
+                        >
+                          {isBot ? '🤖 Bot Handled' : '👨‍💼 Transferred'}
+                        </span>
                       </td>
 
                       <td style={{ padding: '12px', fontWeight: 600, color: '#111827' }}>

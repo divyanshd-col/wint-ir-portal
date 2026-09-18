@@ -13,6 +13,7 @@ export interface KBDraftSuggestionRow {
   suggested_kb_content: string;
   target_kb: string;
   tag: 'Educational' | 'Non-Educational';
+  chat_type: 'Bot Handled' | 'Transferred to Agent';
   created_at?: string;
 }
 
@@ -114,6 +115,8 @@ export async function runKBAgendaAnalysis(options?: {
       disposition: string;
       sub_disposition: string;
       transcript: any;
+      conversation_type: string | null;
+      bot_to_team_seconds: number | null;
     }>(
       `WITH ranked_chats AS (
         SELECT 
@@ -122,6 +125,8 @@ export async function runKBAgendaAnalysis(options?: {
           c.tags->>'disposition' AS disposition,
           c.tags->>'sub_disposition' AS sub_disposition,
           c.transcript,
+          c.conversation_type,
+          c.bot_to_team_seconds,
           ROW_NUMBER() OVER (
             PARTITION BY date_trunc('week', c.closed_at) 
             ORDER BY c.closed_at DESC
@@ -131,7 +136,7 @@ export async function runKBAgendaAnalysis(options?: {
           AND c.closed_at >= NOW() - ($1 * INTERVAL '1 day')
           AND (c.tags->>'disposition' = ANY($2::text[]))
       )
-      SELECT id, closed_at, disposition, sub_disposition, transcript
+      SELECT id, closed_at, disposition, sub_disposition, transcript, conversation_type, bot_to_team_seconds
       FROM ranked_chats
       WHERE rn <= $3
       ORDER BY closed_at DESC`,
@@ -163,6 +168,10 @@ export async function runKBAgendaAnalysis(options?: {
 
       const chatDate = new Date(chat.closed_at || Date.now());
       const weekLabel = getWeekLabel(chatDate);
+
+      // Determine Chat Type (Bot Handled vs Transferred to Agent)
+      const isBotHandled = chat.conversation_type === 'bot' || chat.bot_to_team_seconds === null;
+      const chatType: 'Bot Handled' | 'Transferred to Agent' = isBotHandled ? 'Bot Handled' : 'Transferred to Agent';
 
       const userPrompt = `CHAT_ID: ${chat.id}\nDISPOSITION: ${chat.disposition || 'General'}\nSUB_DISPOSITION: ${chat.sub_disposition || 'General'}\n\nTRANSCRIPT:\n${transcriptText.slice(0, 8000)}`;
 
@@ -206,15 +215,16 @@ export async function runKBAgendaAnalysis(options?: {
             suggested_kb_content: kbContent,
             target_kb: parsed.target_kb || 'KB main',
             tag: parsed.tag === 'Non-Educational' ? 'Non-Educational' : 'Educational',
+            chat_type: chatType,
           };
 
           rawResults.push(suggestionRow);
 
-          // Real-time immediate DB insertion per processed chat (No id column)
+          // Real-time immediate DB insertion per processed chat
           await query(
             `INSERT INTO kb_draft_suggestions (
-              week_number, category, question, chat_ids, agent_answer, suggested_kb_content, target_kb, tag
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+              week_number, category, question, chat_ids, agent_answer, suggested_kb_content, target_kb, tag, chat_type
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
             [
               suggestionRow.week_number,
               suggestionRow.category,
@@ -224,6 +234,7 @@ export async function runKBAgendaAnalysis(options?: {
               suggestionRow.suggested_kb_content,
               suggestionRow.target_kb,
               suggestionRow.tag,
+              suggestionRow.chat_type,
             ]
           );
         }
