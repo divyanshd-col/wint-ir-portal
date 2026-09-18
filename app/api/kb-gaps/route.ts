@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const tag = url.searchParams.get('tag') || 'all';
   const category = url.searchParams.get('category') || 'all';
+  const chatType = url.searchParams.get('chat_type') || 'all';
   const limit = parseInt(url.searchParams.get('limit') || '50', 10);
 
   const conditions: string[] = ['1=1'];
@@ -22,6 +23,11 @@ export async function GET(req: NextRequest) {
   if (category !== 'all') {
     params.push(category);
     conditions.push(`category = $${params.length}`);
+  }
+
+  if (chatType !== 'all') {
+    params.push(chatType);
+    conditions.push(`chat_type = $${params.length}`);
   }
 
   params.push(limit);
@@ -38,6 +44,7 @@ export async function GET(req: NextRequest) {
         suggested_kb_content,
         target_kb,
         tag,
+        chat_type,
         created_at::text AS created_at
        FROM kb_draft_suggestions
        WHERE ${conditions.join(' AND ')}
