@@ -2,6 +2,9 @@
   "functions": {
     "app/api/cron/generate-scorecards/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/generate-kb-suggestions/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -16,6 +19,10 @@
     {
       "path": "/api/cron/generate-scorecards",
       "schedule": "30 2 * * 1"
+    },
+    {
+      "path": "/api/cron/generate-kb-suggestions",
+      "schedule": "0 3 * * 1"
     },
     {
       "path": "/api/cron/email-cred-reminder",
