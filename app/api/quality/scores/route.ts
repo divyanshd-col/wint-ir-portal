@@ -116,6 +116,8 @@ export async function GET(req: NextRequest) {
   const dateTo        = searchParams.get('dateTo') || '';
   const typeFilter     = searchParams.get('type') || '';
   const chatIdSearch   = searchParams.get('chatId') || '';
+  const sortByParam    = searchParams.get('sortBy') || '';
+  const sortBy         = (sortByParam === 'closed_at' || sortByParam === 'recently_evaluated') ? sortByParam : undefined;
   const minUserMsgsRaw = searchParams.get('minUserMsgs');
   const minUserMessages = minUserMsgsRaw ? parseInt(minUserMsgsRaw, 10) : undefined;
 
@@ -209,6 +211,7 @@ export async function GET(req: NextRequest) {
   if (chatIdSearch) dbOpts.chatIdSearch = chatIdSearch;
   if (minScore)      dbOpts.iqsMin      = minScore;
   if (maxScore !== 100) dbOpts.iqsMax   = maxScore;
+  if (sortBy)        dbOpts.sortBy      = sortBy;
   dbOpts.page = page;
   dbOpts.pageSize = requestedPageSize;
 
@@ -306,7 +309,7 @@ export async function GET(req: NextRequest) {
     },
   }, {
     headers: {
-      'Cache-Control': 'private, max-age=30',
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
     }
   });
 }
