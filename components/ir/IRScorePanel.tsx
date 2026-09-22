@@ -494,6 +494,25 @@ export default function IRScorePanel({
               </button>
             </div>
 
+            {/* QA Review / Resolution Banner */}
+            {(mode === 'reviewed' || reviewNote) && (
+              <div style={{
+                margin: '12px 16px',
+                padding: '10px 14px',
+                borderRadius: 8,
+                background: isRejected ? '#fef2f2' : '#f0fdf4',
+                border: `1px solid ${isRejected ? '#fecaca' : '#bbf7d0'}`,
+                fontSize: 12,
+                color: isRejected ? '#991b1b' : '#166534',
+                flexShrink: 0,
+              }}>
+                <div style={{ fontWeight: 600, marginBottom: reviewNote ? 4 : 0 }}>
+                  QA Review: {reviewedOutcome}{reviewedBy ? ` by ${reviewedBy}` : ''}{reviewedAt ? ` · ${new Date(reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                </div>
+                {reviewNote && <div style={{ color: isRejected ? '#7f1d1d' : '#14532d', lineHeight: 1.4 }}>{reviewNote}</div>}
+              </div>
+            )}
+
             {/* Dispute compose area */}
             {mode === 'evaluated' && disputing && (
               <div style={{
