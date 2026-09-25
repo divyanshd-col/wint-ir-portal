@@ -38,6 +38,15 @@ function sanitizeHeaders(req: NextRequest): Record<string, string> {
   return headersObj;
 }
 
+export async function GET() {
+  return NextResponse.json({
+    status: 'online',
+    message: 'DoubleTick Webhook Ingestion Endpoint is active and listening for POST requests.',
+    endpoint: '/api/webhooks/doubletick',
+    supportedMethod: 'POST',
+  }, { status: 200 });
+}
+
 export async function POST(req: NextRequest) {
   if (!isAuthorised(req)) {
     return NextResponse.json({ error: 'Unauthorized: Invalid webhook secret' }, { status: 401 });
