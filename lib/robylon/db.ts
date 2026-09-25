@@ -1429,7 +1429,7 @@ export interface RobylonWebhookPayloadRecord {
 }
 
 /**
- * Stores incoming Robylon webhook payloads as-is into `robylon_webhook_payloads`.
+ * Stores incoming webhook payloads as-is into `robylon_webhook_payloads`.
  * Catches and logs errors so that failure to log never interrupts webhook processing.
  */
 export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<void> {
@@ -1447,6 +1447,6 @@ export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRec
       ]
     );
   } catch (err: any) {
-    console.error('[db] Failed to save Robylon webhook payload:', err.message);
+    console.error('[db] Failed to save webhook payload:', err.message);
   }
 }
