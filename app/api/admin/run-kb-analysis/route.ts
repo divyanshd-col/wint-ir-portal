@@ -4,8 +4,9 @@ import { runKBAgendaAnalysis } from '@/lib/kb-analyzer/agent';
 import { log } from '@/lib/log';
 
 export async function POST(req: NextRequest) {
-  const { response, user } = await requireRole(['admin']);
+  const { response, session } = await requireRole(['admin']);
   if (response) return response;
+  const user = session!.user as any;
 
   try {
     const body = await req.json().catch(() => ({}));
