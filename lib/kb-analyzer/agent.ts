@@ -191,9 +191,14 @@ export async function runKBAgendaAnalysis(options?: {
           keys,
           'gemini-3.5-flash',
           [userPrompt],
-          { systemInstruction: KB_ANALYSIS_SYSTEM_PROMPT, temperature: 0.1 },
-          300_000,
-          { jobType: 'kb_query_expansion', featureGroup: 'Analytics', entityId: chat.id }
+          {
+            systemInstruction: KB_ANALYSIS_SYSTEM_PROMPT,
+            temperature: 0.1,
+            jobType: 'kb_query_expansion',
+            featureGroup: 'Analytics',
+            entityId: chat.id,
+          },
+          300_000
         );
 
         let jsonClean = responseText.trim();
