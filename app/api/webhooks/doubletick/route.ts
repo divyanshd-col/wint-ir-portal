@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveRobylonWebhookPayload } from '@/lib/robylon/db';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * DoubleTick Webhook / Ingestion Route
  * POST /api/webhooks/doubletick
