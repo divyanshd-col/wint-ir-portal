@@ -127,10 +127,10 @@ export function CallTranscriptCard({
                 );
               }
 
-              const textContent = (seg.text || seg.translation || '').trim();
+              const textContent = (seg.text || seg.message || seg.translation || '').trim();
               if (!textContent) return null;
 
-              const isIR = seg.speaker === 'IR EXECUTIVE';
+              const isIR = seg.speaker === 'IR EXECUTIVE' || seg.sender === 'agent';
               const timeOffset = formatTs(seg.ts);
 
               if (!isIR) {
