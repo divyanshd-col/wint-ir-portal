@@ -145,7 +145,7 @@ export function CallTranscriptCard({
                         Investor{timeOffset && ` · ${timeOffset}`}
                       </p>
                       <div className="bg-white border border-slate-150 text-slate-800 px-3.5 py-2 rounded-2xl rounded-tl-sm text-[12.5px] leading-relaxed font-sans shadow-sm">
-                        {seg.text}
+                        {textContent}
                         {seg.translated && (
                           <span className="ml-2 inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-500 border border-blue-100">
                             🌐 translated
@@ -165,7 +165,7 @@ export function CallTranscriptCard({
                       IR Executive{timeOffset && ` · ${timeOffset}`}
                     </p>
                     <div className="bg-[#2d3139] dark:bg-[var(--qa-gray-700)] text-white px-3.5 py-2 rounded-2xl rounded-tr-sm text-[12.5px] leading-relaxed font-sans shadow-sm">
-                      {seg.text}
+                      {textContent}
                       {seg.translated && (
                         <span className="ml-2 inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-white/10 text-white/90 border border-white/10">
                           🌐 translated
