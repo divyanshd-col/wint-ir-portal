@@ -49,3 +49,6 @@ ir-logs.jsonl
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# local SLA cron testing (seed data + scripts)
+/scratch/sla/
