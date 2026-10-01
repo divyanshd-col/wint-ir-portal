@@ -5,36 +5,40 @@ import React, { useEffect, useState, useRef } from 'react';
 interface PCGCall {
   id: string;
   callId: string;
-  agentName: string;
+  rmName: string;
   phoneNumber: string;
   callType: string;
   tag: string | null;
   durationSeconds: number;
   startTime: string | null;
+  isAnswered: boolean;
   hasRecording: boolean;
 }
 
-interface AgentOption {
+interface RmOption {
   name: string;
   count: number;
 }
 
 interface SummaryMetrics {
   totalCalls: number;
+  answeredCalls: number;
+  unansweredCalls: number;
   totalDurationSeconds: number;
-  activeAgentsCount: number;
+  activeRmsCount: number;
 }
 
 export default function PcgCallsClient() {
   const [calls, setCalls] = useState<PCGCall[]>([]);
-  const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [rms, setRms] = useState<RmOption[]>([]);
   const [summary, setSummary] = useState<SummaryMetrics | null>(null);
-  
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Filters
-  const [selectedAgent, setSelectedAgent] = useState('all');
+  const [selectedRm, setSelectedRm] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all'); // 'all' | 'answered' | 'unanswered'
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -46,7 +50,7 @@ export default function PcgCallsClient() {
 
   useEffect(() => {
     fetchCalls();
-  }, [selectedAgent, page]);
+  }, [selectedRm, selectedStatus, page]);
 
   // Debounced search
   useEffect(() => {
@@ -65,8 +69,11 @@ export default function PcgCallsClient() {
         page: page.toString(),
         limit: '15',
       });
-      if (selectedAgent && selectedAgent !== 'all') {
-        params.set('agent_name', selectedAgent);
+      if (selectedRm && selectedRm !== 'all') {
+        params.set('rm_name', selectedRm);
+      }
+      if (selectedStatus && selectedStatus !== 'all') {
+        params.set('status', selectedStatus);
       }
       if (searchQuery.trim()) {
         params.set('search', searchQuery.trim());
@@ -78,7 +85,7 @@ export default function PcgCallsClient() {
       }
       const data = await res.json();
       setCalls(data.calls || []);
-      setAgents(data.agents || []);
+      setRms(data.rms || []);
       setSummary(data.summary || null);
       setTotalPages(data.totalPages || 1);
       setTotalCount(data.total || 0);
@@ -90,7 +97,6 @@ export default function PcgCallsClient() {
   };
 
   const handlePlayAudio = (callId: string) => {
-    // Pause any other currently playing audio
     if (currentlyPlayingId && currentlyPlayingId !== callId) {
       const prevAudio = audioRefs.current[currentlyPlayingId];
       if (prevAudio) {
@@ -134,57 +140,39 @@ export default function PcgCallsClient() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-6 space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center font-bold text-lg">
-              📞
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">PCG Call Recordings</h1>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                Admin view to review complete calls handled by PCG Team agents
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <span className="px-3 py-1 bg-amber-500/10 text-amber-600 text-xs font-semibold rounded-full border border-amber-500/20">
-            🔒 Admin View Only
-          </span>
-          <span className="px-3 py-1 bg-emerald-500/10 text-emerald-600 text-xs font-semibold rounded-full border border-emerald-500/20">
-            Audio Stream Verified
-          </span>
-        </div>
-      </div>
-
       {/* Summary Stat Cards */}
       {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Complete Calls</div>
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Calls</div>
             <div className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">
               {summary.totalCalls}
             </div>
-            <p className="text-xs text-slate-500 mt-1">Calls with verified recording & duration</p>
+            <p className="text-xs text-slate-500 mt-1">Combined PCG call records</p>
           </div>
 
           <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Audio Duration</div>
-            <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400 mt-1">
-              {formatHoursMinutes(summary.totalDurationSeconds)}
-            </div>
-            <p className="text-xs text-slate-500 mt-1">Combined call recording time</p>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active PCG Agents</div>
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Answered Calls</div>
             <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-1">
-              {summary.activeAgentsCount}
+              {summary.answeredCalls}
             </div>
-            <p className="text-xs text-slate-500 mt-1">Agents with completed calls</p>
+            <p className="text-xs text-slate-500 mt-1">Total audio duration: {formatHoursMinutes(summary.totalDurationSeconds)}</p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Unanswered Calls</div>
+            <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 mt-1">
+              {summary.unansweredCalls}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Calls with no recording / 0s duration</p>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 p-5 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active RMs</div>
+            <div className="text-3xl font-extrabold text-blue-600 dark:text-blue-400 mt-1">
+              {summary.activeRmsCount}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">Relationship Managers handling calls</p>
           </div>
         </div>
       )}
@@ -192,28 +180,45 @@ export default function PcgCallsClient() {
       {/* Controls & Filters Bar */}
       <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-          {/* Agent Filter */}
+          {/* RM Filter */}
           <div className="w-full sm:w-64">
-            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Filter by Agent</label>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Filter by RM</label>
             <select
-              value={selectedAgent}
+              value={selectedRm}
               onChange={(e) => {
-                setSelectedAgent(e.target.value);
+                setSelectedRm(e.target.value);
                 setPage(1);
               }}
               className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all">All Agents ({agents.reduce((acc, a) => acc + a.count, 0)})</option>
-              {agents.map((a) => (
-                <option key={a.name} value={a.name}>
-                  {a.name} ({a.count} calls)
+              <option value="all">All RMs ({rms.reduce((acc, r) => acc + r.count, 0)})</option>
+              {rms.map((r) => (
+                <option key={r.name} value={r.name}>
+                  {r.name} ({r.count} calls)
                 </option>
               ))}
             </select>
           </div>
 
+          {/* Call Status Filter */}
+          <div className="w-full sm:w-48">
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Call Status</label>
+            <select
+              value={selectedStatus}
+              onChange={(e) => {
+                setSelectedStatus(e.target.value);
+                setPage(1);
+              }}
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Calls</option>
+              <option value="answered">Answered Only</option>
+              <option value="unanswered">Unanswered Only</option>
+            </select>
+          </div>
+
           {/* Search Filter */}
-          <div className="w-full sm:w-72">
+          <div className="w-full sm:w-64">
             <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Search Phone / Call ID</label>
             <input
               type="text"
@@ -247,17 +252,18 @@ export default function PcgCallsClient() {
           </div>
         ) : calls.length === 0 ? (
           <div className="p-12 text-center text-slate-500 dark:text-slate-400">
-            <p className="text-base font-semibold">No complete call recordings found</p>
-            <p className="text-xs mt-1 text-slate-400">Try changing your agent filter or search query.</p>
+            <p className="text-base font-semibold">No call recordings found</p>
+            <p className="text-xs mt-1 text-slate-400">Try changing your RM filter or search query.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-sm">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                  <th className="py-3.5 px-4">Agent Name</th>
+                  <th className="py-3.5 px-4">RM Name</th>
                   <th className="py-3.5 px-4">Customer Phone</th>
                   <th className="py-3.5 px-4">Call Type</th>
+                  <th className="py-3.5 px-4">Call Status</th>
                   <th className="py-3.5 px-4">Date & Time</th>
                   <th className="py-3.5 px-4">Duration</th>
                   <th className="py-3.5 px-4 text-center">Audio Recording Player</th>
@@ -271,13 +277,13 @@ export default function PcgCallsClient() {
                       currentlyPlayingId === call.id ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''
                     }`}
                   >
-                    {/* Agent Name */}
+                    {/* RM Name */}
                     <td className="py-3.5 px-4 font-semibold text-slate-900 dark:text-white">
                       <div className="flex items-center gap-2">
-                        <span className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold text-xs">
-                          {call.agentName ? call.agentName.charAt(0).toUpperCase() : '?'}
+                        <span className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-xs">
+                          {call.rmName ? call.rmName.charAt(0).toUpperCase() : '?'}
                         </span>
-                        <span>{call.agentName}</span>
+                        <span>{call.rmName}</span>
                       </div>
                     </td>
 
@@ -299,6 +305,19 @@ export default function PcgCallsClient() {
                       </span>
                     </td>
 
+                    {/* Call Status Tag (Answered vs Unanswered) */}
+                    <td className="py-3.5 px-4">
+                      {call.isAnswered ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                          ✓ Answered
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700">
+                          ⚠️ Unanswered
+                        </span>
+                      )}
+                    </td>
+
                     {/* Start Time */}
                     <td className="py-3.5 px-4 text-xs text-slate-500 dark:text-slate-400">
                       {formatDate(call.startTime)}
@@ -306,22 +325,28 @@ export default function PcgCallsClient() {
 
                     {/* Duration */}
                     <td className="py-3.5 px-4 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      ⏱️ {formatDuration(call.durationSeconds)}
+                      {call.isAnswered ? `⏱️ ${formatDuration(call.durationSeconds)}` : '00:00'}
                     </td>
 
                     {/* Audio Player */}
                     <td className="py-3.5 px-4 min-w-[280px]">
-                      <div className="flex items-center justify-center">
-                        <audio
-                          ref={(el) => { audioRefs.current[call.id] = el; }}
-                          controls
-                          controlsList="nodownload"
-                          preload="none"
-                          onPlay={() => handlePlayAudio(call.id)}
-                          src={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                          className="h-9 w-full max-w-[260px] rounded-lg accent-blue-600 shadow-sm"
-                        />
-                      </div>
+                      {call.hasRecording ? (
+                        <div className="flex items-center justify-center">
+                          <audio
+                            ref={(el) => { audioRefs.current[call.id] = el; }}
+                            controls
+                            controlsList="nodownload"
+                            preload="none"
+                            onPlay={() => handlePlayAudio(call.id)}
+                            src={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
+                            className="h-9 w-full max-w-[260px] rounded-lg accent-blue-600 shadow-sm"
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-center text-xs text-slate-400 italic">
+                          No Audio Recording (Unanswered)
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
