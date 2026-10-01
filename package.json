@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",
+    "@aws-sdk/client-s3": "^3.1144.0",
+    "@aws-sdk/s3-request-presigner": "^3.1144.0",
     "@google/genai": "^1.44.0",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@vercel/functions": "^3.6.0",

@@ -51,6 +51,7 @@ export default function Sidebar({ username, isAdmin, role, skills: propSkills, h
   const canSeeCallAnalysis = checkSkill('call_analysis:access');
   const canSeeTokens       = checkSkill('tokens:view:access');
   const canSeeSettings     = checkSkill('settings:manage:access');
+  const canSeePcgCalls     = isAdmin || userRole === 'admin';
   const [open, setOpen] = useState(true); // mobile drawer
   const [collapsed, setCollapsed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -174,6 +175,15 @@ export default function Sidebar({ username, isAdmin, role, skills: propSkills, h
                 <rect x="1" y="9" width="3" height="6" rx="0.5" /><rect x="6" y="5" width="3" height="10" rx="0.5" /><rect x="11" y="1" width="3" height="14" rx="0.5" />
               </svg>
             } label="CX Dashboard" active={pathname === '/cx'} expanded={isExpanded}
+              onClick={() => setAndPersistCollapsed(true)} />
+          )}
+
+          {canSeePcgCalls && (
+            <NavLink href="/admin/pcg-calls" icon={
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z" />
+              </svg>
+            } label="PCG Calls" active={pathname === '/admin/pcg-calls'} expanded={isExpanded}
               onClick={() => setAndPersistCollapsed(true)} />
           )}
 
