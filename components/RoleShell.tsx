@@ -68,9 +68,8 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
     : (DEFAULT_ROLE_SKILLS[role] || []);
 
   const hasAccess = (item: NavItem) => {
-    if (role === 'admin') return true;
     if (item.skill) {
-      return effectiveSkills.includes(item.skill);
+      return role === 'admin' || effectiveSkills.includes(item.skill);
     }
     if (item.roles) {
       return item.roles.includes(role);
@@ -78,7 +77,16 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
     return true;
   };
 
-  const filteredNav = navItems.filter(hasAccess);
+  // Deduplicate items by href if label conflicts exist for admin
+  const seenHrefs = new Set<string>();
+  const filteredNav = navItems.filter((item) => {
+    if (!hasAccess(item)) return false;
+    // Prefer role-specific item if duplicate href exists
+    if (seenHrefs.has(item.href)) return false;
+    seenHrefs.add(item.href);
+    return true;
+  });
+
   const displayRoleLabel = roleLabel || role.charAt(0).toUpperCase() + role.slice(1);
 
   return (
@@ -115,12 +123,12 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
             {displayRoleLabel}
           </div>
 
-          {filteredNav.map((item) => {
+          {filteredNav.map((item, idx) => {
             const Icon = item.icon;
             const active = pathname === item.href;
             return (
               <Link
-                key={item.href}
+                key={`${item.href}-${item.label}-${idx}`}
                 href={item.href}
                 className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
               >
