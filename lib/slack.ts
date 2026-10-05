@@ -1,15 +1,26 @@
+export interface SlackSendOptions {
+  username?: string;
+  icon_emoji?: string;
+  thread_ts?: string;
+}
+
+export interface SlackPostResponse {
+  ok: boolean;
+  ts?: string;
+  error?: string;
+}
+
 /**
  * Post a plain-text (or Block Kit) message to a Slack channel via chat.postMessage.
- * Requires SLACK_BOT_TOKEN with chat:write scope.
- * Channel can be a name (#quality-alerts) or channel ID.
+ * Returns { ok, ts, error } so callers can reply in threads using thread_ts.
  */
-export async function sendSlackMessage(
+export async function postSlackMessage(
   channel: string,
   text: string,
   token: string,
   blocks?: any[],
-  options?: string | { username?: string; icon_emoji?: string },
-): Promise<boolean> {
+  options?: string | SlackSendOptions,
+): Promise<SlackPostResponse> {
   try {
     const opts = typeof options === 'object' && options !== null
       ? options
@@ -17,6 +28,7 @@ export async function sendSlackMessage(
 
     const username = opts.username || 'cx-agent';
     const icon_emoji = opts.icon_emoji;
+    const thread_ts = opts.thread_ts;
 
     const isWebhookChannel = channel.startsWith('https://');
     const webhookUrl = isWebhookChannel
@@ -27,17 +39,19 @@ export async function sendSlackMessage(
       const payload: any = { text, username };
       if (icon_emoji) payload.icon_emoji = icon_emoji;
       if (blocks?.length) payload.blocks = blocks;
+      if (thread_ts) payload.thread_ts = thread_ts;
       const res = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
-        console.error(`[slack] Webhook error ${res.status}: ${await res.text()}`);
-        return false;
+        const errorText = await res.text();
+        console.error(`[slack] Webhook error ${res.status}: ${errorText}`);
+        return { ok: false, error: errorText };
       }
       console.log(`[slack] Posted alert via Webhook to ${channel}`);
-      return true;
+      return { ok: true };
     }
 
     const body: any = {
@@ -48,6 +62,8 @@ export async function sendSlackMessage(
     if (username && username !== 'cx-agent') body.username = username;
     if (icon_emoji) body.icon_emoji = icon_emoji;
     if (blocks?.length) body.blocks = blocks;
+    if (thread_ts) body.thread_ts = thread_ts;
+
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: {
@@ -59,14 +75,30 @@ export async function sendSlackMessage(
     const data = await res.json();
     if (!data.ok) {
       console.error(`[slack] chat.postMessage error: ${data.error}`);
-      return false;
+      return { ok: false, error: data.error };
     }
-    console.log(`[slack] Posted alert to ${channel}`);
-    return true;
-  } catch (err) {
+    console.log(`[slack] Posted alert to ${channel}${thread_ts ? ` (thread: ${thread_ts})` : ''}`);
+    return { ok: true, ts: data.ts };
+  } catch (err: any) {
     console.error('[slack] chat.postMessage failed:', err);
-    return false;
+    return { ok: false, error: err?.message || String(err) };
   }
+}
+
+/**
+ * Post a plain-text (or Block Kit) message to a Slack channel via chat.postMessage.
+ * Requires SLACK_BOT_TOKEN with chat:write scope.
+ * Channel can be a name (#quality-alerts) or channel ID.
+ */
+export async function sendSlackMessage(
+  channel: string,
+  text: string,
+  token: string,
+  blocks?: any[],
+  options?: string | SlackSendOptions,
+): Promise<boolean> {
+  const result = await postSlackMessage(channel, text, token, blocks, options);
+  return result.ok;
 }
 
 export interface SlackResult {
