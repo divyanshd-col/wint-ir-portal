@@ -52,3 +52,7 @@ next-env.d.ts
 
 # local SLA cron testing (seed data + scripts)
 /scratch/sla/
+
+# presentations & generation scripts
+Graph_RAG_MTP_Presentation.pptx
+generate_mtp_presentation.py
