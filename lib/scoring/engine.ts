@@ -432,6 +432,7 @@ export async function executeScoring(
       subDisposition,
       conversationType:    'bot',
       isTransferred:       false,
+      transcript:          transcriptText,
     }).catch(() => {});
   }
 

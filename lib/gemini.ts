@@ -38,6 +38,7 @@ function isRetryable(err: any): boolean {
 // Fallback chain: follow links until no next entry or a cycle is detected.
 // gemini-3.5-flash → gemini-3-flash-preview → gemini-3.5-flash → gemini-3.5-pro
 const FALLBACK_MODEL: Record<string, string> = {
+  'gemini-3.6-flash': 'gemini-3.5-flash',
   'gemini-3.5-flash': 'gemini-3.5-pro',
   'gemini-3.5-pro': 'gemini-1.5-pro',
 };
