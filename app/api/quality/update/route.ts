@@ -114,18 +114,37 @@ export async function PATCH(req: NextRequest) {
       if (rowExists) {
         await query(
           `UPDATE iqs_scores
-           SET parameters = $1, iqs_score = $2, review_note = $3
-           WHERE chat_id = $4`,
-          [JSON.stringify(params), newIqs, note || null, chatId]
+           SET parameters = $1, iqs_score = $2, review_note = $3,
+               reviewed_by = $4, reviewed_at = NOW(), status = 'reviewed'
+           WHERE chat_id = $5`,
+          [JSON.stringify(params), newIqs, note || null, updatedBy, chatId]
         );
       } else {
         await query(
-          `INSERT INTO iqs_scores (chat_id, parameters, iqs_score, scored_at, review_note)
-           VALUES ($1, $2, $3, NOW(), $4)`,
-          [chatId, JSON.stringify(params), newIqs, note || null]
+          `INSERT INTO iqs_scores (chat_id, parameters, iqs_score, scored_at, review_note, reviewed_by, reviewed_at, status)
+           VALUES ($1, $2, $3, NOW(), $4, $5, NOW(), 'reviewed')`,
+          [chatId, JSON.stringify(params), newIqs, note || null, updatedBy]
         );
       }
       console.log(`[quality/update] Saved override for ${chatId}: iqs=${newIqs}, by=${updatedBy}`);
+
+      // Synchronize with iqs_flags if there is an open dispute for this chat
+      try {
+        const { storeGetIQSFlags, storeUpdateIQSFlag } = await import('@/lib/store');
+        const raw = await storeGetIQSFlags();
+        const allFlags = raw.map(r => { try { return JSON.parse(r); } catch { return null; } }).filter(Boolean);
+        const activeFlags = allFlags.filter((f: any) => f.chatId === chatId && (f.status === 'pending' || f.status === 'ir_pending_tl' || f.status === 'tl_forwarded'));
+        for (const flag of activeFlags) {
+          await storeUpdateIQSFlag(flag.id, {
+            status: 'reviewed',
+            reviewedBy: updatedBy,
+            reviewedAt: new Date().toISOString(),
+            reviewNote: note || 'Score updated by QA',
+          });
+        }
+      } catch (flagErr: any) {
+        console.error('[quality/update] storeUpdateIQSFlag error:', flagErr?.message);
+      }
 
       if (params['__needs_kb_update']?.score === true) {
         try {

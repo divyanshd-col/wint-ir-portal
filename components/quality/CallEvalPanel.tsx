@@ -1074,10 +1074,10 @@ export default function CallEvalPanel({
                     );
                   }
                   
-                  const textContent = (seg.text || seg.translation || seg.content || '').trim();
+                  const textContent = (seg.text || seg.message || seg.translation || seg.content || '').trim();
                   if (!textContent) return null;
 
-                  const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent';
+                  const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent' || seg.sender === 'agent';
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>

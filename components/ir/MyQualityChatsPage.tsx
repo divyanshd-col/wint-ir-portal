@@ -355,6 +355,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
     fetchDisputes();
   }, [fetchDisputes]);
 
+  useEffect(() => {
+    fetchEvaluatedChats();
+    fetchDisputes();
+  }, [activeTab]);
+
   const cancelDispute = async (flagId: string) => {
     setCancellingId(flagId);
     try {
@@ -530,7 +535,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 type="text"
                 placeholder="Search Chat ID…"
                 value={chatIdSearch}
-                onChange={(e) => setChatIdSearch(e.target.value)}
+                onChange={(e) => {
+                  setChatIdSearch(e.target.value);
+                  setPage(0);
+                }}
                 style={{ ...chipInputStyle, width: 130 }}
               />
 
@@ -761,6 +769,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   const isLast = idx === entries.length - 1 && !isOpen;
                   const pendingFlag = pendingChatIdMap.get(e.chatId);
                   const reviewedFlag = reviewedChatIdMap.get(e.chatId);
+                  const isReviewed = Boolean(reviewedFlag || e.updatedBy);
+                  const isPending = Boolean(pendingFlag);
+                  const panelMode = isPending ? 'pending' : isReviewed ? 'reviewed' : 'evaluated';
 
                   return (
                     <Fragment key={e.id}>
@@ -784,7 +795,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           {e.date || '—'}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
-                          {pendingFlag ? (
+                          {isPending ? (
                             <span
                               style={{
                                 padding: '2px 6px',
@@ -796,7 +807,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             >
                               Pending TL Review
                             </span>
-                          ) : reviewedFlag ? (
+                          ) : isReviewed ? (
                             <span
                               style={{
                                 padding: '2px 6px',
@@ -851,8 +862,14 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           botIqsScore={e.botIqsScore}
                           closedAt={e.date || e.scoredAt || ''}
                           parameters={buildParams(e)}
-                          mode="evaluated"
-                          flagStatus={pendingFlag?.status}
+                          mode={panelMode}
+                          flagStatus={pendingFlag?.status || reviewedFlag?.status}
+                          reviewedBy={e.updatedBy || reviewedFlag?.reviewedBy}
+                          reviewNote={e.reviewNote || reviewedFlag?.reviewNote}
+                          reviewedAt={e.updatedAt || reviewedFlag?.reviewedAt}
+                          challengedParams={reviewedFlag?.challengedParams || pendingFlag?.challengedParams || []}
+                          agentNote={reviewedFlag?.agentNote || pendingFlag?.agentNote}
+                          flagId={pendingFlag?.flagId || reviewedFlag?.flagId}
                           colSpan={8}
                           onClose={() => setExpandedEvalId(null)}
                           onDisputeRaised={() => {

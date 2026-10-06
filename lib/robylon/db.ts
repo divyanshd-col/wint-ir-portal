@@ -524,19 +524,38 @@ export interface GetScoredConversationsOptions {
   minUserMessages?: number;
   chatIdSearch?: string;
   excludeNil?: boolean;
+  sortBy?: 'recently_evaluated' | 'closed_at';
 }
 
 function buildFilters(opts: GetScoredConversationsOptions = {}): { conditions: string[]; params: any[] } {
   const conditions: string[] = [];
   const params: any[] = [];
 
-  if (opts.dateFrom) {
+  if (opts.dateFrom && opts.dateTo) {
+    params.push(opts.dateFrom, opts.dateTo);
+    const pFrom = `$${params.length - 1}`;
+    const pTo = `$${params.length}`;
+    conditions.push(`(
+      (c.closed_at::date >= ${pFrom} AND c.closed_at::date <= ${pTo})
+      OR
+      (s.reviewed_at IS NOT NULL AND s.reviewed_at::date >= ${pFrom} AND s.reviewed_at::date <= ${pTo})
+    )`);
+  } else if (opts.dateFrom) {
     params.push(opts.dateFrom);
-    conditions.push(`c.closed_at::date >= $${params.length}`);
-  }
-  if (opts.dateTo) {
+    const pFrom = `$${params.length}`;
+    conditions.push(`(
+      c.closed_at::date >= ${pFrom}
+      OR
+      (s.reviewed_at IS NOT NULL AND s.reviewed_at::date >= ${pFrom})
+    )`);
+  } else if (opts.dateTo) {
     params.push(opts.dateTo);
-    conditions.push(`c.closed_at::date <= $${params.length}`);
+    const pTo = `$${params.length}`;
+    conditions.push(`(
+      c.closed_at::date <= ${pTo}
+      OR
+      (s.reviewed_at IS NOT NULL AND s.reviewed_at::date <= ${pTo})
+    )`);
   }
   if (opts.iqsMin !== undefined && opts.iqsMin > 0) {
     params.push(opts.iqsMin);
@@ -665,7 +684,9 @@ export async function getAllScoredConversations(
     JOIN iqs_scores s ON s.chat_id = c.id
     LEFT JOIN agents a ON a.id = c.agent_id
     ${where}
-    ORDER BY c.closed_at DESC NULLS LAST, s.scored_at DESC
+    ${opts.sortBy === 'closed_at'
+      ? 'ORDER BY c.closed_at DESC NULLS LAST, s.scored_at DESC'
+      : 'ORDER BY COALESCE(s.reviewed_at, s.scored_at, c.closed_at) DESC NULLS LAST, c.closed_at DESC NULLS LAST'}
     ${limitSql}
   `, params);
 
@@ -1408,7 +1429,7 @@ export interface RobylonWebhookPayloadRecord {
 }
 
 /**
- * Stores incoming Robylon webhook payloads as-is into `robylon_webhook_payloads`.
+ * Stores incoming webhook payloads as-is into `robylon_webhook_payloads`.
  * Catches and logs errors so that failure to log never interrupts webhook processing.
  */
 export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRecord): Promise<void> {
@@ -1426,6 +1447,6 @@ export async function saveRobylonWebhookPayload(record: RobylonWebhookPayloadRec
       ]
     );
   } catch (err: any) {
-    console.error('[db] Failed to save Robylon webhook payload:', err.message);
+    console.error('[db] Failed to save webhook payload:', err.message);
   }
 }

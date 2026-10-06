@@ -49,3 +49,10 @@ ir-logs.jsonl
 *.tsbuildinfo
 next-env.d.ts
 .env*.local
+
+# local SLA cron testing (seed data + scripts)
+/scratch/sla/
+
+# presentations & generation scripts
+Graph_RAG_MTP_Presentation.pptx
+generate_mtp_presentation.py

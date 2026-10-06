@@ -24,6 +24,57 @@ async function resolveAgentId(dbUser: any, agentName: string): Promise<number | 
   return null;
 }
 
+async function enrichReportsWithLiveScores(reports: any[]): Promise<any[]> {
+  const chatIds = new Set<string>();
+  for (const r of reports) {
+    const evList = r.generated?.evidence;
+    if (Array.isArray(evList)) {
+      for (const ev of evList) {
+        if (ev.chatId) chatIds.add(String(ev.chatId));
+      }
+    }
+  }
+
+  if (chatIds.size === 0) return reports;
+
+  try {
+    const scoreRows = await query<any>(
+      `SELECT chat_id, iqs_score, reviewed_by, reviewed_at, review_note
+       FROM iqs_scores
+       WHERE chat_id = ANY($1)`,
+      [Array.from(chatIds)]
+    );
+    const scoreMap = new Map<string, any>(scoreRows.map(s => [String(s.chat_id), s]));
+
+    for (const r of reports) {
+      if (r.generated && Array.isArray(r.generated.evidence)) {
+        r.generated.evidence = r.generated.evidence.map((ev: any) => {
+          const live = scoreMap.get(String(ev.chatId));
+          if (live && live.iqs_score != null) {
+            const liveScore = Math.round(Number(live.iqs_score));
+            return {
+              ...ev,
+              score: liveScore,
+              originalScore: ev.score,
+              ...(live.reviewed_by ? {
+                reviewedBy: live.reviewed_by,
+                reviewedAt: live.reviewed_at,
+                reviewNote: live.review_note,
+                isReviewed: true,
+              } : {}),
+            };
+          }
+          return ev;
+        });
+      }
+    }
+  } catch (err: any) {
+    console.error('[ir-reports-api] enrichReportsWithLiveScores error:', err?.message);
+  }
+
+  return reports;
+}
+
 // GET: Fetch reports depending on user role
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -55,13 +106,14 @@ export async function GET(req: NextRequest) {
       }
 
       // Fetch published scorecards for this agent
-      const reports = await query<any>(
+      const rawReports = await query<any>(
         `SELECT id, agent_id, week_start::date::text AS week_start, week_end::date::text AS week_end, status, generated, comments, viewed_at, generated_at
          FROM ir_reports
          WHERE agent_id = $1 AND status = 'published'
          ORDER BY week_start DESC`,
         [agentId]
       );
+      const reports = await enrichReportsWithLiveScores(rawReports);
       return NextResponse.json({ reports, latestSystemWeek });
     }
 
@@ -111,7 +163,8 @@ export async function GET(req: NextRequest) {
          ORDER BY r.week_start DESC, a.name ASC`,
         [allMappedNames]
       );
-      return NextResponse.json({ reports, latestSystemWeek });
+      const enrichedReports = await enrichReportsWithLiveScores(reports);
+      return NextResponse.json({ reports: enrichedReports, latestSystemWeek });
     }
 
     if (role === 'admin' || role === 'quality') {
@@ -123,7 +176,8 @@ export async function GET(req: NextRequest) {
          WHERE r.status = 'published'
          ORDER BY r.week_start DESC, a.name ASC`
       );
-      return NextResponse.json({ reports, latestSystemWeek });
+      const enrichedReports = await enrichReportsWithLiveScores(reports);
+      return NextResponse.json({ reports: enrichedReports, latestSystemWeek });
     }
 
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

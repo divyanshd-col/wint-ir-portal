@@ -49,7 +49,7 @@ async function main() {
   });
   console.log('Test 5 (agent chat):', !testAgent ? 'PASSED (skipped)' : 'FAILED');
 
-  // Test case 6: Pure bot chat triggering Slack alert
+  // Test case 6: Pure bot chat triggering Slack alert with evaluator reasoning fallback
   const testChatId = `test_bot_${Date.now()}`;
   console.log(`\nSending test pure BOT quality alert for chat ${testChatId}...`);
 
@@ -70,7 +70,37 @@ async function main() {
     disposition: 'FD Information Query',
   });
 
-  console.log(`BOT Quality Alert test result: ${sent ? 'SUCCESS' : 'FAILED / DUPED'}`);
+  console.log(`BOT Quality Alert test 1 result: ${sent ? 'SUCCESS' : 'FAILED / DUPED'}`);
+
+  // Test case 7: Pure bot chat triggering Slack alert with full transcript for AI summary
+  const testChatId2 = `test_bot_ai_${Date.now()}`;
+  console.log(`\nSending test pure BOT quality alert with transcript for chat ${testChatId2}...`);
+
+  const sent2 = await fireBotQualityAlert({
+    chatId: testChatId2,
+    agentName: 'Myra (Bot)',
+    conversationType: 'bot',
+    isTransferred: false,
+    scores: {
+      issue_resolution: 'No',
+      correct_escalation: 'No',
+    },
+    reasoning: {
+      issue_resolution: 'Bot provided generic FD rates instead of premature withdrawal penalty details.',
+      correct_escalation: 'Bot did not connect to human representative despite customer asking for an executive.',
+    },
+    iqs: 25,
+    disposition: 'Fixed Deposit',
+    subDisposition: 'Premature Withdrawal',
+    transcript: `Customer: Hi, I want to withdraw my Bajaj Finance FD early. What will be the penalty deduction?
+Bot: Welcome to Wint Wealth! You can explore multiple high yield FDs on our platform.
+Customer: I am asking about my existing FD withdrawal penalty, please answer my question or connect me to an agent.
+Bot: Our FD rates go up to 9.1% p.a. Bajaj Finance FDs are rated AAA.
+Customer: This is useless. Connect me to a human support executive now!
+Bot: Thank you for contacting Wint Wealth! Have a nice day.`,
+  });
+
+  console.log(`BOT Quality Alert test 2 (with transcript) result: ${sent2 ? 'SUCCESS' : 'FAILED / DUPED'}`);
 }
 
 main().catch(err => {

@@ -7,7 +7,7 @@
  * Call-interaction chats are flagged separately and skipped from scoring.
  */
 
-import { sendSlackMessage } from './slack';
+import { sendSlackMessage, postSlackMessage } from './slack';
 import { storeHasQualityAlert, storeMarkQualityAlert, storeHasBotQualityAlert, storeMarkBotQualityAlert } from './store';
 import { appendQualityAlertToSheet } from './quality-sheet';
 import { appendComplianceAlertToSheet } from './compliance-sheet';
@@ -496,6 +496,106 @@ export function checkBotFailure(scores: Record<string, any>): {
   return { isFailure: false };
 }
 
+function formatSlackMrkdwn(text: string): string {
+  return text
+    // Replace standard markdown bold **text** with Slack mrkdwn *text*
+    .replace(/\*\*(.*?)\*\*/g, '*$1*')
+    // Normalize any bullet points at the start of a line to Slack bullet •
+    .replace(/^\s*[*•-]\s+/gm, '• ')
+    .trim();
+}
+
+async function generateBotChatSummary(opts: {
+  chatId: string;
+  disposition?: string;
+  subDisposition?: string;
+  reasoning?: Record<string, string>;
+  transcript?: string;
+  botFailure: {
+    issueResolutionReasoning?: string;
+    correctEscalationReasoning?: string;
+  };
+}): Promise<string> {
+  let transcriptText = opts.transcript?.trim() || '';
+
+  // If no transcript provided, attempt to fetch from DB
+  if (!transcriptText && opts.chatId) {
+    try {
+      const { getConversation } = await import('./robylon/db');
+      const conv = await getConversation(opts.chatId);
+      if (conv?.transcript) {
+        if (typeof conv.transcript === 'string') {
+          transcriptText = conv.transcript;
+        } else if (Array.isArray(conv.transcript)) {
+          const { transcriptFromJsonb } = await import('./scoring/transcript');
+          transcriptText = transcriptFromJsonb(conv.transcript);
+        } else if (typeof conv.transcript === 'object' && Array.isArray((conv.transcript as any).messages)) {
+          const { transcriptFromJsonb } = await import('./scoring/transcript');
+          transcriptText = transcriptFromJsonb((conv.transcript as any).messages);
+        }
+      }
+    } catch (e) {
+      console.warn(`[quality-alert] Could not fetch transcript for chat ${opts.chatId}:`, e);
+    }
+  }
+
+  // 1. If transcript is available, try Gemini quick summary
+  if (transcriptText) {
+    try {
+      const { readConfig } = await import('./config');
+      const config = await readConfig();
+      const { geminiGenerate, getIQSGeminiKeys } = await import('./gemini');
+      const keys = getIQSGeminiKeys(config);
+      if (keys.length > 0) {
+        const prompt = `You are an AI Quality Analyst for Wint Wealth customer support.
+An AI bot failed to resolve this customer chat and failed to escalate appropriately.
+Analyze the following conversation transcript and summarize what went wrong in 2-3 concise bullet points formatted for Slack:
+• *Customer Issue:* [What specific question/need the customer had]
+• *Bot Failure:* [Why the bot failed to resolve it]
+• *Escalation Failure:* [Why/how escalation failed]
+
+Important formatting rules for Slack:
+- Use single asterisks for bold (e.g. *Customer Issue:*), NEVER double asterisks (**).
+- Start each line with the bullet character •
+- Keep it under 60 words total. Do not include greetings, introductions, or markdown code fences.
+
+Chat Transcript:
+${transcriptText.slice(0, 4000)}`;
+
+        const summary = await geminiGenerate(keys, 'gemini-3.6-flash', [{ role: 'user', parts: [{ text: prompt }] }], {}, 8000);
+        if (summary?.trim()) {
+          const formattedSummary = formatSlackMrkdwn(summary);
+          const lines = [
+            `📋 *Chat Issue Summary*`,
+            ``,
+            formattedSummary,
+          ];
+          if (opts.disposition) {
+            lines.push(``, `• *Disposition:* ${opts.disposition}${opts.subDisposition ? ` › ${opts.subDisposition}` : ''}`);
+          }
+          return lines.join('\n');
+        }
+      }
+    } catch (err) {
+      console.warn('[quality-alert] Failed to generate AI summary for bot failure, falling back to evaluator reasoning:', err);
+    }
+  }
+
+  // 2. Fallback: structured evaluator reasoning
+  const issueReason = opts.botFailure.issueResolutionReasoning || opts.reasoning?.issue_resolution || opts.reasoning?.IssueResolution || 'Bot failed to resolve customer query.';
+  const escReason = opts.botFailure.correctEscalationReasoning || opts.reasoning?.correct_escalation || opts.reasoning?.CorrectEscalation || 'Bot failed to escalate chat.';
+
+  const lines = [
+    `📋 *Chat Issue Summary*`,
+    ``,
+    opts.disposition ? `• *Disposition:* ${opts.disposition}${opts.subDisposition ? ` › ${opts.subDisposition}` : ''}` : null,
+    `• *Issue Resolution Failure:* ${issueReason}`,
+    `• *Escalation Failure:* ${escReason}`,
+  ].filter(Boolean) as string[];
+
+  return lines.join('\n');
+}
+
 export async function fireBotQualityAlert(opts: {
   chatId: string;
   agentName?: string;
@@ -507,6 +607,7 @@ export async function fireBotQualityAlert(opts: {
   subDisposition?: string;
   conversationType?: string;
   isTransferred?: boolean;
+  transcript?: string;
 }): Promise<boolean> {
   // 1. Guard against transferred chats or human agent chats explicitly passed
   if (opts.isTransferred || opts.conversationType === 'hybrid' || opts.conversationType === 'agent' || (opts.conversationType && opts.conversationType !== 'bot')) {
@@ -555,11 +656,37 @@ export async function fireBotQualityAlert(opts: {
 
   const messageText = `Bot failed to resolve this chat : ${chatLink}`;
 
-  const sent = await sendSlackMessage(channel, messageText, token, undefined, {
+  const postResult = await postSlackMessage(channel, messageText, token, undefined, {
     username: 'Wint BOT Quality Alert',
     icon_emoji: ':robot_face:',
   });
+
+  const sent = postResult.ok;
   console.log(`[quality-alert] BOT quality failure Slack alert for chat ${opts.chatId} to ${channel}: ${sent ? 'SUCCESS' : 'FAILED'}`);
+
+  // Post summary in thread if parent message succeeded
+  if (sent && postResult.ts) {
+    try {
+      const summaryText = await generateBotChatSummary({
+        chatId: opts.chatId,
+        disposition: opts.disposition,
+        subDisposition: opts.subDisposition,
+        reasoning: opts.reasoning,
+        transcript: opts.transcript,
+        botFailure,
+      });
+
+      await postSlackMessage(channel, summaryText, token, undefined, {
+        username: 'Wint BOT Quality Alert',
+        icon_emoji: ':robot_face:',
+        thread_ts: postResult.ts,
+      });
+      console.log(`[quality-alert] Posted bot failure thread summary for chat ${opts.chatId}`);
+    } catch (threadErr) {
+      console.error(`[quality-alert] Failed to post bot failure thread summary for chat ${opts.chatId}:`, threadErr);
+    }
+  }
+
   return sent;
 }
 

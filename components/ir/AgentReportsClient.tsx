@@ -697,15 +697,22 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                             </div>
                           </td>
                           <td className="p-4 text-center whitespace-nowrap">
-                            <span className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${
-                              ev.score >= 85 
-                                ? 'bg-green-50 text-green-700 border border-green-200' 
-                                : ev.score >= 70 
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                  : 'bg-red-50 text-red-700 border border-red-200'
-                            }`}>
-                              {ev.score}%
-                            </span>
+                            <div className="flex flex-col items-center gap-1">
+                              <span className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${
+                                ev.score >= 85 
+                                  ? 'bg-green-50 text-green-700 border border-green-200' 
+                                  : ev.score >= 70 
+                                    ? 'bg-amber-50 text-amber-700 border border-amber-200' 
+                                    : 'bg-red-50 text-red-700 border border-red-200'
+                              }`}>
+                                {ev.score}%
+                              </span>
+                              {ev.isReviewed && (
+                                <span className="text-[10px] font-semibold text-green-700 bg-green-50 px-1.5 py-0.2 rounded border border-green-200" title={ev.reviewNote || 'Score updated by QA'}>
+                                  ✓ QA Updated
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-4 font-semibold text-gray-800 whitespace-nowrap">
                             {ev.topic}
