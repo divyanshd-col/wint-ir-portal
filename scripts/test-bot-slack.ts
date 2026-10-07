@@ -49,12 +49,12 @@ async function main() {
   });
   console.log('Test 5 (agent chat):', !testAgent ? 'PASSED (skipped)' : 'FAILED');
 
-  // Test case 6: Pure bot chat triggering Slack alert with evaluator reasoning fallback
-  const testChatId = `test_bot_${Date.now()}`;
-  console.log(`\nSending test pure BOT quality alert for chat ${testChatId}...`);
+  // Test case 6: Pure bot chat WITHOUT transcript should be skipped (not triggered)
+  const testChatIdNoTranscript = `test_bot_no_transcript_${Date.now()}`;
+  console.log(`\nTesting pure BOT chat WITHOUT transcript (${testChatIdNoTranscript})...`);
 
-  const sent = await fireBotQualityAlert({
-    chatId: testChatId,
+  const sentWithoutTranscript = await fireBotQualityAlert({
+    chatId: testChatIdNoTranscript,
     agentName: 'Myra (Bot)',
     conversationType: 'bot',
     isTransferred: false,
@@ -70,9 +70,9 @@ async function main() {
     disposition: 'FD Information Query',
   });
 
-  console.log(`BOT Quality Alert test 1 result: ${sent ? 'SUCCESS' : 'FAILED / DUPED'}`);
+  console.log('Test 6 (missing transcript skipped):', !sentWithoutTranscript ? 'PASSED (skipped)' : 'FAILED');
 
-  // Test case 7: Pure bot chat triggering Slack alert with full transcript for AI summary
+  // Test case 7: Pure bot chat WITH transcript triggering Slack alert + summary of what happened
   const testChatId2 = `test_bot_ai_${Date.now()}`;
   console.log(`\nSending test pure BOT quality alert with transcript for chat ${testChatId2}...`);
 
@@ -100,7 +100,35 @@ Customer: This is useless. Connect me to a human support executive now!
 Bot: Thank you for contacting Wint Wealth! Have a nice day.`,
   });
 
-  console.log(`BOT Quality Alert test 2 (with transcript) result: ${sent2 ? 'SUCCESS' : 'FAILED / DUPED'}`);
+  console.log(`BOT Quality Alert test 2 (pure bot -> default TL Sivaranjini): ${sent2 ? 'SUCCESS' : 'FAILED / DUPED'}`);
+
+  // Test case 8: Bot chat with assigned agent Hasan -> should tag Hasan's TL Vedant G
+  const testChatId3 = `test_bot_assigned_agent_${Date.now()}`;
+  console.log(`\nSending test BOT quality alert with assigned agent Hasan for chat ${testChatId3}...`);
+
+  const sent3 = await fireBotQualityAlert({
+    chatId: testChatId3,
+    agentName: 'Hasan',
+    conversationType: 'bot',
+    isTransferred: false,
+    scores: {
+      issue_resolution: 'No',
+      correct_escalation: 'No',
+    },
+    reasoning: {
+      issue_resolution: 'Bot gave inaccurate KYC guidance.',
+      correct_escalation: 'Bot did not escalate to human agent.',
+    },
+    iqs: 20,
+    disposition: 'KYC',
+    subDisposition: 'Address Proof',
+    transcript: `Customer: Can I submit driving license for KYC?
+Bot: Welcome to Wint Wealth! Please explore bonds.
+Customer: Answer about driving license please!
+Bot: Have a good day.`,
+  });
+
+  console.log(`BOT Quality Alert test 3 (assigned agent -> TL Vedant G): ${sent3 ? 'SUCCESS' : 'FAILED / DUPED'}`);
 }
 
 main().catch(err => {
