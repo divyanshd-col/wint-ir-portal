@@ -572,6 +572,7 @@ export async function fireBotQualityAlert(opts: {
   conversationType?: string;
   isTransferred?: boolean;
   transcript?: string;
+  tlName?: string;
 }): Promise<boolean> {
   // 1. Guard against transferred chats or human agent chats explicitly passed
   if (opts.isTransferred || opts.conversationType === 'hybrid' || opts.conversationType === 'agent' || (opts.conversationType && opts.conversationType !== 'bot')) {
@@ -623,6 +624,52 @@ export async function fireBotQualityAlert(opts: {
     return false;
   }
 
+  // 4. Resolve assigned agent and TL for tagging
+  let agentName = (opts.agentName || '').trim();
+  let tlName = (opts.tlName || '').trim();
+
+  // If tlName or agentName is missing, check database conversations JOIN agents
+  if ((!tlName || !agentName) && opts.chatId) {
+    try {
+      const { query } = await import('./cx/db');
+      const rows = await query<{ agent_name: string | null; tl_name: string | null }>(
+        `SELECT a.name as agent_name, a.tl_name FROM conversations c
+         JOIN agents a ON a.id = c.agent_id
+         WHERE c.id = $1
+         LIMIT 1`,
+        [opts.chatId]
+      );
+      if (rows[0]) {
+        if (!agentName && rows[0].agent_name) agentName = rows[0].agent_name.trim();
+        if (!tlName && rows[0].tl_name) tlName = rows[0].tl_name.trim();
+      }
+    } catch {}
+  }
+
+  // If tlName still missing, look up from agents table by agentName
+  if (!tlName && agentName) {
+    try {
+      const { getAgentTLByName } = await import('./robylon/db');
+      tlName = (await getAgentTLByName(agentName)) || '';
+    } catch {}
+  }
+
+  // Fallback for known agent overrides
+  if (!tlName && agentName) {
+    const cleanAgent = agentName.trim().toLowerCase();
+    if (cleanAgent.includes('hasan')) {
+      tlName = 'Vedant G';
+    } else if (cleanAgent.includes('nitya') && !cleanAgent.includes('nityaa')) {
+      tlName = 'Kriti';
+    }
+  }
+
+  // Get Slack mention for the TL
+  let tlMention = getTLSlackMention(tlName, agentName);
+  if (!tlMention || tlMention === 'N/A') {
+    tlMention = `<@${BOT_DEFAULT_TL_SLACK_ID}>`;
+  }
+
   let token = process.env.BOT_FAIL_SLACK_BOT_TOKEN || process.env.BOT_SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
   if (!token) {
     try {
@@ -645,7 +692,15 @@ export async function fireBotQualityAlert(opts: {
     ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
     : opts.chatId;
 
-  const messageText = `Bot failed to resolve this chat : ${chatLink}`;
+  const lines: string[] = [
+    `Bot failed to resolve this chat : ${chatLink}`,
+  ];
+  if (agentName && !isBotAgentName(agentName)) {
+    lines.push(`Agent: ${agentName}`);
+  }
+  lines.push(`TL: ${tlMention}`);
+
+  const messageText = lines.join('\n');
 
   const postResult = await postSlackMessage(channel, messageText, token, undefined, {
     username: 'Wint BOT Quality Alert',

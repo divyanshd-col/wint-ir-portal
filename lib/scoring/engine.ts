@@ -424,6 +424,7 @@ export async function executeScoring(
     fireBotQualityAlert({
       chatId,
       agentName:           finalAgentName,
+      tlName:              resolvedTlName,
       contactPhone,
       scores:              Object.fromEntries(Object.entries(botParameters).map(([k,v]) => [k, String(v.score)])),
       reasoning:           Object.fromEntries(Object.entries(botParameters).map(([k,v]) => [k, v.reasoning])),
