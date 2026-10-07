@@ -49,12 +49,12 @@ async function main() {
   });
   console.log('Test 5 (agent chat):', !testAgent ? 'PASSED (skipped)' : 'FAILED');
 
-  // Test case 6: Pure bot chat triggering Slack alert with evaluator reasoning fallback
-  const testChatId = `test_bot_${Date.now()}`;
-  console.log(`\nSending test pure BOT quality alert for chat ${testChatId}...`);
+  // Test case 6: Pure bot chat WITHOUT transcript should be skipped (not triggered)
+  const testChatIdNoTranscript = `test_bot_no_transcript_${Date.now()}`;
+  console.log(`\nTesting pure BOT chat WITHOUT transcript (${testChatIdNoTranscript})...`);
 
-  const sent = await fireBotQualityAlert({
-    chatId: testChatId,
+  const sentWithoutTranscript = await fireBotQualityAlert({
+    chatId: testChatIdNoTranscript,
     agentName: 'Myra (Bot)',
     conversationType: 'bot',
     isTransferred: false,
@@ -70,9 +70,9 @@ async function main() {
     disposition: 'FD Information Query',
   });
 
-  console.log(`BOT Quality Alert test 1 result: ${sent ? 'SUCCESS' : 'FAILED / DUPED'}`);
+  console.log('Test 6 (missing transcript skipped):', !sentWithoutTranscript ? 'PASSED (skipped)' : 'FAILED');
 
-  // Test case 7: Pure bot chat triggering Slack alert with full transcript for AI summary
+  // Test case 7: Pure bot chat WITH transcript triggering Slack alert + summary of what happened
   const testChatId2 = `test_bot_ai_${Date.now()}`;
   console.log(`\nSending test pure BOT quality alert with transcript for chat ${testChatId2}...`);
 
