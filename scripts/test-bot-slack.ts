@@ -100,35 +100,7 @@ Customer: This is useless. Connect me to a human support executive now!
 Bot: Thank you for contacting Wint Wealth! Have a nice day.`,
   });
 
-  console.log(`BOT Quality Alert test 2 (pure bot -> default TL Sivaranjini): ${sent2 ? 'SUCCESS' : 'FAILED / DUPED'}`);
-
-  // Test case 8: Bot chat with assigned agent Hasan -> should tag Hasan's TL Vedant G
-  const testChatId3 = `test_bot_assigned_agent_${Date.now()}`;
-  console.log(`\nSending test BOT quality alert with assigned agent Hasan for chat ${testChatId3}...`);
-
-  const sent3 = await fireBotQualityAlert({
-    chatId: testChatId3,
-    agentName: 'Hasan',
-    conversationType: 'bot',
-    isTransferred: false,
-    scores: {
-      issue_resolution: 'No',
-      correct_escalation: 'No',
-    },
-    reasoning: {
-      issue_resolution: 'Bot gave inaccurate KYC guidance.',
-      correct_escalation: 'Bot did not escalate to human agent.',
-    },
-    iqs: 20,
-    disposition: 'KYC',
-    subDisposition: 'Address Proof',
-    transcript: `Customer: Can I submit driving license for KYC?
-Bot: Welcome to Wint Wealth! Please explore bonds.
-Customer: Answer about driving license please!
-Bot: Have a good day.`,
-  });
-
-  console.log(`BOT Quality Alert test 3 (assigned agent -> TL Vedant G): ${sent3 ? 'SUCCESS' : 'FAILED / DUPED'}`);
+  console.log(`BOT Quality Alert test 2 (with transcript) result: ${sent2 ? 'SUCCESS' : 'FAILED / DUPED'}`);
 }
 
 main().catch(err => {

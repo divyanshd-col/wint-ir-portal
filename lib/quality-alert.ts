@@ -469,7 +469,17 @@ function isParamNoValue(val: any): boolean {
   return false;
 }
 
-export function checkBotFailure(scores: Record<string, any>): {
+function cleanReasoningText(val: any): string | undefined {
+  if (val === undefined || val === null) return undefined;
+  const str = String(val).trim();
+  const low = str.toLowerCase();
+  if (low === 'false' || low === 'true' || low === '0' || low === '1' || low === 'no' || low === 'yes') {
+    return undefined;
+  }
+  return str || undefined;
+}
+
+export function checkBotFailure(scores: Record<string, any>, reasoning?: Record<string, string>): {
   isFailure: boolean;
   issueResolutionReasoning?: string;
   correctEscalationReasoning?: string;
@@ -485,11 +495,15 @@ export function checkBotFailure(scores: Record<string, any>): {
   const correctEscCell = scores[correctEscKey];
 
   if (isParamNoValue(issueResCell) && isParamNoValue(correctEscCell)) {
-    const getReasoning = (cell: any) => typeof cell === 'object' && cell?.reasoning ? cell.reasoning : String(cell);
+    const getReasoning = (cell: any, key: string) => {
+      if (typeof cell === 'object' && cell?.reasoning) return cleanReasoningText(cell.reasoning);
+      if (reasoning?.[key]) return cleanReasoningText(reasoning[key]);
+      return cleanReasoningText(cell);
+    };
     return {
       isFailure: true,
-      issueResolutionReasoning: getReasoning(issueResCell),
-      correctEscalationReasoning: getReasoning(correctEscCell),
+      issueResolutionReasoning: getReasoning(issueResCell, issueResKey),
+      correctEscalationReasoning: getReasoning(correctEscCell, correctEscKey),
     };
   }
 
@@ -538,7 +552,7 @@ Important formatting rules for Slack:
 Chat Transcript:
 ${transcriptText.slice(0, 4000)}`;
 
-      const summary = await geminiGenerate(keys, 'gemini-3.6-flash', [{ role: 'user', parts: [{ text: prompt }] }], {}, 8000);
+      const summary = await geminiGenerate(keys, 'gemini-3.6-flash', [{ role: 'user', parts: [{ text: prompt }] }], {}, 15000);
       if (summary?.trim()) {
         const formattedSummary = formatSlackMrkdwn(summary);
         return `📋 *What happened:*\n\n${formattedSummary}`;
@@ -549,8 +563,16 @@ ${transcriptText.slice(0, 4000)}`;
   }
 
   // 2. Fallback if LLM times out: attach only summary of what happened based on evaluator reasoning
-  const issueReason = opts.botFailure.issueResolutionReasoning || opts.reasoning?.issue_resolution || opts.reasoning?.IssueResolution || 'Bot failed to resolve customer query.';
-  const escReason = opts.botFailure.correctEscalationReasoning || opts.reasoning?.correct_escalation || opts.reasoning?.CorrectEscalation || 'Bot failed to escalate chat.';
+  const issueReason = cleanReasoningText(opts.reasoning?.issue_resolution) ||
+                      cleanReasoningText(opts.reasoning?.IssueResolution) ||
+                      cleanReasoningText(opts.reasoning?.all_questions) ||
+                      cleanReasoningText(opts.botFailure.issueResolutionReasoning) ||
+                      'Bot failed to resolve customer query.';
+
+  const escReason = cleanReasoningText(opts.reasoning?.correct_escalation) ||
+                    cleanReasoningText(opts.reasoning?.CorrectEscalation) ||
+                    cleanReasoningText(opts.botFailure.correctEscalationReasoning) ||
+                    'Bot failed to escalate to a human agent.';
 
   return [
     `📋 *What happened:*`,
@@ -572,7 +594,6 @@ export async function fireBotQualityAlert(opts: {
   conversationType?: string;
   isTransferred?: boolean;
   transcript?: string;
-  tlName?: string;
 }): Promise<boolean> {
   // 1. Guard against transferred chats or human agent chats explicitly passed
   if (opts.isTransferred || opts.conversationType === 'hybrid' || opts.conversationType === 'agent' || (opts.conversationType && opts.conversationType !== 'bot')) {
@@ -594,7 +615,7 @@ export async function fireBotQualityAlert(opts: {
     }
   }
 
-  const botFailure = checkBotFailure(opts.scores || {});
+  const botFailure = checkBotFailure(opts.scores || {}, opts.reasoning);
   if (!botFailure.isFailure) return false;
 
   // 3. Ensure transcript is available — do not trigger if no transcript is found
@@ -624,52 +645,6 @@ export async function fireBotQualityAlert(opts: {
     return false;
   }
 
-  // 4. Resolve assigned agent and TL for tagging
-  let agentName = (opts.agentName || '').trim();
-  let tlName = (opts.tlName || '').trim();
-
-  // If tlName or agentName is missing, check database conversations JOIN agents
-  if ((!tlName || !agentName) && opts.chatId) {
-    try {
-      const { query } = await import('./cx/db');
-      const rows = await query<{ agent_name: string | null; tl_name: string | null }>(
-        `SELECT a.name as agent_name, a.tl_name FROM conversations c
-         JOIN agents a ON a.id = c.agent_id
-         WHERE c.id = $1
-         LIMIT 1`,
-        [opts.chatId]
-      );
-      if (rows[0]) {
-        if (!agentName && rows[0].agent_name) agentName = rows[0].agent_name.trim();
-        if (!tlName && rows[0].tl_name) tlName = rows[0].tl_name.trim();
-      }
-    } catch {}
-  }
-
-  // If tlName still missing, look up from agents table by agentName
-  if (!tlName && agentName) {
-    try {
-      const { getAgentTLByName } = await import('./robylon/db');
-      tlName = (await getAgentTLByName(agentName)) || '';
-    } catch {}
-  }
-
-  // Fallback for known agent overrides
-  if (!tlName && agentName) {
-    const cleanAgent = agentName.trim().toLowerCase();
-    if (cleanAgent.includes('hasan')) {
-      tlName = 'Vedant G';
-    } else if (cleanAgent.includes('nitya') && !cleanAgent.includes('nityaa')) {
-      tlName = 'Kriti';
-    }
-  }
-
-  // Get Slack mention for the TL
-  let tlMention = getTLSlackMention(tlName, agentName);
-  if (!tlMention || tlMention === 'N/A') {
-    tlMention = `<@${BOT_DEFAULT_TL_SLACK_ID}>`;
-  }
-
   let token = process.env.BOT_FAIL_SLACK_BOT_TOKEN || process.env.BOT_SLACK_BOT_TOKEN || process.env.SLACK_BOT_TOKEN || process.env.SLACK_USER_TOKEN || '';
   if (!token) {
     try {
@@ -692,15 +667,7 @@ export async function fireBotQualityAlert(opts: {
     ? `<${ROBYLON_BASE}/${opts.chatId}|${opts.chatId}>`
     : opts.chatId;
 
-  const lines: string[] = [
-    `Bot failed to resolve this chat : ${chatLink}`,
-  ];
-  if (agentName && !isBotAgentName(agentName)) {
-    lines.push(`Agent: ${agentName}`);
-  }
-  lines.push(`TL: ${tlMention}`);
-
-  const messageText = lines.join('\n');
+  const messageText = `Bot failed to resolve this chat : ${chatLink}`;
 
   const postResult = await postSlackMessage(channel, messageText, token, undefined, {
     username: 'Wint BOT Quality Alert',
