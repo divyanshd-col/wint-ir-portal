@@ -469,7 +469,17 @@ function isParamNoValue(val: any): boolean {
   return false;
 }
 
-export function checkBotFailure(scores: Record<string, any>): {
+function cleanReasoningText(val: any): string | undefined {
+  if (val === undefined || val === null) return undefined;
+  const str = String(val).trim();
+  const low = str.toLowerCase();
+  if (low === 'false' || low === 'true' || low === '0' || low === '1' || low === 'no' || low === 'yes') {
+    return undefined;
+  }
+  return str || undefined;
+}
+
+export function checkBotFailure(scores: Record<string, any>, reasoning?: Record<string, string>): {
   isFailure: boolean;
   issueResolutionReasoning?: string;
   correctEscalationReasoning?: string;
@@ -485,11 +495,15 @@ export function checkBotFailure(scores: Record<string, any>): {
   const correctEscCell = scores[correctEscKey];
 
   if (isParamNoValue(issueResCell) && isParamNoValue(correctEscCell)) {
-    const getReasoning = (cell: any) => typeof cell === 'object' && cell?.reasoning ? cell.reasoning : String(cell);
+    const getReasoning = (cell: any, key: string) => {
+      if (typeof cell === 'object' && cell?.reasoning) return cleanReasoningText(cell.reasoning);
+      if (reasoning?.[key]) return cleanReasoningText(reasoning[key]);
+      return cleanReasoningText(cell);
+    };
     return {
       isFailure: true,
-      issueResolutionReasoning: getReasoning(issueResCell),
-      correctEscalationReasoning: getReasoning(correctEscCell),
+      issueResolutionReasoning: getReasoning(issueResCell, issueResKey),
+      correctEscalationReasoning: getReasoning(correctEscCell, correctEscKey),
     };
   }
 
@@ -538,7 +552,7 @@ Important formatting rules for Slack:
 Chat Transcript:
 ${transcriptText.slice(0, 4000)}`;
 
-      const summary = await geminiGenerate(keys, 'gemini-3.6-flash', [{ role: 'user', parts: [{ text: prompt }] }], {}, 8000);
+      const summary = await geminiGenerate(keys, 'gemini-3.6-flash', [{ role: 'user', parts: [{ text: prompt }] }], {}, 15000);
       if (summary?.trim()) {
         const formattedSummary = formatSlackMrkdwn(summary);
         return `📋 *What happened:*\n\n${formattedSummary}`;
@@ -549,8 +563,16 @@ ${transcriptText.slice(0, 4000)}`;
   }
 
   // 2. Fallback if LLM times out: attach only summary of what happened based on evaluator reasoning
-  const issueReason = opts.botFailure.issueResolutionReasoning || opts.reasoning?.issue_resolution || opts.reasoning?.IssueResolution || 'Bot failed to resolve customer query.';
-  const escReason = opts.botFailure.correctEscalationReasoning || opts.reasoning?.correct_escalation || opts.reasoning?.CorrectEscalation || 'Bot failed to escalate chat.';
+  const issueReason = cleanReasoningText(opts.reasoning?.issue_resolution) ||
+                      cleanReasoningText(opts.reasoning?.IssueResolution) ||
+                      cleanReasoningText(opts.reasoning?.all_questions) ||
+                      cleanReasoningText(opts.botFailure.issueResolutionReasoning) ||
+                      'Bot failed to resolve customer query.';
+
+  const escReason = cleanReasoningText(opts.reasoning?.correct_escalation) ||
+                    cleanReasoningText(opts.reasoning?.CorrectEscalation) ||
+                    cleanReasoningText(opts.botFailure.correctEscalationReasoning) ||
+                    'Bot failed to escalate to a human agent.';
 
   return [
     `📋 *What happened:*`,
@@ -593,7 +615,7 @@ export async function fireBotQualityAlert(opts: {
     }
   }
 
-  const botFailure = checkBotFailure(opts.scores || {});
+  const botFailure = checkBotFailure(opts.scores || {}, opts.reasoning);
   if (!botFailure.isFailure) return false;
 
   // 3. Ensure transcript is available — do not trigger if no transcript is found
