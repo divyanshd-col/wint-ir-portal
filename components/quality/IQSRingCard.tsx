@@ -1,5 +1,5 @@
 interface Props {
-  data:    { chat: number | null; call: number | null; email: null } | null;
+  data:    { chat: number | null; call: number | null; email?: number | null } | null;
   loading: boolean;
 }
 
@@ -67,7 +67,7 @@ export default function IQSRingCard({ data, loading }: Props) {
           <>
             <Ring value={data?.chat  ?? null} label="Chats" />
             <Ring value={data?.call  ?? null} label="Calls" />
-            <Ring value={null}                label="Emails" />
+            <Ring value={data?.email ?? null} label="Emails" />
           </>
         )}
       </div>

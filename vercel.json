@@ -5,9 +5,16 @@
     },
     "app/api/cron/generate-kb-suggestions/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/cron/process-calls/route.ts": {
+      "maxDuration": 300
     }
   },
   "crons": [
+    {
+      "path": "/api/cron/process-calls",
+      "schedule": "*/10 * * * *"
+    },
     {
       "path": "/api/cron/sync-logs",
       "schedule": "0 0 * * *"

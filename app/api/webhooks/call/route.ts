@@ -20,7 +20,10 @@ import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys } from '@/lib/gemini';
 import {
   CALL_TRANSCRIPTION_PROMPT,
+  CALL_DISPOSITION_CLASSIFY_PROMPT,
   parseTranscriptionResponse,
+  parseCallDispositionClassified,
+  segmentsToText,
 } from '@/lib/call-quality';
 import {
   storeHasProcessedEvent,
@@ -33,6 +36,7 @@ import {
   updateCallRecordingMetrics,
   findClosedConversationForCall,
   linkCallToChat,
+  updateCallDisposition,
   saveRobylonWebhookPayload,
 } from '@/lib/robylon/db';
 
@@ -182,7 +186,39 @@ async function processCallWebhook(body: any): Promise<void> {
   });
 
   console.log(`[call-webhook] Stored call ${callId} — interruptions=${interruptionCount} dead_air=${deadAirCount} status=${resolvedChatId ? 'linked' : 'pending_link'}`);
-  // Scoring fires from the chat webhook at TICKET_CLOSED / CLASSIFICATION_UPDATED.
+
+  // Classify disposition if transcript text is available
+  const callTranscriptText = segmentsToText(segments);
+  let disposition = '';
+  let subDisposition = '';
+  if (callTranscriptText) {
+    try {
+      const rawDisp = await callGeminiForCall(
+        geminiKeys,
+        [{ role: 'user', parts: [{ text: CALL_DISPOSITION_CLASSIFY_PROMPT + '\n\n## CALL TRANSCRIPT\n' + callTranscriptText }] }],
+        undefined,
+        30_000,
+      );
+      const classified = parseCallDispositionClassified(rawDisp);
+      disposition    = classified.disposition;
+      subDisposition = classified.subDisposition;
+      if (disposition) {
+        await updateCallDisposition(callId, disposition, subDisposition);
+        console.log(`[call-webhook] Call ${callId} classified — ${disposition} > ${subDisposition}`);
+      }
+    } catch (err: any) {
+      console.error(`[call-webhook] Disposition classify failed for call ${callId}:`, err.message);
+    }
+  }
+
+  // Auto-trigger evaluation pipeline for the call
+  try {
+    const { runCallPipeline } = await import('@/lib/scoring/call-pipeline');
+    await runCallPipeline(callId);
+    console.log(`[call-webhook] Auto-evaluated call ${callId}`);
+  } catch (pipelineErr: any) {
+    console.error(`[call-webhook] Call pipeline trigger failed for call ${callId}:`, pipelineErr.message);
+  }
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────

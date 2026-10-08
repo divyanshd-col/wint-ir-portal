@@ -51,7 +51,8 @@ next-env.d.ts
 .env*.local
 
 # local SLA cron testing (seed data + scripts)
-/scratch/sla/
+/scratch/
+
 
 # presentations & generation scripts
 Graph_RAG_MTP_Presentation.pptx
