@@ -191,8 +191,9 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   );
 }
 
-function ScoreRing({ score }: { score: number | null }) {
-  const val = score ?? 0;
+function ScoreRing({ score }: { score: number | string | null }) {
+  const num = score != null ? Math.round(Number(score)) : null;
+  const val = num ?? 0;
   const r = 27;
   const circ = 2 * Math.PI * r; // ≈ 169.6
   const offset = circ - (val / 100) * circ;
@@ -217,12 +218,12 @@ function ScoreRing({ score }: { score: number | null }) {
         y={33}
         textAnchor="middle"
         dominantBaseline="central"
-        fontSize={18}
+        fontSize={16}
         fontWeight={700}
         fill="#111111"
         fontFamily={SANS}
       >
-        {score !== null ? val : '—'}
+        {num !== null ? `${val}%` : '—'}
       </text>
     </svg>
   );
@@ -811,7 +812,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                       </div>
                                       {isOverridden && (
                                         <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600, marginTop: 4 }}>
-                                          QA Adjusted from {item.quality_score}%
+                                          QA Adjusted from {Math.round(Number(item.quality_score))}%
                                         </div>
                                       )}
                                     </div>

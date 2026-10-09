@@ -89,8 +89,10 @@ function fmtTime(iso: string) {
 }
 
 // ─── Score Badges ─────────────────────────────────────────────────────────────
-function IQSBadge({ score }: { score: number | null }) {
+function IQSBadge({ score }: { score: number | string | null }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
+  const num = Math.round(Number(score));
+  if (isNaN(num)) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>;
   return (
     <span
       style={{
@@ -107,38 +109,66 @@ function IQSBadge({ score }: { score: number | null }) {
         border: '1px solid var(--qa-border)',
       }}
     >
-      {score}
+      {num}
     </span>
   );
 }
 
-function ScoreRing({ score, size = 56 }: { score: number | null; size?: number }) {
-  const radius = (size - 6) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = score != null ? circumference - (score / 100) * circumference : circumference;
-  const color = score == null ? '#94a3b8' : score >= 85 ? '#16a34a' : score >= 70 ? '#d97706' : '#dc2626';
+function ScoreRing({ score, size = 64 }: { score: number | string | null; size?: number }) {
+  const num = score != null ? Math.round(Number(score)) : null;
+  if (num == null || isNaN(num)) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+        <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-border-sub, #f1f5f9)" strokeWidth="5" />
+        <text
+          x="32"
+          y="33"
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize="13"
+          fontWeight="700"
+          fill="var(--qa-text-3)"
+          fontFamily={MONO}
+        >
+          NIL
+        </text>
+      </svg>
+    );
+  }
+  const RING_C = 169.6;
+  const clamped = Math.max(0, Math.min(100, num));
+  const offset = (((100 - clamped) / 100) * RING_C).toFixed(1);
+  const color = clamped >= 85 ? '#16a34a' : clamped >= 70 ? '#d97706' : '#dc2626';
 
   return (
-    <div style={{ position: 'relative', width: size, height: size, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-        <circle cx={size / 2} cy={size / 2} r={radius} stroke="var(--qa-border-sub)" strokeWidth="5" fill="transparent" />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={color}
-          strokeWidth="5"
-          fill="transparent"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          strokeLinecap="round"
-          style={{ transition: 'stroke-dashoffset 0.5s ease' }}
-        />
-      </svg>
-      <span style={{ position: 'absolute', fontSize: 13, fontWeight: 700, color: 'var(--qa-text)', fontFamily: MONO }}>
-        {score != null ? `${score}%` : 'N/A'}
-      </span>
-    </div>
+    <svg width={size} height={size} viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+      <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-border-sub, #f1f5f9)" strokeWidth="5" />
+      <circle
+        cx="32"
+        cy="32"
+        r="27"
+        fill="none"
+        stroke={color}
+        strokeWidth="5"
+        strokeLinecap="round"
+        strokeDasharray="169.6"
+        strokeDashoffset={offset}
+        transform="rotate(-90 32 32)"
+        style={{ transition: 'stroke-dashoffset 0.3s' }}
+      />
+      <text
+        x="32"
+        y="33"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="16"
+        fontWeight="700"
+        fill="var(--qa-text)"
+        fontFamily={MONO}
+      >
+        {num}%
+      </text>
+    </svg>
   );
 }
 
@@ -704,17 +734,17 @@ function EvaluatedEmailsSection({ onTotalChange }: { onTotalChange?: (count: num
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                <ScoreRing score={score} size={54} />
+                                <ScoreRing score={score} size={64} />
                                 <div>
                                   <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
                                     Quality Score
                                   </div>
-                                  <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--qa-text)', marginTop: 2, fontFamily: MONO }}>
-                                    {score != null ? `${score}%` : 'N/A'}
+                                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--qa-text)', marginTop: 2, fontFamily: MONO }}>
+                                    {score != null ? `${Math.round(Number(score))}%` : 'N/A'}
                                   </div>
                                   {reply.qa_override_score != null && (
                                     <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                      Adjusted from {reply.quality_score}%
+                                      Adjusted from {Math.round(Number(reply.quality_score))}%
                                     </div>
                                   )}
                                 </div>
