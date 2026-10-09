@@ -89,7 +89,7 @@ export async function middleware(req: NextRequest) {
     }
   }
   if (pathname.startsWith('/quality/call-evaluation')) {
-    if (!checkSkill('quality:call_eval:access')) {
+    if (!checkSkill(['quality:call_eval:access', 'tl:quality_calls:access'])) {
       return NextResponse.redirect(new URL('/quality', req.url));
     }
   }

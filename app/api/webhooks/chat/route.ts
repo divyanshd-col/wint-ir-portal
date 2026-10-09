@@ -37,6 +37,7 @@ import {
   getConversation,
   isScored,
   getUnlinkedCallsForContact,
+  findClosedConversationForCall,
   linkCallToChat,
   insertCallRecording,
   updateCallRecordingMetrics,
@@ -488,9 +489,24 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
         transcript: segments,
         rawPayload: body,
       });
-      await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
+      let resolvedChatId: string | null = null;
+      if (contactId) {
+        const conv = await findClosedConversationForCall(contactId, calledAt);
+        if (conv) {
+          resolvedChatId = conv.id;
+          await linkCallToChat(callId, resolvedChatId);
+          console.log(`[webhook] Late-linked call ${callId} → chat ${resolvedChatId}`);
+        }
+      }
 
-      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, agent=${agentName || agentEmail || 'none'}, status=pending_link`);
+      await updateCallRecordingMetrics({
+        id: callId,
+        interruptionCount,
+        deadAirCount,
+        status: resolvedChatId ? 'linked' : 'pending_link',
+      });
+
+      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, agent=${agentName || agentEmail || 'none'}, status=${resolvedChatId ? 'linked' : 'pending_link'}`);
 
       // ── Step 4: Classify disposition (constrained to official 14-category list) ──
       const callTranscriptText = segmentsToText(segments);
@@ -521,7 +537,14 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
           }
         }
 
-        // ── Step 6: Chunking removed ─────────────────────────────────────────
+        // ── Step 6: Trigger call evaluation pipeline ─────────────────────────
+        try {
+          const { runCallPipeline } = await import('@/lib/scoring/call-pipeline');
+          await runCallPipeline(callId);
+          console.log(`[webhook] Auto-evaluated call ${callId}`);
+        } catch (pipelineErr: any) {
+          console.error(`[webhook] Call pipeline trigger failed for call ${callId}:`, pipelineErr.message);
+        }
       }
     } catch (err: any) {
       console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);

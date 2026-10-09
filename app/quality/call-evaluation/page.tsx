@@ -10,7 +10,13 @@ export default async function CallEvaluationPage() {
   const user = session.user as any;
   const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
   const skills = user?.skills || (await getSkillsForPersona(user?.role));
-  if (!hasSkill({ ...user, skills }, 'quality:call_eval:access')) redirect('/quality');
+  const canAccess =
+    hasSkill({ ...user, skills }, 'quality:call_eval:access') ||
+    hasSkill({ ...user, skills }, 'tl:quality_calls:access') ||
+    user?.role === 'admin' ||
+    user?.role === 'quality' ||
+    user?.role === 'tl';
+  if (!canAccess) redirect('/quality');
 
   return <CallEvaluationPageClient />;
 }
