@@ -930,35 +930,16 @@ export default function EmailEvaluationPage() {
                                                     height: 28,
                                                     padding: '0 11px',
                                                     borderRadius: 8,
-                                                    border: isSel
-                                                      ? optVal === 'yes'
-                                                        ? '1px solid #86EFAC'
-                                                        : optVal === 'partial'
-                                                        ? '1px solid #FDE68A'
-                                                        : '1px solid #FCA5A5'
-                                                      : '1px solid var(--qa-border)',
-                                                    background: isSel
-                                                      ? optVal === 'yes'
-                                                        ? '#DCFCE7'
-                                                        : optVal === 'partial'
-                                                        ? '#FEF3C7'
-                                                        : '#FEE2E2'
-                                                      : 'var(--qa-card)',
-                                                    color: isSel
-                                                      ? optVal === 'yes'
-                                                        ? '#15803D'
-                                                        : optVal === 'partial'
-                                                        ? '#B45309'
-                                                        : '#B91C1C'
-                                                      : 'var(--qa-text-2)',
+                                                    border: '1px solid var(--qa-border)',
+                                                    background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                                    color: isSel ? '#ffffff' : 'var(--qa-text-2)',
                                                     fontSize: 12,
                                                     fontFamily: 'inherit',
-                                                    fontWeight: isSel ? 700 : 400,
+                                                    fontWeight: isSel ? 600 : 400,
                                                     cursor: 'pointer',
-                                                    transition: 'all 0.12s',
+                                                    transition: 'background 0.12s, color 0.12s, border-color 0.12s',
                                                   }}
                                                 >
-                                                  {isSel && (optVal === 'yes' ? '✓ ' : optVal === 'partial' ? '½ ' : '✗ ')}
                                                   {label}
                                                 </button>
                                               );

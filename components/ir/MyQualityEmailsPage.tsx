@@ -110,72 +110,67 @@ function IQSBadge({ score }: { score: number | null }) {
 
 function renderParamBadge(v: any) {
   const s = String(v ?? '').toLowerCase().trim();
-  const norm: 'yes' | 'partial' | 'no' | 'na' =
-    s === 'yes' || s === 'pass' || s === '1' || s === 'true'
-      ? 'yes'
-      : s === 'partial' || s === 'half' || s === '0.5'
-      ? 'partial'
-      : s === 'no' || s === 'fail' || s === '0' || s === 'false'
-      ? 'no'
-      : typeof v === 'number' && v >= 80
-      ? 'yes'
-      : typeof v === 'number' && v >= 40
-      ? 'partial'
-      : typeof v === 'number'
-      ? 'no'
-      : 'na';
-
-  return (
-    <div style={{ display: 'flex', gap: 4 }}>
-      {(['yes', 'partial', 'no'] as const).map(opt => {
-        const isSel = norm === opt;
-        const label = opt === 'yes' ? 'Yes' : opt === 'partial' ? 'Partial' : 'No';
-
-        let bg = 'var(--qa-card, #FFFFFF)';
-        let color = 'var(--qa-text-3, #A1A1AA)';
-        let border = '1px solid var(--qa-border-sub, #F4F4F5)';
-
-        if (isSel) {
-          if (opt === 'yes') {
-            bg = '#DCFCE7';
-            color = '#15803D';
-            border = '1px solid #86EFAC';
-          } else if (opt === 'partial') {
-            bg = '#FEF3C7';
-            color = '#B45309';
-            border = '1px solid #FDE68A';
-          } else if (opt === 'no') {
-            bg = '#FEE2E2';
-            color = '#B91C1C';
-            border = '1px solid #FCA5A5';
-          }
-        }
-
-        return (
-          <span
-            key={opt}
-            style={{
-              height: 24,
-              padding: '0 8px',
-              borderRadius: 6,
-              border,
-              background: bg,
-              color,
-              fontSize: 11,
-              fontWeight: isSel ? 700 : 400,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: SANS,
-            }}
-          >
-            {isSel && (opt === 'yes' ? '✓ ' : opt === 'partial' ? '½ ' : '✗ ')}
-            {label}
-          </span>
-        );
-      })}
-    </div>
-  );
+  if (s === 'yes' || s === 'pass') {
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontSize: 11,
+          fontWeight: 600,
+          color: '#166534',
+          background: '#f0fdf4',
+          border: '1px solid #bbf7d0',
+          padding: '2px 8px',
+          borderRadius: 6,
+        }}
+      >
+        ✓ Yes
+      </span>
+    );
+  }
+  if (s === 'partial') {
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontSize: 11,
+          fontWeight: 600,
+          color: '#854d0e',
+          background: '#fefce8',
+          border: '1px solid #fef08a',
+          padding: '2px 8px',
+          borderRadius: 6,
+        }}
+      >
+        ½ Partial
+      </span>
+    );
+  }
+  if (s === 'no' || s === 'fail') {
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontSize: 11,
+          fontWeight: 600,
+          color: '#991b1b',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          padding: '2px 8px',
+          borderRadius: 6,
+        }}
+      >
+        ✗ No
+      </span>
+    );
+  }
+  return <span style={{ fontWeight: 600, color: 'var(--qa-text, #111111)', fontFamily: MONO, fontSize: 12 }}>{v}%</span>;
 }
 
 function CountBadge({ count, active }: { count: number; active: boolean }) {
