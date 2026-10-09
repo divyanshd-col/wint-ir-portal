@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import EmailMessageView, { stripHtml } from '@/components/quality/EmailContentRenderer';
+import EmailMessageView, { stripHtml, CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
 
 interface AgentBreakdown {
@@ -19,6 +19,7 @@ interface EvaluationItem {
   message_id: string;
   agent_name: string;
   sent_at: string;
+  subject_line?: string;
   customer_message?: string;
   agent_reply_text?: string;
   quality_score?: number;
@@ -29,6 +30,10 @@ interface EvaluationItem {
   dispute_status?: string;
   qa_notes?: string;
   parameter_scores?: Record<string, any>;
+  chat_id?: string;
+  customer_email?: string;
+  customer_phone?: string;
+  thread_summary?: any;
 }
 
 function renderParamBadge(v: any) {
@@ -127,6 +132,7 @@ export default function TLEmailQualityPage() {
   const [thisWeekOnly, setThisWeekOnly] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -513,22 +519,79 @@ export default function TLEmailQualityPage() {
                               gridTemplateColumns: '1.2fr 1fr',
                               gap: 24,
                             }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-3)' }}>
-                                  Agent Outbound Response
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                      Customer Context / Query
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: !prev[reply.message_id] }))}
+                                      style={{
+                                        height: 26,
+                                        padding: '0 10px',
+                                        borderRadius: 6,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        border: '1px solid var(--qa-border)',
+                                        background: historyOpen[reply.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                        color: historyOpen[reply.message_id] ? '#fff' : 'var(--qa-text-2)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 5,
+                                        transition: 'all 0.15s',
+                                      }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <polyline points="12 6 12 12 16 14" />
+                                      </svg>
+                                      {historyOpen[reply.message_id] ? 'Hide History' : 'History'}
+                                    </button>
+                                  </div>
+
+                                  {historyOpen[reply.message_id] && (
+                                    <EmailHistoryPanel
+                                      customerEmail={reply.customer_email}
+                                      chatId={reply.chat_id}
+                                      ticketId={reply.ticket_id}
+                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: false }))}
+                                    />
+                                  )}
+
+                                  <div style={{
+                                    background: 'var(--qa-card)',
+                                    border: '1px solid var(--qa-border)',
+                                    borderRadius: 8,
+                                    padding: '14px 16px',
+                                  }}>
+                                    <CustomerSummaryBlock
+                                      threadSummary={reply.thread_summary}
+                                      customerMessage={reply.customer_message}
+                                      subjectLine={reply.subject_line}
+                                    />
+                                  </div>
                                 </div>
-                                <div style={{
-                                  background: 'var(--qa-card)',
-                                  border: '1px solid var(--qa-border)',
-                                  borderRadius: 8,
-                                  padding: '12px 16px',
-                                  maxHeight: 250,
-                                  overflowY: 'auto',
-                                }}>
-                                  <EmailMessageView
-                                    content={reply.agent_reply_text}
-                                    fallback="No text content."
-                                  />
+
+                                <div>
+                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                                    Agent Outbound Response
+                                  </div>
+                                  <div style={{
+                                    background: 'var(--qa-card)',
+                                    border: '1px solid var(--qa-border)',
+                                    borderRadius: 8,
+                                    padding: '12px 16px',
+                                    maxHeight: 250,
+                                    overflowY: 'auto',
+                                  }}>
+                                    <EmailMessageView
+                                      content={reply.agent_reply_text}
+                                      fallback="No text content."
+                                    />
+                                  </div>
                                 </div>
                               </div>
 

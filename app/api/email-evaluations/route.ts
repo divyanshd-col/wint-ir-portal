@@ -79,10 +79,13 @@ export async function GET(req: NextRequest) {
     const itemsQuery = `
       SELECT 
         e.*,
+        c.chat_id,
         c.subject_line,
         c.customer_email,
+        c.customer_phone,
         c.status AS conversation_status,
         c.merged_into_ticket_id,
+        c.thread_summary,
         COALESCE(e.qa_override_score, e.quality_score) AS effective_score
       FROM email_reply_evaluations e
       JOIN email_conversations c ON e.ticket_id = c.id

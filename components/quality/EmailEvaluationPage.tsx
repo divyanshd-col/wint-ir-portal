@@ -3,8 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import DateRangePicker from './DateRangePicker';
 import { DEFAULT_EMAIL_PARAMETERS, ParameterScoreValue } from '@/lib/email/context-builder';
-import EmailMessageView from './EmailContentRenderer';
-
+import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from './EmailContentRenderer';
 
 type Tab = 'pending' | 'reviewed' | 'disputes';
 
@@ -12,6 +11,8 @@ interface EvaluationItem {
   id: number;
   ticket_id: string;
   message_id: string;
+  chat_id?: string;
+  customer_email?: string;
   agent_id?: string;
   agent_name?: string;
   sent_at: string;
@@ -29,6 +30,7 @@ interface EvaluationItem {
   dispute_notes?: string;
   evaluated_at?: string;
   subject_line?: string;
+  thread_summary?: any;
   effective_score?: number;
 }
 
@@ -195,6 +197,7 @@ export default function EmailEvaluationPage() {
   // QA action state
   const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
   const [overrideParams, setOverrideParams] = useState<Record<string, Record<string, ParameterScoreValue>>>({});
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
 
   const normalizeToggleValue = (val: any): ParameterScoreValue => {
@@ -704,25 +707,59 @@ export default function EmailEvaluationPage() {
                             }}>
                               {/* Left Pane: Customer Query Context & Agent Outbound Reply */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                                    Customer Context / Query
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                      Customer Context &amp; Query Summary
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
+                                      style={{
+                                        height: 26,
+                                        padding: '0 10px',
+                                        borderRadius: 6,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        border: '1px solid var(--qa-border)',
+                                        background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                        color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 5,
+                                        transition: 'all 0.15s',
+                                      }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <polyline points="12 6 12 12 16 14" />
+                                      </svg>
+                                      {historyOpen[item.message_id] ? 'Hide History' : 'History'}
+                                    </button>
                                   </div>
+
+                                  {/* History Panel */}
+                                  {historyOpen[item.message_id] && (
+                                    <EmailHistoryPanel
+                                      customerEmail={item.customer_email}
+                                      chatId={item.chat_id}
+                                      ticketId={item.ticket_id}
+                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
+                                    />
+                                  )}
+
+                                  {/* Customer Context / Query: ONLY SUMMARY */}
                                   <div style={{
                                     background: 'var(--qa-card)',
                                     border: '1px solid var(--qa-border)',
                                     borderRadius: 8,
-                                    padding: '12px 16px',
-                                    fontSize: 13,
-                                    lineHeight: '1.5',
-                                    color: 'var(--qa-text)',
-                                    maxHeight: 180,
-                                    overflowY: 'auto',
-                                    whiteSpace: 'pre-wrap',
+                                    padding: '14px 16px',
                                   }}>
-                                    <EmailMessageView
-                                      content={item.customer_message || item.subject_line}
-                                      fallback="Initial ticket query."
+                                    <CustomerSummaryBlock
+                                      threadSummary={item.thread_summary}
+                                      customerMessage={item.customer_message}
+                                      subjectLine={item.subject_line}
                                     />
                                   </div>
                                 </div>

@@ -3,13 +3,14 @@
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
-import EmailMessageView, { stripHtml } from '@/components/quality/EmailContentRenderer';
-
+import EmailMessageView, { stripHtml, CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
 interface EvaluationItem {
   id: number;
   ticket_id: string;
   message_id: string;
+  chat_id?: string;
+  customer_email?: string;
   agent_name: string;
   sent_at: string;
   customer_message?: string;
@@ -24,6 +25,7 @@ interface EvaluationItem {
   dispute_status?: 'None' | 'Raised' | 'Under_Review' | 'Resolved' | 'Rejected';
   dispute_notes?: string;
   subject_line?: string;
+  thread_summary?: any;
 }
 
 interface SummaryStats {
@@ -231,6 +233,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   const [summary, setSummary] = useState<SummaryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Tabs
   const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>('evaluated');
@@ -925,30 +928,65 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                     </div>
                                   )}
 
-                                  {/* Customer Message */}
-                                  <div>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A', marginBottom: 6 }}>
-                                      Customer Inquiry
+                                  {/* Customer Context / Query Summary & History */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A' }}>
+                                        Customer Context &amp; Query Summary
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setHistoryOpen(v => !v)}
+                                        style={{
+                                          height: 24,
+                                          padding: '0 8px',
+                                          borderRadius: 5,
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          border: '1px solid #E4E4E7',
+                                          background: historyOpen ? '#2D2D31' : '#FFFFFF',
+                                          color: historyOpen ? '#FFFFFF' : '#71717A',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 4,
+                                          transition: 'all 0.15s',
+                                        }}
+                                      >
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <polyline points="12 6 12 12 16 14" />
+                                        </svg>
+                                        {historyOpen ? 'Hide History' : 'History'}
+                                      </button>
                                     </div>
+
+                                    {/* History Panel */}
+                                    {historyOpen && (
+                                      <EmailHistoryPanel
+                                        customerEmail={item.customer_email}
+                                        chatId={item.chat_id}
+                                        ticketId={item.ticket_id}
+                                        onClose={() => setHistoryOpen(false)}
+                                      />
+                                    )}
+
+                                    {/* Customer Context: ONLY SUMMARY */}
                                     <div
                                       style={{
                                         background: '#F4F4F5',
                                         border: '1px solid #E4E4E7',
                                         borderRadius: 8,
                                         padding: '12px 16px',
-                                        maxHeight: 180,
-                                        overflowY: 'auto',
                                       }}
                                     >
-                                        <div style={{ fontWeight: 600, fontSize: 13, color: '#111111', marginBottom: 6 }}>
-                                          {item.subject_line || 'Email Support Query'}
-                                        </div>
-                                        <EmailMessageView
-                                          content={item.customer_message}
-                                          fallback="Customer query details."
-                                        />
-                                      </div>
+                                      <CustomerSummaryBlock
+                                        threadSummary={item.thread_summary}
+                                        customerMessage={item.customer_message}
+                                        subjectLine={item.subject_line}
+                                      />
                                     </div>
+                                  </div>
 
                                     {/* Agent Reply */}
                                     <div>
