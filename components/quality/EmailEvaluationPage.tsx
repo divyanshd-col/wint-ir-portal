@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import DateRangePicker from './DateRangePicker';
 import { DEFAULT_EMAIL_PARAMETERS, ParameterScoreValue } from '@/lib/email/context-builder';
+import EmailMessageView from './EmailContentRenderer';
+
 
 type Tab = 'pending' | 'reviewed' | 'disputes';
 
@@ -718,7 +720,10 @@ export default function EmailEvaluationPage() {
                                     overflowY: 'auto',
                                     whiteSpace: 'pre-wrap',
                                   }}>
-                                    {item.customer_message || item.subject_line || 'Initial ticket query.'}
+                                    <EmailMessageView
+                                      content={item.customer_message || item.subject_line}
+                                      fallback="Initial ticket query."
+                                    />
                                   </div>
                                 </div>
 
@@ -736,9 +741,11 @@ export default function EmailEvaluationPage() {
                                     color: 'var(--qa-text)',
                                     maxHeight: 260,
                                     overflowY: 'auto',
-                                    whiteSpace: 'pre-wrap',
                                   }}>
-                                    {item.agent_reply_text || 'No message content available.'}
+                                    <EmailMessageView
+                                      content={item.agent_reply_text}
+                                      fallback="No message content available."
+                                    />
                                   </div>
                                 </div>
 

@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
+import EmailMessageView, { stripHtml } from '@/components/quality/EmailContentRenderer';
+
 
 interface EvaluationItem {
   id: number;
@@ -636,7 +638,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                             {item.subject_line || 'Email Support'}
                           </span>
                           <span style={{ color: 'var(--qa-text-2, #6B6B6B)', marginLeft: 8 }}>
-                            — {item.agent_reply_text ? item.agent_reply_text.slice(0, 55) + '…' : ''}
+                            — {item.agent_reply_text ? stripHtml(item.agent_reply_text).slice(0, 55) + '…' : ''}
                           </span>
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
@@ -934,39 +936,41 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                         border: '1px solid #E4E4E7',
                                         borderRadius: 8,
                                         padding: '12px 16px',
-                                        fontSize: 13,
-                                        lineHeight: 1.5,
-                                        color: '#111111',
-                                        whiteSpace: 'pre-wrap',
+                                        maxHeight: 180,
+                                        overflowY: 'auto',
                                       }}
                                     >
-                                      <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                                        {item.subject_line || 'Email Support Query'}
+                                        <div style={{ fontWeight: 600, fontSize: 13, color: '#111111', marginBottom: 6 }}>
+                                          {item.subject_line || 'Email Support Query'}
+                                        </div>
+                                        <EmailMessageView
+                                          content={item.customer_message}
+                                          fallback="Customer query details."
+                                        />
                                       </div>
-                                      {item.customer_message || 'Customer query details.'}
                                     </div>
-                                  </div>
 
-                                  {/* Agent Reply */}
-                                  <div>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A', marginBottom: 6 }}>
-                                      My Outbound Reply
+                                    {/* Agent Reply */}
+                                    <div>
+                                      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A', marginBottom: 6 }}>
+                                        My Outbound Reply
+                                      </div>
+                                      <div
+                                        style={{
+                                          background: '#FFFFFF',
+                                          border: '1px solid #E4E4E7',
+                                          borderRadius: 8,
+                                          padding: '14px 16px',
+                                          maxHeight: 280,
+                                          overflowY: 'auto',
+                                        }}
+                                      >
+                                        <EmailMessageView
+                                          content={item.agent_reply_text}
+                                          fallback="No text reply content recorded."
+                                        />
+                                      </div>
                                     </div>
-                                    <div
-                                      style={{
-                                        background: '#FFFFFF',
-                                        border: '1px solid #E4E4E7',
-                                        borderRadius: 8,
-                                        padding: '14px 16px',
-                                        fontSize: 13,
-                                        lineHeight: 1.6,
-                                        color: '#111111',
-                                        whiteSpace: 'pre-wrap',
-                                      }}
-                                    >
-                                      {item.agent_reply_text || 'No text reply content recorded.'}
-                                    </div>
-                                  </div>
                                 </div>
 
                                 {/* Dispute Section at bottom */}

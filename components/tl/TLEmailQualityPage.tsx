@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import EmailMessageView, { stripHtml } from '@/components/quality/EmailContentRenderer';
+
 
 interface AgentBreakdown {
   agent_name: string;
@@ -461,10 +463,10 @@ export default function TLEmailQualityPage() {
                         </td>
                         <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ color: 'var(--qa-text-2)', marginRight: 6 }}>
-                            {reply.customer_message ? `"${reply.customer_message.slice(0, 40)}…"` : 'Email:'}
+                            {reply.customer_message ? `"${stripHtml(reply.customer_message).slice(0, 40)}…"` : 'Email:'}
                           </span>
                           <span style={{ color: 'var(--qa-text)' }}>
-                            {reply.agent_reply_text ? reply.agent_reply_text.slice(0, 60) + '…' : '—'}
+                            {reply.agent_reply_text ? stripHtml(reply.agent_reply_text).slice(0, 60) + '…' : '—'}
                           </span>
                         </td>
                         <td style={tdNum}>
@@ -520,12 +522,13 @@ export default function TLEmailQualityPage() {
                                   border: '1px solid var(--qa-border)',
                                   borderRadius: 8,
                                   padding: '12px 16px',
-                                  fontSize: 13,
-                                  lineHeight: '1.6',
-                                  color: 'var(--qa-text)',
-                                  whiteSpace: 'pre-wrap',
+                                  maxHeight: 250,
+                                  overflowY: 'auto',
                                 }}>
-                                  {reply.agent_reply_text || 'No text content.'}
+                                  <EmailMessageView
+                                    content={reply.agent_reply_text}
+                                    fallback="No text content."
+                                  />
                                 </div>
                               </div>
 
