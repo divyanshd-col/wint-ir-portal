@@ -102,9 +102,8 @@ const chipActive: React.CSSProperties = {
 };
 
 // ─── SVG Score Ring (identical to EvalPanel) ──────────────────────────────────
-function ScoreRing({ score }: { score: number | string | null }) {
-  const num = score != null ? Math.round(Number(score)) : null;
-  if (num == null || isNaN(num)) {
+function ScoreRing({ score }: { score: number | null }) {
+  if (score == null) {
     return (
       <svg width="60" height="60" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
         <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-fill-med)" strokeWidth="5" />
@@ -116,9 +115,8 @@ function ScoreRing({ score }: { score: number | string | null }) {
     );
   }
   const RING_C = 169.6;
-  const clamped = Math.max(0, Math.min(100, num));
-  const offset = (((100 - clamped) / 100) * RING_C).toFixed(1);
-  const ringColor = clamped >= 85 ? 'var(--accent)' : clamped >= 70 ? '#d97706' : '#dc2626';
+  const offset = ((100 - Math.max(0, Math.min(100, score))) / 100 * RING_C).toFixed(1);
+  const ringColor = score >= 85 ? 'var(--accent)' : score >= 70 ? '#d97706' : '#dc2626';
 
   return (
     <svg width="60" height="60" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
@@ -129,8 +127,8 @@ function ScoreRing({ score }: { score: number | string | null }) {
         transform="rotate(-90 32 32)" style={{ transition: 'stroke-dashoffset 0.3s' }}
       />
       <text x="32" y="33" textAnchor="middle" dominantBaseline="central"
-        fontSize="16" fontWeight="700" fill="var(--qa-text)" fontFamily={MONO}>
-        {num}%
+        fontSize="17" fontWeight="700" fill="var(--qa-text)" fontFamily={MONO}>
+        {score}
       </text>
     </svg>
   );
@@ -825,15 +823,15 @@ export default function EmailEvaluationPage() {
                                         IQS
                                       </div>
                                       <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--qa-text)', marginTop: 2 }}>
-                                        {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : 'Pending'}
+                                        {currentIQS != null ? `${currentIQS}%` : 'Pending'}
                                       </div>
                                       {isSessionOverridden && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          Adjusted from {Math.round(Number(item.quality_score))}%
+                                          Adjusted from {item.quality_score}%
                                         </div>
                                       ) : hasOverride && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          QA Override from {Math.round(Number(item.quality_score))}%
+                                          QA Override from {item.quality_score}%
                                         </div>
                                       ) : null}
                                     </div>
@@ -932,16 +930,35 @@ export default function EmailEvaluationPage() {
                                                     height: 28,
                                                     padding: '0 11px',
                                                     borderRadius: 8,
-                                                    border: '1px solid var(--qa-border)',
-                                                    background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                                    color: isSel ? '#ffffff' : 'var(--qa-text-2)',
+                                                    border: isSel
+                                                      ? optVal === 'yes'
+                                                        ? '1px solid #86EFAC'
+                                                        : optVal === 'partial'
+                                                        ? '1px solid #FDE68A'
+                                                        : '1px solid #FCA5A5'
+                                                      : '1px solid var(--qa-border)',
+                                                    background: isSel
+                                                      ? optVal === 'yes'
+                                                        ? '#DCFCE7'
+                                                        : optVal === 'partial'
+                                                        ? '#FEF3C7'
+                                                        : '#FEE2E2'
+                                                      : 'var(--qa-card)',
+                                                    color: isSel
+                                                      ? optVal === 'yes'
+                                                        ? '#15803D'
+                                                        : optVal === 'partial'
+                                                        ? '#B45309'
+                                                        : '#B91C1C'
+                                                      : 'var(--qa-text-2)',
                                                     fontSize: 12,
                                                     fontFamily: 'inherit',
-                                                    fontWeight: isSel ? 600 : 400,
+                                                    fontWeight: isSel ? 700 : 400,
                                                     cursor: 'pointer',
-                                                    transition: 'background 0.12s, color 0.12s, border-color 0.12s',
+                                                    transition: 'all 0.12s',
                                                   }}
                                                 >
+                                                  {isSel && (optVal === 'yes' ? '✓ ' : optVal === 'partial' ? '½ ' : '✗ ')}
                                                   {label}
                                                 </button>
                                               );

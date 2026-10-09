@@ -497,3 +497,454 @@ export function EmailHistoryPanel({
     </div>
   );
 }
+
+// ── Score Ring Component (Matching EvalPanel & IRScorePanel in Quality Chats) ───
+export function ScoreRing({ score }: { score: number | null | undefined }) {
+  if (score == null) {
+    return (
+      <svg width="56" height="56" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+        <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-fill-med, #E4E4E7)" strokeWidth="5" />
+        <text x="32" y="33" textAnchor="middle" dominantBaseline="central"
+          fontSize="13" fontWeight="700" fill="var(--qa-text-3, #71717A)" fontFamily="inherit">
+          NIL
+        </text>
+      </svg>
+    );
+  }
+  const val = Math.max(0, Math.min(100, Math.round(Number(score))));
+  const RING_C = 169.6;
+  const offset = ((100 - val) / 100 * RING_C).toFixed(1);
+  return (
+    <svg width="56" height="56" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
+      <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-fill-med, #E4E4E7)" strokeWidth="5" />
+      <circle cx="32" cy="32" r="27" fill="none" stroke="var(--qa-gray-700, #27272a)" strokeWidth="5"
+        strokeLinecap="round" strokeDasharray="169.6" strokeDashoffset={offset}
+        transform="rotate(-90 32 32)" style={{ transition: 'stroke-dashoffset 0.3s' }} />
+      <text x="32" y="33" textAnchor="middle" dominantBaseline="central"
+        fontSize="17" fontWeight="700" fill="var(--qa-text, #09090b)" fontFamily="inherit">
+        {val}
+      </text>
+    </svg>
+  );
+}
+
+export function normalizeParamScore(val: any): 'yes' | 'partial' | 'no' | 'na' {
+  if (val === null || val === undefined || val === '') return 'na';
+  const s = String(val).toLowerCase().trim();
+  if (s === 'yes' || s === 'true' || s === '1' || s === '1.0' || s === 'pass') return 'yes';
+  if (s === 'partial' || s === 'half' || s === '0.5' || s === 'part') return 'partial';
+  if (s === 'no' || s === 'false' || s === '0' || s === '0.0' || s === 'fail') return 'no';
+  if (typeof val === 'number') {
+    if (val >= 80) return 'yes';
+    if (val >= 40) return 'partial';
+    return 'no';
+  }
+  return 'na';
+}
+
+const EMAIL_PARAM_METADATA: Record<string, { name: string; description: string; weight: number }> = {
+  accuracy: {
+    name: 'Accuracy & Financial Correctness',
+    description: 'Factual accuracy regarding bonds, yields, TDS, maturity dates, and account details.',
+    weight: 20,
+  },
+  completeness: {
+    name: 'Completeness',
+    description: 'Addressing all customer queries, explicit questions, and implicit requests.',
+    weight: 20,
+  },
+  clarity: {
+    name: 'Clarity & Structure',
+    description: 'Concise, well-organized explanation without jargon or ambiguous phrasing.',
+    weight: 15,
+  },
+  tone: {
+    name: 'Tone & Empathy',
+    description: 'Courteous, empathetic, and professional language adhering to brand standards.',
+    weight: 15,
+  },
+  process_adherence: {
+    name: 'Process & SOP Adherence',
+    description: 'Following company workflows, identity checks, and escalation paths.',
+    weight: 15,
+  },
+  expectation_setting: {
+    name: 'Expectation Setting & SLA',
+    description: 'Communicating explicit, realistic resolution timelines and commitments.',
+    weight: 15,
+  },
+};
+
+export interface EmailEvaluationFeedbackPanelProps {
+  qualityScore?: number | null;
+  effectiveScore?: number | null;
+  qaOverrideScore?: number | null;
+  compliancePassed?: boolean | null;
+  complianceIssues?: string[] | null;
+  qaNotes?: string | null;
+  parameterScores?: Record<string, any> | null;
+  disputeStatus?: string | null;
+}
+
+/**
+ * Renders Evaluation Feedback & Parameters matching the design, tokens,
+ * and components used in Quality Chats (ScoreRing, parameter pill badges, and feedback box).
+ */
+export function EmailEvaluationFeedbackPanel({
+  qualityScore,
+  effectiveScore,
+  qaOverrideScore,
+  compliancePassed,
+  complianceIssues,
+  qaNotes,
+  parameterScores,
+  disputeStatus,
+}: EmailEvaluationFeedbackPanelProps) {
+  const displayScore = effectiveScore ?? qualityScore ?? null;
+
+  // Build normalized parameters list
+  const rawParams = parameterScores || {};
+  const standardKeys = [
+    'accuracy',
+    'completeness',
+    'clarity',
+    'tone',
+    'process_adherence',
+    'expectation_setting',
+  ];
+
+  // Map known parameters
+  const paramList = standardKeys.map(key => {
+    const meta = EMAIL_PARAM_METADATA[key] || {
+      name: key.replace(/_/g, ' '),
+      description: '',
+      weight: 15,
+    };
+    // Match against rawParams (case-insensitive & snake/camelCase)
+    let rawVal = rawParams[key];
+    if (rawVal === undefined) {
+      const camel = key.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
+      rawVal = rawParams[camel];
+    }
+    if (rawVal === undefined) {
+      const foundKey = Object.keys(rawParams).find(
+        k => k.toLowerCase().replace(/_/g, '') === key.toLowerCase().replace(/_/g, '')
+      );
+      if (foundKey) rawVal = rawParams[foundKey];
+    }
+
+    return {
+      key,
+      name: meta.name,
+      description: meta.description,
+      weight: meta.weight,
+      score: rawVal,
+    };
+  });
+
+  // Check for any extra custom parameters that weren't in standardKeys
+  Object.keys(rawParams).forEach(k => {
+    const normK = k.toLowerCase().replace(/_/g, '');
+    const alreadyMapped = standardKeys.some(sk => sk.toLowerCase().replace(/_/g, '') === normK);
+    if (!alreadyMapped && !k.startsWith('__')) {
+      paramList.push({
+        key: k,
+        name: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        description: '',
+        weight: 0,
+        score: rawParams[k],
+      });
+    }
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* ── 1. Score Summary & Compliance Card ── */}
+      <div
+        style={{
+          background: 'var(--qa-card, #FFFFFF)',
+          border: '1px solid var(--qa-border, #E4E4E7)',
+          borderRadius: 8,
+          padding: '14px 18px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 16,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <ScoreRing score={displayScore} />
+          <div>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)', fontWeight: 600 }}>
+              IQS Score
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--qa-text, #111111)', marginTop: 2, fontFamily: 'ui-monospace, monospace' }}>
+              {displayScore != null ? `${Math.round(displayScore)}%` : 'Pending'}
+            </div>
+            {qaOverrideScore != null && qualityScore != null && (
+              <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600, marginTop: 2 }}>
+                QA Adjusted from {qualityScore}%
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {disputeStatus && disputeStatus !== 'None' && (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                padding: '3px 8px',
+                borderRadius: 4,
+                fontSize: 11,
+                fontWeight: 600,
+                background: '#fef3c7',
+                color: '#92400e',
+                border: '1px solid #fde68a',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Dispute: {disputeStatus}
+            </span>
+          )}
+
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)', fontWeight: 600, marginBottom: 4 }}>
+              Compliance
+            </div>
+            {compliancePassed === false ? (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  background: '#fee2e2',
+                  color: '#b91c1c',
+                  border: '1px solid #fca5a5',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                ⚠️ Non-Compliant
+              </span>
+            ) : compliancePassed === true ? (
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  padding: '3px 8px',
+                  borderRadius: 4,
+                  background: '#dcfce7',
+                  color: '#15803d',
+                  border: '1px solid #86efac',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                ✓ Compliant
+              </span>
+            ) : (
+              <span style={{ fontSize: 12, color: 'var(--qa-text-3, #71717A)' }}>Pending Eval</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── 2. Compliance Breaches Banner (if any) ── */}
+      {complianceIssues && complianceIssues.length > 0 && (
+        <div
+          style={{
+            background: '#fff1f2',
+            border: '1px solid #fecdd3',
+            borderRadius: 8,
+            padding: '10px 14px',
+          }}
+        >
+          <div style={{ fontSize: 11, fontWeight: 700, color: '#9f1239', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            ⚠️ Compliance Breaches ({complianceIssues.length})
+          </div>
+          <ul style={{ margin: '6px 0 0 16px', padding: 0, fontSize: 12, color: '#881337', lineHeight: 1.5 }}>
+            {complianceIssues.map((issue, idx) => (
+              <li key={idx}>{issue}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* ── 3. Evaluator Feedback & Remarks ── */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)', marginBottom: 6 }}>
+          Evaluator Feedback &amp; Remarks
+        </div>
+        <div
+          style={{
+            background: 'var(--qa-card, #FFFFFF)',
+            border: '1px solid var(--qa-border, #E4E4E7)',
+            borderRadius: 8,
+            padding: '12px 16px',
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: 'var(--qa-text, #111111)',
+          }}
+        >
+          {qaNotes ? (
+            qaNotes
+          ) : (
+            <span style={{ color: 'var(--qa-text-3, #71717A)', fontStyle: 'italic', fontSize: 12 }}>
+              No specific evaluator notes provided.
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* ── 4. Parameter Scores Card (Quality Chats Styling & Colors) ── */}
+      <div>
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: 'var(--qa-text-3, #71717A)',
+            marginBottom: 6,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <span>Parameter Scores ({paramList.length})</span>
+          <span style={{ fontSize: 10, fontWeight: 500, color: 'var(--qa-text-3, #71717A)' }}>IQS Breakdown</span>
+        </div>
+
+        <div
+          style={{
+            border: '1px solid var(--qa-border, #E4E4E7)',
+            borderRadius: 8,
+            background: 'var(--qa-card, #FFFFFF)',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              padding: '8px 16px',
+              background: 'var(--qa-gray-50, #F9FAFB)',
+              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: 'var(--qa-text-3, #71717A)',
+            }}
+          >
+            <span>Parameter</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+              <span>Evaluation</span>
+              <span style={{ minWidth: 32, textAlign: 'right' }}>Weight</span>
+            </div>
+          </div>
+
+          {paramList.map((param, idx) => {
+            const isLast = idx === paramList.length - 1;
+            const norm = normalizeParamScore(param.score);
+            return (
+              <div
+                key={param.key}
+                style={{
+                  padding: '11px 16px',
+                  borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub, #F4F4F5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
+                    {param.name}
+                  </div>
+                  {param.description && (
+                    <div style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginTop: 2, lineHeight: 1.3 }}>
+                      {param.description}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+                  {/* Segmented Pill Group matching IRScorePanel & EvalPanel from Quality Chats */}
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {(['yes', 'partial', 'no'] as const).map(opt => {
+                      const isSel = norm === opt;
+                      const label = opt === 'yes' ? 'Yes' : opt === 'partial' ? 'Partial' : 'No';
+
+                      let bg = 'var(--qa-card, #FFFFFF)';
+                      let color = 'var(--qa-text-3, #A1A1AA)';
+                      let border = '1px solid var(--qa-border-sub, #F4F4F5)';
+
+                      if (isSel) {
+                        if (opt === 'yes') {
+                          bg = '#DCFCE7';
+                          color = '#15803D';
+                          border = '1px solid #86EFAC';
+                        } else if (opt === 'partial') {
+                          bg = '#FEF3C7';
+                          color = '#B45309';
+                          border = '1px solid #FDE68A';
+                        } else if (opt === 'no') {
+                          bg = '#FEE2E2';
+                          color = '#B91C1C';
+                          border = '1px solid #FCA5A5';
+                        }
+                      }
+
+                      return (
+                        <span
+                          key={opt}
+                          style={{
+                            height: 25,
+                            padding: '0 8px',
+                            borderRadius: 6,
+                            border,
+                            background: bg,
+                            color,
+                            fontSize: 11,
+                            fontWeight: isSel ? 700 : 400,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontFamily: 'inherit',
+                          }}
+                        >
+                          {isSel && (opt === 'yes' ? '✓ ' : opt === 'partial' ? '½ ' : '✗ ')}
+                          {label}
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--qa-text-3, #71717A)',
+                      fontFamily: 'ui-monospace, monospace',
+                      minWidth: 32,
+                      textAlign: 'right',
+                    }}
+                  >
+                    {param.weight > 0 ? `${param.weight}%` : '—'}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}

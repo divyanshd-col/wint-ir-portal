@@ -2,7 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
-import EmailMessageView, { stripHtml, CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
+import EmailMessageView, {
+  stripHtml,
+  CustomerSummaryBlock,
+  EmailHistoryPanel,
+  EmailEvaluationFeedbackPanel,
+} from '@/components/quality/EmailContentRenderer';
 
 // ─── Design Tokens & Styles (Identical to QualityChatsPage) ────────────────────
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
@@ -719,91 +724,17 @@ function EvaluatedEmailsSection({ onTotalChange }: { onTotalChange?: (count: num
                             </div>
                           </div>
 
-                          {/* Right Column: Score Breakdown & Parameters */}
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                            <div
-                              style={{
-                                background: 'var(--qa-card)',
-                                border: '1px solid var(--qa-border)',
-                                borderRadius: 8,
-                                padding: '16px 20px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 16,
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                <ScoreRing score={score} size={64} />
-                                <div>
-                                  <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                    Quality Score
-                                  </div>
-                                  <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--qa-text)', marginTop: 2, fontFamily: MONO }}>
-                                    {score != null ? `${Math.round(Number(score))}%` : 'N/A'}
-                                  </div>
-                                  {reply.qa_override_score != null && (
-                                    <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                      Adjusted from {Math.round(Number(reply.quality_score))}%
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              {reply.dispute_status && reply.dispute_status !== 'None' && (
-                                <DisputeStatusPill status={reply.dispute_status} />
-                              )}
-                            </div>
-
-                            <div
-                              style={{
-                                background: 'var(--qa-card)',
-                                border: '1px solid var(--qa-border)',
-                                borderRadius: 8,
-                                padding: '14px 16px',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: 10,
-                              }}
-                            >
-                              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                Evaluation Parameters
-                              </div>
-
-                              {reply.compliance_issues && reply.compliance_issues.length > 0 && (
-                                <div style={{ color: '#b91c1c', fontSize: 12, fontWeight: 600, background: '#fee2e2', padding: '6px 10px', borderRadius: 6 }}>
-                                  ⚠️ Compliance Breach: {reply.compliance_issues.join(', ')}
-                                </div>
-                              )}
-
-                              {reply.qa_notes && (
-                                <div style={{ color: 'var(--qa-text-2)', fontSize: 12, lineHeight: 1.5, background: 'var(--qa-fill-light)', padding: '8px 10px', borderRadius: 6 }}>
-                                  <strong>Evaluator Note:</strong> {reply.qa_notes}
-                                </div>
-                              )}
-
-                              {reply.parameter_scores && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 4 }}>
-                                  {Object.entries(reply.parameter_scores).map(([k, v]) => (
-                                    <div
-                                      key={k}
-                                      style={{
-                                        fontSize: 12,
-                                        color: 'var(--qa-text-2)',
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        padding: '4px 0',
-                                        borderBottom: '1px solid var(--qa-border-sub)',
-                                      }}
-                                    >
-                                      <span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
-                                      {renderParamBadge(v)}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                          {/* Right Column: Score Breakdown, Evaluator Feedback & Parameters */}
+                          <EmailEvaluationFeedbackPanel
+                            qualityScore={reply.quality_score}
+                            effectiveScore={reply.effective_score}
+                            qaOverrideScore={reply.qa_override_score}
+                            compliancePassed={reply.compliance_passed}
+                            complianceIssues={reply.compliance_issues}
+                            qaNotes={reply.qa_notes}
+                            parameterScores={reply.parameter_scores}
+                            disputeStatus={reply.dispute_status}
+                          />
                         </div>
                       </td>
                     </tr>
@@ -1098,27 +1029,28 @@ function EmailDisputesSection({
                             </div>
                           </div>
 
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-3)' }}>
-                              Dispute Information &amp; QA Feedback
-                            </div>
-                            <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '14px 16px', fontSize: 13 }}>
-                              <div style={{ marginBottom: 10 }}>
-                                <span style={{ fontWeight: 600, color: '#854d0e' }}>Agent Note: </span>
-                                <span>{dispute.dispute_notes || 'Score disputed'}</span>
-                              </div>
-                              {dispute.qa_notes && (
-                                <div style={{ marginBottom: 10, color: 'var(--qa-text-2)' }}>
-                                  <span style={{ fontWeight: 600 }}>QA Notes: </span>
-                                  <span>{dispute.qa_notes}</span>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            {dispute.dispute_notes && (
+                              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 8, padding: '12px 14px' }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                                  Agent Dispute Reason
                                 </div>
-                              )}
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-                                <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>IQS Score:</span>
-                                <IQSBadge score={dispute.effective_score ?? dispute.quality_score ?? null} />
-                                <DisputeStatusPill status={dispute.dispute_status || 'Raised'} />
+                                <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.5 }}>
+                                  {dispute.dispute_notes}
+                                </div>
                               </div>
-                            </div>
+                            )}
+
+                            <EmailEvaluationFeedbackPanel
+                              qualityScore={dispute.quality_score}
+                              effectiveScore={dispute.effective_score}
+                              qaOverrideScore={dispute.qa_override_score}
+                              compliancePassed={dispute.compliance_passed}
+                              complianceIssues={dispute.compliance_issues}
+                              qaNotes={dispute.qa_notes}
+                              parameterScores={dispute.parameter_scores}
+                              disputeStatus={dispute.dispute_status}
+                            />
                           </div>
                         </div>
                       </td>
