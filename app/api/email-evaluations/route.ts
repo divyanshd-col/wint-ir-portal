@@ -27,6 +27,9 @@ export async function GET(req: NextRequest) {
     const disputesOnly = searchParams.get('disputesOnly');
     const ticketId = searchParams.get('ticketId');
     const search = searchParams.get('search');
+    const fromDate = searchParams.get('from');
+    const toDate = searchParams.get('to');
+    const disputeStatus = searchParams.get('disputeStatus');
     const limit = Math.min(Number(searchParams.get('limit') || 100), 500);
     const offset = Number(searchParams.get('offset') || 0);
 
@@ -48,6 +51,17 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`e.ticket_id = $${params.length}`);
     }
 
+    if (fromDate) {
+      params.push(fromDate);
+      whereClauses.push(`e.sent_at >= $${params.length}`);
+    }
+
+    if (toDate) {
+      const toValue = toDate.includes('T') ? toDate : `${toDate}T23:59:59.999Z`;
+      params.push(toValue);
+      whereClauses.push(`e.sent_at <= $${params.length}`);
+    }
+
     if (maxScore !== null && maxScore !== undefined && maxScore !== '') {
       params.push(Number(maxScore));
       whereClauses.push(`COALESCE(e.qa_override_score, e.quality_score) <= $${params.length}`);
@@ -62,7 +76,11 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`(e.compliance_passed = FALSE OR array_length(e.compliance_issues, 1) > 0)`);
     }
 
-    if (disputesOnly === 'true') {
+    if (disputeStatus === 'pending') {
+      whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
+    } else if (disputeStatus === 'reviewed') {
+      whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
+    } else if (disputesOnly === 'true') {
       whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
     }
 
@@ -105,7 +123,8 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.evaluation_status = 'Completed' THEN 1 END)::int AS completed_count,
         ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed'), 2) AS avg_score,
         COUNT(CASE WHEN e.compliance_passed = FALSE THEN 1 END)::int AS compliance_breach_count,
-        COUNT(CASE WHEN e.dispute_status = 'Raised' THEN 1 END)::int AS active_disputes_count,
+        COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS active_disputes_count,
+        COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected') THEN 1 END)::int AS reviewed_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
       FROM email_reply_evaluations e
       WHERE ${whereSQL}
@@ -120,7 +139,7 @@ export async function GET(req: NextRequest) {
         COUNT(*)::int AS total_replies,
         ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed'), 1) AS avg_score,
         COUNT(CASE WHEN e.compliance_passed = FALSE THEN 1 END)::int AS compliance_errors,
-        COUNT(CASE WHEN e.dispute_status = 'Raised' THEN 1 END)::int AS disputes_raised,
+        COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS disputes_raised,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS overrides_count
       FROM email_reply_evaluations e
       WHERE e.agent_name IS NOT NULL
@@ -140,6 +159,7 @@ export async function GET(req: NextRequest) {
         avgScore: Number(summary.avg_score || 0),
         complianceBreachCount: Number(summary.compliance_breach_count || 0),
         activeDisputesCount: Number(summary.active_disputes_count || 0),
+        reviewedDisputesCount: Number(summary.reviewed_disputes_count || 0),
         qaOverridesCount: Number(summary.qa_overrides_count || 0),
       },
       agentBreakdown: agentBreakdown || [],
@@ -218,6 +238,25 @@ export async function POST(req: NextRequest) {
       );
 
       return NextResponse.json({ ok: true, message: `Dispute marked as ${decision}` });
+    }
+
+    // Action 3b: TL forwards dispute to QA
+    if (action === 'forward_dispute') {
+      const { messageId, notes } = body;
+      if (!messageId) {
+        return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
+      }
+
+      await query(
+        `UPDATE email_reply_evaluations
+         SET dispute_status = 'Under_Review',
+             dispute_notes = COALESCE(dispute_notes, '') || CASE WHEN $1::text IS NOT NULL THEN ' [TL Forward: ' || $1 || ']' ELSE '' END,
+             updated_at = NOW()
+         WHERE message_id = $2`,
+        [notes || null, messageId]
+      );
+
+      return NextResponse.json({ ok: true, message: 'Dispute forwarded to QA successfully' });
     }
 
     // Action 4: Immediate sync re-evaluation of single reply
