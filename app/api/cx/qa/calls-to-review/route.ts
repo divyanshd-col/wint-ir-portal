@@ -121,10 +121,31 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   if (hasCallId && callId) {
+    const trimmedId = callId.trim();
+    // Check if evaluation already exists; if not, check call_recordings and evaluate on-demand
+    try {
+      const evalExists = await query<{ count: string }>(
+        `SELECT count(*) as count FROM call_evaluations WHERE call_id = $1`,
+        [trimmedId]
+      );
+      if (parseInt(evalExists[0]?.count ?? '0') === 0) {
+        const recExists = await query<{ id: string }>(
+          `SELECT id FROM call_recordings WHERE id = $1`,
+          [trimmedId]
+        );
+        if (recExists.length > 0) {
+          const { runCallPipeline } = await import('@/lib/scoring/call-pipeline');
+          await runCallPipeline(trimmedId);
+        }
+      }
+    } catch (evalErr: any) {
+      log.warn(ROUTE, `On-demand evaluation check failed for call ${trimmedId}: ${evalErr.message}`);
+    }
+
     const pIdx = paramIdx++;
-    extraWhere += ` AND (ce.call_id LIKE $${pIdx} OR ce.chat_id LIKE $${pIdx})`;
-    sqlParams.push(`%${callId.trim()}%`);
-    filters.callId = callId.trim();
+    extraWhere += ` AND (COALESCE(ce.call_id, cr.id) LIKE $${pIdx} OR COALESCE(ce.chat_id, cr.chat_id) LIKE $${pIdx})`;
+    sqlParams.push(`%${trimmedId}%`);
+    filters.callId = trimmedId;
   }
 
   if (hasMobile) {
@@ -198,15 +219,26 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') ?? '50')));
   const offset = (page - 1) * limit;
 
+  // When looking up directly by call ID or mobile, do a LEFT JOIN so calls in call_recordings
+  // are never dropped even if an evaluation is still pending.
+  const fromClause = isDirectLookup
+    ? `call_recordings cr
+       LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+       LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
+       LEFT JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id)
+       LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+       LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id`
+    : `call_evaluations ce
+       JOIN call_recordings cr ON cr.id = ce.call_id
+       LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
+       LEFT JOIN agents a ON a.id = ce.agent_id
+       LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
+       LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id`;
+
   // Count query
   const countRows = await query<{ total: string }>(
     `SELECT COUNT(*) AS total
-     FROM call_evaluations ce
-     JOIN call_recordings cr ON cr.id = ce.call_id
-     LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
-     LEFT JOIN agents a ON a.id = ce.agent_id
-     LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
-     LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
+     FROM ${fromClause}
      WHERE ${baseWhere}${extraWhere}`,
     sqlParams
   );
@@ -218,19 +250,14 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const offsetParamIdx = paramIdx++;
 
   const rows = await query<any>(
-    `SELECT ce.call_id, COALESCE(ce.chat_id, cr.chat_id) as chat_id, COALESCE(a.name, 'Unknown') as agent_name,
-            ce.iqs_percent, ce.verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
+    `SELECT COALESCE(ce.call_id, cr.id) as call_id, COALESCE(ce.chat_id, cr.chat_id) as chat_id, COALESCE(a.name, 'Unknown') as agent_name,
+            ce.iqs_percent, COALESCE(ce.verdict, 'PENDING') as verdict, cr.called_at, cr.call_disposition, cr.call_sub_disposition,
             cr.duration_seconds, cr.language, cr.interruption_count, cr.dead_air_count,
-            ce.reviewed_by, ce.reviewed_at, ce.review_note, ce.status, ce.gates, ce.iqs_scores,
+            ce.reviewed_by, ce.reviewed_at, ce.review_note, COALESCE(ce.status, 'pending') as status, ce.gates, ce.iqs_scores,
             COALESCE(ct_cr.phone, ct_c.phone, c.phone_number) AS mobile_number
-     FROM call_evaluations ce
-     JOIN call_recordings cr ON cr.id = ce.call_id
-     LEFT JOIN conversations c ON c.id = COALESCE(ce.chat_id, cr.chat_id)
-     LEFT JOIN agents a ON a.id = ce.agent_id
-     LEFT JOIN contacts ct_cr ON ct_cr.id = cr.contact_id
-     LEFT JOIN contacts ct_c ON ct_c.id = c.contact_id
+     FROM ${fromClause}
      WHERE ${baseWhere}${extraWhere}
-     ORDER BY cr.called_at DESC NULLS LAST, ${reviewedMode ? 'ce.reviewed_at DESC NULLS LAST' : 'ce.scored_at DESC NULLS LAST'}
+     ORDER BY cr.called_at DESC NULLS LAST, ${reviewedMode ? 'ce.reviewed_at DESC NULLS LAST' : 'COALESCE(ce.scored_at, cr.called_at) DESC NULLS LAST'}
      LIMIT $${limitParamIdx} OFFSET $${offsetParamIdx}`,
     dataSqlParams
   );

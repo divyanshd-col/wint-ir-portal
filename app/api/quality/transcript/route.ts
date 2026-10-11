@@ -55,6 +55,27 @@ function dbMessagesToTimedMessages(messages: any[]): { sender: string; content: 
   });
 }
 
+function ensureCallsEvaluated(callIds: string[]): void {
+  if (!callIds.length) return;
+  query<{ call_id: string }>(
+    `SELECT call_id FROM call_evaluations WHERE call_id = ANY($1)`,
+    [callIds]
+  ).then(evalRows => {
+    const evaluatedSet = new Set(evalRows.map(e => e.call_id));
+    for (const id of callIds) {
+      if (!evaluatedSet.has(id)) {
+        import('@/lib/scoring/call-pipeline').then(({ runCallPipeline }) => {
+          runCallPipeline(id).catch(err => {
+            log.warn('quality/transcript', `Background evaluation failed for call ${id}: ${err.message}`);
+          });
+        });
+      }
+    }
+  }).catch(err => {
+    log.warn('quality/transcript', `Failed to check call evaluation status: ${err.message}`);
+  });
+}
+
 export async function GET(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
@@ -206,6 +227,7 @@ export async function GET(req: NextRequest) {
         interruptionCount: r.interruption_count || 0,
         deadAirCount: r.dead_air_count || 0,
       }));
+      ensureCallsEvaluated(callRecordings.map(r => r.id));
       log.info(ROUTE, 'hit', { chatId, source: 'kv', messageCount: kvData.timedMessages?.length ?? 0, callCount: callRecordings.length, durationMs: Date.now() - t0 });
       return NextResponse.json({ ok: true, found: true, ...kvData, callRecordings });
     }
@@ -317,6 +339,7 @@ export async function GET(req: NextRequest) {
     }
 
     const timedMessages = dbMessagesToTimedMessages(messages);
+    ensureCallsEvaluated(callRecordings.map(r => r.id));
     log.info(ROUTE, 'hit', { chatId, source: 'db', messageCount: timedMessages.length, callCount: callRecordings.length, durationMs: Date.now() - t0 });
     return NextResponse.json({ ok: true, found: true, timedMessages, callRecordings });
   } catch (err: any) {

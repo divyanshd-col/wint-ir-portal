@@ -25,6 +25,23 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     );
     if (evalRows.length > 0) {
       evalData = evalRows[0];
+    } else {
+      try {
+        const { runCallPipeline } = await import('@/lib/scoring/call-pipeline');
+        await runCallPipeline(callId);
+        const retryRows = await query<any>(
+          `SELECT chat_id, gates, iqs_scores, iqs_percent, verdict, status, reviewed_by, review_note 
+           FROM call_evaluations 
+           WHERE call_id = $1 OR chat_id = $1 
+           ORDER BY scored_at DESC NULLS LAST LIMIT 1`,
+          [callId]
+        );
+        if (retryRows.length > 0) {
+          evalData = retryRows[0];
+        }
+      } catch (pipelineErr) {
+        console.error('[transcript] on-demand evaluation failed for call:', callId, pipelineErr);
+      }
     }
   } catch (err) {
     console.error('[transcript] failed to fetch call_evaluations:', err);

@@ -21,7 +21,7 @@ async function _GET(req: NextRequest) {
     LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
     WHERE cr.status IN ('received', 'stored', 'linked', 'transcribed')
       AND (ce.call_id IS NULL OR cr.status IN ('received', 'stored'))
-    ORDER BY cr.called_at ASC
+    ORDER BY cr.called_at DESC NULLS LAST
     LIMIT 10
   `);
 
