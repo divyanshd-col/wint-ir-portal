@@ -204,3 +204,45 @@ body {
   min-width: 0;
   max-width: 1400px;
 }
+
+/* ── Email HTML renderer styling ────────────────────────────────────────── */
+.email-html-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--qa-text, #18181b);
+  word-break: break-word;
+}
+.email-html-body p {
+  margin: 0 0 0.6em 0;
+}
+.email-html-body p:last-child {
+  margin-bottom: 0;
+}
+.email-html-body a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.email-html-body a:hover {
+  color: #1d4ed8;
+}
+.email-html-body ul,
+.email-html-body ol {
+  padding-left: 20px;
+  margin: 0 0 0.6em 0;
+}
+.email-html-body blockquote {
+  border-left: 3px solid var(--qa-border, #e4e4e7);
+  padding-left: 12px;
+  margin: 0.5em 0;
+  color: var(--qa-text-2, #71717a);
+}
+.email-html-body table {
+  max-width: 100%;
+  border-collapse: collapse;
+}
+.email-html-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+

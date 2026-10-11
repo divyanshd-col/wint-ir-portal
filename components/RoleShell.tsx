@@ -35,7 +35,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
     'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
   ],
   tl: [
-    'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
+    'quality:analytics:access', 'tl:member_analytics:access',
     'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
   ],
   quality: [
@@ -69,11 +69,11 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
 
   const hasAccess = (item: NavItem) => {
     if (role === 'admin') return true;
+    if (item.roles && !item.roles.includes(role)) {
+      return false;
+    }
     if (item.skill) {
       return effectiveSkills.includes(item.skill);
-    }
-    if (item.roles) {
-      return item.roles.includes(role);
     }
     return true;
   };
