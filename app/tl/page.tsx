@@ -12,11 +12,8 @@ export default async function TLPage() {
   const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
   const skills = (session.user as any)?.skills || (await getSkillsForPersona(role));
 
-  if (role !== 'admin' || !hasSkill({ ...userAny, skills }, 'tl:team_analytics:access')) {
-    if (
-      hasSkill({ ...userAny, skills }, 'tl:member_analytics:access') ||
-      hasSkill({ ...userAny, skills }, 'agent:my_analytics:access')
-    ) {
+  if (!hasSkill({ ...userAny, skills }, 'tl:team_analytics:access')) {
+    if (hasSkill({ ...userAny, skills }, 'agent:my_analytics:access')) {
       redirect('/tl/member-analytics');
     }
     redirect('/');
