@@ -102,6 +102,12 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
       return;
     }
 
+    // Prevent enabling tl:team_analytics:access for non-admin personas
+    if (personaId !== 'admin' && skillId === 'tl:team_analytics:access' && !currentEnabled) {
+      showToast('Team Analytics is restricted to Administrator only');
+      return;
+    }
+
     const nextEnabled = !currentEnabled;
 
     // Optimistic UI update
