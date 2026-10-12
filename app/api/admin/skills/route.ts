@@ -47,11 +47,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Cannot remove skill management permission from Administrator' }, { status: 400 });
   }
 
-  // Restrict tl:team_analytics:access to admin persona only
-  if (personaId !== 'admin' && skillId === 'tl:team_analytics:access' && enabled) {
-    return NextResponse.json({ error: 'Team Analytics is restricted to Administrator persona only' }, { status: 400 });
-  }
-
   try {
     const updatedSkills = await togglePersonaSkill(personaId, skillId, enabled, actorEmail);
     return NextResponse.json({
