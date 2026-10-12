@@ -30,7 +30,7 @@ function extractPooledParams(paramsArray: any[]): Record<string, { yes: number; 
 
 export async function GET(req: NextRequest) {
   const { requireSkill } = await import('@/lib/skills');
-  const auth = await requireSkill(['cx_dashboard:access', 'tl:team_analytics:access']);
+  const auth = await requireSkill('tl:team_analytics:access');
   if (auth.error) return auth.error;
   const session = auth.session!;
 
