@@ -5,9 +5,6 @@
     },
     "app/api/cron/generate-kb-suggestions/route.ts": {
       "maxDuration": 300
-    },
-    "app/api/cron/process-calls/route.ts": {
-      "maxDuration": 300
     }
   },
   "crons": [
