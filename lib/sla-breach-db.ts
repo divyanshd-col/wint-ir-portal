@@ -3,7 +3,8 @@ import { SLA_HOURS, type BreachingTicket } from '@/lib/sla-breach';
 
 /**
  * Tickets whose latest customer message is still unanswered (no REPLY_SENT after it) and whose
- * SLA breach time (that message + 24h) falls in [windowStart, windowEnd]. Status is ignored on purpose.
+ * SLA breach time (that message + 24h) falls in [windowStart, windowEnd]. CLOSED tickets are ignored
+ * (a customer follow-up reopens a ticket as OPEN, so it comes back); every other status counts.
  * Customer messages = TICKET_CREATED + NEW_MESSAGE from the customer; bot replies and internal notes don't count.
  * Tickets whose latest L1 intent is 'Junk' (phishing, gibberish, no query) are skipped: nothing to answer.
  * l1_intent = names.l1 from the most recent event carrying a classification (null if none yet).
@@ -37,6 +38,7 @@ export async function fetchBreachingTickets(window: { windowStart: Date; windowE
      JOIN email_conversations c ON c.chat_id = ev.chat_id
      LEFT JOIN intent ON intent.chat_id = ev.chat_id
      WHERE ev.last_customer_at IS NOT NULL
+       AND upper(COALESCE(c.status, '')) <> 'CLOSED'
        AND lower(COALESCE(intent.l1_intent, '')) <> 'junk'
        AND (ev.last_reply_at IS NULL OR ev.last_reply_at < ev.last_customer_at)
        AND ev.last_customer_at + make_interval(hours => $3) BETWEEN $1 AND $2

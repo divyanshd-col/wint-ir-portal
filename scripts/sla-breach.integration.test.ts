@@ -53,10 +53,10 @@ test('sla-breach cron end to end against a real database', { skip }, async () =>
       authHeader: 'Bearer s', secret: 's', trigger: '1', now,
       fetchRows: fetchBreachingTickets, post: async (p) => { posted.push(JSON.stringify(p)); },
     });
-    assert.deepEqual(res, { status: 200, body: { ok: true, count: 3, excluded: 1 } });
+    assert.deepEqual(res, { status: 200, body: { ok: true, count: 2, excluded: 1 } });
     assert.match(posted[0], /in-unreplied/);
     assert.match(posted[0], /in-followup/);
-    assert.ok(!/just-outside|\banswered|auto-in-window|junk-in-window/.test(posted[0]));
+    assert.ok(!/just-outside|\banswered|closed-unanswered|auto-in-window|junk-in-window/.test(posted[0]));
     assert.match(posted[0], /1 automated sender/);
 
   } finally {
