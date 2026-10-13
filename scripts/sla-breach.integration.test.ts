@@ -26,7 +26,8 @@ test('sla-breach cron end to end against a real database', { skip }, async () =>
        ('c','just-outside','c@example.com','OPEN'),
        ('d','answered','d@example.com','OPEN'),
        ('e','closed-unanswered','e@example.com','CLOSED'),
-       ('f','auto-in-window','noreply@example.com','OPEN')`,
+       ('f','auto-in-window','noreply@example.com','OPEN'),
+       ('g','junk-in-window','g@example.com','OPEN')`,
     );
     // now = 2026-10-01 09:45 IST. Trigger 1 window = 04:30Z..13:30Z on Oct 1 (breach = last customer msg + 24h).
     const ev = (chat: string, type: string, at: string, extra: object = {}) =>
@@ -44,6 +45,8 @@ test('sla-breach cron end to end against a real database', { skip }, async () =>
     await ev('closed-unanswered', 'TICKET_CREATED', '2026-09-30T08:30:00Z');
     await ev('closed-unanswered', 'TICKET_CLOSED', '2026-10-01T08:30:00Z');
     await ev('auto-in-window', 'TICKET_CREATED', '2026-09-30T09:00:00Z');
+    await ev('junk-in-window', 'TICKET_CREATED', '2026-09-30T09:30:00Z');
+    await ev('junk-in-window', 'STATUS_CHANGED', '2026-09-30T09:31:00Z', { intents: [{ names: { l1: 'Junk', l2: 'Phishing / Fraud' } }] });
     const posted: string[] = [];
     const now = new Date('2026-10-01T04:15:00Z');
     const res = await runSlaBreachCron({
@@ -53,7 +56,7 @@ test('sla-breach cron end to end against a real database', { skip }, async () =>
     assert.deepEqual(res, { status: 200, body: { ok: true, count: 3, excluded: 1 } });
     assert.match(posted[0], /in-unreplied/);
     assert.match(posted[0], /in-followup/);
-    assert.ok(!/just-outside|\banswered|auto-in-window/.test(posted[0]));
+    assert.ok(!/just-outside|\banswered|auto-in-window|junk-in-window/.test(posted[0]));
     assert.match(posted[0], /1 automated sender/);
 
   } finally {
