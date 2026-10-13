@@ -1,20 +1,33 @@
 import { query } from '@/lib/cx/db';
 import { SLA_HOURS, type BreachingTicket } from '@/lib/sla-breach';
 
-/** Production query: OPEN tickets whose SLA breach time (anchor + 24h) falls in [windowStart, windowEnd]. */
+/**
+ * Tickets whose latest customer message is still unanswered (no REPLY_SENT after it) and whose
+ * SLA breach time (that message + 24h) falls in [windowStart, windowEnd]. Status is ignored on purpose.
+ * Customer messages = TICKET_CREATED + NEW_MESSAGE from the customer; bot replies and internal notes don't count.
+ * Only webhook events from windowStart - 24h onwards are scanned: older customer messages breach before the window.
+ */
 export async function fetchBreachingTickets(window: { windowStart: Date; windowEnd: Date }): Promise<BreachingTicket[]> {
   return query<BreachingTicket>(
-    `WITH tickets AS (
-       SELECT chat_id, id AS ticket_id, customer_email, customer_phone,
-              CASE WHEN first_response_at IS NULL THEN created_at ELSE updated_at END AS sla_clock_start
-       FROM email_conversations
-       WHERE status = 'OPEN'
+    `WITH ev AS (
+       SELECT chat_id,
+              MAX(COALESCE((payload->>'created_at')::timestamptz, received_at))
+                FILTER (WHERE event_type = 'TICKET_CREATED'
+                           OR (event_type = 'NEW_MESSAGE' AND payload->'data'->>'sender_type' = 'customer')) AS last_customer_at,
+              MAX(COALESCE((payload->>'created_at')::timestamptz, received_at))
+                FILTER (WHERE event_type = 'REPLY_SENT') AS last_reply_at
+       FROM robylon_webhook_payloads
+       WHERE source = 'email' AND received_at >= $1::timestamptz - make_interval(hours => $3)
+       GROUP BY chat_id
      )
-     SELECT chat_id, ticket_id, customer_email, customer_phone,
-            sla_clock_start AS user_last_replied_at,
-            sla_clock_start + make_interval(hours => $3) AS sla_breach_time
-     FROM tickets
-     WHERE sla_clock_start + make_interval(hours => $3) BETWEEN $1 AND $2
+     SELECT c.chat_id, c.id AS ticket_id, c.customer_email, c.customer_phone,
+            ev.last_customer_at AS user_last_replied_at,
+            ev.last_customer_at + make_interval(hours => $3) AS sla_breach_time
+     FROM ev
+     JOIN email_conversations c ON c.chat_id = ev.chat_id
+     WHERE ev.last_customer_at IS NOT NULL
+       AND (ev.last_reply_at IS NULL OR ev.last_reply_at < ev.last_customer_at)
+       AND ev.last_customer_at + make_interval(hours => $3) BETWEEN $1 AND $2
      ORDER BY sla_breach_time`,
     [window.windowStart, window.windowEnd, SLA_HOURS],
   );

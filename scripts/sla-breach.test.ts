@@ -37,50 +37,53 @@ import { findBreachingTickets, type EmailTicketRow, type BreachingTicket } from 
 
 const row = (o: Partial<EmailTicketRow>): EmailTicketRow => ({
   id: 't', chat_id: 'c', customer_email: 'a@example.com', customer_phone: '',
-  status: 'OPEN', created_at: new Date('2026-09-30T05:00:00Z'), first_response_at: null,
-  updated_at: new Date('2026-09-30T05:00:00Z'), ...o,
+  last_customer_at: new Date('2026-09-30T05:00:00Z'), last_reply_at: null, ...o,
 });
 // Trigger 1 window on 2026-10-01 IST: 04:30Z .. 13:30Z. Breach = anchor + 24h.
 const W1 = getSlaWindow(new Date('2026-10-01T04:15:00Z'), 1);
 
 test('findBreachingTickets includes a ticket breaching inside the window', () => {
-  const r = findBreachingTickets([row({ chat_id: 'in', created_at: new Date('2026-09-30T08:00:00Z') })], W1);
+  const r = findBreachingTickets([row({ chat_id: 'in', last_customer_at: new Date('2026-09-30T08:00:00Z') })], W1);
   assert.deepEqual(r.map((x) => x.chat_id), ['in']);
   assert.equal(r[0].sla_breach_time.toISOString(), '2026-10-01T08:00:00.000Z');
 });
 
 test('findBreachingTickets excludes tickets just outside the window', () => {
   const rows = [
-    row({ chat_id: 'before', created_at: new Date('2026-09-30T04:29:59Z') }), // breach 04:29:59Z
-    row({ chat_id: 'after', created_at: new Date('2026-09-30T13:30:01Z') }), // breach 13:30:01Z
+    row({ chat_id: 'before', last_customer_at: new Date('2026-09-30T04:29:59Z') }), // breach 04:29:59Z
+    row({ chat_id: 'after', last_customer_at: new Date('2026-09-30T13:30:01Z') }), // breach 13:30:01Z
   ];
   assert.deepEqual(findBreachingTickets(rows, W1), []);
 });
 
-test('findBreachingTickets excludes CLOSED and RESOLVED tickets', () => {
-  const t = new Date('2026-09-30T08:00:00Z');
-  const rows = [
-    row({ chat_id: 'closed', status: 'CLOSED', created_at: t }),
-    row({ chat_id: 'resolved', status: 'RESOLVED', created_at: t }),
-  ];
-  assert.deepEqual(findBreachingTickets(rows, W1), []);
+test('findBreachingTickets ignores status: unanswered customer message counts even on closed tickets', () => {
+  // status is not even a field now; the only inputs are the two timestamps
+  const r = findBreachingTickets([row({ chat_id: 'x', last_customer_at: new Date('2026-09-30T08:00:00Z') })], W1);
+  assert.deepEqual(r.map((x) => x.chat_id), ['x']);
 });
 
-test('findBreachingTickets anchors on updated_at once first_response_at is set', () => {
+test('findBreachingTickets anchors on the customer\'s latest message, not ticket creation', () => {
   const r = findBreachingTickets([row({
-    chat_id: 'replied',
-    created_at: new Date('2026-09-20T00:00:00Z'), // would be far outside the window
-    first_response_at: new Date('2026-09-20T01:00:00Z'),
-    updated_at: new Date('2026-09-30T09:00:00Z'),
+    chat_id: 'followup',
+    last_customer_at: new Date('2026-09-30T09:00:00Z'),
+    last_reply_at: new Date('2026-09-20T01:00:00Z'),
   })], W1);
-  assert.deepEqual(r.map((x) => x.chat_id), ['replied']);
+  assert.deepEqual(r.map((x) => x.chat_id), ['followup']);
   assert.equal(r[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
+});
+
+test('findBreachingTickets drops tickets we already replied to after the customer\'s last message', () => {
+  const rows = [
+    row({ chat_id: 'answered', last_customer_at: new Date('2026-09-30T08:00:00Z'), last_reply_at: new Date('2026-09-30T09:00:00Z') }),
+    row({ chat_id: 'never-messaged', last_customer_at: null }),
+  ];
+  assert.deepEqual(findBreachingTickets(rows, W1), []);
 });
 
 test('findBreachingTickets sorts by breach time ascending', () => {
   const r = findBreachingTickets([
-    row({ chat_id: 'late', created_at: new Date('2026-09-30T12:00:00Z') }),
-    row({ chat_id: 'early', created_at: new Date('2026-09-30T05:00:00Z') }),
+    row({ chat_id: 'late', last_customer_at: new Date('2026-09-30T12:00:00Z') }),
+    row({ chat_id: 'early', last_customer_at: new Date('2026-09-30T05:00:00Z') }),
   ], W1);
   assert.deepEqual(r.map((x) => x.chat_id), ['early', 'late']);
 });
@@ -90,8 +93,8 @@ import { buildSlackPayload, formatMentions, formatBreachesIn, formatBreachesAt }
 
 const NOW = new Date('2026-10-01T10:51:00Z'); // 16:21 IST
 const mk = () => findBreachingTickets([
-  row({ chat_id: '111', customer_email: 'secret@example.com', created_at: new Date('2026-09-30T13:34:00Z') }), // breach 13:34Z = 19:04 IST, 2h43m away
-  row({ chat_id: '222', created_at: new Date('2026-09-30T20:00:00Z') }), // breach next day 20:00Z - 1d9h09m away
+  row({ chat_id: '111', customer_email: 'secret@example.com', last_customer_at: new Date('2026-09-30T13:34:00Z') }), // breach 13:34Z = 19:04 IST, 2h43m away
+  row({ chat_id: '222', last_customer_at: new Date('2026-09-30T20:00:00Z') }), // breach next day 20:00Z - 1d9h09m away
 ], { windowStart: new Date('2026-10-01T00:00:00Z'), windowEnd: new Date('2026-10-03T00:00:00Z') });
 
 test('formatBreachesIn - hours and minutes, days when long, "overdue" when past', () => {

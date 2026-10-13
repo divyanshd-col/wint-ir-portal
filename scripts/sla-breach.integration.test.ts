@@ -18,36 +18,44 @@ test('sla-breach cron end to end against a real database', { skip }, async () =>
   const pool = new Pool({ connectionString: url });
   try {
     await pool.query('TRUNCATE email_conversations');
-    // now = 2026-10-01 09:45 IST. Trigger 1 window = 04:30Z..13:30Z on Oct 1 (breach = anchor + 24h).
+    await pool.query('TRUNCATE robylon_webhook_payloads');
     await pool.query(
-      `INSERT INTO email_conversations (id, chat_id, customer_email, status, created_at, first_response_at, updated_at) VALUES
-       ('a','in-unreplied','a@example.com','OPEN','2026-09-30 08:00Z',NULL,'2026-09-30 08:00Z'),
-       ('b','in-replied','b@example.com','OPEN','2026-09-20 00:00Z','2026-09-20 01:00Z','2026-09-30 09:00Z'),
-       ('c','just-outside','c@example.com','OPEN','2026-09-30 13:31Z',NULL,'2026-09-30 13:31Z'),
-       ('d','closed','d@example.com','CLOSED','2026-09-30 08:00Z',NULL,'2026-09-30 08:00Z'),
-       ('e','resolved','e@example.com','RESOLVED','2026-09-30 08:00Z','2026-09-30 08:30Z','2026-09-30 08:30Z'),
-       ('f','auto-in-window','noreply@example.com','OPEN','2026-09-30 09:00Z',NULL,'2026-09-30 09:00Z')`,
+      `INSERT INTO email_conversations (id, chat_id, customer_email, status) VALUES
+       ('a','in-unreplied','a@example.com','OPEN'),
+       ('b','in-followup','b@example.com','RESOLVED'),
+       ('c','just-outside','c@example.com','OPEN'),
+       ('d','answered','d@example.com','OPEN'),
+       ('e','closed-unanswered','e@example.com','CLOSED'),
+       ('f','auto-in-window','noreply@example.com','OPEN')`,
     );
+    // now = 2026-10-01 09:45 IST. Trigger 1 window = 04:30Z..13:30Z on Oct 1 (breach = last customer msg + 24h).
+    const ev = (chat: string, type: string, at: string, extra: object = {}) =>
+      pool.query(
+        `INSERT INTO robylon_webhook_payloads (source, event_type, chat_id, payload, received_at) VALUES ('email',$1,$2,$3,$4)`,
+        [type, chat, JSON.stringify({ created_at: at, data: extra }), at],
+      );
+    await ev('in-unreplied', 'TICKET_CREATED', '2026-09-30T08:00:00Z');
+    await ev('in-followup', 'TICKET_CREATED', '2026-09-20T00:00:00Z');
+    await ev('in-followup', 'REPLY_SENT', '2026-09-20T01:00:00Z');
+    await ev('in-followup', 'NEW_MESSAGE', '2026-09-30T09:00:00Z', { sender_type: 'customer' });
+    await ev('just-outside', 'TICKET_CREATED', '2026-09-30T13:31:00Z');
+    await ev('answered', 'TICKET_CREATED', '2026-09-30T08:00:00Z');
+    await ev('answered', 'REPLY_SENT', '2026-09-30T09:00:00Z');
+    await ev('closed-unanswered', 'TICKET_CREATED', '2026-09-30T08:30:00Z');
+    await ev('closed-unanswered', 'TICKET_CLOSED', '2026-10-01T08:30:00Z');
+    await ev('auto-in-window', 'TICKET_CREATED', '2026-09-30T09:00:00Z');
     const posted: string[] = [];
     const now = new Date('2026-10-01T04:15:00Z');
     const res = await runSlaBreachCron({
       authHeader: 'Bearer s', secret: 's', trigger: '1', now,
       fetchRows: fetchBreachingTickets, post: async (p) => { posted.push(JSON.stringify(p)); },
     });
-    assert.deepEqual(res, { status: 200, body: { ok: true, count: 2, excluded: 1 } });
+    assert.deepEqual(res, { status: 200, body: { ok: true, count: 3, excluded: 1 } });
     assert.match(posted[0], /in-unreplied/);
-    assert.match(posted[0], /in-replied/);
-    assert.ok(!/just-outside|closed|resolved|auto-in-window/.test(posted[0]));
+    assert.match(posted[0], /in-followup/);
+    assert.ok(!/just-outside|\banswered|auto-in-window/.test(posted[0]));
     assert.match(posted[0], /1 automated sender/);
 
-    // The brief's original IST SQL must agree with the parameterised one.
-    const ref = await pool.query(
-      `WITH t AS (SELECT chat_id, CASE WHEN first_response_at IS NULL THEN created_at ELSE updated_at END AS s FROM email_conversations WHERE status='OPEN')
-       SELECT chat_id FROM t WHERE (s + INTERVAL '24 hours') AT TIME ZONE 'Asia/Kolkata'
-         BETWEEN '2026-10-01 10:00' AND '2026-10-01 19:00' ORDER BY s`,
-    );
-    const mine = await fetchBreachingTickets(getSlaWindow(now, 1));
-    assert.deepEqual(mine.map((r) => r.chat_id), ref.rows.map((r) => r.chat_id)); // SQL returns automated too; the filter is applied afterwards
   } finally {
     await pool.end();
     (await import('../lib/cx/db')).getPool().end().catch(() => {});

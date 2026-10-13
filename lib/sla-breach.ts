@@ -14,15 +14,14 @@ export function getSlaWindow(now: Date, trigger: SlaTrigger): { windowStart: Dat
   };
 }
 
+/** One email ticket with the time of the customer's latest message and our latest human reply (null = none). */
 export interface EmailTicketRow {
   id: string;
   chat_id: string;
   customer_email: string | null;
   customer_phone: string | null;
-  status: string;
-  created_at: Date;
-  first_response_at: Date | null;
-  updated_at: Date;
+  last_customer_at: Date | null;
+  last_reply_at: Date | null;
 }
 
 export interface BreachingTicket {
@@ -37,31 +36,24 @@ export interface BreachingTicket {
 export const SLA_HOURS = 24;
 
 /**
- * SLA clock anchor. Approximation: there is no "customer's last message" column, so once a
- * first response exists we fall back to updated_at, which moves on ANY row change.
+ * In-memory equivalent of the production SQL. The SLA clock starts when the customer sent their latest
+ * message and is only running while that message is unanswered (no human reply after it), whatever the
+ * ticket status. Breach = that message + 24h; keep those falling in the window.
  */
-export function slaClockStart(r: Pick<EmailTicketRow, 'created_at' | 'first_response_at' | 'updated_at'>): Date {
-  return r.first_response_at == null ? r.created_at : r.updated_at;
-}
-
-/** In-memory equivalent of the production SQL: OPEN tickets whose anchor + 24h falls in the window. */
 export function findBreachingTickets(
   rows: EmailTicketRow[],
   { windowStart, windowEnd }: { windowStart: Date; windowEnd: Date },
 ): BreachingTicket[] {
   return rows
-    .filter((r) => r.status === 'OPEN')
-    .map((r) => {
-      const anchor = slaClockStart(r);
-      return {
-        chat_id: r.chat_id,
-        ticket_id: r.id,
-        customer_email: r.customer_email,
-        customer_phone: r.customer_phone,
-        user_last_replied_at: anchor,
-        sla_breach_time: new Date(anchor.getTime() + SLA_HOURS * HOUR_MS),
-      };
-    })
+    .filter((r) => r.last_customer_at != null && (r.last_reply_at == null || r.last_reply_at < r.last_customer_at))
+    .map((r) => ({
+      chat_id: r.chat_id,
+      ticket_id: r.id,
+      customer_email: r.customer_email,
+      customer_phone: r.customer_phone,
+      user_last_replied_at: r.last_customer_at!,
+      sla_breach_time: new Date(r.last_customer_at!.getTime() + SLA_HOURS * HOUR_MS),
+    }))
     .filter((t) => t.sla_breach_time >= windowStart && t.sla_breach_time <= windowEnd)
     .sort((a, b) => a.sla_breach_time.getTime() - b.sla_breach_time.getTime());
 }
