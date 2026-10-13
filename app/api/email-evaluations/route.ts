@@ -9,6 +9,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
 import {
   evaluateSingleReplySync,
@@ -21,6 +23,8 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const agentName = searchParams.get('agentName');
     const status = searchParams.get('status');
+    const reviewStatus = searchParams.get('reviewStatus');
+    const tab = searchParams.get('tab');
     const maxScore = searchParams.get('maxScore'); // e.g. 85 for QA low scores
     const minScore = searchParams.get('minScore');
     const complianceFailed = searchParams.get('complianceFailed');
@@ -41,7 +45,17 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`e.agent_name ILIKE $${params.length}`);
     }
 
-    if (status) {
+    // QA Review workflow filtering
+    if (tab === 'pending' || reviewStatus === 'pending' || status === 'Pending_Review') {
+      // Completed AI evaluation, pending QA review
+      whereClauses.push(`e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL)`);
+    } else if (tab === 'reviewed' || reviewStatus === 'reviewed' || status === 'Reviewed') {
+      // Finalized & submitted by QA
+      whereClauses.push(`e.review_status = 'reviewed'`);
+    } else if (tab === 'unscored' || reviewStatus === 'unscored' || status === 'Unscored') {
+      // Ingested, awaiting AI batch or sync evaluation
+      whereClauses.push(`e.evaluation_status IN ('Pending', 'In_Batch')`);
+    } else if (status) {
       params.push(status);
       whereClauses.push(`e.evaluation_status = $${params.length}`);
     }
@@ -76,12 +90,12 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`(e.compliance_passed = FALSE OR array_length(e.compliance_issues, 1) > 0)`);
     }
 
-    if (disputeStatus === 'pending') {
+    if (tab === 'disputes' || disputesOnly === 'true') {
+      whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
+    } else if (disputeStatus === 'pending') {
       whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
     } else if (disputeStatus === 'reviewed') {
       whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
-    } else if (disputesOnly === 'true') {
-      whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
     }
 
     if (search) {
@@ -93,7 +107,7 @@ export async function GET(req: NextRequest) {
 
     const whereSQL = whereClauses.join(' AND ');
 
-    // 1. Fetch evaluated items with conversation subject
+    // 1. Fetch evaluated items with conversation subject & review metadata
     const itemsQuery = `
       SELECT 
         e.*,
@@ -114,12 +128,13 @@ export async function GET(req: NextRequest) {
 
     const items = await query(itemsQuery, params);
 
-    // 2. Fetch Aggregated Statistics for Dashboard
+    // 2. Fetch Aggregated Statistics & Tab Counts for Dashboard
     const statsQuery = `
       SELECT 
         COUNT(*)::int AS total_count,
-        COUNT(CASE WHEN e.evaluation_status = 'Pending' THEN 1 END)::int AS pending_count,
-        COUNT(CASE WHEN e.evaluation_status = 'In_Batch' THEN 1 END)::int AS in_batch_count,
+        COUNT(CASE WHEN e.evaluation_status = 'Completed' AND (e.review_status = 'pending' OR e.review_status IS NULL) THEN 1 END)::int AS pending_review_count,
+        COUNT(CASE WHEN e.review_status = 'reviewed' THEN 1 END)::int AS reviewed_count,
+        COUNT(CASE WHEN e.evaluation_status IN ('Pending', 'In_Batch') THEN 1 END)::int AS unscored_count,
         COUNT(CASE WHEN e.evaluation_status = 'Completed' THEN 1 END)::int AS completed_count,
         ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed'), 2) AS avg_score,
         COUNT(CASE WHEN e.compliance_passed = FALSE THEN 1 END)::int AS compliance_breach_count,
@@ -127,9 +142,8 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected') THEN 1 END)::int AS reviewed_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
       FROM email_reply_evaluations e
-      WHERE ${whereSQL}
     `;
-    const statsRes = await query(statsQuery, params);
+    const statsRes = await query(statsQuery);
     const summary = statsRes?.[0] || {};
 
     // 3. Member-Level Breakdown for Team Lead View
@@ -153,8 +167,10 @@ export async function GET(req: NextRequest) {
       items: items || [],
       summary: {
         totalCount: Number(summary.total_count || 0),
-        pendingCount: Number(summary.pending_count || 0),
-        inBatchCount: Number(summary.in_batch_count || 0),
+        pendingCount: Number(summary.pending_review_count || 0),
+        pendingReviewCount: Number(summary.pending_review_count || 0),
+        reviewedCount: Number(summary.reviewed_count || 0),
+        unscoredCount: Number(summary.unscored_count || 0),
         completedCount: Number(summary.completed_count || 0),
         avgScore: Number(summary.avg_score || 0),
         complianceBreachCount: Number(summary.compliance_breach_count || 0),
@@ -175,29 +191,44 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const action = body?.action;
 
-    // Action 1: QA manual score override and notes (Page 6 & 7)
-    if (action === 'qa_override') {
-      const { messageId, overrideScore, qaNotes, parameterScores } = body;
-      if (!messageId || overrideScore === undefined) {
-        return NextResponse.json({ error: 'messageId and overrideScore are required' }, { status: 400 });
+    // Action 1: QA submits evaluation review or saves override
+    if (action === 'submit_review' || action === 'qa_override') {
+      const { messageId, overrideScore, score, qaNotes, parameterScores, compliancePassed, complianceIssues } = body;
+      if (!messageId) {
+        return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
       }
+
+      const session = await getServerSession(authOptions).catch(() => null);
+      const reviewerEmail = (session?.user as any)?.email || session?.user?.name || body.reviewedBy || 'QA Reviewer';
+
+      const finalScore = score !== undefined && score !== null
+        ? Number(score)
+        : (overrideScore !== undefined && overrideScore !== null ? Number(overrideScore) : null);
 
       await query(
         `UPDATE email_reply_evaluations
          SET qa_override_score = $1,
              qa_notes = COALESCE($2, qa_notes),
              parameter_scores = CASE WHEN $3::text IS NOT NULL THEN $3::jsonb ELSE parameter_scores END,
+             review_status = 'reviewed',
+             reviewed_by = $4,
+             reviewed_at = NOW(),
+             compliance_passed = COALESCE($5, compliance_passed),
+             compliance_issues = COALESCE($6, compliance_issues),
              updated_at = NOW()
-         WHERE message_id = $4`,
+         WHERE message_id = $7`,
         [
-          Number(overrideScore),
+          finalScore,
           qaNotes || null,
           parameterScores ? JSON.stringify(parameterScores) : null,
+          reviewerEmail,
+          compliancePassed !== undefined ? Boolean(compliancePassed) : null,
+          complianceIssues ? complianceIssues : null,
           messageId,
         ]
       );
 
-      return NextResponse.json({ ok: true, message: 'QA override updated successfully' });
+      return NextResponse.json({ ok: true, message: 'Review submitted successfully' });
     }
 
     // Action 2: Agent raises a dispute (Page 7)
@@ -226,15 +257,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'messageId and decision are required' }, { status: 400 });
       }
 
+      const session = await getServerSession(authOptions).catch(() => null);
+      const reviewerEmail = (session?.user as any)?.email || session?.user?.name || 'QA Reviewer';
+
       const updateScore = newScore !== undefined ? Number(newScore) : null;
       await query(
         `UPDATE email_reply_evaluations
          SET dispute_status = $1,
              qa_notes = COALESCE(qa_notes, '') || ' [Dispute Decision: ' || $1 || ' - ' || $2 || ']',
              qa_override_score = COALESCE($3, qa_override_score),
+             review_status = 'reviewed',
+             reviewed_by = COALESCE(reviewed_by, $4),
+             reviewed_at = NOW(),
              updated_at = NOW()
-         WHERE message_id = $4`,
-        [decision, notes || '', updateScore, messageId]
+         WHERE message_id = $5`,
+        [decision, notes || '', updateScore, reviewerEmail, messageId]
       );
 
       return NextResponse.json({ ok: true, message: `Dispute marked as ${decision}` });

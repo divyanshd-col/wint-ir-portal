@@ -2,10 +2,15 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import DateRangePicker from './DateRangePicker';
-import { DEFAULT_EMAIL_PARAMETERS, ParameterScoreValue } from '@/lib/email/context-builder';
+import {
+  DEFAULT_EMAIL_PARAMETERS,
+  ParameterScoreValue,
+  calculateEmailIQS,
+  normalizeParamScoreValue,
+} from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from './EmailContentRenderer';
 
-type Tab = 'pending' | 'reviewed' | 'disputes';
+type Tab = 'pending' | 'reviewed' | 'disputes' | 'unscored';
 
 interface EvaluationItem {
   id: number;
@@ -19,6 +24,9 @@ interface EvaluationItem {
   customer_message?: string;
   agent_reply_text?: string;
   evaluation_status: 'Pending' | 'In_Batch' | 'Completed' | 'Failed' | 'Skipped';
+  review_status?: 'pending' | 'reviewed';
+  reviewed_by?: string;
+  reviewed_at?: string;
   batch_job_id?: string;
   quality_score?: number;
   compliance_passed?: boolean;
@@ -175,8 +183,15 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
 export default function EmailEvaluationPage() {
   const [tab, setTab] = useState<Tab>('pending');
   const [items, setItems] = useState<EvaluationItem[]>([]);
+  const [summary, setSummary] = useState<{
+    pendingReviewCount?: number;
+    reviewedCount?: number;
+    activeDisputesCount?: number;
+    unscoredCount?: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -197,43 +212,18 @@ export default function EmailEvaluationPage() {
   // QA action state
   const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
   const [overrideParams, setOverrideParams] = useState<Record<string, Record<string, ParameterScoreValue>>>({});
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
+  const [evaluatingSingle, setEvaluatingSingle] = useState<string | null>(null);
+  const [triggeringBatch, setTriggeringBatch] = useState(false);
 
   const normalizeToggleValue = (val: any): ParameterScoreValue => {
-    if (val === 'yes' || val === 'partial' || val === 'no') return val;
-    if (typeof val === 'string') {
-      const s = val.toLowerCase().trim();
-      if (s === 'yes' || s === 'pass') return 'yes';
-      if (s === 'partial') return 'partial';
-      if (s === 'no' || s === 'fail') return 'no';
-    }
-    if (typeof val === 'number') {
-      if (val >= 80) return 'yes';
-      if (val >= 50) return 'partial';
-      return 'no';
-    }
-    return 'yes';
+    return normalizeParamScoreValue(val);
   };
 
   const calculateIQS = (params: Record<string, ParameterScoreValue>): number => {
-    let totalWeight = 0;
-    let earned = 0;
-
-    DEFAULT_EMAIL_PARAMETERS.forEach(def => {
-      const weight = def.defaultWeight || 1;
-      totalWeight += weight;
-      const val = params[def.key] ?? 'yes';
-      if (val === 'yes') {
-        earned += weight * 100;
-      } else if (val === 'partial') {
-        earned += weight * 50;
-      } else {
-        earned += 0;
-      }
-    });
-
-    return totalWeight > 0 ? Math.round(earned / totalWeight) : 0;
+    return calculateEmailIQS(params);
   };
 
   const getParamsForItem = (item: EvaluationItem): Record<string, ParameterScoreValue> => {
@@ -243,7 +233,16 @@ export default function EmailEvaluationPage() {
     const current = item.parameter_scores || {};
     const initial: Record<string, ParameterScoreValue> = {};
     DEFAULT_EMAIL_PARAMETERS.forEach(def => {
-      initial[def.key] = normalizeToggleValue(current[def.key]);
+      let raw = current[def.key];
+      if (raw === undefined && def.aliases) {
+        for (const alias of def.aliases) {
+          if (current[alias] !== undefined) {
+            raw = current[alias];
+            break;
+          }
+        }
+      }
+      initial[def.key] = normalizeParamScoreValue(raw);
     });
     return initial;
   };
@@ -274,18 +273,14 @@ export default function EmailEvaluationPage() {
       if (search) params.set('search', search);
       if (agentFilter) params.set('agentName', agentFilter);
       if (complianceFailedOnly) params.set('complianceFailed', 'true');
-
-      if (tab === 'pending') {
-        params.set('status', 'Pending');
-      } else if (tab === 'disputes') {
-        params.set('disputesOnly', 'true');
-      } else if (tab === 'reviewed') {
-        params.set('status', 'Completed');
-      }
+      params.set('tab', tab);
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
       if (data.ok) {
+        if (data.summary) {
+          setSummary(data.summary);
+        }
         if (data.agentBreakdown && data.agentBreakdown.length > 0) {
           const names = data.agentBreakdown.map((a: any) => a.agent_name).filter(Boolean);
           setAvailableAgents(prev => Array.from(new Set([...prev, ...names])).sort());
@@ -318,11 +313,12 @@ export default function EmailEvaluationPage() {
     setExpandedId(null);
   };
 
-  const handleSaveQAOverride = async (item: EvaluationItem) => {
+  const handleSubmitReview = async (item: EvaluationItem) => {
     const currentParams = getParamsForItem(item);
     const scoreVal = overrideScores[item.message_id] !== undefined
       ? Number(overrideScores[item.message_id])
       : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
+    const notes = reviewNotes[item.message_id] ?? item.qa_notes ?? '';
 
     setSubmittingAction(true);
     try {
@@ -330,15 +326,17 @@ export default function EmailEvaluationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'qa_override',
+          action: 'submit_review',
           messageId: item.message_id,
-          overrideScore: Number(scoreVal),
-          qaNotes: item.qa_notes || 'QA Review Override',
+          score: Number(scoreVal),
+          qaNotes: notes,
           parameterScores: currentParams,
         }),
       });
       const data = await res.json();
       if (data.ok) {
+        setSuccessMessage(`Evaluation score for Ticket #${item.ticket_id.slice(0, 8)} submitted and moved to Reviewed!`);
+        setTimeout(() => setSuccessMessage(null), 4000);
         setOverrideScores(prev => {
           const next = { ...prev };
           delete next[item.message_id];
@@ -349,12 +347,60 @@ export default function EmailEvaluationPage() {
           delete next[item.message_id];
           return next;
         });
+        setReviewNotes(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setExpandedId(null);
         fetchData();
       }
     } catch (err) {
       console.error(err);
     } finally {
       setSubmittingAction(false);
+    }
+  };
+
+  const handleEvaluateSingle = async (messageId: string) => {
+    setEvaluatingSingle(messageId);
+    try {
+      const res = await fetch('/api/email-evaluations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'evaluate_single', messageId }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSuccessMessage(`Email evaluated! Now available in Pending Review.`);
+        setTimeout(() => setSuccessMessage(null), 4000);
+        fetchData();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEvaluatingSingle(null);
+    }
+  };
+
+  const handleTriggerBatch = async () => {
+    setTriggeringBatch(true);
+    try {
+      const res = await fetch('/api/email-evaluations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'trigger_batch' }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSuccessMessage(`Gemini batch evaluation job triggered!`);
+        setTimeout(() => setSuccessMessage(null), 4000);
+        fetchData();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setTriggeringBatch(false);
     }
   };
 
@@ -426,7 +472,29 @@ export default function EmailEvaluationPage() {
         </div>
       </div>
 
-      {/* ── Tab Bar (Exact styling of ChatEvaluationPage) ── */}
+      {/* ── Success Toast Banner ── */}
+      {successMessage && (
+        <div style={{
+          background: '#dcfce7',
+          border: '1px solid #86efac',
+          color: '#15803d',
+          padding: '12px 18px',
+          borderRadius: 8,
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: 13,
+          fontWeight: 500,
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          {successMessage}
+        </div>
+      )}
+
+      {/* ── Tab Bar (Matching ChatEvaluationPage) ── */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -441,18 +509,49 @@ export default function EmailEvaluationPage() {
           borderRadius: 10, padding: 4, width: 'fit-content',
         }}>
           <button style={tabStyle(tab === 'pending')} onClick={() => handleTabChange('pending')}>
-            Pending Batch
-            {tab === 'pending' && <CountBadge count={items.length} active={true} />}
+            Pending Review
+            <CountBadge count={summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0)} active={tab === 'pending'} />
           </button>
           <button style={tabStyle(tab === 'reviewed')} onClick={() => handleTabChange('reviewed')}>
             Reviewed Emails
-            {tab === 'reviewed' && <CountBadge count={items.length} active={true} />}
+            <CountBadge count={summary?.reviewedCount ?? (tab === 'reviewed' ? items.length : 0)} active={tab === 'reviewed'} />
           </button>
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
-            {tab === 'disputes' && <CountBadge count={items.length} active={true} />}
+            <CountBadge count={summary?.activeDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
+          </button>
+          <button style={tabStyle(tab === 'unscored')} onClick={() => handleTabChange('unscored')}>
+            Awaiting AI
+            <CountBadge count={summary?.unscoredCount ?? (tab === 'unscored' ? items.length : 0)} active={tab === 'unscored'} />
           </button>
         </div>
+
+        {tab === 'unscored' && (
+          <button
+            onClick={handleTriggerBatch}
+            disabled={triggeringBatch}
+            style={{
+              height: 36,
+              padding: '0 16px',
+              borderRadius: 8,
+              border: 'none',
+              background: 'var(--accent, #16a34a)',
+              color: '#fff',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: triggeringBatch ? 'not-allowed' : 'pointer',
+              opacity: triggeringBatch ? 0.7 : 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            {triggeringBatch ? 'Submitting Batch…' : 'Run Gemini Batch Evaluation'}
+          </button>
+        )}
       </div>
 
       {/* ── Filter Toolbar (Matching ChatEvalTable) ── */}
@@ -677,19 +776,74 @@ export default function EmailEvaluationPage() {
                           )}
                         </td>
                         <td style={td}>
-                          <span style={{
-                            display: 'inline-flex', alignItems: 'center',
-                            fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                            background: item.evaluation_status === 'Completed' ? '#dcfce7' : item.evaluation_status === 'In_Batch' ? '#e0f2fe' : '#fef3c7',
-                            color: item.evaluation_status === 'Completed' ? '#15803d' : item.evaluation_status === 'In_Batch' ? '#0369a1' : '#b45309',
-                          }}>
-                            {item.evaluation_status}
-                          </span>
+                          {item.review_status === 'reviewed' ? (
+                            <div>
+                              <span style={{
+                                display: 'inline-flex', alignItems: 'center',
+                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                                background: '#dcfce7', color: '#15803d',
+                              }}>
+                                Reviewed
+                              </span>
+                              {item.reviewed_by && (
+                                <div style={{ fontSize: 10, color: 'var(--qa-text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  by {item.reviewed_by.split('@')[0]}
+                                </div>
+                              )}
+                            </div>
+                          ) : item.evaluation_status === 'Completed' ? (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center',
+                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                              background: '#fef3c7', color: '#b45309',
+                            }}>
+                              Pending Review
+                            </span>
+                          ) : item.evaluation_status === 'In_Batch' ? (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center',
+                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                              background: '#e0f2fe', color: '#0369a1',
+                            }}>
+                              In Batch
+                            </span>
+                          ) : (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center',
+                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
+                              background: '#f4f4f5', color: '#71717a',
+                            }}>
+                              Awaiting AI
+                            </span>
+                          )}
                         </td>
                         <td style={{ ...td, textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
-                            {isExpanded ? 'Hide ▲' : 'Review ▼'}
-                          </span>
+                          {tab === 'unscored' && item.evaluation_status === 'Pending' ? (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEvaluateSingle(item.message_id);
+                              }}
+                              disabled={evaluatingSingle === item.message_id}
+                              style={{
+                                height: 26,
+                                padding: '0 8px',
+                                borderRadius: 6,
+                                border: '1px solid var(--qa-border)',
+                                background: 'var(--qa-card)',
+                                color: 'var(--qa-text)',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                cursor: evaluatingSingle === item.message_id ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              {evaluatingSingle === item.message_id ? 'Evaluating…' : '⚡ Eval'}
+                            </button>
+                          ) : (
+                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
+                              {isExpanded ? 'Hide ▲' : 'Review ▼'}
+                            </span>
+                          )}
                         </td>
                       </tr>
 
@@ -880,7 +1034,7 @@ export default function EmailEvaluationPage() {
                                 <div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                                     <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Parameter Scores
+                                      Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})
                                     </div>
                                   </div>
 
@@ -893,6 +1047,7 @@ export default function EmailEvaluationPage() {
                                     {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
                                       const currentParams = getParamsForItem(item);
                                       const val = currentParams[def.key] ?? 'yes';
+                                      const reason = (item.parameter_scores as any)?.__reasoning?.[def.key];
                                       return (
                                         <div
                                           key={def.key}
@@ -911,24 +1066,38 @@ export default function EmailEvaluationPage() {
                                             <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>
                                               {def.description}
                                             </div>
+                                            {reason && (
+                                              <div style={{ fontSize: 11, color: '#4b5563', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>
+                                                💡 {reason}
+                                              </div>
+                                            )}
                                           </div>
 
-                                          {/* Yes / Partial / No buttons (Matching EvalPanel in chats) */}
+                                          {/* Yes / Half / No / NA buttons */}
                                           <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                            {([
-                                              { val: 'yes', label: 'Yes' },
-                                              { val: 'partial', label: 'Partial' },
-                                              { val: 'no', label: 'No' },
-                                            ] as const).map(({ val: optVal, label }) => {
-                                              const isSel = val === optVal;
+                                            {(
+                                              def.allowNA
+                                                ? [
+                                                    { val: 'yes', label: 'Yes' },
+                                                    { val: 'half', label: 'Half' },
+                                                    { val: 'no', label: 'No' },
+                                                    { val: 'na', label: 'NA' },
+                                                  ]
+                                                : [
+                                                    { val: 'yes', label: 'Yes' },
+                                                    { val: 'half', label: 'Half' },
+                                                    { val: 'no', label: 'No' },
+                                                  ]
+                                            ).map(({ val: optVal, label }) => {
+                                              const isSel = val === optVal || (optVal === 'half' && val === 'partial');
                                               return (
                                                 <button
                                                   key={optVal}
                                                   type="button"
-                                                  onClick={() => handleParamChange(item.message_id, def.key, optVal)}
+                                                  onClick={() => handleParamChange(item.message_id, def.key, optVal as ParameterScoreValue)}
                                                   style={{
                                                     height: 28,
-                                                    padding: '0 11px',
+                                                    padding: '0 10px',
                                                     borderRadius: 8,
                                                     border: '1px solid var(--qa-border)',
                                                     background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
@@ -955,27 +1124,34 @@ export default function EmailEvaluationPage() {
                                   </div>
                                 </div>
 
-                                {/* AI Feedback Summary */}
-                                {item.qa_notes && (
-                                  <div>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
-                                      Evaluator Feedback &amp; Summary
-                                    </div>
-                                    <div style={{
-                                      background: 'var(--qa-card)',
-                                      border: '1px solid var(--qa-border)',
-                                      borderRadius: 6,
-                                      padding: '10px 12px',
-                                      fontSize: 12,
-                                      color: 'var(--qa-text)',
-                                      lineHeight: 1.5,
-                                    }}>
-                                      {item.qa_notes}
-                                    </div>
+                                {/* QA Feedback & Notes (Editable) */}
+                                <div>
+                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
+                                    {item.review_status === 'reviewed' ? 'QA Review Notes & Feedback' : 'QA Notes & Feedback (Editable)'}
                                   </div>
-                                )}
+                                  <textarea
+                                    value={reviewNotes[item.message_id] !== undefined ? reviewNotes[item.message_id] : (item.qa_notes || '')}
+                                    onChange={e => setReviewNotes(prev => ({ ...prev, [item.message_id]: e.target.value }))}
+                                    placeholder="Add QA feedback, observations, or rationale for score adjustments..."
+                                    rows={3}
+                                    style={{
+                                      width: '100%',
+                                      boxSizing: 'border-box',
+                                      padding: '10px 12px',
+                                      borderRadius: 8,
+                                      border: '1px solid var(--qa-border)',
+                                      background: 'var(--qa-card)',
+                                      color: 'var(--qa-text)',
+                                      fontSize: 12,
+                                      lineHeight: 1.5,
+                                      fontFamily: 'inherit',
+                                      resize: 'vertical',
+                                      outline: 'none',
+                                    }}
+                                  />
+                                </div>
 
-                                {/* Action Bar: Save / Override */}
+                                {/* Action Bar: Submit Review / Update */}
                                 <div style={{
                                   display: 'flex',
                                   justifyContent: 'space-between',
@@ -1007,29 +1183,62 @@ export default function EmailEvaluationPage() {
                                         </button>
                                       </div>
                                     )}
+                                    {item.review_status === 'reviewed' && item.reviewed_by && (
+                                      <div style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>
+                                        Reviewed by <strong>{item.reviewed_by}</strong> {item.reviewed_at ? `on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}
+                                      </div>
+                                    )}
                                   </div>
                                   <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-                                    <button
-                                      onClick={() => handleSaveQAOverride(item)}
-                                      disabled={submittingAction}
-                                      style={{
-                                        height: 34,
-                                        padding: '0 18px',
-                                        border: 'none',
-                                        borderRadius: 6,
-                                        background: 'var(--qa-gray-700)',
-                                        color: '#fff',
-                                        fontSize: 12,
-                                        fontWeight: 600,
-                                        cursor: submittingAction ? 'not-allowed' : 'pointer',
-                                        opacity: submittingAction ? 0.7 : 1,
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 6,
-                                      }}
-                                    >
-                                      {submittingAction ? 'Saving…' : 'Save / Override'}
-                                    </button>
+                                    {item.review_status === 'reviewed' ? (
+                                      <button
+                                        onClick={() => handleSubmitReview(item)}
+                                        disabled={submittingAction}
+                                        style={{
+                                          height: 34,
+                                          padding: '0 18px',
+                                          border: 'none',
+                                          borderRadius: 6,
+                                          background: 'var(--qa-gray-700)',
+                                          color: '#fff',
+                                          fontSize: 12,
+                                          fontWeight: 600,
+                                          cursor: submittingAction ? 'not-allowed' : 'pointer',
+                                          opacity: submittingAction ? 0.7 : 1,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 6,
+                                        }}
+                                      >
+                                        {submittingAction ? 'Updating…' : 'Update Review'}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() => handleSubmitReview(item)}
+                                        disabled={submittingAction}
+                                        style={{
+                                          height: 36,
+                                          padding: '0 20px',
+                                          border: 'none',
+                                          borderRadius: 8,
+                                          background: 'var(--accent, #16a34a)',
+                                          color: '#fff',
+                                          fontSize: 13,
+                                          fontWeight: 600,
+                                          cursor: submittingAction ? 'not-allowed' : 'pointer',
+                                          opacity: submittingAction ? 0.7 : 1,
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 6,
+                                          boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                                        }}
+                                      >
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                          <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                        {submittingAction ? 'Submitting…' : 'Submit Evaluation Score'}
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>

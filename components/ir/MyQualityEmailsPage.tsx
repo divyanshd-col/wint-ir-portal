@@ -130,7 +130,7 @@ function renderParamBadge(v: any) {
       </span>
     );
   }
-  if (s === 'partial') {
+  if (s === 'half' || s === 'partial') {
     return (
       <span
         style={{
@@ -146,7 +146,7 @@ function renderParamBadge(v: any) {
           borderRadius: 6,
         }}
       >
-        ½ Partial
+        ½ Half
       </span>
     );
   }
@@ -167,6 +167,26 @@ function renderParamBadge(v: any) {
         }}
       >
         ✗ No
+      </span>
+    );
+  }
+  if (s === 'na' || s === 'n/a') {
+    return (
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 3,
+          fontSize: 11,
+          fontWeight: 600,
+          color: '#52525b',
+          background: '#f4f4f5',
+          border: '1px solid #e4e4e7',
+          padding: '2px 8px',
+          borderRadius: 6,
+        }}
+      >
+        — NA
       </span>
     );
   }
@@ -834,14 +854,23 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                     alignItems: 'center',
                                   }}
                                 >
-                                  <span>Parameter Scores (6)</span>
+                                  <span>Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})</span>
                                   <span style={{ fontSize: 11, fontWeight: 400, color: '#A1A1AA' }}>IQS Breakdown</span>
                                 </div>
 
                                 {/* Parameters List */}
                                 <div style={{ flex: 1, overflowY: 'auto' }}>
                                   {DEFAULT_EMAIL_PARAMETERS.map((def, pIdx) => {
-                                    const val = item.parameter_scores?.[def.key];
+                                    let val = item.parameter_scores?.[def.key];
+                                    if (val === undefined && def.aliases) {
+                                      for (const alias of def.aliases) {
+                                        if (item.parameter_scores?.[alias] !== undefined) {
+                                          val = item.parameter_scores[alias];
+                                          break;
+                                        }
+                                      }
+                                    }
+                                    const reason = (item.parameter_scores as any)?.__reasoning?.[def.key];
                                     const isLastP = pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1;
                                     return (
                                       <div
@@ -862,6 +891,11 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                           <div style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginTop: 2, lineHeight: 1.3 }}>
                                             {def.description}
                                           </div>
+                                          {reason && (
+                                            <div style={{ fontSize: 11, color: '#4b5563', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>
+                                              💡 {reason}
+                                            </div>
+                                          )}
                                         </div>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                                           {renderParamBadge(val)}

@@ -38,24 +38,31 @@ interface EvaluationItem {
 
 function renderParamBadge(v: any) {
   const s = String(v ?? '').toLowerCase().trim();
-  if (s === 'yes') {
+  if (s === 'yes' || s === 'pass') {
     return (
       <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>
         ✓ Yes
       </span>
     );
   }
-  if (s === 'partial') {
+  if (s === 'half' || s === 'partial') {
     return (
       <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4 }}>
-        ½ Partial
+        ½ Half
       </span>
     );
   }
-  if (s === 'no') {
+  if (s === 'no' || s === 'fail') {
     return (
       <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 4 }}>
         ✗ No
+      </span>
+    );
+  }
+  if (s === 'na' || s === 'n/a') {
+    return (
+      <span style={{ fontSize: 11, fontWeight: 700, color: '#52525b', background: '#f4f4f5', padding: '1px 6px', borderRadius: 4 }}>
+        — NA
       </span>
     );
   }
@@ -621,7 +628,7 @@ export default function TLEmailQualityPage() {
                                   )}
                                   {reply.parameter_scores && (
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
-                                      {Object.entries(reply.parameter_scores).map(([k, v]) => (
+                                      {Object.entries(reply.parameter_scores).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
                                         <div key={k} style={{ fontSize: 12, color: 'var(--qa-text-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                           <span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
                                           {renderParamBadge(v)}

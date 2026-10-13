@@ -14,7 +14,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { query } from '@/lib/cx/db';
 import { readConfig } from '@/lib/config';
-import { buildEmailEvaluationPrompt, ThreadSummary } from './context-builder';
+import { buildEmailEvaluationPrompt, calculateEmailIQS, ThreadSummary } from './context-builder';
 import { sendEmailComplianceSlackAlert } from './compliance-alert';
 
 const DEFAULT_MODEL = 'gemini-2.5-flash';
@@ -249,12 +249,20 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
             parsedResult = JSON.parse(cleaned);
           }
 
-          const qualityScore = Number(parsedResult.quality_score ?? 0);
+          const rawParamScores = parsedResult.parameter_scores || {};
+          const parameterReasoning = parsedResult.parameter_reasoning || {};
+          const parameterScores = {
+            ...rawParamScores,
+            ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
+          };
+          const calculatedScore = calculateEmailIQS(rawParamScores);
+          const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
+            ? calculatedScore
+            : Number(parsedResult.quality_score ?? 0);
           const compliancePassed = Boolean(parsedResult.compliance_passed ?? true);
           const complianceIssues = Array.isArray(parsedResult.compliance_issues)
             ? parsedResult.compliance_issues
             : [];
-          const parameterScores = parsedResult.parameter_scores || {};
           const summaryNote = parsedResult.summary || '';
 
           await query(
@@ -265,6 +273,7 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
                  parameter_scores = $4,
                  qa_notes = COALESCE(qa_notes, $5),
                  evaluation_status = 'Completed',
+                 review_status = 'pending',
                  evaluated_at = NOW(),
                  updated_at = NOW()
              WHERE message_id = $6`,
@@ -398,12 +407,20 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
     parsed = JSON.parse(cleaned);
   }
 
-  const qualityScore = Number(parsed.quality_score ?? 0);
+  const rawParamScores = parsed.parameter_scores || {};
+  const parameterReasoning = parsed.parameter_reasoning || {};
+  const parameterScores = {
+    ...rawParamScores,
+    ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
+  };
+  const calculatedScore = calculateEmailIQS(rawParamScores);
+  const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
+    ? calculatedScore
+    : Number(parsed.quality_score ?? 0);
   const compliancePassed = Boolean(parsed.compliance_passed ?? true);
   const complianceIssues = Array.isArray(parsed.compliance_issues)
     ? parsed.compliance_issues
     : [];
-  const parameterScores = parsed.parameter_scores || {};
   const summaryNote = parsed.summary || '';
 
   await query(
@@ -414,6 +431,7 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
          parameter_scores = $4,
          qa_notes = COALESCE(qa_notes, $5),
          evaluation_status = 'Completed',
+         review_status = 'pending',
          evaluated_at = NOW(),
          updated_at = NOW()
      WHERE message_id = $6`,
