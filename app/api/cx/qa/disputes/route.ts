@@ -319,10 +319,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         const agentMatches = myAgents && effectiveAgentName && myAgents.has(effectiveAgentName.toLowerCase());
         const dispositionMatches = dispositions.length > 0 && effectiveDisposition && dispositions.includes(effectiveDisposition);
 
-        if (dispositions.length > 0) {
-          if (!dispositionMatches) continue;
-        } else if (myAgents && myAgents.size > 0) {
-          if (!agentMatches) continue;
+        const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
+        if (hasRestrictions && !agentMatches && !dispositionMatches) {
+          continue;
         }
       }
     }

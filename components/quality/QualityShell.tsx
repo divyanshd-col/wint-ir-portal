@@ -62,7 +62,7 @@ export const NAV_ALL: NavItem[] = [
   { label: 'Analytics',        href: '/quality',                icon: StarIcon,       roles: ['admin', 'quality', 'tl', 'agent'], skill: 'quality:analytics:access' },
   { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'],                skill: 'quality:chat_eval:access' },
   { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'],                skill: 'quality:call_eval:access' },
-  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin', 'tl'],                     skill: 'tl:team_analytics:access' },
+  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin'],                           skill: 'tl:team_analytics:access' },
   { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'],                     skill: 'tl:member_analytics:access' },
   { label: 'My Analytics',     href: '/tl/member-analytics',    icon: UserIcon,       roles: ['agent'],                           skill: 'agent:my_analytics:access' },
   { label: 'My Quality Chats', href: '/agent/quality-chats',    icon: ChatIcon,       roles: ['agent'],                           skill: 'agent:my_chats:access' },
