@@ -1,5 +1,5 @@
 /**
- * GET /api/cron/sla-breach?trigger=1|2
+ * GET /api/cron/sla-breach?trigger=1|2[&dry=1]  (dry=1 returns the Slack payload instead of posting)
  *
  * Twice daily (vercel.json, UTC): posts open email tickets about to breach the 24h SLA to Slack.
  *   trigger 1 (09:45 IST) -> breaches 10:00-19:00 IST today
@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     trigger: req.nextUrl.searchParams.get('trigger'),
     now: new Date(),
     fetchRows: fetchBreachingTickets,
+    dryRun: req.nextUrl.searchParams.get('dry') === '1',
     mentions: process.env.SLA_SLACK_MENTIONS,
     post: async ({ text, blocks }) => {
       const channel = process.env.SLA_SLACK_CHANNEL || process.env.SLACK_WEBHOOK_URL || '';

@@ -31,6 +31,8 @@ export interface BreachingTicket {
   customer_phone: string | null;
   user_last_replied_at: Date;
   sla_breach_time: Date;
+  /** Latest L1 intent Robylon classified this ticket with; null while unclassified. */
+  l1_intent?: string | null;
 }
 
 export const SLA_HOURS = 24;
@@ -131,11 +133,12 @@ export function buildSlackPayload(
   const table = {
     type: 'table',
     rows: [
-      [cell('Ticket ID'), cell('Breaches in'), cell('Breaches at'), cell('Open ticket')],
+      [cell('Ticket ID'), cell('Breaches in'), cell('Breaches at'), cell('L1 intent'), cell('Open ticket')],
       ...shown.map((r) => [
         cell(r.chat_id),
         cell(formatBreachesIn(r.sla_breach_time, now)),
         cell(formatBreachesAt(r.sla_breach_time)),
+        cell(r.l1_intent || '—'),
         {
           type: 'rich_text',
           elements: [{
@@ -166,6 +169,8 @@ export interface CronDeps {
   fetchRows: (window: { windowStart: Date; windowEnd: Date }) => Promise<BreachingTicket[]>;
   mentions?: string;
   post: (payload: SlackPayload) => Promise<void>;
+  /** Build the payload but don't post it; the payload is returned in the response body. */
+  dryRun?: boolean;
 }
 
 /** Cron orchestration with injected I/O. Auth is checked first and fails closed if no secret is configured. */
@@ -179,6 +184,8 @@ export async function runSlaBreachCron(d: CronDeps): Promise<CronResult> {
   }
   const t = Number(trigger) as SlaTrigger;
   const { human, automatedCount } = splitAutomated(await d.fetchRows(getSlaWindow(d.now, t)));
-  await d.post(buildSlackPayload(human, WINDOW_LABELS[t], d.now, formatMentions(d.mentions), automatedCount));
+  const payload = buildSlackPayload(human, WINDOW_LABELS[t], d.now, formatMentions(d.mentions), automatedCount);
+  if (d.dryRun) return { status: 200, body: { ok: true, dryRun: true, count: human.length, excluded: automatedCount, payload } };
+  await d.post(payload);
   return { status: 200, body: { ok: true, count: human.length, excluded: automatedCount } };
 }

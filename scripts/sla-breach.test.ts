@@ -133,12 +133,13 @@ test('buildSlackPayload - mentions + ticket table with the 3 columns, no email, 
   const table: any = p.blocks!.find((b: any) => b.type === 'table');
   assert.ok(table);
   const [header, r1, r2] = table.rows;
-  assert.deepEqual(header.map((c: any) => c.text), ['Ticket ID', 'Breaches in', 'Breaches at', 'Open ticket']);
+  assert.deepEqual(header.map((c: any) => c.text), ['Ticket ID', 'Breaches in', 'Breaches at', 'L1 intent', 'Open ticket']);
   assert.equal(r1[0].text, '111');
   assert.equal(r1[1].text, '2h 43m');
   assert.equal(r1[2].text, '1 Oct, 7:04 PM'); // 13:34Z = 19:04 IST
   assert.equal(r2[0].text, '222');
-  const link = r1[3].elements[0].elements[0];
+  assert.equal(r1[3].text, '—'); // unclassified
+  const link = r1[4].elements[0].elements[0];
   assert.equal(link.type, 'link');
   assert.equal(link.url, 'https://app.robylon.ai/unified-inbox/share/111');
   assert.equal(link.text, 'Open ticket');
@@ -254,4 +255,19 @@ test('runSlaBreachCron - drops automated senders from the alert and reports the 
   });
   assert.deepEqual(res.body, { ok: true, count: 1, excluded: 1 });
   assert.ok(posted[0].includes('900') && !posted[0].includes('901'));
+});
+
+test('buildSlackPayload - shows the L1 intent when classified', () => {
+  const p = buildSlackPayload([{ ...mk()[0], l1_intent: 'Withdrawal' }], 'w', NOW, '@x');
+  const table: any = p.blocks!.find((b: any) => b.type === 'table');
+  assert.equal(table.rows[1][3].text, 'Withdrawal');
+});
+
+test('runSlaBreachCron - dryRun returns the payload and never posts', async () => {
+  const { calls, d } = deps();
+  const res = await runSlaBreachCron({ ...d, authHeader: 'Bearer shh', trigger: '2', dryRun: true, fetchRows: async () => mk() });
+  assert.equal(res.status, 200);
+  assert.equal(res.body.dryRun, true);
+  assert.ok((res.body.payload as any).blocks.some((b: any) => b.type === 'table'));
+  assert.equal(calls.post.length, 0);
 });
