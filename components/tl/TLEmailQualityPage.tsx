@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
-import { resolveDateRange, robylonTicketUrl } from '@/lib/email/ui';
+import { periodBounds, robylonTicketUrl, paramLabel } from '@/lib/email/ui';
+import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { stripHtml, CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
 
@@ -37,39 +38,6 @@ interface EvaluationItem {
   customer_email?: string;
   customer_phone?: string;
   thread_summary?: any;
-}
-
-function renderParamBadge(v: any) {
-  const s = String(v ?? '').toLowerCase().trim();
-  if (s === 'yes' || s === 'pass') {
-    return (
-      <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a', background: '#dcfce7', padding: '1px 6px', borderRadius: 4 }}>
-        ✓ Yes
-      </span>
-    );
-  }
-  if (s === 'half' || s === 'partial') {
-    return (
-      <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706', background: '#fef3c7', padding: '1px 6px', borderRadius: 4 }}>
-        ½ Half
-      </span>
-    );
-  }
-  if (s === 'no' || s === 'fail') {
-    return (
-      <span style={{ fontSize: 11, fontWeight: 700, color: '#dc2626', background: '#fee2e2', padding: '1px 6px', borderRadius: 4 }}>
-        ✗ No
-      </span>
-    );
-  }
-  if (s === 'na' || s === 'n/a') {
-    return (
-      <span style={{ fontSize: 11, fontWeight: 700, color: '#52525b', background: '#f4f4f5', padding: '1px 6px', borderRadius: 4 }}>
-        — NA
-      </span>
-    );
-  }
-  return <span style={{ fontWeight: 700, color: 'var(--qa-text)', fontFamily: MONO }}>{v}%</span>;
 }
 
 // ─── Design Tokens & Styles ───────────────────────────────────────────────────
@@ -126,7 +94,7 @@ export default function TLEmailQualityPage() {
     try {
       const params = new URLSearchParams();
       if (selectedAgent) params.set('agentName', selectedAgent);
-      const { from, to } = resolveDateRange(period.period, period.customFrom, period.customTo);
+      const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       params.set('from', from);
       params.set('to', to);
       params.set('limit', '500');
@@ -361,6 +329,7 @@ export default function TLEmailQualityPage() {
               <col style={{ width: 160 }} />
               <col style={{ width: 130 }} />
               <col />
+              <col style={{ width: 80 }} />
               <col style={{ width: 100 }} />
               <col style={{ width: 90 }} />
             </colgroup>
@@ -369,6 +338,7 @@ export default function TLEmailQualityPage() {
                 <th style={th}>Agent</th>
                 <th style={th}>Ticket ID</th>
                 <th style={th}>Customer Context &amp; Reply</th>
+                <th style={th}>CSAT</th>
                 <th style={{ ...th, textAlign: 'right' }}>Score</th>
                 <th style={{ ...th, textAlign: 'right' }}>Detail</th>
               </tr>
@@ -376,13 +346,13 @@ export default function TLEmailQualityPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     Loading team email replies…
                   </td>
                 </tr>
               ) : replies.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     No replies matching selected filters
                   </td>
                 </tr>
@@ -423,20 +393,9 @@ export default function TLEmailQualityPage() {
                             {reply.agent_reply_text ? stripHtml(reply.agent_reply_text).slice(0, 60) + '…' : '—'}
                           </span>
                         </td>
-                        <td style={tdNum}>
-                          {score != null ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
-                              fontFamily: MONO, fontWeight: 600,
-                              background: score >= 85 ? '#dcfce7' : score >= 70 ? '#fef9c3' : '#fee2e2',
-                              color: score >= 85 ? '#15803d' : score >= 70 ? '#854d0e' : '#b91c1c',
-                            }}>
-                              {score}
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--qa-text-3)' }}>—</span>
-                          )}
+                        <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
+                        <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
+                          {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                         </td>
                         <td style={{ ...td, textAlign: 'right' }}>
                           <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
@@ -447,7 +406,7 @@ export default function TLEmailQualityPage() {
 
                       {isExpanded && (
                         <tr>
-                          <td colSpan={5} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
                             <div style={{
                               background: 'var(--qa-gray-50)',
                               borderTop: '1px solid var(--qa-border-sub)',
@@ -521,7 +480,7 @@ export default function TLEmailQualityPage() {
                                     border: '1px solid var(--qa-border)',
                                     borderRadius: 8,
                                     padding: '12px 16px',
-                                    maxHeight: 250,
+                                    maxHeight: 420,
                                     overflowY: 'auto',
                                   }}>
                                     <EmailMessageView
@@ -532,40 +491,47 @@ export default function TLEmailQualityPage() {
                                 </div>
                               </div>
 
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-3)' }}>
-                                  Evaluator Feedback &amp; Parameters
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
                                 </div>
                                 <div style={{
-                                  background: 'var(--qa-card)',
                                   border: '1px solid var(--qa-border)',
                                   borderRadius: 8,
-                                  padding: '12px 16px',
-                                  fontSize: 13,
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: 8,
+                                  background: 'var(--qa-card)',
+                                  overflow: 'hidden',
                                 }}>
-                                  {reply.compliance_issues && reply.compliance_issues.length > 0 && (
-                                    <div style={{ color: '#b91c1c', fontSize: 12, fontWeight: 600 }}>
-                                      Breaches: {reply.compliance_issues.join(', ')}
+                                  {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
+                                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {reply.compliance_issues && reply.compliance_issues.length > 0 && (
+                                        <div style={{ color: '#b91c1c', fontWeight: 600 }}>Breaches: {reply.compliance_issues.join(', ')}</div>
+                                      )}
+                                      {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
                                     </div>
                                   )}
-                                  {reply.qa_notes && (
-                                    <div style={{ color: 'var(--qa-text-2)', fontSize: 12, lineHeight: 1.5 }}>
-                                      {reply.qa_notes}
-                                    </div>
-                                  )}
-                                  {reply.parameter_scores && (
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4 }}>
-                                      {Object.entries(reply.parameter_scores).filter(([k]) => !k.startsWith('_')).map(([k, v]) => (
-                                        <div key={k} style={{ fontSize: 12, color: 'var(--qa-text-2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                          <span style={{ textTransform: 'capitalize' }}>{k.replace(/_/g, ' ')}:</span>
-                                          {renderParamBadge(v)}
+                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                    const scores = reply.parameter_scores;
+                                    const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
+                                    const reason = scores?.__reasoning?.[def.key];
+                                    return (
+                                      <div key={def.key} style={{
+                                        padding: '12px 16px',
+                                        borderBottom: idx < DEFAULT_EMAIL_PARAMETERS.length - 1 ? '1px solid var(--qa-border-sub)' : 'none',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 12,
+                                      }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{def.name}</div>
+                                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>{def.description}</div>
+                                          {reason && (
+                                            <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>💡 {reason}</div>
+                                          )}
                                         </div>
-                                      ))}
-                                    </div>
-                                  )}
+                                        <div style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: MONO }}>{paramLabel(val)}</div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             </div>

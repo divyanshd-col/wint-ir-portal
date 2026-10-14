@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
-import { resolveDateRange, robylonTicketUrl, intentLabel } from '@/lib/email/ui';
+import { periodBounds, robylonTicketUrl, intentLabel } from '@/lib/email/ui';
 import {
   DEFAULT_EMAIL_PARAMETERS,
   ParameterScoreValue,
@@ -141,26 +141,11 @@ function ScoreRing({ score }: { score: number | null }) {
 // ─── Score Badge (consistent with ChatEvalTable) ──────────────────────────────
 function QualityScoreBadge({ score, isOverridden }: { score: number | null; isOverridden?: boolean }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>;
-  const bg = score >= 85 ? '#dcfce7' : score >= 70 ? '#fef9c3' : '#fee2e2';
-  const color = score >= 85 ? '#15803d' : score >= 70 ? '#854d0e' : '#b91c1c';
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
-        fontFamily: MONO, fontWeight: 600, background: bg, color,
-      }}>
-        {score}
-      </span>
-      {isOverridden && (
-        <span style={{
-          fontSize: 10, padding: '1px 4px', borderRadius: 4, fontWeight: 700,
-          background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7',
-        }}>
-          QA
-        </span>
-      )}
-    </div>
+    <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+      {score}
+      {isOverridden && <span style={{ fontSize: 10, marginLeft: 4, color: 'var(--qa-text-3)' }}>QA</span>}
+    </span>
   );
 }
 
@@ -208,8 +193,6 @@ export default function EmailEvaluationPage() {
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
-  const [evaluatingSingle, setEvaluatingSingle] = useState<string | null>(null);
-  const [triggeringBatch, setTriggeringBatch] = useState(false);
 
   const normalizeToggleValue = (val: any): ParameterScoreValue => {
     return normalizeParamScoreValue(val);
@@ -265,7 +248,7 @@ export default function EmailEvaluationPage() {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (agentFilter) params.set('agentName', agentFilter);
-      const { from, to } = resolveDateRange(period.period, period.customFrom, period.customTo);
+      const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       params.set('from', from);
       params.set('to', to);
       params.set('tab', tab);
@@ -345,48 +328,6 @@ export default function EmailEvaluationPage() {
       console.error(err);
     } finally {
       setSubmittingAction(false);
-    }
-  };
-
-  const handleEvaluateSingle = async (messageId: string) => {
-    setEvaluatingSingle(messageId);
-    try {
-      const res = await fetch('/api/email-evaluations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'evaluate_single', messageId }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setSuccessMessage(`Email evaluated! Now available in Pending Review.`);
-        setTimeout(() => setSuccessMessage(null), 4000);
-        fetchData();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setEvaluatingSingle(null);
-    }
-  };
-
-  const handleTriggerBatch = async () => {
-    setTriggeringBatch(true);
-    try {
-      const res = await fetch('/api/email-evaluations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'trigger_batch' }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setSuccessMessage(`Gemini batch evaluation job triggered!`);
-        setTimeout(() => setSuccessMessage(null), 4000);
-        fetchData();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setTriggeringBatch(false);
     }
   };
 
@@ -513,32 +454,6 @@ export default function EmailEvaluationPage() {
           </button>
         </div>
 
-        {tab === 'unscored' && (
-          <button
-            onClick={handleTriggerBatch}
-            disabled={triggeringBatch}
-            style={{
-              height: 36,
-              padding: '0 16px',
-              borderRadius: 8,
-              border: 'none',
-              background: 'var(--accent, #16a34a)',
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: triggeringBatch ? 'not-allowed' : 'pointer',
-              opacity: triggeringBatch ? 0.7 : 1,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            {triggeringBatch ? 'Submitting Batch…' : 'Run Gemini Batch Evaluation'}
-          </button>
-        )}
       </div>
 
       {/* ── Filter Toolbar (Matching ChatEvalTable) ── */}
@@ -641,16 +556,14 @@ export default function EmailEvaluationPage() {
               <col style={{ width: 140 }} />
               <col />
               <col style={{ width: 100 }} />
-              <col style={{ width: 130 }} />
               <col style={{ width: 90 }} />
             </colgroup>
             <thead>
               <tr>
                 <th style={th}>Agent</th>
                 <th style={th}>Ticket ID</th>
-                <th style={th}>Intent (L1)</th>
+                <th style={th}>Intent</th>
                 <th style={{ ...th, textAlign: 'right' }}>IQS</th>
-                <th style={th}>Compliance</th>
                 <th style={{ ...th, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -658,7 +571,7 @@ export default function EmailEvaluationPage() {
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 5 }).map((_, j) => (
                       <td key={j} style={td}>
                         <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
                       </td>
@@ -667,7 +580,7 @@ export default function EmailEvaluationPage() {
                 ))
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
+                  <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
                     No email reply evaluations found matching filters
                   </td>
                 </tr>
@@ -713,60 +626,17 @@ export default function EmailEvaluationPage() {
                         <td style={tdNum}>
                           <QualityScoreBadge score={currentIQS} isOverridden={hasOverride || isSessionOverridden} />
                         </td>
-                        <td style={td}>
-                          {item.compliance_passed === false ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              fontSize: 12, fontWeight: 600, color: '#b91c1c',
-                            }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626' }} />
-                              Failed
-                            </span>
-                          ) : item.compliance_passed === true ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              fontSize: 12, fontWeight: 500, color: 'var(--accent)',
-                            }}>
-                              <span style={{ fontSize: 10 }}>✓</span> Compliant
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
-                          )}
-                        </td>
                         <td style={{ ...td, textAlign: 'right' }}>
-                          {tab === 'unscored' && item.evaluation_status === 'Pending' ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEvaluateSingle(item.message_id);
-                              }}
-                              disabled={evaluatingSingle === item.message_id}
-                              style={{
-                                height: 26,
-                                padding: '0 8px',
-                                borderRadius: 6,
-                                border: '1px solid var(--qa-border)',
-                                background: 'var(--qa-card)',
-                                color: 'var(--qa-text)',
-                                fontSize: 11,
-                                fontWeight: 600,
-                                cursor: evaluatingSingle === item.message_id ? 'not-allowed' : 'pointer',
-                              }}
-                            >
-                              {evaluatingSingle === item.message_id ? 'Evaluating…' : '⚡ Eval'}
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
+                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
                               {isExpanded ? 'Hide ▲' : 'Review ▼'}
                             </span>
-                          )}
                         </td>
                       </tr>
 
                       {/* ── Expanded Inline Review Drawer (Matching EvalPanel Structure) ── */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={5} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
                             <div style={{
                               background: 'var(--qa-gray-50)',
                               borderTop: '1px solid var(--qa-border-sub)',
@@ -846,7 +716,7 @@ export default function EmailEvaluationPage() {
                                     fontSize: 13,
                                     lineHeight: '1.6',
                                     color: 'var(--qa-text)',
-                                    maxHeight: 260,
+                                    maxHeight: 420,
                                     overflowY: 'auto',
                                   }}>
                                     <EmailMessageView

@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { trimEmailBody } from '@/lib/email/ui';
 
 /**
  * Strips HTML tags and decodes common HTML entities for plain-text previews and snippets.
@@ -91,7 +92,7 @@ export default function EmailMessageView({
   style,
   className = '',
 }: EmailMessageViewProps) {
-  const text = content?.trim() || '';
+  const text = trimEmailBody(content);
 
   if (!text) {
     return (

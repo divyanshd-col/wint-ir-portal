@@ -209,3 +209,8 @@ body {
   min-width: 0;
   max-width: 1400px;
 }
+
+/* Email bodies in the quality review panels: tight like chat transcripts, no dangling space after the last paragraph. */
+.email-html-body { overflow-wrap: anywhere; }
+.email-html-body p, .email-html-body div { margin-top: 0; margin-bottom: 0.6em; }
+.email-html-body > :last-child { margin-bottom: 0; }

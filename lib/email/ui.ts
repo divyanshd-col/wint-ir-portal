@@ -23,3 +23,37 @@ export function intentLabel(v: string | null | undefined): string {
   const t = (v ?? '').trim();
   return !t || t.toLowerCase() === 'none' || UUID.test(t) ? '—' : t;
 }
+
+const TRAILING_EMPTY = /(?:\s|&nbsp;|<br\s*\/?>|<(p|div|span)\b[^>]*>(?:\s|&nbsp;|<br\s*\/?>)*<\/\1>)+$/i;
+
+/** Email body for the review panels: no trailing blank lines or empty html blocks, and no runs of 3+ newlines (chats-style tight preview). */
+export function trimEmailBody(raw: string | null | undefined): string {
+  return (raw ?? '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(TRAILING_EMPTY, '').trim();
+}
+
+/** Plain-text label for a stored parameter value (yes/half/no/na, or a numeric score), a dash when missing. */
+export function paramLabel(v: unknown): string {
+  const s = String(v ?? '').toLowerCase().trim();
+  if (!s) return '—';
+  if (s === 'yes' || s === 'pass') return 'Yes';
+  if (s === 'half' || s === 'partial') return 'Half';
+  if (s === 'no' || s === 'fail') return 'No';
+  if (s === 'na' || s === 'n/a') return 'NA';
+  return `${v}%`;
+}
+
+const dayStart = (ymdStr: string, end: boolean) => {
+  const [y, m, d] = ymdStr.split('-').map(Number);
+  return (end ? new Date(y, m - 1, d, 23, 59, 59, 999) : new Date(y, m - 1, d)).toISOString();
+};
+
+/** from/to calendar days -> local day start / day end as ISO instants, so "today" means the viewer's today, not UTC's. */
+export function dayBoundsISO(from: string, to: string): { from: string; to: string } {
+  return { from: dayStart(from, false), to: dayStart(to, true) };
+}
+
+/** Query-ready from/to instants for the period control. */
+export function periodBounds(period: Period, customFrom?: string, customTo?: string): { from: string; to: string } {
+  const r = resolveDateRange(period, customFrom, customTo);
+  return dayBoundsISO(r.from, r.to);
+}

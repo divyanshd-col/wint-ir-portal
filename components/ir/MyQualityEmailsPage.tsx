@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
-import { resolveDateRange, robylonTicketUrl, intentLabel } from '@/lib/email/ui';
+import { periodBounds, robylonTicketUrl, intentLabel, paramLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
@@ -86,114 +86,11 @@ const TD_NUM: CSSProperties = {
 
 function IQSBadge({ score }: { score: number | null }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
-  const bg = score >= 85 ? '#f0fdf4' : score >= 70 ? '#fefce8' : '#fef2f2';
-  const color = score >= 85 ? '#166534' : score >= 70 ? '#854d0e' : '#991b1b';
-  const border = score >= 85 ? '#bbf7d0' : score >= 70 ? '#fef08a' : '#fecaca';
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minWidth: 36,
-        height: 24,
-        borderRadius: 6,
-        fontSize: 12,
-        fontWeight: 600,
-        fontFamily: MONO,
-        background: bg,
-        color: color,
-        border: `1px solid ${border}`,
-      }}
-    >
-      {score}
-    </span>
-  );
+  return <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111111)' }}>{Math.round(Number(score))}</span>;
 }
 
 function renderParamBadge(v: any) {
-  const s = String(v ?? '').toLowerCase().trim();
-  if (s === 'yes' || s === 'pass') {
-    return (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          fontSize: 11,
-          fontWeight: 600,
-          color: '#166534',
-          background: '#f0fdf4',
-          border: '1px solid #bbf7d0',
-          padding: '2px 8px',
-          borderRadius: 6,
-        }}
-      >
-        ✓ Yes
-      </span>
-    );
-  }
-  if (s === 'half' || s === 'partial') {
-    return (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          fontSize: 11,
-          fontWeight: 600,
-          color: '#854d0e',
-          background: '#fefce8',
-          border: '1px solid #fef08a',
-          padding: '2px 8px',
-          borderRadius: 6,
-        }}
-      >
-        ½ Half
-      </span>
-    );
-  }
-  if (s === 'no' || s === 'fail') {
-    return (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          fontSize: 11,
-          fontWeight: 600,
-          color: '#991b1b',
-          background: '#fef2f2',
-          border: '1px solid #fecaca',
-          padding: '2px 8px',
-          borderRadius: 6,
-        }}
-      >
-        ✗ No
-      </span>
-    );
-  }
-  if (s === 'na' || s === 'n/a') {
-    return (
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 3,
-          fontSize: 11,
-          fontWeight: 600,
-          color: '#52525b',
-          background: '#f4f4f5',
-          border: '1px solid #e4e4e7',
-          padding: '2px 8px',
-          borderRadius: 6,
-        }}
-      >
-        — NA
-      </span>
-    );
-  }
-  return <span style={{ fontWeight: 600, color: 'var(--qa-text, #111111)', fontFamily: MONO, fontSize: 12 }}>{v}%</span>;
+  return <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text, #111111)', fontFamily: MONO }}>{paramLabel(v)}</span>;
 }
 
 function CountBadge({ count, active }: { count: number; active: boolean }) {
@@ -277,7 +174,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
       const params = new URLSearchParams();
       if (agentName) params.set('agentName', agentName);
       params.set('status', 'Completed');
-      const { from, to } = resolveDateRange(period.period, period.customFrom, period.customTo);
+      const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       params.set('from', from);
       params.set('to', to);
       params.set('limit', '500');
@@ -611,6 +508,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <colgroup>
               <col style={{ width: 150 }} />
               <col />
+              <col style={{ width: 80 }} />
               <col style={{ width: 95 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 150 }} />
@@ -619,7 +517,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <thead>
               <tr>
                 <th style={TH_BASE}>Ticket ID</th>
-                <th style={TH_BASE}>Intent (L1)</th>
+                <th style={TH_BASE}>Intent</th>
+                <th style={TH_BASE}>CSAT</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
                 <th style={TH_BASE}>Compliance</th>
                 <th style={TH_BASE}>Dispute</th>
@@ -629,13 +528,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading email quality evaluations…
                   </td>
                 </tr>
               ) : currentTabItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={7} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No evaluations found in this view.
                   </td>
                 </tr>
@@ -670,20 +569,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ color: 'var(--qa-text, #111111)' }}>{intentLabel(item.intent_l1)}</span>
                         </td>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', color: 'var(--qa-text-3, #A1A1AA)' }}>—</td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <IQSBadge score={score} />
                             {isOverridden && (
                               <span
-                                style={{
-                                  fontSize: 10,
-                                  padding: '1px 4px',
-                                  borderRadius: 4,
-                                  fontWeight: 700,
-                                  background: '#f4f4f5',
-                                  color: '#52525b',
-                                  border: '1px solid #e4e4e7',
-                                }}
+                                style={{ fontSize: 10, color: 'var(--qa-text-3, #A1A1AA)' }}
                                 title="Adjusted by QA"
                               >
                                 QA
@@ -800,7 +692,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                       {/* ── Expanded Detail Drawer (Exact match with IRScorePanel) ── */}
                       {isOpen && (
                         <tr style={{ background: '#FAFAFB' }}>
-                          <td colSpan={6} style={{ padding: '0 16px 16px' }}>
+                          <td colSpan={7} style={{ padding: '0 16px 16px' }}>
                             <div
                               style={{
                                 display: 'flex',
@@ -1039,7 +931,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                           border: '1px solid #E4E4E7',
                                           borderRadius: 8,
                                           padding: '14px 16px',
-                                          maxHeight: 280,
+                                          maxHeight: 420,
                                           overflowY: 'auto',
                                         }}
                                       >

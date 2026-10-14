@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { robylonTicketUrl, resolveDateRange, intentLabel } from '../lib/email/ui';
+import { robylonTicketUrl, resolveDateRange, intentLabel, trimEmailBody, paramLabel, dayBoundsISO } from '../lib/email/ui';
 
 test('robylonTicketUrl - the unified-inbox link for a chat id', () => {
   assert.equal(robylonTicketUrl('110894'), 'https://app.robylon.ai/unified-inbox/share/110894');
@@ -28,4 +28,21 @@ test('intentLabel - L1 name for display, a dash when Robylon has not classified 
   assert.equal(intentLabel('KYC'), 'KYC');
   assert.equal(intentLabel('  Interest Repayment '), 'Interest Repayment');
   for (const v of [null, undefined, '', '  ', 'None', 'none', 'a34fb658-285d-450e-951e-b804c98cfff1']) assert.equal(intentLabel(v), '—', String(v));
+});
+
+test('trimEmailBody - drops trailing blank lines / empty html blocks and collapses blank runs', () => {
+  assert.equal(trimEmailBody('Hi\n\n\n\nThanks\n\n  \n'), 'Hi\n\nThanks');
+  assert.equal(trimEmailBody('<p>Hi</p><p>Thanks</p><p>&nbsp;</p><br><br/><div> <br></div>\n'), '<p>Hi</p><p>Thanks</p>');
+  assert.equal(trimEmailBody('<p>Hi<br>there</p>'), '<p>Hi<br>there</p>');
+  assert.equal(trimEmailBody(null), '');
+});
+
+test('paramLabel - plain label for a stored parameter value', () => {
+  assert.deepEqual(['yes', 'PASS', 'Half', 'partial', 'no', 'fail', 'na', 'N/A', undefined, '', 85].map(paramLabel), ['Yes', 'Yes', 'Half', 'Half', 'No', 'No', 'NA', 'NA', '—', '—', '85%']);
+});
+
+test('dayBoundsISO - local start/end of the picked days, as instants the API can compare with sent_at', () => {
+  const { from, to } = dayBoundsISO('2026-10-08', '2026-10-14');
+  assert.equal(from, new Date(2026, 9, 8, 0, 0, 0, 0).toISOString());
+  assert.equal(to, new Date(2026, 9, 14, 23, 59, 59, 999).toISOString());
 });

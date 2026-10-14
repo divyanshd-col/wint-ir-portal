@@ -148,10 +148,13 @@ export async function GET(req: NextRequest) {
       rangeParams.push(toDate.includes('T') ? toDate : `${toDate}T23:59:59.999Z`);
       rangeClauses.push(`e.sent_at <= $${rangeParams.length}`);
     }
-    const rangeWhere = rangeClauses.length ? `WHERE ${rangeClauses.join(' AND ')}` : '';
     const rangeAnd = rangeClauses.length ? `AND ${rangeClauses.join(' AND ')}` : '';
 
     // 2. Fetch Aggregated Statistics & Tab Counts for Dashboard
+    // Summary cards also follow the agent filter, so an agent's banner is their own numbers (the member breakdown stays team-wide).
+    const statsClauses = agentName ? [...rangeClauses, `e.agent_name ILIKE $${rangeParams.length + 1}`] : rangeClauses;
+    const statsParams = agentName ? [...rangeParams, agentName] : rangeParams;
+    const statsWhere = statsClauses.length ? `WHERE ${statsClauses.join(' AND ')}` : '';
     const statsQuery = `
       SELECT 
         COUNT(*)::int AS total_count,
@@ -165,9 +168,9 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected') THEN 1 END)::int AS reviewed_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
       FROM email_reply_evaluations e
-      ${rangeWhere}
+      ${statsWhere}
     `;
-    const statsRes = await query(statsQuery, rangeParams);
+    const statsRes = await query(statsQuery, statsParams);
     const summary = statsRes?.[0] || {};
 
     // 3. Member-Level Breakdown for Team Lead View
