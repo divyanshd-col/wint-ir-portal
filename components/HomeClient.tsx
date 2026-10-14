@@ -40,12 +40,6 @@ export default function HomeClient({ username, isAdmin, role, historyEnabled, fl
         onNewChat={handleNewChat}
       />
       <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-[var(--page-bg)] border-b border-[var(--tb-border)] px-6 py-3.5 flex items-center justify-between shrink-0">
-          <div>
-            <h1 className="text-[#1a1a1a] font-semibold text-sm tracking-tight">IR Support Assistant</h1>
-            <p className="text-gray-400 text-xs mt-0.5">Wint Wealth · Internal use only</p>
-          </div>
-        </header>
         <div className="flex-1 overflow-hidden">
           <ChatInterface
             key={chatKey}

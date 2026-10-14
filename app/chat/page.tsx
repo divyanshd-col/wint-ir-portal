@@ -17,7 +17,7 @@ export default async function ChatPage() {
   const historyEnabled = config.conversationHistoryEnabled ?? false;
 
   return (
-    <div className="flex h-screen bg-[#f5f5f0] overflow-hidden">
+    <div className="flex h-screen bg-[var(--color-background-primary)] overflow-hidden">
       <HomeClient username={username} isAdmin={isAdmin} role={role} historyEnabled={historyEnabled} />
     </div>
   );
