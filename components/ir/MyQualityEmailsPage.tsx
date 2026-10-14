@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import ScoreRing from '@/components/quality/ScoreRing';
 import { periodBounds, intentLabel, paramLabel, disputeLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
@@ -109,43 +110,6 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
     >
       {count}
     </span>
-  );
-}
-
-function ScoreRing({ score }: { score: number | null }) {
-  const val = Math.round(Number(score ?? 0));
-  const r = 27;
-  const circ = 2 * Math.PI * r; // ≈ 169.6
-  const offset = circ - (val / 100) * circ;
-  return (
-    <svg width={64} height={64} style={{ flexShrink: 0 }}>
-      <circle cx={32} cy={32} r={r} stroke="#E4E4E7" strokeWidth={5} fill="none" />
-      <circle
-        cx={32}
-        cy={32}
-        r={r}
-        stroke="#2D2D31"
-        strokeWidth={5}
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={circ}
-        strokeDashoffset={offset}
-        transform="rotate(-90 32 32)"
-        style={{ transition: 'stroke-dashoffset 0.3s' }}
-      />
-      <text
-        x={32}
-        y={33}
-        textAnchor="middle"
-        dominantBaseline="central"
-        fontSize={18}
-        fontWeight={700}
-        fill="#111111"
-        fontFamily={SANS}
-      >
-        {score !== null ? val : '—'}
-      </text>
-    </svg>
   );
 }
 

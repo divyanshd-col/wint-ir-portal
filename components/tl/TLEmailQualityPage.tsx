@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import ScoreRing from '@/components/quality/ScoreRing';
 import { periodBounds, paramLabel, intentLabel, disputeLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
@@ -723,6 +724,17 @@ export default function TLEmailQualityPage() {
                                   background: 'var(--qa-card)',
                                   overflow: 'hidden',
                                 }}>
+                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
+                                    <ScoreRing score={reply.effective_score ?? reply.quality_score} />
+                                    <div>
+                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
+                                        <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
+                                        {' · '}
+                                        {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                      </div>
+                                    </div>
+                                  </div>
                                   {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
                                     <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
                                       {reply.compliance_issues && reply.compliance_issues.length > 0 && (

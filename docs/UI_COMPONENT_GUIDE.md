@@ -76,6 +76,7 @@ Shell wrappers and their layouts:
 | `PeriodFilter` (+ `DEFAULT_PERIOD`, `PeriodState`) | `components/quality/PeriodFilter.tsx` | 7 days / 30 days / Custom range control (opens `DateRangePicker`). Controlled: `value`, `onChange`. Default 7 days. Pair with `periodBounds()` from `lib/email/ui.ts` to build query params. |
 | `TicketLinkButton` | `components/quality/TicketLinkButton.tsx` | Ticket/chat id rendered as a bordered blue "Show chat ↗"-style button that opens `https://app.robylon.ai/unified-inbox/share/{id}` in a new tab. Props: `id` (used for the URL), optional `label` (display text, e.g. a shortened id). Stops click propagation so the row doesn't expand. |
 | `EmailMessageView`, `CustomerSummaryBlock`, `EmailHistoryPanel`, `stripHtml`, `sanitizeEmailHtml` | `components/quality/EmailContentRenderer.tsx` | Email body rendering. `EmailMessageView` runs content through `trimEmailBody` (no trailing blank lines/empty blocks) and uses the `.email-html-body` rules in `app/globals.css` (tight paragraphs, no trailing margin). `CustomerSummaryBlock` shows the 4-point customer summary; `EmailHistoryPanel` the prior-interaction history. |
+| `ScoreRing` | `components/quality/ScoreRing.tsx` | Neutral IQS ring (64px, whole-number score, dash when unscored) used in the agent and TL email detail panels; token colours so it works in dark mode. The QA email page keeps its own colour-coded ring. |
 | `DateRangePicker` | `components/quality/DateRangePicker.tsx` | Calendar popover used by `PeriodFilter` and the chat/call tables. |
 | `DisputeStatusPill` | exported from `components/tl/QualityChatsPage.tsx` | Dispute label for chats/calls (shared by TL chats, TL calls, My Quality Chats/Calls). Now **plain text**, despite the name. |
 | `ParamBadge`, `IQSRing`, `IQSRingCard`, `EvalPanel`, `CallEvalPanel` | `components/quality/` | Older chat/call scoring pieces; not used by the email pages. |
@@ -141,7 +142,7 @@ QA columns are driven by `TAB_COLS` / `COL_LABEL` / `COL_WIDTH` in `EmailEvaluat
 
 ### Expanded drawers
 - **QA:** customer summary + history, agent outbound reply, IQS ring, compliance badge and breaches, the seven parameters with Yes/Half/No(/NA) buttons and AI reasoning, QA override form, dispute note and resolve controls.
-- **TL / agent:** the same seven parameters via `DEFAULT_EMAIL_PARAMETERS` (`lib/email/context-builder.ts`: name, description, aliases, weight) with the plain value from `paramLabel`, the weight (`defaultWeight`, shown as `25%`; the seven add up to 100) and the AI reasoning (`parameter_scores.__reasoning[key]`). Never print raw stored keys.
+- **TL / agent:** a header card (ring via `ScoreRing`, agent name, ticket id and date), then the same seven parameters via `DEFAULT_EMAIL_PARAMETERS` (`lib/email/context-builder.ts`: name, description, aliases, weight) with the plain value from `paramLabel`, the weight (`defaultWeight`, shown as `25%`; the seven add up to 100) and the AI reasoning (`parameter_scores.__reasoning[key]`). Never print raw stored keys.
 - Reply boxes size to their content and scroll only past 420px.
 
 ### Date range and cards
