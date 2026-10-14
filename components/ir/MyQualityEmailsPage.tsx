@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
-import { periodBounds, robylonTicketUrl, intentLabel, paramLabel } from '@/lib/email/ui';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { periodBounds, intentLabel, paramLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
@@ -556,15 +557,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                         }}
                       >
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          <a
-                            href={robylonTicketUrl(item.chat_id ?? item.ticket_id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
-                          >
-                            {item.chat_id ?? `${item.ticket_id.slice(0, 12)}…`}
-                          </a>
+                          <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 12)}…`} />
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || agentName}</td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

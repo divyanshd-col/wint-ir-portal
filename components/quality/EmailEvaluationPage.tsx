@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
-import { periodBounds, robylonTicketUrl, intentLabel } from '@/lib/email/ui';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { periodBounds, intentLabel } from '@/lib/email/ui';
 import {
   DEFAULT_EMAIL_PARAMETERS,
   ParameterScoreValue,
@@ -625,15 +626,7 @@ export default function EmailEvaluationPage() {
                   const cell: Record<Col, React.ReactNode> = {
                     ticket: (
                       <td style={tdMono}>
-                        <a
-                          href={robylonTicketUrl(item.chat_id ?? item.ticket_id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
-                        >
-                          {item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`}
-                        </a>
+                        <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
                       </td>
                     ),
                     agent: (

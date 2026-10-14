@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
-import { periodBounds, robylonTicketUrl, paramLabel, intentLabel } from '@/lib/email/ui';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { periodBounds, paramLabel, intentLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
@@ -364,15 +365,7 @@ export default function TLEmailQualityPage() {
                         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                       >
                         <td style={tdMono}>
-                          <a
-                            href={robylonTicketUrl(reply.chat_id ?? reply.ticket_id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
-                          >
-                            {reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`}
-                          </a>
+                          <TicketLinkButton id={reply.chat_id ?? reply.ticket_id} label={reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`} />
                         </td>
                         <td style={{ ...td, fontWeight: 500 }}>
                           {reply.agent_name || 'Unassigned'}
