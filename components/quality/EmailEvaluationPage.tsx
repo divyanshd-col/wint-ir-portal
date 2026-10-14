@@ -837,11 +837,11 @@ export default function EmailEvaluationPage() {
                                     </div>
                                     <div style={{ marginTop: 4 }}>
                                       {item.compliance_passed === false ? (
-                                        <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: '#fee2e2', color: '#b91c1c' }}>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                                           Non-Compliant
                                         </span>
                                       ) : item.compliance_passed === true ? (
-                                        <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: '#dcfce7', color: '#15803d' }}>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                                           Compliant
                                         </span>
                                       ) : (

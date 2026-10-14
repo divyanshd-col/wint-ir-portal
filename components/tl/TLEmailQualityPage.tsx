@@ -259,15 +259,7 @@ export default function TLEmailQualityPage() {
                       {agent.total_replies}
                     </td>
                     <td style={tdNum}>
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
-                        fontFamily: MONO, fontWeight: 600,
-                        background: score >= 85 ? '#dcfce7' : score >= 70 ? '#fef9c3' : '#fee2e2',
-                        color: score >= 85 ? '#15803d' : score >= 70 ? '#854d0e' : '#b91c1c',
-                      }}>
-                        {score}%
-                      </span>
+                      <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>{score}%</span>
                     </td>
                     <td style={tdNum}>
                       {agent.disputes_raised}
