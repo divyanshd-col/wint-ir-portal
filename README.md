@@ -4,6 +4,8 @@ An AI-powered Investor Relations (IR) operations platform. Agents use it to tria
 
 > Built on **Next.js 16 App Router**, powered by **Google Gemini** and **Anthropic Claude**, with a **PostgreSQL** database and **Google Drive** as the knowledge base.
 
+> Working on the UI? Start with [`docs/UI_COMPONENT_GUIDE.md`](docs/UI_COMPONENT_GUIDE.md): design tokens, light/dark theme, top bar and sidebars, shared components, table conventions, the Email Quality screens and a changelog of the UI overhaul.
+
 ---
 
 ## Table of Contents
