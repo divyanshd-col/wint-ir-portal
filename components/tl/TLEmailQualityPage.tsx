@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { resolveDateRange, robylonTicketUrl } from '@/lib/email/ui';
 import EmailMessageView, { stripHtml, CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
 
@@ -16,6 +18,7 @@ interface AgentBreakdown {
 interface EvaluationItem {
   id: number;
   ticket_id: string;
+  intent_l1?: string | null;
   message_id: string;
   agent_name: string;
   sent_at: string;
@@ -109,34 +112,11 @@ const tdNum: React.CSSProperties = {
   fontSize: 13,
 };
 
-const chip: React.CSSProperties = {
-  height: 32,
-  padding: '0 12px',
-  border: '1px solid var(--qa-border)',
-  borderRadius: 8,
-  background: 'var(--qa-card)',
-  color: 'var(--qa-text)',
-  fontSize: 13,
-  fontFamily: 'inherit',
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  cursor: 'pointer',
-};
-
-const chipActive: React.CSSProperties = {
-  ...chip,
-  background: 'var(--qa-gray-700)',
-  color: '#fff',
-  borderColor: 'var(--qa-gray-700)',
-};
-
 export default function TLEmailQualityPage() {
   const [agents, setAgents] = useState<AgentBreakdown[]>([]);
   const [replies, setReplies] = useState<EvaluationItem[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
-  const [complianceMistakesOnly, setComplianceMistakesOnly] = useState<boolean>(false);
-  const [thisWeekOnly, setThisWeekOnly] = useState<boolean>(false);
+  const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
   const [loading, setLoading] = useState<boolean>(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
@@ -146,25 +126,23 @@ export default function TLEmailQualityPage() {
     try {
       const params = new URLSearchParams();
       if (selectedAgent) params.set('agentName', selectedAgent);
-      if (complianceMistakesOnly) params.set('complianceFailed', 'true');
+      const { from, to } = resolveDateRange(period.period, period.customFrom, period.customTo);
+      params.set('from', from);
+      params.set('to', to);
+      params.set('limit', '500');
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
       if (data.ok) {
         setAgents(data.agentBreakdown || []);
-        let items: EvaluationItem[] = data.items || [];
-        if (thisWeekOnly) {
-          const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-          items = items.filter(i => new Date(i.sent_at) >= sevenDaysAgo);
-        }
-        setReplies(items);
+        setReplies(data.items || []);
       }
     } catch (err) {
       console.error('Failed to load TL data:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedAgent, complianceMistakesOnly, thisWeekOnly]);
+  }, [selectedAgent, period]);
 
   useEffect(() => {
     fetchData();
@@ -179,13 +157,16 @@ export default function TLEmailQualityPage() {
   return (
     <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 8px 40px' }}>
       {/* ── Page Header ── */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
-          Quality Emails
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0' }}>
-          Team-level email performance, compliance breaches, and individual member trajectory
-        </p>
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
+            Quality Emails
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0' }}>
+            Team-level email performance and individual member results
+          </p>
+        </div>
+        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
       {/* ── KPI Cards (Consistent with QAAnalyticsDashboard / IQSRingCard) ── */}
@@ -281,9 +262,7 @@ export default function TLEmailQualityPage() {
               <col style={{ width: 220 }} />
               <col style={{ width: 140 }} />
               <col style={{ width: 150 }} />
-              <col style={{ width: 170 }} />
               <col style={{ width: 140 }} />
-              <col style={{ width: 180 }} />
               <col style={{ width: 130 }} />
             </colgroup>
             <thead>
@@ -291,9 +270,7 @@ export default function TLEmailQualityPage() {
                 <th style={th}>Agent Name</th>
                 <th style={{ ...th, textAlign: 'right' }}>Replies</th>
                 <th style={{ ...th, textAlign: 'right' }}>Avg Score</th>
-                <th style={th}>Compliance</th>
                 <th style={{ ...th, textAlign: 'right' }}>Disputes</th>
-                <th style={th}>Trajectory</th>
                 <th style={{ ...th, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -301,7 +278,6 @@ export default function TLEmailQualityPage() {
               {agents.map((agent) => {
                 const score = agent.avg_score || 0;
                 const isSelected = selectedAgent === agent.agent_name;
-                const isHigh = score >= 85;
 
                 return (
                   <tr
@@ -325,27 +301,8 @@ export default function TLEmailQualityPage() {
                         {score}%
                       </span>
                     </td>
-                    <td style={td}>
-                      {agent.compliance_errors > 0 ? (
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c' }}>
-                          ⚠️ {agent.compliance_errors} errors
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>
-                          ✓ 0 errors
-                        </span>
-                      )}
-                    </td>
                     <td style={tdNum}>
                       {agent.disputes_raised}
-                    </td>
-                    <td style={td}>
-                      <span style={{
-                        fontSize: 12, fontWeight: 600,
-                        color: isHigh ? 'var(--accent)' : '#d97706',
-                      }}>
-                        {isHigh ? '↑ Consistent High' : '↓ Needs Coaching'}
-                      </span>
                     </td>
                     <td style={{ ...td, textAlign: 'right' }}>
                       <button
@@ -395,55 +352,37 @@ export default function TLEmailQualityPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => setComplianceMistakesOnly(!complianceMistakesOnly)}
-              style={complianceMistakesOnly ? chipActive : chip}
-            >
-              Compliance Failures Only
-            </button>
-            <button
-              onClick={() => setThisWeekOnly(!thisWeekOnly)}
-              style={thisWeekOnly ? chipActive : chip}
-            >
-              This Week Only
-            </button>
-          </div>
         </div>
 
         {/* Replies Table */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 140 }} />
               <col style={{ width: 160 }} />
               <col style={{ width: 130 }} />
               <col />
               <col style={{ width: 100 }} />
-              <col style={{ width: 130 }} />
               <col style={{ width: 90 }} />
             </colgroup>
             <thead>
               <tr>
-                <th style={th}>Sent At</th>
                 <th style={th}>Agent</th>
                 <th style={th}>Ticket ID</th>
                 <th style={th}>Customer Context &amp; Reply</th>
                 <th style={{ ...th, textAlign: 'right' }}>Score</th>
-                <th style={th}>Compliance</th>
                 <th style={{ ...th, textAlign: 'right' }}>Detail</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     Loading team email replies…
                   </td>
                 </tr>
               ) : replies.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     No replies matching selected filters
                   </td>
                 </tr>
@@ -462,17 +401,19 @@ export default function TLEmailQualityPage() {
                         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                       >
-                        <td style={tdMono}>
-                          {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{' '}
-                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>
-                            {new Date(reply.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
                         <td style={{ ...td, fontWeight: 500 }}>
                           {reply.agent_name}
                         </td>
                         <td style={tdMono}>
-                          {reply.ticket_id.slice(0, 8)}…
+                          <a
+                            href={robylonTicketUrl(reply.chat_id ?? reply.ticket_id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                          >
+                            {reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`}
+                          </a>
                         </td>
                         <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ color: 'var(--qa-text-2)', marginRight: 6 }}>
@@ -497,17 +438,6 @@ export default function TLEmailQualityPage() {
                             <span style={{ color: 'var(--qa-text-3)' }}>—</span>
                           )}
                         </td>
-                        <td style={td}>
-                          {reply.compliance_passed === false ? (
-                            <span style={{ fontSize: 12, fontWeight: 600, color: '#b91c1c' }}>
-                              ⚠️ Failed
-                            </span>
-                          ) : (
-                            <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>
-                              ✓ Passed
-                            </span>
-                          )}
-                        </td>
                         <td style={{ ...td, textAlign: 'right' }}>
                           <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
                             {isExpanded ? 'Hide ▲' : 'View ▼'}
@@ -517,7 +447,7 @@ export default function TLEmailQualityPage() {
 
                       {isExpanded && (
                         <tr>
-                          <td colSpan={7} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={5} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
                             <div style={{
                               background: 'var(--qa-gray-50)',
                               borderTop: '1px solid var(--qa-border-sub)',

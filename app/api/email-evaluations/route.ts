@@ -118,15 +118,38 @@ export async function GET(req: NextRequest) {
         c.status AS conversation_status,
         c.merged_into_ticket_id,
         c.thread_summary,
+        intent.val AS intent_l1,
         COALESCE(e.qa_override_score, e.quality_score) AS effective_score
       FROM email_reply_evaluations e
       JOIN email_conversations c ON e.ticket_id = c.id
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
+        FROM robylon_webhook_payloads w,
+             jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
+        WHERE w.source = 'email' AND w.chat_id = c.chat_id
+          AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
+        ORDER BY w.received_at DESC LIMIT 1
+      ) intent ON true
       WHERE ${whereSQL}
       ORDER BY e.sent_at DESC
       LIMIT ${limit} OFFSET ${offset}
     `;
 
     const items = await query(itemsQuery, params);
+
+    // The cards (totals, tab counts, per-agent breakdown) follow the same sent_at range as the list.
+    const rangeClauses: string[] = [];
+    const rangeParams: any[] = [];
+    if (fromDate) {
+      rangeParams.push(fromDate);
+      rangeClauses.push(`e.sent_at >= $${rangeParams.length}`);
+    }
+    if (toDate) {
+      rangeParams.push(toDate.includes('T') ? toDate : `${toDate}T23:59:59.999Z`);
+      rangeClauses.push(`e.sent_at <= $${rangeParams.length}`);
+    }
+    const rangeWhere = rangeClauses.length ? `WHERE ${rangeClauses.join(' AND ')}` : '';
+    const rangeAnd = rangeClauses.length ? `AND ${rangeClauses.join(' AND ')}` : '';
 
     // 2. Fetch Aggregated Statistics & Tab Counts for Dashboard
     const statsQuery = `
@@ -142,8 +165,9 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected') THEN 1 END)::int AS reviewed_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
       FROM email_reply_evaluations e
+      ${rangeWhere}
     `;
-    const statsRes = await query(statsQuery);
+    const statsRes = await query(statsQuery, rangeParams);
     const summary = statsRes?.[0] || {};
 
     // 3. Member-Level Breakdown for Team Lead View
@@ -156,11 +180,11 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS disputes_raised,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS overrides_count
       FROM email_reply_evaluations e
-      WHERE e.agent_name IS NOT NULL
+      WHERE e.agent_name IS NOT NULL ${rangeAnd}
       GROUP BY e.agent_name
       ORDER BY total_replies DESC
     `;
-    const agentBreakdown = await query(tlBreakdownQuery);
+    const agentBreakdown = await query(tlBreakdownQuery, rangeParams);
 
     return NextResponse.json({
       ok: true,

@@ -1,15 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
+import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { resolveDateRange, robylonTicketUrl, intentLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
-import EmailMessageView, { stripHtml, CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
+import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
 interface EvaluationItem {
   id: number;
   ticket_id: string;
   message_id: string;
   chat_id?: string;
+  intent_l1?: string | null;
   customer_email?: string;
   agent_name: string;
   sent_at: string;
@@ -259,6 +262,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   const [activeTab, setActiveTab] = useState<'evaluated' | 'disputes' | 'reviewed'>('evaluated');
 
   // Filters
+  const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
   const [search, setSearch] = useState('');
   const [complianceFilter, setComplianceFilter] = useState<'' | 'compliant' | 'breach'>('');
 
@@ -273,6 +277,10 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
       const params = new URLSearchParams();
       if (agentName) params.set('agentName', agentName);
       params.set('status', 'Completed');
+      const { from, to } = resolveDateRange(period.period, period.customFrom, period.customTo);
+      params.set('from', from);
+      params.set('to', to);
+      params.set('limit', '500');
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
@@ -285,7 +293,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
     } finally {
       setLoading(false);
     }
-  }, [agentName]);
+  }, [agentName, period]);
 
   useEffect(() => {
     fetchMyEvaluations();
@@ -391,13 +399,16 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   return (
     <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* ── Page Header ── */}
-      <div style={{ marginBottom: 20 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
-          My Quality Emails
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: '4px 0 0' }}>
-          View evaluated email replies, track parameter grading, and raise or monitor disputes for {agentName}.
-        </p>
+      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
+            My Quality Emails
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: '4px 0 0' }}>
+            View evaluated email replies, track parameter grading, and raise or monitor disputes for {agentName}.
+          </p>
+        </div>
+        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
       {/* ── KPI Cards (Consistent with MyQualityChatsPage) ── */}
@@ -599,7 +610,6 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 150 }} />
-              <col style={{ width: 140 }} />
               <col />
               <col style={{ width: 95 }} />
               <col style={{ width: 130 }} />
@@ -608,9 +618,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             </colgroup>
             <thead>
               <tr>
-                <th style={TH_BASE}>Sent Date</th>
                 <th style={TH_BASE}>Ticket ID</th>
-                <th style={TH_BASE}>Subject / Reply Snippet</th>
+                <th style={TH_BASE}>Intent (L1)</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
                 <th style={TH_BASE}>Compliance</th>
                 <th style={TH_BASE}>Dispute</th>
@@ -620,13 +629,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading email quality evaluations…
                   </td>
                 </tr>
               ) : currentTabItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={6} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No evaluations found in this view.
                   </td>
                 </tr>
@@ -648,21 +657,18 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                         }}
                       >
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          {new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{' '}
-                          <span style={{ fontSize: 11, color: '#A1A1AA' }}>
-                            {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
-                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          {item.ticket_id.slice(0, 12)}…
+                          <a
+                            href={robylonTicketUrl(item.chat_id ?? item.ticket_id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                          >
+                            {item.chat_id ?? `${item.ticket_id.slice(0, 12)}…`}
+                          </a>
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <span style={{ fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
-                            {item.subject_line || 'Email Support'}
-                          </span>
-                          <span style={{ color: 'var(--qa-text-2, #6B6B6B)', marginLeft: 8 }}>
-                            — {item.agent_reply_text ? stripHtml(item.agent_reply_text).slice(0, 55) + '…' : ''}
-                          </span>
+                          <span style={{ color: 'var(--qa-text, #111111)' }}>{intentLabel(item.intent_l1)}</span>
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -794,7 +800,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                       {/* ── Expanded Detail Drawer (Exact match with IRScorePanel) ── */}
                       {isOpen && (
                         <tr style={{ background: '#FAFAFB' }}>
-                          <td colSpan={7} style={{ padding: '0 16px 16px' }}>
+                          <td colSpan={6} style={{ padding: '0 16px 16px' }}>
                             <div
                               style={{
                                 display: 'flex',

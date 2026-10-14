@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import DateRangePicker from './DateRangePicker';
+import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
+import { resolveDateRange, robylonTicketUrl, intentLabel } from '@/lib/email/ui';
 import {
   DEFAULT_EMAIL_PARAMETERS,
   ParameterScoreValue,
@@ -17,6 +18,7 @@ interface EvaluationItem {
   ticket_id: string;
   message_id: string;
   chat_id?: string;
+  intent_l1?: string | null;
   customer_email?: string;
   agent_id?: string;
   agent_name?: string;
@@ -102,12 +104,6 @@ const chip: React.CSSProperties = {
   userSelect: 'none',
 };
 
-const chipActive: React.CSSProperties = {
-  ...chip,
-  background: 'var(--qa-gray-700)',
-  color: '#fff',
-  borderColor: 'var(--qa-gray-700)',
-};
 
 // ─── SVG Score Ring (identical to EvalPanel) ──────────────────────────────────
 function ScoreRing({ score }: { score: number | null }) {
@@ -204,10 +200,7 @@ export default function EmailEvaluationPage() {
     'Priya Singh',
     'Vedant G',
   ]);
-  const [complianceFailedOnly, setComplianceFailedOnly] = useState(false);
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
 
   // QA action state
   const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
@@ -272,7 +265,9 @@ export default function EmailEvaluationPage() {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (agentFilter) params.set('agentName', agentFilter);
-      if (complianceFailedOnly) params.set('complianceFailed', 'true');
+      const { from, to } = resolveDateRange(period.period, period.customFrom, period.customTo);
+      params.set('from', from);
+      params.set('to', to);
       params.set('tab', tab);
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
@@ -285,23 +280,14 @@ export default function EmailEvaluationPage() {
           const names = data.agentBreakdown.map((a: any) => a.agent_name).filter(Boolean);
           setAvailableAgents(prev => Array.from(new Set([...prev, ...names])).sort());
         }
-        let rows: EvaluationItem[] = data.items || [];
-        if (customFrom && customTo) {
-          const from = new Date(customFrom + 'T00:00:00Z').getTime();
-          const to = new Date(customTo + 'T23:59:59Z').getTime();
-          rows = rows.filter(r => {
-            const t = new Date(r.sent_at).getTime();
-            return t >= from && t <= to;
-          });
-        }
-        setItems(rows);
+        setItems(data.items || []);
       }
     } catch (err) {
       console.error('[email-eval] Failed to load data:', err);
     } finally {
       setLoading(false);
     }
-  }, [tab, search, agentFilter, complianceFailedOnly, customFrom, customTo]);
+  }, [tab, search, agentFilter, period]);
 
   useEffect(() => {
     fetchData();
@@ -451,7 +437,7 @@ export default function EmailEvaluationPage() {
     transition: 'background 0.15s, color 0.15s',
   });
 
-  const hasFilters = Boolean(search || agentFilter || complianceFailedOnly || customFrom);
+  const hasFilters = Boolean(search || agentFilter);
 
   const agentOptions = Array.from(new Set([
     ...availableAgents,
@@ -470,6 +456,7 @@ export default function EmailEvaluationPage() {
             Quality assurance evaluations with IQS parameter grading, overrides, and dispute arbitration
           </p>
         </div>
+        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
       {/* ── Success Toast Banner ── */}
@@ -620,37 +607,10 @@ export default function EmailEvaluationPage() {
           ))}
         </select>
 
-        {/* Compliance Failures Chip */}
-        <button
-          onClick={() => setComplianceFailedOnly(!complianceFailedOnly)}
-          style={complianceFailedOnly ? chipActive : chip}
-        >
-          Compliance Failures
-        </button>
-
-        {/* Date Range Picker */}
-        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button
-            style={customFrom ? chipActive : chip}
-            onClick={() => setShowDatePicker(v => !v)}
-          >
-            {customFrom && customTo
-              ? `${new Date(customFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(customTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
-              : 'Date range'}
-            <span style={{ fontSize: 9, marginLeft: 2 }}>▾</span>
-          </button>
-          {showDatePicker && (
-            <DateRangePicker
-              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowDatePicker(false); }}
-              onCancel={() => setShowDatePicker(false)}
-            />
-          )}
-        </div>
-
         {/* Reset Filters */}
         <button
           disabled={!hasFilters}
-          onClick={() => { setSearch(''); setAgentFilter(''); setComplianceFailedOnly(false); setCustomFrom(''); setCustomTo(''); }}
+          onClick={() => { setSearch(''); setAgentFilter(''); }}
           style={{
             ...chip,
             color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
@@ -677,24 +637,20 @@ export default function EmailEvaluationPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
+              <col style={{ width: 170 }} />
               <col style={{ width: 140 }} />
-              <col style={{ width: 160 }} />
-              <col style={{ width: 130 }} />
               <col />
               <col style={{ width: 100 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 110 }} />
+              <col style={{ width: 130 }} />
               <col style={{ width: 90 }} />
             </colgroup>
             <thead>
               <tr>
-                <th style={th}>Sent At</th>
                 <th style={th}>Agent</th>
                 <th style={th}>Ticket ID</th>
-                <th style={th}>Subject</th>
+                <th style={th}>Intent (L1)</th>
                 <th style={{ ...th, textAlign: 'right' }}>IQS</th>
                 <th style={th}>Compliance</th>
-                <th style={th}>Status</th>
                 <th style={{ ...th, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
@@ -702,7 +658,7 @@ export default function EmailEvaluationPage() {
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <td key={j} style={td}>
                         <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
                       </td>
@@ -711,7 +667,7 @@ export default function EmailEvaluationPage() {
                 ))
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
+                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
                     No email reply evaluations found matching filters
                   </td>
                 </tr>
@@ -737,20 +693,22 @@ export default function EmailEvaluationPage() {
                         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                       >
-                        <td style={tdMono}>
-                          {new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{' '}
-                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>
-                            {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
                         <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {item.agent_name || 'Unassigned'}
                         </td>
                         <td style={tdMono}>
-                          {item.ticket_id.slice(0, 8)}…
+                          <a
+                            href={robylonTicketUrl(item.chat_id ?? item.ticket_id)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                          >
+                            {item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`}
+                          </a>
                         </td>
                         <td style={{ ...td, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.subject_line || 'Email Support'}
+                          {intentLabel(item.intent_l1)}
                         </td>
                         <td style={tdNum}>
                           <QualityScoreBadge score={currentIQS} isOverridden={hasOverride || isSessionOverridden} />
@@ -773,48 +731,6 @@ export default function EmailEvaluationPage() {
                             </span>
                           ) : (
                             <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
-                          )}
-                        </td>
-                        <td style={td}>
-                          {item.review_status === 'reviewed' ? (
-                            <div>
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center',
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                                background: '#dcfce7', color: '#15803d',
-                              }}>
-                                Reviewed
-                              </span>
-                              {item.reviewed_by && (
-                                <div style={{ fontSize: 10, color: 'var(--qa-text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  by {item.reviewed_by.split('@')[0]}
-                                </div>
-                              )}
-                            </div>
-                          ) : item.evaluation_status === 'Completed' ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                              background: '#fef3c7', color: '#b45309',
-                            }}>
-                              Pending Review
-                            </span>
-                          ) : item.evaluation_status === 'In_Batch' ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                              background: '#e0f2fe', color: '#0369a1',
-                            }}>
-                              In Batch
-                            </span>
-                          ) : (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                              background: '#f4f4f5', color: '#71717a',
-                            }}>
-                              Awaiting AI
-                            </span>
                           )}
                         </td>
                         <td style={{ ...td, textAlign: 'right' }}>
@@ -850,7 +766,7 @@ export default function EmailEvaluationPage() {
                       {/* ── Expanded Inline Review Drawer (Matching EvalPanel Structure) ── */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={8} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
                             <div style={{
                               background: 'var(--qa-gray-50)',
                               borderTop: '1px solid var(--qa-border-sub)',
