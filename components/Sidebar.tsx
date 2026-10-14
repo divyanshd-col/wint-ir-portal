@@ -56,7 +56,7 @@ export default function Sidebar({ historyEnabled = false, onRestoreConversation,
       </button>
 
       <aside
-        className={`${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-all duration-200 fixed lg:static top-[var(--topbar-h)] bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 bg-[var(--color-background-primary)] border-r border-[var(--sb-border)] flex flex-col overflow-hidden ${isExpanded ? 'w-60' : 'w-14'}`}
+        className={`${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-all duration-200 fixed lg:static top-[var(--topbar-h)] bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] flex flex-col overflow-hidden ${isExpanded ? 'w-60' : 'w-14'}`}
       >
         {/* Collapse toggle */}
         <div className={`pt-4 pb-2 flex ${isExpanded ? 'justify-end px-4' : 'justify-center'}`}>

@@ -757,7 +757,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
   );
 
   return (
-    <div className="flex flex-col h-full bg-[var(--color-background-primary)]">
+    <div className="flex flex-col h-full bg-[var(--page-bg)]">
       {/* Messages area */}
       <div className={`flex-1 overflow-y-auto py-5 ${messages.length === 0 ? 'flex' : ''}`}>
         <div className={`max-w-4xl mx-auto px-6 space-y-4 ${messages.length === 0 ? 'my-auto w-full' : ''}`}>
@@ -1234,7 +1234,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
 
       {/* Input bar (docked once the conversation has started) */}
       {messages.length > 0 && (
-        <div className="bg-[var(--color-background-primary)] px-6 pb-4 pt-2">
+        <div className="bg-[var(--page-bg)] px-6 pb-4 pt-2">
           {composer}
         </div>
       )}
