@@ -4,8 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ScoreRing from '@/components/quality/ScoreRing';
+import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
-import { periodBounds, paramLabel, intentLabel, disputeLabel } from '@/lib/email/ui';
+import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
@@ -680,27 +681,17 @@ export default function TLEmailQualityPage() {
                                   {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
                                     const scores = reply.parameter_scores;
                                     const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
-                                    const reason = scores?.__reasoning?.[def.key];
                                     return (
-                                      <div key={def.key} style={{
-                                        padding: '12px 16px',
-                                        borderBottom: idx < DEFAULT_EMAIL_PARAMETERS.length - 1 ? '1px solid var(--qa-border-sub)' : 'none',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 12,
-                                      }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{def.name}</div>
-                                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>{def.description}</div>
-                                          {reason && (
-                                            <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>{reason}</div>
-                                          )}
-                                        </div>
-                                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: MONO }}>{paramLabel(val)}</span>
-                                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, minWidth: 28, textAlign: 'right' }}>{def.defaultWeight}%</span>
-                                        </div>
-                                      </div>
+                                      <ParamScoreRow
+                                        key={def.key}
+                                        name={def.name}
+                                        description={def.description}
+                                        value={val}
+                                        allowNA={def.allowNA}
+                                        weight={def.defaultWeight}
+                                        reason={scores?.__reasoning?.[def.key]}
+                                        last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                      />
                                     );
                                   })}
                                 </div>

@@ -5,7 +5,8 @@ import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/qua
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import ScoreRing from '@/components/quality/ScoreRing';
-import { periodBounds, intentLabel, paramLabel, disputeLabel } from '@/lib/email/ui';
+import ParamScoreRow from '@/components/quality/ParamScoreRow';
+import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
@@ -90,10 +91,6 @@ const TD_NUM: CSSProperties = {
 function IQSBadge({ score }: { score: number | null }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   return <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111111)' }}>{Math.round(Number(score))}</span>;
-}
-
-function renderParamBadge(v: any) {
-  return <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text, #111111)', fontFamily: MONO }}>{paramLabel(v)}</span>;
 }
 
 function CountBadge({ count, active }: { count: number; active: boolean }) {
@@ -648,49 +645,18 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                 {/* Parameters List */}
                                 <div style={{ flex: 1, overflowY: 'auto' }}>
                                   {DEFAULT_EMAIL_PARAMETERS.map((def, pIdx) => {
-                                    let val = item.parameter_scores?.[def.key];
-                                    if (val === undefined && def.aliases) {
-                                      for (const alias of def.aliases) {
-                                        if (item.parameter_scores?.[alias] !== undefined) {
-                                          val = item.parameter_scores[alias];
-                                          break;
-                                        }
-                                      }
-                                    }
-                                    const reason = (item.parameter_scores as any)?.__reasoning?.[def.key];
-                                    const isLastP = pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1;
+                                    const val = [def.key, ...(def.aliases ?? [])].map(k => item.parameter_scores?.[k]).find(v => v !== undefined);
                                     return (
-                                      <div
+                                      <ParamScoreRow
                                         key={def.key}
-                                        style={{
-                                          padding: '12px 16px',
-                                          borderBottom: isLastP ? 'none' : '1px solid #F0F0F2',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          justifyContent: 'space-between',
-                                          gap: 12,
-                                        }}
-                                      >
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
-                                            {def.name}
-                                          </div>
-                                          <div style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginTop: 2, lineHeight: 1.3 }}>
-                                            {def.description}
-                                          </div>
-                                          {reason && (
-                                            <div style={{ fontSize: 11, color: '#4b5563', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>
-                                              {reason}
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                                          {renderParamBadge(val)}
-                                          <span style={{ fontSize: 11, color: '#A1A1AA', fontFamily: MONO, minWidth: 28, textAlign: 'right' }}>
-                                            {def.defaultWeight}%
-                                          </span>
-                                        </div>
-                                      </div>
+                                        name={def.name}
+                                        description={def.description}
+                                        value={val}
+                                        allowNA={def.allowNA}
+                                        weight={def.defaultWeight}
+                                        reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
+                                        last={pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                      />
                                     );
                                   })}
                                 </div>

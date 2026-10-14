@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { robylonTicketUrl, resolveDateRange, intentLabel, trimEmailBody, paramLabel, dayBoundsISO, disputeLabel, pageSlice, pageCount } from '../lib/email/ui';
+import { robylonTicketUrl, resolveDateRange, intentLabel, trimEmailBody, paramLabel, dayBoundsISO, disputeLabel, pageSlice, pageCount, paramChoice } from '../lib/email/ui';
 
 test('robylonTicketUrl - the unified-inbox link for a chat id', () => {
   assert.equal(robylonTicketUrl('110894'), 'https://app.robylon.ai/unified-inbox/share/110894');
@@ -61,4 +61,11 @@ test('pageSlice / pageCount - client-side paging for the email tables', () => {
   assert.deepEqual(pageSlice(rows, 1, 20), rows.slice(0, 20));
   assert.deepEqual(pageSlice(rows, 3, 20), [41, 42, 43, 44, 45]);
   assert.deepEqual(pageSlice(rows, 9, 20), [41, 42, 43, 44, 45]); // out-of-range page clamps to the last
+});
+
+test('paramChoice - which of Yes / Half / No / NA a stored value selects', () => {
+  assert.deepEqual(
+    ['yes', 'PASS', 'half', 'Partial', 'no', 'fail', 'na', 'N/A', 85, '', null, undefined].map(paramChoice),
+    ['yes', 'yes', 'half', 'half', 'no', 'no', 'na', 'na', null, null, null, null],
+  );
 });

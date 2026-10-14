@@ -78,3 +78,15 @@ export function pageSlice<T>(items: T[], page: number, size: number): T[] {
   const p = Math.min(Math.max(1, page), pageCount(items.length, size));
   return items.slice((p - 1) * size, p * size);
 }
+
+export type ParamChoice = 'yes' | 'half' | 'no' | 'na';
+
+/** Which of the four buttons a stored parameter value selects; null for a missing or numeric value. */
+export function paramChoice(v: unknown): ParamChoice | null {
+  const s = String(v ?? '').toLowerCase().trim();
+  if (s === 'yes' || s === 'pass') return 'yes';
+  if (s === 'half' || s === 'partial') return 'half';
+  if (s === 'no' || s === 'fail') return 'no';
+  if (s === 'na' || s === 'n/a') return 'na';
+  return null;
+}

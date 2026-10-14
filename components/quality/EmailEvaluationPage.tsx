@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import {
@@ -775,79 +776,18 @@ export default function EmailEvaluationPage() {
                                   }}>
                                     {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
                                       const currentParams = getParamsForItem(item);
-                                      const val = currentParams[def.key] ?? 'yes';
-                                      const reason = (item.parameter_scores as any)?.__reasoning?.[def.key];
                                       return (
-                                        <div
+                                        <ParamScoreRow
                                           key={def.key}
-                                          style={{
-                                            padding: '12px 16px',
-                                            borderBottom: idx < DEFAULT_EMAIL_PARAMETERS.length - 1 ? '1px solid var(--qa-border-sub)' : 'none',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 12,
-                                          }}
-                                        >
-                                          <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>
-                                              {def.name}
-                                            </div>
-                                            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>
-                                              {def.description}
-                                            </div>
-                                            {reason && (
-                                              <div style={{ fontSize: 11, color: '#4b5563', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>
-                                                {reason}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Yes / Half / No / NA buttons */}
-                                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                            {(
-                                              def.allowNA
-                                                ? [
-                                                    { val: 'yes', label: 'Yes' },
-                                                    { val: 'half', label: 'Half' },
-                                                    { val: 'no', label: 'No' },
-                                                    { val: 'na', label: 'NA' },
-                                                  ]
-                                                : [
-                                                    { val: 'yes', label: 'Yes' },
-                                                    { val: 'half', label: 'Half' },
-                                                    { val: 'no', label: 'No' },
-                                                  ]
-                                            ).map(({ val: optVal, label }) => {
-                                              const isSel = val === optVal || (optVal === 'half' && val === 'partial');
-                                              return (
-                                                <button
-                                                  key={optVal}
-                                                  type="button"
-                                                  onClick={() => handleParamChange(item.message_id, def.key, optVal as ParameterScoreValue)}
-                                                  style={{
-                                                    height: 28,
-                                                    padding: '0 10px',
-                                                    borderRadius: 8,
-                                                    border: '1px solid var(--qa-border)',
-                                                    background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                                    color: isSel ? '#ffffff' : 'var(--qa-text-2)',
-                                                    fontSize: 12,
-                                                    fontFamily: 'inherit',
-                                                    fontWeight: isSel ? 600 : 400,
-                                                    cursor: 'pointer',
-                                                    transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-                                                  }}
-                                                >
-                                                  {label}
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-
-                                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, flexShrink: 0, minWidth: 32, textAlign: 'right' }}>
-                                            {def.defaultWeight}%
-                                          </span>
-                                        </div>
+                                          name={def.name}
+                                          description={def.description}
+                                          value={currentParams[def.key] ?? 'yes'}
+                                          allowNA={def.allowNA}
+                                          weight={def.defaultWeight}
+                                          reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
+                                          onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
+                                          last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                        />
                                       );
                                     })}
                                   </div>

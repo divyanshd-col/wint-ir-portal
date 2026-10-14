@@ -77,6 +77,7 @@ Shell wrappers and their layouts:
 | `TicketLinkButton` | `components/quality/TicketLinkButton.tsx` | Ticket/chat id rendered as a bordered blue "Show chat ↗"-style button that opens `https://app.robylon.ai/unified-inbox/share/{id}` in a new tab. Props: `id` (used for the URL), optional `label` (display text, e.g. a shortened id). Stops click propagation so the row doesn't expand. |
 | `EmailMessageView`, `CustomerSummaryBlock`, `EmailHistoryPanel`, `stripHtml`, `sanitizeEmailHtml` | `components/quality/EmailContentRenderer.tsx` | Email body rendering. `EmailMessageView` runs content through `trimEmailBody` (no trailing blank lines/empty blocks) and uses the `.email-html-body` rules in `app/globals.css` (tight paragraphs, no trailing margin). `CustomerSummaryBlock` shows the 4-point customer summary; `EmailHistoryPanel` the prior-interaction history. |
 | `usePaging`, `ShowingCount`, `Pager` | `components/quality/TablePaging.tsx` | Client-side paging for the email tables, same look as the chat tables: `ShowingCount` = "Showing X of N" + rows-per-page button (20/50/100) at the right end of the filter bar; `Pager` = "Page x of y" + Prev/Next footer (hidden on one page); `usePaging(items, resetKey)` slices the rows and returns to page 1 when `resetKey` changes. Pure helpers `pageSlice` / `pageCount` live in `lib/email/ui.ts`. |
+| `ParamScoreRow` | `components/quality/ParamScoreRow.tsx` | One evaluation parameter laid out like the chat evaluation panel: name on the left, Yes / Half / No (/ NA) buttons and the weight (`25%`) on the same line, the AI reasoning underneath (no description; it is the name's tooltip). Pass `onChange` to make it editable (QA email drawer); without it the buttons are a read-only display with the selected answer highlighted and the rest dimmed (TL and agent drawers). A value that is none of the four (missing, numeric) shows as text. Used for every parameter list on the email pages. |
 | `ScoreRing` | `components/quality/ScoreRing.tsx` | Neutral IQS ring (64px, whole-number score, dash when unscored) used in the agent and TL email detail panels; token colours so it works in dark mode. The QA email page keeps its own colour-coded ring. |
 | `DateRangePicker` | `components/quality/DateRangePicker.tsx` | Calendar popover used by `PeriodFilter` and the chat/call tables. |
 | `DisputeStatusPill` | exported from `components/tl/QualityChatsPage.tsx` | Dispute label for chats/calls (shared by TL chats, TL calls, My Quality Chats/Calls). Now **plain text**, despite the name. |
@@ -92,6 +93,7 @@ Shell wrappers and their layouts:
 | `periodBounds(period, from?, to?)` | `resolveDateRange` + `dayBoundsISO`; what pages send as `from`/`to` |
 | `intentLabel(v)` | Intent L1 for a cell; "—" for empty, "None" or a raw UUID |
 | `paramLabel(v)` | Plain label for a stored parameter value: Yes / Half / No / NA, numeric -> `NN%`, missing -> "—" |
+| `paramChoice(v)` | Which button a stored value selects: `'yes' \| 'half' \| 'no' \| 'na'` (accepts pass/partial/fail/n/a), else `null` |
 | `pageSlice(items, page, size)`, `pageCount(total, size)` | One page of rows (1-based, out-of-range clamps to the last page) and the page count (min 1) |
 | `trimEmailBody(raw)` | Collapse 3+ newlines, drop trailing blank lines / empty `<p>`/`<div>`/`<br>` |
 | `disputeLabel(status)` | `Raised` -> "Raised by agent", `Under_Review` -> "Forwarded to QA", `TL_Resolved` -> "Resolved by TL", `Resolved` -> "Resolved by QA", `Rejected` -> "Rejected by QA", else "—" |
@@ -176,7 +178,7 @@ QA columns are driven by `TAB_COLS` / `COL_LABEL` / `COL_WIDTH` in `EmailEvaluat
 
 ### Expanded drawers
 - **QA** (evaluation left, conversation right): IQS ring, compliance badge and breaches, the seven parameters with buttons and AI reasoning, QA override form; on the right the customer summary + history, agent outbound reply, compliance badge and breaches, the seven parameters with Yes/Half/No(/NA) buttons and AI reasoning, QA override form, dispute note and resolve controls.
-- **TL / agent:** a header card (ring via `ScoreRing`, agent name, ticket id and date), then the same seven parameters via `DEFAULT_EMAIL_PARAMETERS` (`lib/email/context-builder.ts`: name, description, aliases, weight) with the plain value from `paramLabel`, the weight (`defaultWeight`, shown as `25%`; the seven add up to 100) and the AI reasoning (`parameter_scores.__reasoning[key]`). Never print raw stored keys.
+- **TL / agent:** a header card (ring via `ScoreRing`, agent name, ticket id and date), then the same seven parameters via `DEFAULT_EMAIL_PARAMETERS` (`lib/email/context-builder.ts`: name, description, aliases, weight) as `ParamScoreRow`s (read-only buttons with the selected answer highlighted, the weight `defaultWeight` shown as `25%`, the seven add up to 100, and the AI reasoning underneath) (`parameter_scores.__reasoning[key]`). Never print raw stored keys.
 - Reply boxes size to their content and scroll only past 420px.
 
 ### Date range and cards
@@ -230,7 +232,8 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `84bbc19` | Whole-number IQS in the ring/labels; 💡 removed from parameter reasoning |
 | `c5eb13b`, `6f2acba` | Parameter weights (%) and the IQS ring + header card in the TL detail panel (shared `ScoreRing`) |
 | `ec215c7` | Email pages follow the chat/call page template: title/subtitle only, tabs left + PeriodFilter right, one card with filter bar + table + pager, KPI cards on the Evaluated tab, QA tab order and labels as in chats, client-side paging (`TablePaging`) |
-| (this change) | Email detail drawers: evaluation (ring + parameters) on the left, conversation on the right, as in chats (QA and TL swapped; agent already matched) |
+| `9e10b3a` | Email detail drawers: evaluation (ring + parameters) on the left, conversation on the right, as in chats (QA and TL swapped; agent already matched) |
+| (this change) | Parameter rows in all three email drawers use the chat layout via the shared `ParamScoreRow` (name + buttons + weight on one line, reasoning below; QA editable, TL/agent read-only) |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 
