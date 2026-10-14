@@ -234,7 +234,8 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `ec215c7` | Email pages follow the chat/call page template: title/subtitle only, tabs left + PeriodFilter right, one card with filter bar + table + pager, KPI cards on the Evaluated tab, QA tab order and labels as in chats, client-side paging (`TablePaging`) |
 | `9e10b3a` | Email detail drawers: evaluation (ring + parameters) on the left, conversation on the right, as in chats (QA and TL swapped; agent already matched) |
 | `521766c` | Parameter rows in all three email drawers use the chat layout via the shared `ParamScoreRow` (name + buttons + weight on one line, reasoning below; QA editable, TL/agent read-only) |
-| (this change) | QA Accept / Reject Dispute buttons now show on forwarded (`Under_Review`) disputes; `resolve_dispute` SQL got explicit type casts (it failed with "inconsistent types deduced for parameter $1", so QA could never resolve an email dispute) |
+| `17d82f5` | QA Accept / Reject Dispute buttons now show on forwarded (`Under_Review`) disputes; `resolve_dispute` SQL got explicit type casts (it failed with "inconsistent types deduced for parameter $1", so QA could never resolve an email dispute) |
+| (this change) | Member Analytics "Viewing" dropdown: height capped and scrolls inside (167 agents ran off the page); active period pill text uses `--qa-on-text` so it shows in dark mode |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 
@@ -248,6 +249,7 @@ Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-r
 - **Do** keep a sidebar item's `section` contiguous in `NAV_ALL`.
 - **Don't** add coloured pills/badges to tables, or emoji to UI text.
 - **Don't** hard-code `#fff`/`#111` text or backgrounds in new UI; dark mode will break. (Some older files, notably parts of `MyQualityEmailsPage.tsx` and the call pages, still use fixed light hex colours and rely on the dark-theme inline-style overrides.)
+- **Do** cap any dropdown/popover list that can grow (agents, dispositions): `maxHeight: 'min(360px, calc(100vh - 220px))'`, `overflowY: 'auto'`, `overscrollBehavior: 'contain'`, so it scrolls inside the panel instead of running off the page (the Member Analytics "Viewing" agent list has ~170 entries).
 - **Don't** make the chat sidebar expand on hover.
 - **Don't** put `/agent/*` pages back under `IRShell` for admins.
 - **Known leftovers:** coloured pills may remain on TL Quality Chats (IQS cells), My Quality Chats and My Quality Calls; email tables page client-side over at most 500 rows (the API cap), not server-side; email CSAT is a placeholder; the `027` migration number is duplicated between the email and another migration (owner: email backend).
