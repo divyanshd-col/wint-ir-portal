@@ -2,14 +2,14 @@
 
 .topbar {
   position: sticky; top: 0; z-index: 50; height: var(--topbar-h);
-  display: flex; align-items: center; gap: 16px; padding: 0 20px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px; padding: 0 20px;
   background: var(--tb-bg); border-bottom: 1px solid var(--tb-border);
 }
-.topbar-logo { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: #fff; border: 1px solid var(--color-border-tertiary); flex-shrink: 0; }
+.topbar-logo { justify-self: start; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: #fff; border: 1px solid var(--color-border-tertiary); flex-shrink: 0; }
 .topbar-logo img { display: block; object-fit: contain; }
 
 /* Pill tabs, after the Wint CX TL portal nav: a warm capsule with a lifted white active pill */
-.topbar-tabs { display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--tb-capsule); overflow-x: auto; scrollbar-width: none; }
+.topbar-tabs { max-width: 100%; display: flex; gap: 2px; padding: 4px; border-radius: 999px; background: var(--tb-capsule); overflow-x: auto; scrollbar-width: none; }
 .topbar-tabs::-webkit-scrollbar { display: none; }
 .topbar-tab { padding: 6px 18px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--color-text-secondary); text-decoration: none; white-space: nowrap; transition: background .15s, color .15s; }
 .topbar-tab:hover { color: var(--color-text-primary); }
@@ -17,7 +17,7 @@
 .topbar-tab.active:focus-visible { outline: none; }
 .topbar-tab:focus-visible, .topbar-icon-btn:focus-visible, .topbar-account-btn:focus-visible, .topbar-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.topbar-right { justify-self: end; display: flex; align-items: center; gap: 6px; }
 .topbar-icon-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer; }
 .topbar-icon-btn:hover, .topbar-account-btn:hover { background: var(--color-background-tertiary); color: var(--color-text-primary); }
 
@@ -33,7 +33,8 @@
 .topbar-menu-item:hover { background: var(--color-background-tertiary); }
 
 @media (max-width: 640px) {
-  .topbar { padding: 0 12px; gap: 10px; }
+  .topbar { padding: 0 12px; gap: 10px; grid-template-columns: auto minmax(0, 1fr) auto; }
+  .topbar-tabs { justify-self: center; }
   .topbar-tab { padding: 6px 12px; }
 }
 

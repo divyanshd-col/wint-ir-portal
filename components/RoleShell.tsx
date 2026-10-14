@@ -11,6 +11,8 @@ export interface NavItem {
   icon: () => React.ReactElement;
   roles?: string[];
   skill?: string;
+  /** Heading shown above this item (and the items after it) in the admin sidebar. */
+  section?: string;
 }
 
 interface RoleShellProps {
@@ -86,20 +88,24 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
             {displayRoleLabel}
           </div>
 
-          {filteredNav.map((item) => {
+          {filteredNav.map((item, i) => {
             const Icon = item.icon;
             const active = pathname === item.href;
+            // Admin sees every role's pages, so group them under QA / TL / IR Agent headings.
+            const heading = role === 'admin' && item.section && item.section !== filteredNav[i - 1]?.section ? item.section : null;
             return (
-              <Link
-                key={`${item.label}:${item.href}`}
-                href={item.href}
-                className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
-              >
-                <span>
-                  <Icon />
-                </span>
-                {item.label}
-              </Link>
+              <React.Fragment key={`${item.label}:${item.href}`}>
+                {heading && <div className="quality-shell-sidebar-title">{heading}</div>}
+                <Link
+                  href={item.href}
+                  className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
+                >
+                  <span>
+                    <Icon />
+                  </span>
+                  {item.label}
+                </Link>
+              </React.Fragment>
             );
           })}
         </aside>

@@ -3,6 +3,7 @@ import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
 import IRShell from '@/components/ir/IRShell';
+import QualityShell from '@/components/quality/QualityShell';
 
 export default async function AgentLayout({ children }: { children: React.ReactNode }) {
   const session = await getServerSession(authOptions);
@@ -24,6 +25,15 @@ export default async function AgentLayout({ children }: { children: React.ReactN
   }
   if (!name) {
     name = email.split('@')[0] || 'Agent';
+  }
+
+  // Admin visiting an agent page keeps the admin sidebar instead of switching to the IR Agent one.
+  if (role === 'admin') {
+    return (
+      <QualityShell role={role} email={email} name={name}>
+        {children}
+      </QualityShell>
+    );
   }
 
   return (
