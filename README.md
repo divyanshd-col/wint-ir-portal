@@ -348,6 +348,12 @@ Audio file uploaded to /call-analysis
 
 ---
 
+### 8. Email SLA Breach Alert
+
+Twice a day an external cron (cron-job.org) calls `GET /api/cron/sla-breach?trigger=1|2`. The route finds open email tickets whose 24-hour SLA breaches in the next window (trigger 1: 10 AM–7 PM IST, trigger 2: 7 PM–11:30 AM IST), where the customer spoke last and the Chat Status is not a repayment one, and posts them to Slack as a table (Ticket ID, Category, Breaches in, Breaches at, Open ticket link). Rules, setup, cron-job.org and preview-deployment steps are in [`docs/sla-breach-alert.md`](docs/sla-breach-alert.md).
+
+---
+
 ## AI Prompts & Examples
 
 ### Stage 0 – Intent Router
@@ -773,6 +779,12 @@ GOOGLE_DRIVE_FOLDER_ID=<folder-id>
 # Slack (optional)
 SLACK_BOT_TOKEN=xoxb-...
 SLACK_QUALITY_CHANNEL_ID=C...
+
+# Email SLA breach alert (see docs/sla-breach-alert.md)
+SLA_CRON_SECRET=<random-secret>       # bearer token the cron caller sends
+SLA_SLACK_BOT_TOKEN=xoxb-...          # bot of the SLA Slack app (chat:write)
+SLA_SLACK_CHANNEL=C...                # channel ID; invite the bot to it
+SLA_SLACK_MENTIONS=                   # optional: S… / U… IDs, default plain-text @cx_tl @email
 
 # Google Sheets (optional)
 GOOGLE_SHEETS_ID=<sheet-id>
