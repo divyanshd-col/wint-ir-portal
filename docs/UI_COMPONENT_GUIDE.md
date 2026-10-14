@@ -141,7 +141,7 @@ QA columns are driven by `TAB_COLS` / `COL_LABEL` / `COL_WIDTH` in `EmailEvaluat
 
 ### Expanded drawers
 - **QA:** customer summary + history, agent outbound reply, IQS ring, compliance badge and breaches, the seven parameters with Yes/Half/No(/NA) buttons and AI reasoning, QA override form, dispute note and resolve controls.
-- **TL / agent:** the same seven parameters via `DEFAULT_EMAIL_PARAMETERS` (`lib/email/context-builder.ts`: name, description, aliases, weight) with plain values from `paramLabel` and the AI reasoning (`parameter_scores.__reasoning[key]`). Never print raw stored keys.
+- **TL / agent:** the same seven parameters via `DEFAULT_EMAIL_PARAMETERS` (`lib/email/context-builder.ts`: name, description, aliases, weight) with the plain value from `paramLabel`, the weight (`defaultWeight`, shown as `25%`; the seven add up to 100) and the AI reasoning (`parameter_scores.__reasoning[key]`). Never print raw stored keys.
 - Reply boxes size to their content and scroll only past 420px.
 
 ### Date range and cards

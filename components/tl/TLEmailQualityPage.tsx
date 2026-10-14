@@ -750,7 +750,10 @@ export default function TLEmailQualityPage() {
                                             <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>{reason}</div>
                                           )}
                                         </div>
-                                        <div style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: MONO }}>{paramLabel(val)}</div>
+                                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: MONO }}>{paramLabel(val)}</span>
+                                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, minWidth: 28, textAlign: 'right' }}>{def.defaultWeight}%</span>
+                                        </div>
                                       </div>
                                     );
                                   })}
