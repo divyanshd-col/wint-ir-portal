@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SavedConversation } from '@/lib/types';
 import TimeAgo from '@/components/TimeAgo';
 
@@ -20,10 +20,7 @@ const STORAGE_KEY = 'wint_sidebar_collapsed';
 export default function Sidebar({ historyEnabled = false, onRestoreConversation, onNewChat }: SidebarProps) {
   const [open, setOpen] = useState(true); // mobile drawer
   const [collapsed, setCollapsed] = useState(false);
-  const [hovered, setHovered] = useState(false);
   const [conversations, setConversations] = useState<SavedConversation[]>([]);
-  const leaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const enterTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Restore collapsed preference
   useEffect(() => {
@@ -43,17 +40,8 @@ export default function Sidebar({ historyEnabled = false, onRestoreConversation,
     try { localStorage.setItem(STORAGE_KEY, v ? '1' : '0'); } catch { }
   };
 
-  const handleMouseEnter = () => {
-    if (leaveTimer.current) clearTimeout(leaveTimer.current);
-    enterTimer.current = setTimeout(() => setHovered(true), 200);
-  };
-  const handleMouseLeave = () => {
-    if (enterTimer.current) clearTimeout(enterTimer.current);
-    leaveTimer.current = setTimeout(() => setHovered(false), 120);
-  };
-
-  // When collapsed, the effective expanded state is governed by hover
-  const isExpanded = !collapsed || hovered;
+  // Only the toggle button expands or collapses the sidebar (no hover-to-expand)
+  const isExpanded = !collapsed;
 
   return (
     <>
@@ -68,16 +56,14 @@ export default function Sidebar({ historyEnabled = false, onRestoreConversation,
       </button>
 
       <aside
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
         className={`${open ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 transition-all duration-200 fixed lg:static top-[var(--topbar-h)] bottom-0 lg:top-auto lg:bottom-auto left-0 z-40 bg-[var(--color-background-primary)] border-r border-[var(--sb-border)] flex flex-col overflow-hidden ${isExpanded ? 'w-60' : 'w-14'}`}
       >
         {/* Collapse toggle */}
         <div className={`pt-4 pb-2 flex ${isExpanded ? 'justify-end px-4' : 'justify-center'}`}>
           <button
             onClick={() => setAndPersistCollapsed(!collapsed)}
-            title={collapsed ? 'Pin sidebar open' : 'Collapse sidebar'}
-            aria-label={collapsed ? 'Pin sidebar open' : 'Collapse sidebar'}
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             className="p-1.5 rounded-lg text-[var(--sb-text-muted)] hover:text-[var(--sb-active-text)] hover:bg-[var(--sb-hover)] transition"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
