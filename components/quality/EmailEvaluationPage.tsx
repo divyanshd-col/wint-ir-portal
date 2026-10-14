@@ -143,7 +143,7 @@ function QualityScoreBadge({ score, isOverridden }: { score: number | null; isOv
   if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>;
   return (
     <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-      {score}
+      {Math.round(Number(score))}
       {isOverridden && <span style={{ fontSize: 10, marginLeft: 4, color: 'var(--qa-text-3)' }}>QA</span>}
     </span>
   );
@@ -160,6 +160,19 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
     </span>
   );
 }
+
+// Columns per tab, ordered like the chat tables (ID, Agent, ..., Action).
+type Col = 'ticket' | 'agent' | 'intent' | 'iqs' | 'csat' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
+const TAB_COLS: Record<Tab, Col[]> = {
+  pending:  ['ticket', 'agent', 'intent', 'iqs', 'csat', 'action'],
+  reviewed: ['ticket', 'agent', 'intent', 'iqs', 'csat', 'reviewedBy', 'reviewedAt', 'action'],
+  disputes: ['ticket', 'agent', 'intent', 'iqs', 'csat', 'dispute', 'action'],
+  unscored: ['ticket', 'agent', 'intent', 'action'],
+};
+const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', agent: 'Agent', intent: 'Intent', iqs: 'IQS', csat: 'CSAT', dispute: 'Dispute', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
+const COL_WIDTH: Partial<Record<Col, number>> = { ticket: 130, agent: 170, iqs: 90, csat: 80, dispute: 120, reviewedBy: 170, reviewedAt: 130, action: 90 };
+const RIGHT: Col[] = ['iqs', 'action'];
+type SortCol = 'ticket' | 'agent' | 'iqs';
 
 export default function EmailEvaluationPage() {
   const [tab, setTab] = useState<Tab>('pending');
@@ -186,6 +199,7 @@ export default function EmailEvaluationPage() {
     'Vedant G',
   ]);
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
+  const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null);
 
   // QA action state
   const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
@@ -379,6 +393,14 @@ export default function EmailEvaluationPage() {
   });
 
   const hasFilters = Boolean(search || agentFilter);
+  const cols = TAB_COLS[tab];
+  const iqsOf = (i: EvaluationItem) => Number(i.effective_score ?? i.quality_score ?? -1);
+  const sortedItems = !sort ? items : [...items].sort((a, b) => {
+    const cmp = sort.col === 'iqs' ? iqsOf(a) - iqsOf(b)
+      : sort.col === 'agent' ? (a.agent_name ?? '').localeCompare(b.agent_name ?? '')
+      : String(a.chat_id ?? a.ticket_id).localeCompare(String(b.chat_id ?? b.ticket_id), undefined, { numeric: true });
+    return sort.dir === 'asc' ? cmp : -cmp;
+  });
 
   const agentOptions = Array.from(new Set([
     ...availableAgents,
@@ -552,40 +574,47 @@ export default function EmailEvaluationPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 170 }} />
-              <col style={{ width: 140 }} />
-              <col />
-              <col style={{ width: 100 }} />
-              <col style={{ width: 90 }} />
+              {cols.map(c => <col key={c} style={COL_WIDTH[c] ? { width: COL_WIDTH[c] } : undefined} />)}
             </colgroup>
             <thead>
               <tr>
-                <th style={th}>Agent</th>
-                <th style={th}>Ticket ID</th>
-                <th style={th}>Intent</th>
-                <th style={{ ...th, textAlign: 'right' }}>IQS</th>
-                <th style={{ ...th, textAlign: 'right' }}>Action</th>
+                {cols.map(c => {
+                  const sortable = c === 'ticket' || c === 'agent' || c === 'iqs';
+                  return (
+                    <th key={c} style={{ ...th, textAlign: RIGHT.includes(c) ? 'right' : 'left' }}>
+                      {sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => setSort(prev => prev?.col === c ? { col: c as SortCol, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col: c as SortCol, dir: 'desc' })}
+                          style={{ all: 'inherit', cursor: 'pointer', padding: 0, height: 'auto', background: 'none', border: 'none', display: 'inline-flex', gap: 4 }}
+                        >
+                          {COL_LABEL[c]} <span style={{ opacity: sort?.col === c ? 1 : 0.3 }}>{sort?.col === c ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                        </button>
+                      ) : COL_LABEL[c]}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {cols.map((c, j) => (
                       <td key={j} style={td}>
                         <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
                       </td>
                     ))}
                   </tr>
                 ))
-              ) : items.length === 0 ? (
+              ) : sortedItems.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
+                  <td colSpan={cols.length} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
                     No email reply evaluations found matching filters
                   </td>
                 </tr>
               ) : (
-                items.map(item => {
+                sortedItems.map(item => {
                   const isExpanded = expandedId === item.message_id;
                   const itemParams = getParamsForItem(item);
                   const isSessionOverridden = overrideScores[item.message_id] !== undefined;
@@ -593,6 +622,55 @@ export default function EmailEvaluationPage() {
                     ? Number(overrideScores[item.message_id])
                     : (item.effective_score ?? item.quality_score ?? calculateIQS(itemParams));
                   const hasOverride = item.qa_override_score !== null && item.qa_override_score !== undefined;
+                  const cell: Record<Col, React.ReactNode> = {
+                    ticket: (
+                      <td style={tdMono}>
+                        <a
+                          href={robylonTicketUrl(item.chat_id ?? item.ticket_id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
+                        >
+                          {item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`}
+                        </a>
+                      </td>
+                    ),
+                    agent: (
+                      <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.agent_name || 'Unassigned'}
+                      </td>
+                    ),
+                    intent: (
+                      <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{intentLabel(item.intent_l1)}</td>
+                    ),
+                    iqs: (
+                      <td style={tdNum}>
+                        {item.evaluation_status === 'Completed'
+                          ? <QualityScoreBadge score={currentIQS} isOverridden={hasOverride || isSessionOverridden} />
+                          : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                      </td>
+                    ),
+                    csat: <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>,
+                    dispute: (
+                      <td style={{ ...td, fontSize: 13 }}>{(item.dispute_status ?? 'None').replace('_', ' ')}</td>
+                    ),
+                    reviewedBy: (
+                      <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.reviewed_by || '—'}</td>
+                    ),
+                    reviewedAt: (
+                      <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
+                        {item.reviewed_at ? new Date(item.reviewed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                      </td>
+                    ),
+                    action: (
+                      <td style={{ ...td, textAlign: 'right' }}>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
+                          {isExpanded ? 'Hide ▲' : 'Review ▼'}
+                        </span>
+                      </td>
+                    ),
+                  };
 
                   return (
                     <React.Fragment key={item.message_id}>
@@ -606,37 +684,13 @@ export default function EmailEvaluationPage() {
                         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                       >
-                        <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.agent_name || 'Unassigned'}
-                        </td>
-                        <td style={tdMono}>
-                          <a
-                            href={robylonTicketUrl(item.chat_id ?? item.ticket_id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ color: 'inherit', textDecoration: 'underline', textUnderlineOffset: 2 }}
-                          >
-                            {item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`}
-                          </a>
-                        </td>
-                        <td style={{ ...td, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {intentLabel(item.intent_l1)}
-                        </td>
-                        <td style={tdNum}>
-                          <QualityScoreBadge score={currentIQS} isOverridden={hasOverride || isSessionOverridden} />
-                        </td>
-                        <td style={{ ...td, textAlign: 'right' }}>
-                          <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
-                              {isExpanded ? 'Hide ▲' : 'Review ▼'}
-                            </span>
-                        </td>
+                        {cols.map(c => <React.Fragment key={c}>{cell[c]}</React.Fragment>)}
                       </tr>
 
                       {/* ── Expanded Inline Review Drawer (Matching EvalPanel Structure) ── */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={5} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={cols.length} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
                             <div style={{
                               background: 'var(--qa-gray-50)',
                               borderTop: '1px solid var(--qa-border-sub)',

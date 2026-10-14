@@ -506,21 +506,21 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 150 }} />
-              <col />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 95 }} />
               <col style={{ width: 130 }} />
+              <col style={{ width: 170 }} />
+              <col />
+              <col style={{ width: 95 }} />
+              <col style={{ width: 80 }} />
               <col style={{ width: 150 }} />
               <col style={{ width: 90 }} />
             </colgroup>
             <thead>
               <tr>
                 <th style={TH_BASE}>Ticket ID</th>
+                <th style={TH_BASE}>Agent</th>
                 <th style={TH_BASE}>Intent</th>
-                <th style={TH_BASE}>CSAT</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
-                <th style={TH_BASE}>Compliance</th>
+                <th style={TH_BASE}>CSAT</th>
                 <th style={TH_BASE}>Dispute</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
               </tr>
@@ -566,10 +566,10 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                             {item.chat_id ?? `${item.ticket_id.slice(0, 12)}…`}
                           </a>
                         </td>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || agentName}</td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ color: 'var(--qa-text, #111111)' }}>{intentLabel(item.intent_l1)}</span>
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', color: 'var(--qa-text-3, #A1A1AA)' }}>—</td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <IQSBadge score={score} />
@@ -583,77 +583,9 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                             )}
                           </div>
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
-                          {item.compliance_passed === false ? (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                padding: '2px 8px',
-                                borderRadius: 6,
-                                background: '#fef2f2',
-                                color: '#991b1b',
-                                border: '1px solid #fecaca',
-                              }}
-                            >
-                              Non-Compliant
-                            </span>
-                          ) : (
-                            <span
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                fontSize: 12,
-                                fontWeight: 600,
-                                padding: '2px 8px',
-                                borderRadius: 6,
-                                background: '#f0fdf4',
-                                color: '#166534',
-                                border: '1px solid #bbf7d0',
-                              }}
-                            >
-                              Compliant
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
-                          {isDisputed ? (
-                            isReviewedDispute ? (
-                              <span
-                                style={{
-                                  padding: '2px 8px',
-                                  borderRadius: 6,
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  background: item.dispute_status === 'Resolved' ? '#f0fdf4' : '#fef2f2',
-                                  color: item.dispute_status === 'Resolved' ? '#166534' : '#991b1b',
-                                  border: `1px solid ${item.dispute_status === 'Resolved' ? '#bbf7d0' : '#fecaca'}`,
-                                }}
-                              >
-                                {item.dispute_status}
-                              </span>
-                            ) : (
-                              <span
-                                style={{
-                                  padding: '2px 8px',
-                                  borderRadius: 6,
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  background: '#fefce8',
-                                  color: '#854d0e',
-                                  border: '1px solid #fef08a',
-                                }}
-                              >
-                                Pending TL Review
-                              </span>
-                            )
-                          ) : (
-                            <span style={{ color: '#A1A1AA' }}>—</span>
-                          )}
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', color: 'var(--qa-text-3, #A1A1AA)' }}>—</td>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 13 }}>
+                          {isDisputed ? (isReviewedDispute ? item.dispute_status : 'Pending TL Review') : <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
                           <button

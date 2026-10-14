@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
-import { periodBounds, robylonTicketUrl, paramLabel } from '@/lib/email/ui';
+import { periodBounds, robylonTicketUrl, paramLabel, intentLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
-import EmailMessageView, { stripHtml, CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
+import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
 
 interface AgentBreakdown {
@@ -326,21 +326,21 @@ export default function TLEmailQualityPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 160 }} />
               <col style={{ width: 130 }} />
               <col />
+              <col style={{ width: 220 }} />
+              <col style={{ width: 90 }} />
               <col style={{ width: 80 }} />
-              <col style={{ width: 100 }} />
               <col style={{ width: 90 }} />
             </colgroup>
             <thead>
               <tr>
-                <th style={th}>Agent</th>
                 <th style={th}>Ticket ID</th>
-                <th style={th}>Customer Context &amp; Reply</th>
+                <th style={th}>Agent</th>
+                <th style={th}>Intent</th>
+                <th style={{ ...th, textAlign: 'right' }}>IQS</th>
                 <th style={th}>CSAT</th>
-                <th style={{ ...th, textAlign: 'right' }}>Score</th>
-                <th style={{ ...th, textAlign: 'right' }}>Detail</th>
+                <th style={{ ...th, textAlign: 'right' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -371,9 +371,6 @@ export default function TLEmailQualityPage() {
                         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                       >
-                        <td style={{ ...td, fontWeight: 500 }}>
-                          {reply.agent_name}
-                        </td>
                         <td style={tdMono}>
                           <a
                             href={robylonTicketUrl(reply.chat_id ?? reply.ticket_id)}
@@ -385,18 +382,16 @@ export default function TLEmailQualityPage() {
                             {reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`}
                           </a>
                         </td>
-                        <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          <span style={{ color: 'var(--qa-text-2)', marginRight: 6 }}>
-                            {reply.customer_message ? `"${stripHtml(reply.customer_message).slice(0, 40)}…"` : 'Email:'}
-                          </span>
-                          <span style={{ color: 'var(--qa-text)' }}>
-                            {reply.agent_reply_text ? stripHtml(reply.agent_reply_text).slice(0, 60) + '…' : '—'}
-                          </span>
+                        <td style={{ ...td, fontWeight: 500 }}>
+                          {reply.agent_name || 'Unassigned'}
                         </td>
-                        <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
+                        <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {intentLabel(reply.intent_l1)}
+                        </td>
                         <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
                           {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                         </td>
+                        <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
                         <td style={{ ...td, textAlign: 'right' }}>
                           <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
                             {isExpanded ? 'Hide ▲' : 'View ▼'}
