@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { isHttpsRequest } from '@/lib/auth-cookie';
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -18,7 +19,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const token = await getToken({
+    req,
+    secret: process.env.NEXTAUTH_SECRET,
+    // Read the cookie name next-auth used for THIS request (https tunnel vs plain localhost), not the one NEXTAUTH_URL implies.
+    secureCookie: isHttpsRequest(req.headers.get('x-forwarded-proto'), req.nextUrl.protocol),
+  });
   if (!token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }

@@ -23,10 +23,6 @@ interface RoleShellProps {
   mainStyle?: React.CSSProperties;
 }
 
-function initials(name: string) {
-  return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?';
-}
-
 const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
   admin: [
     'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
@@ -47,7 +43,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
   ],
 };
 
-export default function RoleShell({ role, name, skills: propSkills, children, navItems, roleLabel, mainStyle }: RoleShellProps) {
+export default function RoleShell({ role, skills: propSkills, children, navItems, roleLabel, mainStyle }: RoleShellProps) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const { data: session } = useSession();
@@ -83,31 +79,6 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
 
   return (
     <div className="quality-shell-container">
-      {/* Top Nav */}
-      <header className="quality-shell-header">
-        {/* Wordmark */}
-        <div className="quality-shell-wordmark">
-          Wint Wealth
-        </div>
-
-        {/* Role pill */}
-        <div className="quality-shell-role-container">
-          <span className="quality-shell-role-pill">
-            <span className="quality-shell-role-pill-dot" />
-            {displayRoleLabel}
-          </span>
-        </div>
-
-        {/* User info */}
-        <div className="quality-shell-user">
-          <span className="quality-shell-user-avatar">
-            {initials(name)}
-          </span>
-          <span>{name}</span>
-          <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
-        </div>
-      </header>
-
       <div className="quality-shell-body">
         {/* Sidebar */}
         <aside className="quality-shell-sidebar">
@@ -120,7 +91,7 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
             const active = pathname === item.href;
             return (
               <Link
-                key={item.href}
+                key={`${item.label}:${item.href}`}
                 href={item.href}
                 className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
               >

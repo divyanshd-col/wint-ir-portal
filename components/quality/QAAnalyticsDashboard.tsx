@@ -128,7 +128,7 @@ export default function QAAnalyticsDashboard() {
               <button key={p} onClick={() => { setPeriod(p); setShowPicker(false); }} style={{
                 height: 32, padding: '0 14px', background: period === p ? 'var(--qa-text)' : 'transparent',
                 border: 0, borderRight: '1px solid var(--qa-border)',
-                fontSize: 13, color: period === p ? '#fff' : 'var(--qa-text-2)',
+                fontSize: 13, color: period === p ? 'var(--qa-on-text)' : 'var(--qa-text-2)',
                 cursor: 'pointer', fontFamily: 'inherit',
               }}>
                 {p} days
@@ -137,7 +137,7 @@ export default function QAAnalyticsDashboard() {
             <button onClick={() => setShowPicker(v => !v)} style={{
               height: 32, padding: '0 14px', background: period === 'custom' ? 'var(--qa-text)' : 'transparent',
               border: 0, fontSize: 13,
-              color: period === 'custom' ? '#fff' : 'var(--qa-text-2)',
+              color: period === 'custom' ? 'var(--qa-on-text)' : 'var(--qa-text-2)',
               cursor: 'pointer', fontFamily: 'inherit',
             }}>
               Custom range
