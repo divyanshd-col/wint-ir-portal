@@ -70,3 +70,11 @@ const DISPUTE_LABELS: Record<string, string> = {
 export function disputeLabel(status: string | null | undefined): string {
   return DISPUTE_LABELS[status ?? ''] ?? '—';
 }
+
+export const pageCount = (total: number, size: number) => Math.max(1, Math.ceil(total / size));
+
+/** One page of rows (1-based); an out-of-range page clamps to the last one. */
+export function pageSlice<T>(items: T[], page: number, size: number): T[] {
+  const p = Math.min(Math.max(1, page), pageCount(items.length, size));
+  return items.slice((p - 1) * size, p * size);
+}

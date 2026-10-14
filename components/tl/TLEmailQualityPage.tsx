@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ScoreRing from '@/components/quality/ScoreRing';
+import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, paramLabel, intentLabel, disputeLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
@@ -150,6 +151,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
   const shown = rows.filter(r =>
     (!agentFilter || r.agent_name === agentFilter) &&
     (!outcomeFilter || r.dispute_status === outcomeFilter));
+  const paging = usePaging(shown, `${queue}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
   const colCount = 7;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
 
@@ -178,9 +180,9 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
         {(agentFilter || outcomeFilter) && (
           <button onClick={() => { setAgentFilter(''); setOutcomeFilter(''); }} style={actionBtn}>Clear</button>
         )}
-        <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--qa-text-3)' }}>
-          {loading ? 'Loading…' : `Showing ${shown.length} of ${rows.length}`}
-        </span>
+        <div style={{ marginLeft: 'auto' }}>
+          <ShowingCount shown={paging.pageItems.length} total={shown.length} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
+        </div>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
@@ -207,11 +209,11 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
         <tbody>
           {loading ? (
             <tr><td colSpan={colCount} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>Loading disputes…</td></tr>
-          ) : shown.length === 0 ? (
+          ) : paging.pageItems.length === 0 ? (
             <tr><td colSpan={colCount} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
               {pending ? 'No disputes waiting for review' : 'No reviewed disputes'}
             </td></tr>
-          ) : shown.map(item => {
+          ) : paging.pageItems.map(item => {
             const isOpen = expandedId === item.message_id;
             const score = item.effective_score ?? item.quality_score;
             return (
@@ -283,6 +285,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
           })}
         </tbody>
       </table>
+      <Pager page={paging.page} pages={paging.pages} onPage={paging.setPage} />
     </div>
   );
 }
@@ -332,23 +335,23 @@ export default function TLEmailQualityPage() {
     ? Math.round(agents.reduce((acc, a) => acc + Number(a.avg_score || 0), 0) / agents.length)
     : 0;
 
+  const paging = usePaging(replies, `${selectedAgent}|${period.period}|${period.customFrom}|${period.customTo}`);
+
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 8px 40px' }}>
+    <div>
       {/* ── Page Header ── */}
-      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
-            Quality Emails
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0' }}>
-            Team-level email performance and individual member results
-          </p>
-        </div>
-        <PeriodFilter value={period} onChange={setPeriod} />
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
+          Quality Emails
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0' }}>
+          Team-level email performance and individual member results
+        </p>
       </div>
 
-      {/* ── Tabs (same as Quality Chats) ── */}
-      <div style={{ display: 'flex', gap: 4, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 4, width: 'fit-content', marginBottom: 20 }}>
+      {/* ── Tabs (left) + period filter (right), same slot as the chat/call pages ── */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 4, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 4, width: 'fit-content' }}>
         {([
           ['evaluated', 'Evaluated Emails', counts?.evaluated],
           ['raised', 'Disputes Raised', counts?.raised],
@@ -374,6 +377,8 @@ export default function TLEmailQualityPage() {
             </button>
           );
         })}
+      </div>
+      <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
       {tab === 'raised' && <EmailDisputesSection queue="tl_pending" period={period} onChanged={fetchData} />}
@@ -537,25 +542,30 @@ export default function TLEmailQualityPage() {
         borderRadius: 8,
         overflow: 'hidden',
       }}>
-        {/* Header & Filter Row */}
+        {/* Filter bar, same slots as the chat tables: filters left, count + rows per page right */}
         <div style={{
-          padding: '14px 20px',
-          borderBottom: '1px solid var(--qa-border-sub)',
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--qa-border)',
           display: 'flex',
-          justifyContent: 'space-between',
           alignItems: 'center',
+          gap: 8,
           flexWrap: 'wrap',
-          gap: 12,
         }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
-              {selectedAgent ? `Replies by ${selectedAgent}` : 'All Team Email Replies'}
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 2 }}>
-              Showing {replies.length} replies
-            </div>
-          </div>
-
+          <select
+            value={selectedAgent}
+            onChange={e => setSelectedAgent(e.target.value)}
+            style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: selectedAgent ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
+          >
+            <option value="">All Agents</option>
+            {agents.map(a => <option key={a.agent_name} value={a.agent_name}>{a.agent_name}</option>)}
+          </select>
+          {selectedAgent && (
+            <button onClick={() => setSelectedAgent('')} style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
+              Reset Filters
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
+          <ShowingCount shown={paging.pageItems.length} total={paging.total} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
         </div>
 
         {/* Replies Table */}
@@ -586,14 +596,14 @@ export default function TLEmailQualityPage() {
                     Loading team email replies…
                   </td>
                 </tr>
-              ) : replies.length === 0 ? (
+              ) : paging.pageItems.length === 0 ? (
                 <tr>
                   <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     No replies matching selected filters
                   </td>
                 </tr>
               ) : (
-                replies.map((reply) => {
+                paging.pageItems.map((reply) => {
                   const isExpanded = expandedId === reply.message_id;
                   const score = reply.effective_score ?? reply.quality_score;
                   return (
@@ -782,6 +792,7 @@ export default function TLEmailQualityPage() {
             </tbody>
           </table>
         </div>
+        <Pager page={paging.page} pages={paging.pages} onPage={paging.setPage} />
       </div>
       </>
       )}

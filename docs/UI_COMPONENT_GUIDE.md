@@ -76,6 +76,7 @@ Shell wrappers and their layouts:
 | `PeriodFilter` (+ `DEFAULT_PERIOD`, `PeriodState`) | `components/quality/PeriodFilter.tsx` | 7 days / 30 days / Custom range control (opens `DateRangePicker`). Controlled: `value`, `onChange`. Default 7 days. Pair with `periodBounds()` from `lib/email/ui.ts` to build query params. |
 | `TicketLinkButton` | `components/quality/TicketLinkButton.tsx` | Ticket/chat id rendered as a bordered blue "Show chat ↗"-style button that opens `https://app.robylon.ai/unified-inbox/share/{id}` in a new tab. Props: `id` (used for the URL), optional `label` (display text, e.g. a shortened id). Stops click propagation so the row doesn't expand. |
 | `EmailMessageView`, `CustomerSummaryBlock`, `EmailHistoryPanel`, `stripHtml`, `sanitizeEmailHtml` | `components/quality/EmailContentRenderer.tsx` | Email body rendering. `EmailMessageView` runs content through `trimEmailBody` (no trailing blank lines/empty blocks) and uses the `.email-html-body` rules in `app/globals.css` (tight paragraphs, no trailing margin). `CustomerSummaryBlock` shows the 4-point customer summary; `EmailHistoryPanel` the prior-interaction history. |
+| `usePaging`, `ShowingCount`, `Pager` | `components/quality/TablePaging.tsx` | Client-side paging for the email tables, same look as the chat tables: `ShowingCount` = "Showing X of N" + rows-per-page button (20/50/100) at the right end of the filter bar; `Pager` = "Page x of y" + Prev/Next footer (hidden on one page); `usePaging(items, resetKey)` slices the rows and returns to page 1 when `resetKey` changes. Pure helpers `pageSlice` / `pageCount` live in `lib/email/ui.ts`. |
 | `ScoreRing` | `components/quality/ScoreRing.tsx` | Neutral IQS ring (64px, whole-number score, dash when unscored) used in the agent and TL email detail panels; token colours so it works in dark mode. The QA email page keeps its own colour-coded ring. |
 | `DateRangePicker` | `components/quality/DateRangePicker.tsx` | Calendar popover used by `PeriodFilter` and the chat/call tables. |
 | `DisputeStatusPill` | exported from `components/tl/QualityChatsPage.tsx` | Dispute label for chats/calls (shared by TL chats, TL calls, My Quality Chats/Calls). Now **plain text**, despite the name. |
@@ -91,8 +92,39 @@ Shell wrappers and their layouts:
 | `periodBounds(period, from?, to?)` | `resolveDateRange` + `dayBoundsISO`; what pages send as `from`/`to` |
 | `intentLabel(v)` | Intent L1 for a cell; "—" for empty, "None" or a raw UUID |
 | `paramLabel(v)` | Plain label for a stored parameter value: Yes / Half / No / NA, numeric -> `NN%`, missing -> "—" |
+| `pageSlice(items, page, size)`, `pageCount(total, size)` | One page of rows (1-based, out-of-range clamps to the last page) and the page count (min 1) |
 | `trimEmailBody(raw)` | Collapse 3+ newlines, drop trailing blank lines / empty `<p>`/`<div>`/`<br>` |
 | `disputeLabel(status)` | `Raised` -> "Raised by agent", `Under_Review` -> "Forwarded to QA", `TL_Resolved` -> "Resolved by TL", `Resolved` -> "Resolved by QA", `Rejected` -> "Rejected by QA", else "—" |
+
+---
+
+## 4a. Page layout template (all quality list pages)
+
+Every chat, call and email page, for every persona (QA, TL, agent), uses the same vertical order and slots. Email pages follow it too:
+
+```
+1. Header        h1 (24px / 600), optional subtitle (13px --qa-text-2). No controls here.
+2. Tab row       tabs on the LEFT; ONE control on the RIGHT
+                   chats/calls: the Interaction / agent dropdown
+                   emails:      PeriodFilter (7 days / 30 days / Custom)
+3. KPI cards     emails only (TL and agent), Evaluated tab only, between the tab row and the table
+4. One card      [ filter bar | table | pager ]  in a single bordered card
+                   filter bar: filters on the left; "Showing X of N" + rows-per-page button at the right
+                   table:      ID, Agent, ..., Action (see section 4)
+                   footer:     Pager (Prev / Next), only when more than one page
+```
+
+How each email page maps to it:
+
+| Page | Header | Tabs (left) | Right slot | Card |
+|---|---|---|---|---|
+| QA `Email Evaluation` | title only (like Chat/Call Evaluation) | Pending Review, Disputes, Reviewed Emails, Unscored Emails | PeriodFilter | search + agent select + Reset Filters, count, table, pager |
+| TL `Quality Emails` | title + subtitle | Evaluated Emails, Disputes Raised, Reviewed Disputes | PeriodFilter | Evaluated tab: KPI cards, member table (email-specific), then card with agent select, count, table, pager. Dispute tabs: agent/outcome filters, count, table, pager |
+| Agent `My Quality Emails` | title + subtitle | Evaluated Emails, Disputes Raised, Reviewed Disputes | PeriodFilter | KPI cards (Evaluated tab), then search + compliance select, count, table, pager |
+
+Page wrappers: QA and TL pages are a plain `<div>` (full width of `<main>`, same left edge as the chat pages; no max-width or extra padding). The agent pages keep their shared wrapper (`padding: 24`), as the agent chat/call pages do.
+
+**Rename rule:** this layout is UI only. Never rename API actions or params, DB columns/statuses, tab state keys (`'pending' | 'reviewed' | 'disputes' | 'unscored'`, `'evaluated' | 'raised' | 'reviewed'`), prop names or exported component/function names to "match" the chats; only the visible text and placement change. (Example: the QA tab keyed `unscored` is labelled "Unscored Emails"; the page title "Email Evaluation" matches the sidebar item.)
 
 ---
 
@@ -107,7 +139,7 @@ Follow these on every quality table so views stay consistent.
 5. **Row expansion:** click a row to open an inline drawer (`<tr><td colSpan={n}>`); `colSpan` must equal the column count. Drawer background `--qa-gray-50`, cards `--qa-card` with `--qa-border`.
 6. **Tabs** are a pill group: container `--qa-card` + `--qa-border`, active tab `--qa-gray-700` with `#fff` text, count badge `--qa-gray-100` (active: `rgba(255,255,255,.2)`).
 7. **Tables** use `tableLayout: fixed` with a `<colgroup>`; header cells are 12px uppercase, 0.08em tracking, `--qa-text-2`, on `--qa-gray-50`.
-8. **Period filter** sits top-right of the page header and drives the cards, tab counts and rows together.
+8. **Period filter** sits at the right of the tab row (the slot the chat pages use for their dropdown) and drives the cards, tab counts and rows together.
 9. Don't use emoji in UI text.
 
 ---
@@ -163,7 +195,7 @@ POST `action`: `submit_review`/`qa_override`, `raise_dispute`, `forward_dispute`
 | `TL_Resolved` | TL resolved with a note (no QA) | Resolved by TL | TL "Reviewed Disputes"; agent "Reviewed Disputes" |
 | `Resolved` / `Rejected` | QA decision | Resolved by QA / Rejected by QA | TL "Reviewed Disputes"; agent "Reviewed Disputes" |
 
-QA only sees disputes after the TL forwards them. Not built for email (exists for chats): dispute comment thread, rows-per-page / pagination.
+QA only sees disputes after the TL forwards them. Not built for email (exists for chats): dispute comment thread.
 
 ---
 
@@ -194,6 +226,8 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `275c705`, `a818388`, `5539d2e` | Chat page restyle, no hover-to-expand sidebar, eggshell background |
 | `7a438eb` | TL dispute tabs for emails; `TL_Resolved` status and `tl_resolve_dispute`; QA sees only forwarded disputes; `disputeQueue` filter and new counts |
 | `84bbc19` | Whole-number IQS in the ring/labels; 💡 removed from parameter reasoning |
+| `c5eb13b`, `6f2acba` | Parameter weights (%) and the IQS ring + header card in the TL detail panel (shared `ScoreRing`) |
+| (this change) | Email pages follow the chat/call page template: title/subtitle only, tabs left + PeriodFilter right, one card with filter bar + table + pager, KPI cards on the Evaluated tab, QA tab order and labels as in chats, client-side paging (`TablePaging`) |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 
@@ -209,7 +243,7 @@ Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-r
 - **Don't** hard-code `#fff`/`#111` text or backgrounds in new UI; dark mode will break. (Some older files, notably parts of `MyQualityEmailsPage.tsx` and the call pages, still use fixed light hex colours and rely on the dark-theme inline-style overrides.)
 - **Don't** make the chat sidebar expand on hover.
 - **Don't** put `/agent/*` pages back under `IRShell` for admins.
-- **Known leftovers:** coloured pills may remain on TL Quality Chats (IQS cells), My Quality Chats and My Quality Calls; the QA email table has no pagination (API cap 500 rows); email CSAT is a placeholder; the `027` migration number is duplicated between the email and another migration (owner: email backend).
+- **Known leftovers:** coloured pills may remain on TL Quality Chats (IQS cells), My Quality Chats and My Quality Calls; email tables page client-side over at most 500 rows (the API cap), not server-side; email CSAT is a placeholder; the `027` migration number is duplicated between the email and another migration (owner: email backend).
 
 ---
 

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import {
   DEFAULT_EMAIL_PARAMETERS,
@@ -405,24 +406,20 @@ export default function EmailEvaluationPage() {
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
+  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
+
   const agentOptions = Array.from(new Set([
     ...availableAgents,
     ...items.map(i => i.agent_name).filter(Boolean),
   ])).sort();
 
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 8px 40px' }}>
+    <div>
       {/* ── Page Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
-            Email Quality Evaluation
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0' }}>
-            Quality assurance evaluations with IQS parameter grading, overrides, and dispute arbitration
-          </p>
-        </div>
-        <PeriodFilter value={period} onChange={setPeriod} />
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
+          Email Evaluation
+        </h1>
       </div>
 
       {/* ── Success Toast Banner ── */}
@@ -452,9 +449,9 @@ export default function EmailEvaluationPage() {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 20,
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 16,
       }}>
         <div style={{
           display: 'flex', gap: 4,
@@ -465,29 +462,33 @@ export default function EmailEvaluationPage() {
             Pending Review
             <CountBadge count={summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0)} active={tab === 'pending'} />
           </button>
-          <button style={tabStyle(tab === 'reviewed')} onClick={() => handleTabChange('reviewed')}>
-            Reviewed Emails
-            <CountBadge count={summary?.reviewedCount ?? (tab === 'reviewed' ? items.length : 0)} active={tab === 'reviewed'} />
-          </button>
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
             <CountBadge count={summary?.qaDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
           </button>
+          <button style={tabStyle(tab === 'reviewed')} onClick={() => handleTabChange('reviewed')}>
+            Reviewed Emails
+            <CountBadge count={summary?.reviewedCount ?? (tab === 'reviewed' ? items.length : 0)} active={tab === 'reviewed'} />
+          </button>
           <button style={tabStyle(tab === 'unscored')} onClick={() => handleTabChange('unscored')}>
-            Awaiting AI
+            Unscored Emails
             <CountBadge count={summary?.unscoredCount ?? (tab === 'unscored' ? items.length : 0)} active={tab === 'unscored'} />
           </button>
         </div>
 
+        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
-      {/* ── Filter Toolbar (Matching ChatEvalTable) ── */}
+      {/* ── One card: filter bar + table + pager (as in the chat tables) ── */}
       <div style={{
         background: 'var(--qa-card)',
         border: '1px solid var(--qa-border)',
         borderRadius: 8,
-        padding: '10px 14px',
-        marginBottom: 16,
+        overflow: 'hidden',
+      }}>
+      <div style={{
+        padding: '10px 16px',
+        borderBottom: '1px solid var(--qa-border)',
         display: 'flex',
         alignItems: 'center',
         gap: 8,
@@ -562,18 +563,9 @@ export default function EmailEvaluationPage() {
         </button>
 
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
-          {loading ? 'Loading…' : `${items.length} replies`}
-        </span>
+        <ShowingCount shown={paging.pageItems.length} total={paging.total} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
       </div>
 
-      {/* ── Table Container ── */}
-      <div style={{
-        background: 'var(--qa-card)',
-        border: '1px solid var(--qa-border)',
-        borderRadius: 8,
-        overflow: 'hidden',
-      }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
@@ -610,14 +602,14 @@ export default function EmailEvaluationPage() {
                     ))}
                   </tr>
                 ))
-              ) : sortedItems.length === 0 ? (
+              ) : paging.pageItems.length === 0 ? (
                 <tr>
                   <td colSpan={cols.length} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
                     No email reply evaluations found matching filters
                   </td>
                 </tr>
               ) : (
-                sortedItems.map(item => {
+                paging.pageItems.map(item => {
                   const isExpanded = expandedId === item.message_id;
                   const itemParams = getParamsForItem(item);
                   const isSessionOverridden = overrideScores[item.message_id] !== undefined;
@@ -1088,6 +1080,7 @@ export default function EmailEvaluationPage() {
             </tbody>
           </table>
         </div>
+        <Pager page={paging.page} pages={paging.pages} onPage={paging.setPage} />
       </div>
     </div>
   );

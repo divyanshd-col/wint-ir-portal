@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { robylonTicketUrl, resolveDateRange, intentLabel, trimEmailBody, paramLabel, dayBoundsISO, disputeLabel } from '../lib/email/ui';
+import { robylonTicketUrl, resolveDateRange, intentLabel, trimEmailBody, paramLabel, dayBoundsISO, disputeLabel, pageSlice, pageCount } from '../lib/email/ui';
 
 test('robylonTicketUrl - the unified-inbox link for a chat id', () => {
   assert.equal(robylonTicketUrl('110894'), 'https://app.robylon.ai/unified-inbox/share/110894');
@@ -52,4 +52,13 @@ test('disputeLabel - who is holding the dispute, in the words the chat views use
     ['Raised', 'Under_Review', 'TL_Resolved', 'Resolved', 'Rejected', 'None', undefined].map(disputeLabel),
     ['Raised by agent', 'Forwarded to QA', 'Resolved by TL', 'Resolved by QA', 'Rejected by QA', '—', '—'],
   );
+});
+
+test('pageSlice / pageCount - client-side paging for the email tables', () => {
+  const rows = Array.from({ length: 45 }, (_, i) => i + 1);
+  assert.equal(pageCount(45, 20), 3);
+  assert.equal(pageCount(0, 20), 1);
+  assert.deepEqual(pageSlice(rows, 1, 20), rows.slice(0, 20));
+  assert.deepEqual(pageSlice(rows, 3, 20), [41, 42, 43, 44, 45]);
+  assert.deepEqual(pageSlice(rows, 9, 20), [41, 42, 43, 44, 45]); // out-of-range page clamps to the last
 });

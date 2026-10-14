@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import ScoreRing from '@/components/quality/ScoreRing';
 import { periodBounds, intentLabel, paramLabel, disputeLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
@@ -223,6 +224,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
     });
   }, [activeTab, evaluatedItems, disputesRaisedItems, reviewedDisputesItems, search, complianceFilter]);
 
+  const paging = usePaging(currentTabItems, `${activeTab}|${search}|${complianceFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
   const hasFilters = Boolean(search || complianceFilter);
   const clearFilters = () => {
     setSearch('');
@@ -261,20 +263,57 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   return (
     <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* ── Page Header ── */}
-      <div style={{ marginBottom: 20, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
-            My Quality Emails
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: '4px 0 0' }}>
-            View evaluated email replies, track parameter grading, and raise or monitor disputes for {agentName}.
-          </p>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
+          My Quality Emails
+        </h1>
+        <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: '4px 0 0' }}>
+          View evaluated email replies, track parameter grading, and raise or monitor disputes for {agentName}.
+        </p>
+      </div>
+
+      {/* ── Tabs & Interaction Bar (Exact match with MyQualityChatsPage) ── */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 20,
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
+        {/* Tab Buttons */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            background: 'var(--qa-card, #FFFFFF)',
+            border: '1px solid var(--qa-border, #E4E4E7)',
+            borderRadius: 10,
+            padding: 4,
+            width: 'fit-content',
+          }}
+        >
+          <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
+            Evaluated Emails
+            <CountBadge count={evaluatedItems.length} active={activeTab === 'evaluated'} />
+          </button>
+          <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
+            Disputes Raised
+            <CountBadge count={disputesRaisedItems.length} active={activeTab === 'disputes'} />
+          </button>
+          <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
+            Reviewed Disputes
+            <CountBadge count={reviewedDisputesItems.length} active={activeTab === 'reviewed'} />
+          </button>
         </div>
+
         <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
-      {/* ── KPI Cards (Consistent with MyQualityChatsPage) ── */}
-      {summary && (
+      {/* ── KPI Cards (Evaluated tab, between the tabs and the table) ── */}
+      {activeTab === 'evaluated' && summary && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
           <div
             style={{
@@ -356,43 +395,6 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
         </div>
       )}
 
-      {/* ── Tabs & Interaction Bar (Exact match with MyQualityChatsPage) ── */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-          flexWrap: 'wrap',
-          gap: 16,
-        }}
-      >
-        {/* Tab Buttons */}
-        <div
-          style={{
-            display: 'flex',
-            gap: 4,
-            background: 'var(--qa-card, #FFFFFF)',
-            border: '1px solid var(--qa-border, #E4E4E7)',
-            borderRadius: 10,
-            padding: 4,
-            width: 'fit-content',
-          }}
-        >
-          <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
-            Evaluated Emails
-            <CountBadge count={evaluatedItems.length} active={activeTab === 'evaluated'} />
-          </button>
-          <button style={tabStyle(activeTab === 'disputes')} onClick={() => setActiveTab('disputes')}>
-            Disputes Raised
-            <CountBadge count={disputesRaisedItems.length} active={activeTab === 'disputes'} />
-          </button>
-          <button style={tabStyle(activeTab === 'reviewed')} onClick={() => setActiveTab('reviewed')}>
-            Reviewed Disputes
-            <CountBadge count={reviewedDisputesItems.length} active={activeTab === 'reviewed'} />
-          </button>
-        </div>
-      </div>
 
       {/* ── Table Container Card ── */}
       <div
@@ -460,10 +462,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           </div>
 
           {/* Records Counter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
-            <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
-              Showing {currentTabItems.length} of {items.length} records
-            </span>
+          <div style={{ marginLeft: 'auto' }}>
+            <ShowingCount shown={paging.pageItems.length} total={paging.total} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
           </div>
         </div>
 
@@ -504,9 +504,9 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                   </td>
                 </tr>
               ) : (
-                currentTabItems.map((item, idx) => {
+                paging.pageItems.map((item, idx) => {
                   const isOpen = expandedId === item.message_id;
-                  const isLast = idx === currentTabItems.length - 1 && !isOpen;
+                  const isLast = idx === paging.pageItems.length - 1 && !isOpen;
                   const score = item.effective_score ?? item.quality_score ?? null;
                   const isOverridden = item.qa_override_score !== null && item.qa_override_score !== undefined;
                   const isDisputed = item.dispute_status && item.dispute_status !== 'None';
@@ -941,6 +941,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             </tbody>
           </table>
         </div>
+        <Pager page={paging.page} pages={paging.pages} onPage={paging.setPage} />
       </div>
     </div>
   );
