@@ -233,7 +233,8 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `c5eb13b`, `6f2acba` | Parameter weights (%) and the IQS ring + header card in the TL detail panel (shared `ScoreRing`) |
 | `ec215c7` | Email pages follow the chat/call page template: title/subtitle only, tabs left + PeriodFilter right, one card with filter bar + table + pager, KPI cards on the Evaluated tab, QA tab order and labels as in chats, client-side paging (`TablePaging`) |
 | `9e10b3a` | Email detail drawers: evaluation (ring + parameters) on the left, conversation on the right, as in chats (QA and TL swapped; agent already matched) |
-| (this change) | Parameter rows in all three email drawers use the chat layout via the shared `ParamScoreRow` (name + buttons + weight on one line, reasoning below; QA editable, TL/agent read-only) |
+| `521766c` | Parameter rows in all three email drawers use the chat layout via the shared `ParamScoreRow` (name + buttons + weight on one line, reasoning below; QA editable, TL/agent read-only) |
+| (this change) | QA Accept / Reject Dispute buttons now show on forwarded (`Under_Review`) disputes; `resolve_dispute` SQL got explicit type casts (it failed with "inconsistent types deduced for parameter $1", so QA could never resolve an email dispute) |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 

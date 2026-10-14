@@ -304,9 +304,9 @@ export async function POST(req: NextRequest) {
       const updateScore = newScore !== undefined ? Number(newScore) : null;
       await query(
         `UPDATE email_reply_evaluations
-         SET dispute_status = $1,
-             qa_notes = COALESCE(qa_notes, '') || ' [Dispute Decision: ' || $1 || ' - ' || $2 || ']',
-             qa_override_score = COALESCE($3, qa_override_score),
+         SET dispute_status = $1::varchar,
+             qa_notes = COALESCE(qa_notes, '') || ' [Dispute Decision: ' || $1::text || ' - ' || $2::text || ']',
+             qa_override_score = COALESCE($3::numeric, qa_override_score),
              review_status = 'reviewed',
              reviewed_by = COALESCE(reviewed_by, $4),
              reviewed_at = NOW(),

@@ -828,7 +828,7 @@ export default function EmailEvaluationPage() {
                                   paddingTop: 6,
                                 }}>
                                   <div>
-                                    {item.dispute_status === 'Raised' && (
+                                    {item.dispute_status === 'Under_Review' && ( // forwarded by a TL: QA decides
                                       <div style={{ display: 'flex', gap: 6 }}>
                                         <button
                                           onClick={() => handleResolveDispute(item, 'Resolved')}
@@ -1001,7 +1001,7 @@ export default function EmailEvaluationPage() {
                                     padding: '12px 14px',
                                   }}>
                                     <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#6b21a8' }}>
-                                      Dispute Raised by Agent ({item.dispute_status})
+                                      Dispute Raised by Agent ({disputeLabel(item.dispute_status)})
                                     </div>
                                     <div style={{ fontSize: 13, color: '#3b0764', marginTop: 4 }}>
                                       {item.dispute_notes}
