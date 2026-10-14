@@ -57,3 +57,16 @@ export function periodBounds(period: Period, customFrom?: string, customTo?: str
   const r = resolveDateRange(period, customFrom, customTo);
   return dayBoundsISO(r.from, r.to);
 }
+
+const DISPUTE_LABELS: Record<string, string> = {
+  Raised: 'Raised by agent',
+  Under_Review: 'Forwarded to QA',
+  TL_Resolved: 'Resolved by TL',
+  Resolved: 'Resolved by QA',
+  Rejected: 'Rejected by QA',
+};
+
+/** Dispute status in plain words (mirrors the chat dispute labels); a dash when there is no dispute. */
+export function disputeLabel(status: string | null | undefined): string {
+  return DISPUTE_LABELS[status ?? ''] ?? '—';
+}

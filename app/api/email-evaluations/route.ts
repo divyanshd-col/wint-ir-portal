@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
     const fromDate = searchParams.get('from');
     const toDate = searchParams.get('to');
     const disputeStatus = searchParams.get('disputeStatus');
+    const disputeQueue = searchParams.get('disputeQueue'); // 'tl_pending' (raised, awaiting TL) | 'tl_history' (forwarded or decided)
     const limit = Math.min(Number(searchParams.get('limit') || 100), 500);
     const offset = Number(searchParams.get('offset') || 0);
 
@@ -90,12 +91,19 @@ export async function GET(req: NextRequest) {
       whereClauses.push(`(e.compliance_passed = FALSE OR array_length(e.compliance_issues, 1) > 0)`);
     }
 
-    if (tab === 'disputes' || disputesOnly === 'true') {
+    if (disputeQueue === 'tl_pending') {
+      whereClauses.push(`e.dispute_status = 'Raised'`);
+    } else if (disputeQueue === 'tl_history') {
+      whereClauses.push(`e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved')`);
+    } else if (tab === 'disputes') {
+      // QA queue: only disputes a TL has forwarded (like chats); Raised ones are still with the TL.
+      whereClauses.push(`e.dispute_status = 'Under_Review'`);
+    } else if (disputesOnly === 'true') {
       whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
     } else if (disputeStatus === 'pending') {
       whereClauses.push(`e.dispute_status IN ('Raised', 'Under_Review')`);
     } else if (disputeStatus === 'reviewed') {
-      whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected')`);
+      whereClauses.push(`e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved')`);
     }
 
     if (search) {
@@ -165,7 +173,10 @@ export async function GET(req: NextRequest) {
         ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score)) FILTER (WHERE e.evaluation_status = 'Completed'), 2) AS avg_score,
         COUNT(CASE WHEN e.compliance_passed = FALSE THEN 1 END)::int AS compliance_breach_count,
         COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS active_disputes_count,
-        COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected') THEN 1 END)::int AS reviewed_disputes_count,
+        COUNT(CASE WHEN e.dispute_status IN ('Resolved', 'Rejected', 'TL_Resolved') THEN 1 END)::int AS reviewed_disputes_count,
+        COUNT(CASE WHEN e.dispute_status = 'Under_Review' THEN 1 END)::int AS qa_disputes_count,
+        COUNT(CASE WHEN e.dispute_status = 'Raised' THEN 1 END)::int AS tl_pending_disputes_count,
+        COUNT(CASE WHEN e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved') THEN 1 END)::int AS tl_history_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
       FROM email_reply_evaluations e
       ${statsWhere}
@@ -203,6 +214,9 @@ export async function GET(req: NextRequest) {
         complianceBreachCount: Number(summary.compliance_breach_count || 0),
         activeDisputesCount: Number(summary.active_disputes_count || 0),
         reviewedDisputesCount: Number(summary.reviewed_disputes_count || 0),
+        qaDisputesCount: Number(summary.qa_disputes_count || 0),
+        tlPendingDisputesCount: Number(summary.tl_pending_disputes_count || 0),
+        tlHistoryDisputesCount: Number(summary.tl_history_disputes_count || 0),
         qaOverridesCount: Number(summary.qa_overrides_count || 0),
       },
       agentBreakdown: agentBreakdown || [],
@@ -321,6 +335,30 @@ export async function POST(req: NextRequest) {
       );
 
       return NextResponse.json({ ok: true, message: 'Dispute forwarded to QA successfully' });
+    }
+
+    // Action 3c: TL resolves a raised dispute at TL level (no QA review needed)
+    if (action === 'tl_resolve_dispute') {
+      const { messageId, notes } = body;
+      if (!messageId) {
+        return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
+      }
+      const session = await getServerSession(authOptions).catch(() => null);
+      const role = (session?.user as { role?: string } | undefined)?.role ?? '';
+      if (!['admin', 'tl'].includes(role)) {
+        return NextResponse.json({ error: 'Only a team lead can resolve a dispute at TL level' }, { status: 403 });
+      }
+
+      await query(
+        `UPDATE email_reply_evaluations
+         SET dispute_status = 'TL_Resolved',
+             dispute_notes = COALESCE(dispute_notes, '') || ' [TL Resolved: ' || $1 || ']',
+             updated_at = NOW()
+         WHERE message_id = $2 AND dispute_status = 'Raised'`,
+        [notes || 'Resolved query at TL level', messageId]
+      );
+
+      return NextResponse.json({ ok: true, message: 'Dispute resolved at TL level' });
     }
 
     // Action 4: Immediate sync re-evaluation of single reply

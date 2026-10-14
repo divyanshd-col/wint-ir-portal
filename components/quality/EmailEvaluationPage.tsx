@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
-import { periodBounds, intentLabel } from '@/lib/email/ui';
+import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import {
   DEFAULT_EMAIL_PARAMETERS,
   ParameterScoreValue,
@@ -37,7 +37,7 @@ interface EvaluationItem {
   parameter_scores?: Record<string, string | number>;
   qa_override_score?: number;
   qa_notes?: string;
-  dispute_status?: 'None' | 'Raised' | 'Under_Review' | 'Resolved' | 'Rejected';
+  dispute_status?: 'None' | 'Raised' | 'Under_Review' | 'TL_Resolved' | 'Resolved' | 'Rejected';
   dispute_notes?: string;
   evaluated_at?: string;
   subject_line?: string;
@@ -182,6 +182,7 @@ export default function EmailEvaluationPage() {
     pendingReviewCount?: number;
     reviewedCount?: number;
     activeDisputesCount?: number;
+    qaDisputesCount?: number;
     unscoredCount?: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -469,7 +470,7 @@ export default function EmailEvaluationPage() {
           </button>
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
-            <CountBadge count={summary?.activeDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
+            <CountBadge count={summary?.qaDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
           </button>
           <button style={tabStyle(tab === 'unscored')} onClick={() => handleTabChange('unscored')}>
             Awaiting AI
@@ -646,7 +647,7 @@ export default function EmailEvaluationPage() {
                     ),
                     csat: <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>,
                     dispute: (
-                      <td style={{ ...td, fontSize: 13 }}>{(item.dispute_status ?? 'None').replace('_', ' ')}</td>
+                      <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>
                     ),
                     reviewedBy: (
                       <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.reviewed_by || '—'}</td>

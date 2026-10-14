@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
-import { periodBounds, intentLabel, paramLabel } from '@/lib/email/ui';
+import { periodBounds, intentLabel, paramLabel, disputeLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
@@ -26,7 +26,7 @@ interface EvaluationItem {
   compliance_issues?: string[];
   parameter_scores?: Record<string, any>;
   qa_notes?: string;
-  dispute_status?: 'None' | 'Raised' | 'Under_Review' | 'Resolved' | 'Rejected';
+  dispute_status?: 'None' | 'Raised' | 'Under_Review' | 'TL_Resolved' | 'Resolved' | 'Rejected';
   dispute_notes?: string;
   subject_line?: string;
   thread_summary?: any;
@@ -236,7 +236,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
 
   const reviewedDisputesItems = useMemo(() => {
     return items.filter(
-      (item) => item.dispute_status === 'Resolved' || item.dispute_status === 'Rejected'
+      (item) => item.dispute_status === 'Resolved' || item.dispute_status === 'Rejected' || item.dispute_status === 'TL_Resolved'
     );
   }, [items]);
 
@@ -546,7 +546,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                   const score = item.effective_score ?? item.quality_score ?? null;
                   const isOverridden = item.qa_override_score !== null && item.qa_override_score !== undefined;
                   const isDisputed = item.dispute_status && item.dispute_status !== 'None';
-                  const isReviewedDispute = item.dispute_status === 'Resolved' || item.dispute_status === 'Rejected';
+                  const isReviewedDispute = item.dispute_status === 'Resolved' || item.dispute_status === 'Rejected' || item.dispute_status === 'TL_Resolved';
 
                   return (
                     <Fragment key={item.message_id}>
@@ -578,7 +578,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', color: 'var(--qa-text-3, #A1A1AA)' }}>—</td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 13 }}>
-                          {isDisputed ? (isReviewedDispute ? item.dispute_status : 'Pending TL Review') : <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}
+                          {isDisputed ? disputeLabel(item.dispute_status) : <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
                           <button
@@ -897,23 +897,23 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                     <div
                                       style={{
                                         background: isReviewedDispute
-                                          ? item.dispute_status === 'Resolved' ? '#f0fdf4' : '#fef2f2'
+                                          ? item.dispute_status !== 'Rejected' ? '#f0fdf4' : '#fef2f2'
                                           : '#fefce8',
                                         border: `1px solid ${
                                           isReviewedDispute
-                                            ? item.dispute_status === 'Resolved' ? '#bbf7d0' : '#fecaca'
+                                            ? item.dispute_status !== 'Rejected' ? '#bbf7d0' : '#fecaca'
                                             : '#fef08a'
                                         }`,
                                         borderRadius: 8,
                                         padding: '10px 14px',
                                         fontSize: 12,
                                         color: isReviewedDispute
-                                          ? item.dispute_status === 'Resolved' ? '#166534' : '#991b1b'
+                                          ? item.dispute_status !== 'Rejected' ? '#166534' : '#991b1b'
                                           : '#854d0e',
                                       }}
                                     >
                                       <div style={{ fontWeight: 600, marginBottom: 2 }}>
-                                        Dispute Status: {item.dispute_status}
+                                        Dispute Status: {disputeLabel(item.dispute_status)}
                                       </div>
                                       <div>&ldquo;{item.dispute_notes}&rdquo;</div>
                                     </div>

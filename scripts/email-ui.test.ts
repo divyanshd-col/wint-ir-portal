@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { robylonTicketUrl, resolveDateRange, intentLabel, trimEmailBody, paramLabel, dayBoundsISO } from '../lib/email/ui';
+import { robylonTicketUrl, resolveDateRange, intentLabel, trimEmailBody, paramLabel, dayBoundsISO, disputeLabel } from '../lib/email/ui';
 
 test('robylonTicketUrl - the unified-inbox link for a chat id', () => {
   assert.equal(robylonTicketUrl('110894'), 'https://app.robylon.ai/unified-inbox/share/110894');
@@ -45,4 +45,11 @@ test('dayBoundsISO - local start/end of the picked days, as instants the API can
   const { from, to } = dayBoundsISO('2026-10-08', '2026-10-14');
   assert.equal(from, new Date(2026, 9, 8, 0, 0, 0, 0).toISOString());
   assert.equal(to, new Date(2026, 9, 14, 23, 59, 59, 999).toISOString());
+});
+
+test('disputeLabel - who is holding the dispute, in the words the chat views use', () => {
+  assert.deepEqual(
+    ['Raised', 'Under_Review', 'TL_Resolved', 'Resolved', 'Rejected', 'None', undefined].map(disputeLabel),
+    ['Raised by agent', 'Forwarded to QA', 'Resolved by TL', 'Resolved by QA', 'Rejected by QA', '—', '—'],
+  );
 });

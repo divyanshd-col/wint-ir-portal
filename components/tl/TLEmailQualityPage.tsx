@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
-import { periodBounds, paramLabel, intentLabel } from '@/lib/email/ui';
+import { periodBounds, paramLabel, intentLabel, disputeLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
 
@@ -39,6 +39,9 @@ interface EvaluationItem {
   customer_email?: string;
   customer_phone?: string;
   thread_summary?: any;
+  dispute_notes?: string;
+  updated_at?: string;
+  reviewed_at?: string;
 }
 
 // ─── Design Tokens & Styles ───────────────────────────────────────────────────
@@ -81,12 +84,216 @@ const tdNum: React.CSSProperties = {
   fontSize: 13,
 };
 
+
+// ─── Disputes (same flow as Quality Chats: raised -> TL resolves or forwards to QA -> history) ──
+const dateOf = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—');
+
+const actionBtn: React.CSSProperties = {
+  height: 28, padding: '0 10px', borderRadius: 6, border: '1px solid var(--qa-border)',
+  background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+};
+
+function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending' | 'tl_history'; period: PeriodState; onChanged: () => void }) {
+  const [rows, setRows] = useState<EvaluationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [actioning, setActioning] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [agentFilter, setAgentFilter] = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState('');
+  const pending = queue === 'tl_pending';
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
+      const params = new URLSearchParams({ disputeQueue: queue, from, to, limit: '500' });
+      const res = await fetch(`/api/email-evaluations?${params.toString()}`);
+      const data = await res.json();
+      if (data.ok) setRows(data.items || []);
+    } catch (err) {
+      console.error('Failed to load email disputes:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [queue, period]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const act = async (item: EvaluationItem, action: 'forward_dispute' | 'tl_resolve_dispute', notes?: string) => {
+    setActioning(item.message_id);
+    setError(null);
+    try {
+      const res = await fetch('/api/email-evaluations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, messageId: item.message_id, notes }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setRows(prev => prev.filter(r => r.message_id !== item.message_id));
+      onChanged();
+    } catch {
+      setError(action === 'forward_dispute' ? 'Could not forward that dispute — please retry.' : 'Could not resolve that dispute — please retry.');
+    } finally {
+      setActioning(null);
+    }
+  };
+
+  const resolveAtTL = (item: EvaluationItem) => {
+    const note = prompt('Enter a note explaining why this query was resolved at TL level:');
+    if (note === null) return;
+    act(item, 'tl_resolve_dispute', note || 'Resolved query at TL level');
+  };
+
+  const agentsInRows = Array.from(new Set(rows.map(r => r.agent_name).filter(Boolean))).sort();
+  const shown = rows.filter(r =>
+    (!agentFilter || r.agent_name === agentFilter) &&
+    (!outcomeFilter || r.dispute_status === outcomeFilter));
+  const colCount = 7;
+  const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
+
+  return (
+    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+      {error && (
+        <div style={{ padding: '10px 16px', fontSize: 13, color: '#b91c1c', background: '#fef2f2', borderBottom: '1px solid var(--qa-border)' }}>{error}</div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+        {agentsInRows.length > 0 && (
+          <select value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={field}>
+            <option value="">All Agents</option>
+            {agentsInRows.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
+        {!pending && (
+          <select value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
+            <option value="">All Outcomes</option>
+            <option value="Under_Review">Forwarded to QA</option>
+            <option value="TL_Resolved">Resolved by TL</option>
+            <option value="Resolved">Resolved by QA</option>
+            <option value="Rejected">Rejected by QA</option>
+          </select>
+        )}
+        {(agentFilter || outcomeFilter) && (
+          <button onClick={() => { setAgentFilter(''); setOutcomeFilter(''); }} style={actionBtn}>Clear</button>
+        )}
+        <span style={{ marginLeft: 'auto', fontSize: 13, color: 'var(--qa-text-3)' }}>
+          {loading ? 'Loading…' : `Showing ${shown.length} of ${rows.length}`}
+        </span>
+      </div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+        <colgroup>
+          <col style={{ width: 130 }} />
+          <col />
+          <col style={{ width: 90 }} />
+          <col style={{ width: 80 }} />
+          <col style={{ width: 120 }} />
+          <col style={{ width: 150 }} />
+          <col style={{ width: pending ? 260 : 90 }} />
+        </colgroup>
+        <thead>
+          <tr>
+            <th style={th}>Ticket ID</th>
+            <th style={th}>Agent</th>
+            <th style={{ ...th, textAlign: 'right' }}>IQS</th>
+            <th style={th}>CSAT</th>
+            <th style={th}>{pending ? 'Raised' : 'Updated'}</th>
+            <th style={th}>{pending ? 'Status' : 'Outcome'}</th>
+            <th style={{ ...th, textAlign: 'right' }}>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr><td colSpan={colCount} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>Loading disputes…</td></tr>
+          ) : shown.length === 0 ? (
+            <tr><td colSpan={colCount} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+              {pending ? 'No disputes waiting for review' : 'No reviewed disputes'}
+            </td></tr>
+          ) : shown.map(item => {
+            const isOpen = expandedId === item.message_id;
+            const score = item.effective_score ?? item.quality_score;
+            return (
+              <React.Fragment key={item.message_id}>
+                <tr
+                  onClick={() => setExpandedId(isOpen ? null : item.message_id)}
+                  style={{ background: isOpen ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
+                >
+                  <td style={tdMono}><TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} /></td>
+                  <td style={{ ...td, fontWeight: 500 }}>{item.agent_name || 'Unassigned'}</td>
+                  <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
+                    {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                  </td>
+                  <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
+                  <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>{dateOf(pending ? item.updated_at : (item.reviewed_at ?? item.updated_at))}</td>
+                  <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>
+                  <td style={{ ...td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      {pending && (
+                        <>
+                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => resolveAtTL(item)}>Resolve</button>
+                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => act(item, 'forward_dispute')}>
+                            {actioning === item.message_id ? '…' : 'Forward to QA'}
+                          </button>
+                        </>
+                      )}
+                      <button onClick={() => setExpandedId(isOpen ? null : item.message_id)} style={{ background: 'none', border: 0, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
+                        {isOpen ? 'Hide ▲' : 'View ▼'}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {isOpen && (
+                  <tr>
+                    <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                      <div style={{ background: 'var(--qa-gray-50)', borderTop: '1px solid var(--qa-border-sub)', padding: '20px 24px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                              Dispute raised by {item.agent_name || 'agent'}
+                            </div>
+                            <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
+                              {item.dispute_notes || '—'}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                              Agent Outbound Response
+                            </div>
+                            <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '12px 16px', maxHeight: 420, overflowY: 'auto' }}>
+                              <EmailMessageView content={item.agent_reply_text} fallback="No text content." />
+                            </div>
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                            Customer Context / Query
+                          </div>
+                          <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '14px 16px' }}>
+                            <CustomerSummaryBlock threadSummary={item.thread_summary} customerMessage={item.customer_message} subjectLine={item.subject_line} />
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function TLEmailQualityPage() {
   const [agents, setAgents] = useState<AgentBreakdown[]>([]);
   const [replies, setReplies] = useState<EvaluationItem[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
   const [loading, setLoading] = useState<boolean>(true);
+  const [tab, setTab] = useState<'evaluated' | 'raised' | 'reviewed'>('evaluated');
+  const [counts, setCounts] = useState<{ evaluated: number; raised: number; reviewed: number } | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
 
@@ -104,6 +311,7 @@ export default function TLEmailQualityPage() {
       const data = await res.json();
       if (data.ok) {
         setAgents(data.agentBreakdown || []);
+        if (data.summary) setCounts({ evaluated: data.summary.completedCount, raised: data.summary.tlPendingDisputesCount, reviewed: data.summary.tlHistoryDisputesCount });
         setReplies(data.items || []);
       }
     } catch (err) {
@@ -138,6 +346,40 @@ export default function TLEmailQualityPage() {
         <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
+      {/* ── Tabs (same as Quality Chats) ── */}
+      <div style={{ display: 'flex', gap: 4, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 4, width: 'fit-content', marginBottom: 20 }}>
+        {([
+          ['evaluated', 'Evaluated Emails', counts?.evaluated],
+          ['raised', 'Disputes Raised', counts?.raised],
+          ['reviewed', 'Reviewed Disputes', counts?.reviewed],
+        ] as const).map(([key, label, n]) => {
+          const active = tab === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              style={{
+                height: 36, padding: '0 16px', border: 'none', borderRadius: 8,
+                background: active ? 'var(--qa-gray-700)' : 'transparent',
+                color: active ? '#fff' : 'var(--qa-text-2)',
+                fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 500 : 400,
+                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
+              }}
+            >
+              {label}
+              {n != null && (key === 'evaluated' || n > 0 || key === 'reviewed') && (
+                <span style={{ fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px', background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100)', color: active ? '#fff' : 'var(--qa-text-2)' }}>{n}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'raised' && <EmailDisputesSection queue="tl_pending" period={period} onChanged={fetchData} />}
+      {tab === 'reviewed' && <EmailDisputesSection queue="tl_history" period={period} onChanged={fetchData} />}
+
+      {tab === 'evaluated' && (
+      <>
       {/* ── KPI Cards (Consistent with QAAnalyticsDashboard / IQSRingCard) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
         <div style={{
@@ -526,6 +768,8 @@ export default function TLEmailQualityPage() {
           </table>
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }
