@@ -38,7 +38,7 @@ import { findBreachingTickets, type EmailTicketRow, type BreachingTicket } from 
 const row = (o: Partial<EmailTicketRow>): EmailTicketRow => ({
   id: 't', chat_id: 'c', customer_email: 'a@example.com', customer_phone: '',
   status: 'OPEN', created_at: new Date('2026-09-30T05:00:00Z'), first_response_at: null,
-  updated_at: new Date('2026-09-30T05:00:00Z'), ...o,
+  updated_at: new Date('2026-09-30T05:00:00Z'), intent_l1: null, ...o,
 });
 // Trigger 1 window on 2026-10-01 IST: 04:30Z .. 13:30Z. Breach = anchor + 24h.
 const W1 = getSlaWindow(new Date('2026-10-01T04:15:00Z'), 1);
@@ -86,11 +86,11 @@ test('findBreachingTickets sorts by breach time ascending', () => {
 });
 
 // ---- Step 3: Slack payload (no network) ----
-import { buildSlackPayload, formatMentions, formatBreachesIn, formatBreachesAt } from '../lib/sla-breach';
+import { buildSlackPayload, formatMentions, formatBreachesIn, formatBreachesAt, cleanIntent } from '../lib/sla-breach';
 
 const NOW = new Date('2026-10-01T10:51:00Z'); // 16:21 IST
 const mk = () => findBreachingTickets([
-  row({ chat_id: '111', customer_email: 'secret@example.com', created_at: new Date('2026-09-30T13:34:00Z') }), // breach 13:34Z = 19:04 IST, 2h43m away
+  row({ chat_id: '111', customer_email: 'secret@example.com', intent_l1: 'KYC', created_at: new Date('2026-09-30T13:34:00Z') }), // breach 13:34Z = 19:04 IST, 2h43m away
   row({ chat_id: '222', created_at: new Date('2026-09-30T20:00:00Z') }), // breach next day 20:00Z - 1d9h09m away
 ], { windowStart: new Date('2026-10-01T00:00:00Z'), windowEnd: new Date('2026-10-03T00:00:00Z') });
 
@@ -130,12 +130,14 @@ test('buildSlackPayload - mentions + ticket table with the 3 columns, no email, 
   const table: any = p.blocks!.find((b: any) => b.type === 'table');
   assert.ok(table);
   const [header, r1, r2] = table.rows;
-  assert.deepEqual(header.map((c: any) => c.text), ['Ticket ID', 'Breaches in', 'Breaches at', 'Open ticket']);
+  assert.deepEqual(header.map((c: any) => c.text), ['Ticket ID', 'Category', 'Breaches in', 'Breaches at', 'Open ticket']);
   assert.equal(r1[0].text, '111');
-  assert.equal(r1[1].text, '2h 43m');
-  assert.equal(r1[2].text, '1 Oct, 7:04 PM'); // 13:34Z = 19:04 IST
+  assert.equal(r1[1].text, 'KYC');
+  assert.equal(r2[1].text, '—'); // no intent yet
+  assert.equal(r1[2].text, '2h 43m');
+  assert.equal(r1[3].text, '1 Oct, 7:04 PM'); // 13:34Z = 19:04 IST
   assert.equal(r2[0].text, '222');
-  const link = r1[3].elements[0].elements[0];
+  const link = r1[4].elements[0].elements[0];
   assert.equal(link.type, 'link');
   assert.equal(link.url, 'https://app.robylon.ai/unified-inbox/share/111');
   assert.equal(link.text, 'Open ticket');
@@ -160,7 +162,7 @@ function deps() {
     d: {
       secret: 'shh',
       now: new Date('2026-10-01T04:15:00Z'),
-      fetchRows: async () => { calls.fetch++; return [] as BreachingTicket[]; },
+      fetchOpenTickets: async () => { calls.fetch++; return [] as EmailTicketRow[]; },
       post: async (p: { text: string }) => { calls.post.push(p.text); },
     },
   };
@@ -243,12 +245,75 @@ test('buildSlackPayload - zero human rows but some excluded still says so, with 
 test('runSlaBreachCron - drops automated senders from the alert and reports the count', async () => {
   const { d } = deps();
   const posted: string[] = [];
-  const t = (chat: string, email: string) => ({ ...mk()[0], chat_id: chat, customer_email: email });
+  const t = (chat: string, email: string) => row({ chat_id: chat, customer_email: email, created_at: new Date('2026-09-30T08:00:00Z') });
   const res = await runSlaBreachCron({
     ...d, authHeader: 'Bearer shh', trigger: '1',
-    fetchRows: async () => [t('900', 'real@gmail.com'), t('901', 'noreply@x.com')],
+    fetchOpenTickets: async () => [t('900', 'real@gmail.com'), t('901', 'noreply@x.com')],
     post: async (p) => { posted.push(JSON.stringify(p)); },
   });
   assert.deepEqual(res.body, { ok: true, count: 1, excluded: 1 });
   assert.ok(posted[0].includes('900') && !posted[0].includes('901'));
+});
+
+// ---- L1 intent ----
+test('cleanIntent - keeps names, drops empty, "None" and raw ids', () => {
+  assert.equal(cleanIntent('KYC'), 'KYC');
+  assert.equal(cleanIntent('  Interest Repayment '), 'Interest Repayment');
+  for (const v of [null, undefined, '', '  ', 'None', 'none', 'a34fb658-285d-450e-951e-b804c98cfff1']) assert.equal(cleanIntent(v), null, String(v));
+});
+
+test('findBreachingTickets - carries the L1 intent through', () => {
+  const r = findBreachingTickets([row({ chat_id: 'x', intent_l1: 'Taxation', created_at: new Date('2026-09-30T08:00:00Z') })], W1);
+  assert.equal(r[0].intent_l1, 'Taxation');
+});
+
+// ---- Accuracy rules: last activity is the customer's, status exclusions, precise anchor ----
+import { isStaffEmail, isExcludedChatStatus } from '../lib/sla-breach';
+
+test('isStaffEmail - only the @wintwealth.com domain, any case', () => {
+  assert.equal(isStaffEmail('hello@wintwealth.com'), true);
+  assert.equal(isStaffEmail('Sneha@WintWealth.com'), true);
+  for (const e of ['ritik486@gmail.com', 'x@notwintwealth.com', 'wintwealth.com@gmail.com', '', null, undefined])
+    assert.equal(isStaffEmail(e as string | null | undefined), false, String(e));
+});
+
+test('isExcludedChatStatus - Repayment and Repayment External Dependency only', () => {
+  assert.equal(isExcludedChatStatus('Repayment'), true);
+  assert.equal(isExcludedChatStatus('Repayment External Dependency'), true);
+  assert.equal(isExcludedChatStatus('  repayment external dependency '), true);
+  for (const s of ['Customer reponded', 'External Dependency', 'Repayment Int/Ext Dependency', 'PENDING', '', null, undefined])
+    assert.equal(isExcludedChatStatus(s as string | null | undefined), false, String(s));
+});
+
+test('findBreachingTickets - anchors on the last customer message, not updated_at', () => {
+  const r = findBreachingTickets([row({
+    chat_id: 'm1', first_response_at: new Date('2026-09-20T01:00:00Z'),
+    created_at: new Date('2026-09-20T00:00:00Z'), updated_at: new Date('2026-09-25T00:00:00Z'), // both far outside the window
+    last_message_from: 'cust@gmail.com', last_message_at: new Date('2026-09-30T09:00:00Z'),
+  })], W1);
+  assert.deepEqual(r.map((x) => x.chat_id), ['m1']);
+  assert.equal(r[0].user_last_replied_at.toISOString(), '2026-09-30T09:00:00.000Z');
+});
+
+test('findBreachingTickets - skips tickets whose last message came from @wintwealth.com', () => {
+  const inWindow = new Date('2026-09-30T09:00:00Z');
+  const r = findBreachingTickets([
+    row({ chat_id: 'agent-last', last_message_from: 'hello@wintwealth.com', last_message_at: inWindow }),
+    row({ chat_id: 'sneha-last', last_message_from: 'Sneha@wintwealth.com', last_message_at: inWindow }),
+    row({ chat_id: 'customer-last', last_message_from: 'cust@gmail.com', last_message_at: inWindow }),
+    row({ chat_id: 'no-events', created_at: inWindow }), // no message events: unanswered, customer spoke last
+  ], W1);
+  assert.deepEqual(r.map((x) => x.chat_id).sort(), ['customer-last', 'no-events']);
+});
+
+test('findBreachingTickets - skips Repayment and Repayment External Dependency, keeps other statuses', () => {
+  const t = new Date('2026-09-30T09:00:00Z');
+  const r = findBreachingTickets([
+    row({ chat_id: 'rep', chat_status: 'Repayment', created_at: t }),
+    row({ chat_id: 'rep-ext', chat_status: 'Repayment External Dependency', created_at: t }),
+    row({ chat_id: 'pending', chat_status: 'PENDING', created_at: t }),
+    row({ chat_id: 'cust-resp', chat_status: 'Customer reponded', created_at: t }),
+    row({ chat_id: 'no-status', chat_status: null, created_at: t }),
+  ], W1);
+  assert.deepEqual(r.map((x) => x.chat_id).sort(), ['cust-resp', 'no-status', 'pending']);
 });

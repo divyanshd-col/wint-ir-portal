@@ -23,6 +23,12 @@ export interface EmailTicketRow {
   created_at: Date;
   first_response_at: Date | null;
   updated_at: Date;
+  intent_l1?: string | null;
+  /** Sender and timestamp of the ticket's latest conversation message (customer incoming or agent reply; not internal notes). */
+  last_message_from?: string | null;
+  last_message_at?: Date | null;
+  /** Robylon "Chat Status" property, e.g. "Repayment". */
+  chat_status?: string | null;
 }
 
 export interface BreachingTicket {
@@ -30,6 +36,7 @@ export interface BreachingTicket {
   ticket_id: string;
   customer_email: string | null;
   customer_phone: string | null;
+  intent_l1?: string | null;
   user_last_replied_at: Date;
   sla_breach_time: Date;
 }
@@ -37,20 +44,38 @@ export interface BreachingTicket {
 export const SLA_HOURS = 24;
 
 /**
- * SLA clock anchor. Approximation: there is no "customer's last message" column, so once a
- * first response exists we fall back to updated_at, which moves on ANY row change.
+ * SLA clock anchor: the time of the customer's last message when Robylon's message events have it.
+ * Without message events: unanswered tickets use created_at (exact); once a first response exists we
+ * fall back to updated_at, which moves on ANY row change (approximation).
  */
-export function slaClockStart(r: Pick<EmailTicketRow, 'created_at' | 'first_response_at' | 'updated_at'>): Date {
-  return r.first_response_at == null ? r.created_at : r.updated_at;
+export function slaClockStart(
+  r: Pick<EmailTicketRow, 'created_at' | 'first_response_at' | 'updated_at' | 'last_message_at'>,
+): Date {
+  return r.last_message_at ?? (r.first_response_at == null ? r.created_at : r.updated_at);
 }
 
-/** In-memory equivalent of the production SQL: OPEN tickets whose anchor + 24h falls in the window. */
+/** True for Wint staff senders: the last message came from our side, so the ball is in the customer's court. */
+export function isStaffEmail(email: string | null | undefined): boolean {
+  return /@wintwealth\.com$/i.test((email ?? '').trim());
+}
+
+const EXCLUDED_CHAT_STATUSES = new Set(['repayment', 'repayment external dependency']);
+
+/** Chat Status values that are handled elsewhere (repayment flows) and must not raise SLA alerts. */
+export function isExcludedChatStatus(status: string | null | undefined): boolean {
+  return EXCLUDED_CHAT_STATUSES.has((status ?? '').trim().toLowerCase());
+}
+
+/**
+ * OPEN tickets whose SLA (anchor + 24h) breaches inside the window, where the customer spoke last
+ * and the Chat Status is not a repayment one.
+ */
 export function findBreachingTickets(
   rows: EmailTicketRow[],
   { windowStart, windowEnd }: { windowStart: Date; windowEnd: Date },
 ): BreachingTicket[] {
   return rows
-    .filter((r) => r.status === 'OPEN')
+    .filter((r) => r.status === 'OPEN' && !isStaffEmail(r.last_message_from) && !isExcludedChatStatus(r.chat_status))
     .map((r) => {
       const anchor = slaClockStart(r);
       return {
@@ -58,6 +83,7 @@ export function findBreachingTickets(
         ticket_id: r.id,
         customer_email: r.customer_email,
         customer_phone: r.customer_phone,
+        intent_l1: r.intent_l1 ?? null,
         user_last_replied_at: anchor,
         sla_breach_time: new Date(anchor.getTime() + SLA_HOURS * HOUR_MS),
       };
@@ -88,6 +114,14 @@ export function formatBreachesIn(breach: Date, now: Date): string {
   if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** L1 intent name for display, or null when Robylon has not classified the ticket ("None", empty, or a raw id). */
+export function cleanIntent(v: string | null | undefined): string | null {
+  const t = (v ?? '').trim();
+  return !t || t.toLowerCase() === 'none' || UUID.test(t) ? null : t;
 }
 
 /** Breach time in IST, e.g. "1 Oct, 7:04 PM". */
@@ -139,9 +173,10 @@ export function buildSlackPayload(
   const table = {
     type: 'table',
     rows: [
-      [cell('Ticket ID'), cell('Breaches in'), cell('Breaches at'), cell('Open ticket')],
+      [cell('Ticket ID'), cell('Category'), cell('Breaches in'), cell('Breaches at'), cell('Open ticket')],
       ...shown.map((r) => [
         cell(r.chat_id),
+        cell(cleanIntent(r.intent_l1) ?? '—'),
         cell(formatBreachesIn(r.sla_breach_time, now)),
         cell(formatBreachesAt(r.sla_breach_time)),
         {
@@ -171,7 +206,7 @@ export interface CronDeps {
   secret: string | undefined;
   trigger: string | null;
   now: Date;
-  fetchRows: (window: { windowStart: Date; windowEnd: Date }) => Promise<BreachingTicket[]>;
+  fetchOpenTickets: () => Promise<EmailTicketRow[]>;
   mentions?: string;
   post: (payload: SlackPayload) => Promise<void>;
 }
@@ -186,7 +221,8 @@ export async function runSlaBreachCron(d: CronDeps): Promise<CronResult> {
     return { status: 400, body: { error: 'trigger must be 1 or 2' } };
   }
   const t = Number(trigger) as SlaTrigger;
-  const { human, automatedCount } = splitAutomated(await d.fetchRows(getSlaWindow(d.now, t)));
+  const breaching = findBreachingTickets(await d.fetchOpenTickets(), getSlaWindow(d.now, t));
+  const { human, automatedCount } = splitAutomated(breaching);
   await d.post(buildSlackPayload(human, WINDOW_LABELS[t], d.now, formatMentions(d.mentions), automatedCount));
   return { status: 200, body: { ok: true, count: human.length, excluded: automatedCount } };
 }
