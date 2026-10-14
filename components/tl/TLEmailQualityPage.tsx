@@ -645,9 +645,67 @@ export default function TLEmailQualityPage() {
                               borderTop: '1px solid var(--qa-border-sub)',
                               padding: '20px 24px',
                               display: 'grid',
-                              gridTemplateColumns: '1.2fr 1fr',
+                              gridTemplateColumns: '1fr 1.2fr',
                               gap: 24,
                             }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
+                                </div>
+                                <div style={{
+                                  border: '1px solid var(--qa-border)',
+                                  borderRadius: 8,
+                                  background: 'var(--qa-card)',
+                                  overflow: 'hidden',
+                                }}>
+                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
+                                    <ScoreRing score={reply.effective_score ?? reply.quality_score} />
+                                    <div>
+                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
+                                        <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
+                                        {' · '}
+                                        {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
+                                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {reply.compliance_issues && reply.compliance_issues.length > 0 && (
+                                        <div style={{ color: '#b91c1c', fontWeight: 600 }}>Breaches: {reply.compliance_issues.join(', ')}</div>
+                                      )}
+                                      {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
+                                    </div>
+                                  )}
+                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                    const scores = reply.parameter_scores;
+                                    const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
+                                    const reason = scores?.__reasoning?.[def.key];
+                                    return (
+                                      <div key={def.key} style={{
+                                        padding: '12px 16px',
+                                        borderBottom: idx < DEFAULT_EMAIL_PARAMETERS.length - 1 ? '1px solid var(--qa-border-sub)' : 'none',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 12,
+                                      }}>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{def.name}</div>
+                                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>{def.description}</div>
+                                          {reason && (
+                                            <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>{reason}</div>
+                                          )}
+                                        </div>
+                                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+                                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: MONO }}>{paramLabel(val)}</span>
+                                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, minWidth: 28, textAlign: 'right' }}>{def.defaultWeight}%</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                                 <div>
                                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -721,64 +779,6 @@ export default function TLEmailQualityPage() {
                                       fallback="No text content."
                                     />
                                   </div>
-                                </div>
-                              </div>
-
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
-                                </div>
-                                <div style={{
-                                  border: '1px solid var(--qa-border)',
-                                  borderRadius: 8,
-                                  background: 'var(--qa-card)',
-                                  overflow: 'hidden',
-                                }}>
-                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
-                                    <ScoreRing score={reply.effective_score ?? reply.quality_score} />
-                                    <div>
-                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
-                                        <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
-                                        {' · '}
-                                        {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
-                                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                      {reply.compliance_issues && reply.compliance_issues.length > 0 && (
-                                        <div style={{ color: '#b91c1c', fontWeight: 600 }}>Breaches: {reply.compliance_issues.join(', ')}</div>
-                                      )}
-                                      {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
-                                    </div>
-                                  )}
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
-                                    const scores = reply.parameter_scores;
-                                    const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
-                                    const reason = scores?.__reasoning?.[def.key];
-                                    return (
-                                      <div key={def.key} style={{
-                                        padding: '12px 16px',
-                                        borderBottom: idx < DEFAULT_EMAIL_PARAMETERS.length - 1 ? '1px solid var(--qa-border-sub)' : 'none',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 12,
-                                      }}>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                          <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{def.name}</div>
-                                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>{def.description}</div>
-                                          {reason && (
-                                            <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>{reason}</div>
-                                          )}
-                                        </div>
-                                        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
-                                          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: MONO }}>{paramLabel(val)}</span>
-                                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, minWidth: 28, textAlign: 'right' }}>{def.defaultWeight}%</span>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
                                 </div>
                               </div>
                             </div>

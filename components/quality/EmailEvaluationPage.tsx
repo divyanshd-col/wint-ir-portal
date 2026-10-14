@@ -683,108 +683,10 @@ export default function EmailEvaluationPage() {
                               borderTop: '1px solid var(--qa-border-sub)',
                               padding: '24px 28px',
                               display: 'grid',
-                              gridTemplateColumns: '1.2fr 1fr',
+                              gridTemplateColumns: '1fr 1.2fr',
                               gap: 28,
                             }}>
-                              {/* Left Pane: Customer Query Context & Agent Outbound Reply */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Customer Context &amp; Query Summary
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
-                                      style={{
-                                        height: 26,
-                                        padding: '0 10px',
-                                        borderRadius: 6,
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        border: '1px solid var(--qa-border)',
-                                        background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                        color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 5,
-                                        transition: 'all 0.15s',
-                                      }}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <polyline points="12 6 12 12 16 14" />
-                                      </svg>
-                                      {historyOpen[item.message_id] ? 'Hide History' : 'History'}
-                                    </button>
-                                  </div>
-
-                                  {/* History Panel */}
-                                  {historyOpen[item.message_id] && (
-                                    <EmailHistoryPanel
-                                      customerEmail={item.customer_email}
-                                      chatId={item.chat_id}
-                                      ticketId={item.ticket_id}
-                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
-                                    />
-                                  )}
-
-                                  {/* Customer Context / Query: ONLY SUMMARY */}
-                                  <div style={{
-                                    background: 'var(--qa-card)',
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    padding: '14px 16px',
-                                  }}>
-                                    <CustomerSummaryBlock
-                                      threadSummary={item.thread_summary}
-                                      customerMessage={item.customer_message}
-                                      subjectLine={item.subject_line}
-                                    />
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                                    Agent Outbound Reply ({item.agent_name || 'Agent'})
-                                  </div>
-                                  <div style={{
-                                    background: 'var(--qa-card)',
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    padding: '14px 16px',
-                                    fontSize: 13,
-                                    lineHeight: '1.6',
-                                    color: 'var(--qa-text)',
-                                    maxHeight: 420,
-                                    overflowY: 'auto',
-                                  }}>
-                                    <EmailMessageView
-                                      content={item.agent_reply_text}
-                                      fallback="No message content available."
-                                    />
-                                  </div>
-                                </div>
-
-                                {item.dispute_status && item.dispute_status !== 'None' && (
-                                  <div style={{
-                                    background: '#faf5ff',
-                                    border: '1px solid #e9d5ff',
-                                    borderRadius: 8,
-                                    padding: '12px 14px',
-                                  }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#6b21a8' }}>
-                                      Dispute Raised by Agent ({item.dispute_status})
-                                    </div>
-                                    <div style={{ fontSize: 13, color: '#3b0764', marginTop: 4 }}>
-                                      {item.dispute_notes}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Right Pane: AI Score Ring, Parameters, Compliance & QA Override Form */}
+                              {/* Left Pane: AI Score Ring, Parameters, Compliance & QA Override Form (evaluation on the left, as in chats) */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                                 {/* Top Ring & Score Summary Card */}
                                 <div style={{
@@ -1068,6 +970,104 @@ export default function EmailEvaluationPage() {
                                     )}
                                   </div>
                                 </div>
+                              </div>
+
+                              {/* Right Pane: Customer Query Context & Agent Outbound Reply (conversation on the right, as in chats) */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                      Customer Context &amp; Query Summary
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
+                                      style={{
+                                        height: 26,
+                                        padding: '0 10px',
+                                        borderRadius: 6,
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        cursor: 'pointer',
+                                        border: '1px solid var(--qa-border)',
+                                        background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                        color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 5,
+                                        transition: 'all 0.15s',
+                                      }}
+                                    >
+                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <polyline points="12 6 12 12 16 14" />
+                                      </svg>
+                                      {historyOpen[item.message_id] ? 'Hide History' : 'History'}
+                                    </button>
+                                  </div>
+
+                                  {/* History Panel */}
+                                  {historyOpen[item.message_id] && (
+                                    <EmailHistoryPanel
+                                      customerEmail={item.customer_email}
+                                      chatId={item.chat_id}
+                                      ticketId={item.ticket_id}
+                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
+                                    />
+                                  )}
+
+                                  {/* Customer Context / Query: ONLY SUMMARY */}
+                                  <div style={{
+                                    background: 'var(--qa-card)',
+                                    border: '1px solid var(--qa-border)',
+                                    borderRadius: 8,
+                                    padding: '14px 16px',
+                                  }}>
+                                    <CustomerSummaryBlock
+                                      threadSummary={item.thread_summary}
+                                      customerMessage={item.customer_message}
+                                      subjectLine={item.subject_line}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div>
+                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                                    Agent Outbound Reply ({item.agent_name || 'Agent'})
+                                  </div>
+                                  <div style={{
+                                    background: 'var(--qa-card)',
+                                    border: '1px solid var(--qa-border)',
+                                    borderRadius: 8,
+                                    padding: '14px 16px',
+                                    fontSize: 13,
+                                    lineHeight: '1.6',
+                                    color: 'var(--qa-text)',
+                                    maxHeight: 420,
+                                    overflowY: 'auto',
+                                  }}>
+                                    <EmailMessageView
+                                      content={item.agent_reply_text}
+                                      fallback="No message content available."
+                                    />
+                                  </div>
+                                </div>
+
+                                {item.dispute_status && item.dispute_status !== 'None' && (
+                                  <div style={{
+                                    background: '#faf5ff',
+                                    border: '1px solid #e9d5ff',
+                                    borderRadius: 8,
+                                    padding: '12px 14px',
+                                  }}>
+                                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#6b21a8' }}>
+                                      Dispute Raised by Agent ({item.dispute_status})
+                                    </div>
+                                    <div style={{ fontSize: 13, color: '#3b0764', marginTop: 4 }}>
+                                      {item.dispute_notes}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </td>

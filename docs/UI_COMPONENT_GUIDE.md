@@ -114,6 +114,8 @@ Every chat, call and email page, for every persona (QA, TL, agent), uses the sam
                    footer:     Pager (Prev / Next), only when more than one page
 ```
 
+**Detail drawer (row expansion):** the evaluation is on the **left** (score ring/header, parameter list with values, weights and reasoning, QA notes / override) and the conversation is on the **right** (customer context, the agent's reply, history). This is how chat and call evaluations lay out, and it applies to the QA, TL and agent email drawers alike (QA/TL grid is `1fr 1.2fr`, agent left pane is a fixed 480px). Don't put the conversation on the left.
+
 How each email page maps to it:
 
 | Page | Header | Tabs (left) | Right slot | Card |
@@ -173,7 +175,7 @@ Data: `GET/POST /api/email-evaluations` (`app/api/email-evaluations/route.ts`) o
 QA columns are driven by `TAB_COLS` / `COL_LABEL` / `COL_WIDTH` in `EmailEvaluationPage.tsx`; Ticket ID, Agent and IQS headers are client-side sortable (like the chat QA table). There is deliberately no Sent/Date column, no Status column and no Compliance column in the tables (compliance details stay in the expanded drawer).
 
 ### Expanded drawers
-- **QA:** customer summary + history, agent outbound reply, IQS ring, compliance badge and breaches, the seven parameters with Yes/Half/No(/NA) buttons and AI reasoning, QA override form, dispute note and resolve controls.
+- **QA** (evaluation left, conversation right): IQS ring, compliance badge and breaches, the seven parameters with buttons and AI reasoning, QA override form; on the right the customer summary + history, agent outbound reply, compliance badge and breaches, the seven parameters with Yes/Half/No(/NA) buttons and AI reasoning, QA override form, dispute note and resolve controls.
 - **TL / agent:** a header card (ring via `ScoreRing`, agent name, ticket id and date), then the same seven parameters via `DEFAULT_EMAIL_PARAMETERS` (`lib/email/context-builder.ts`: name, description, aliases, weight) with the plain value from `paramLabel`, the weight (`defaultWeight`, shown as `25%`; the seven add up to 100) and the AI reasoning (`parameter_scores.__reasoning[key]`). Never print raw stored keys.
 - Reply boxes size to their content and scroll only past 420px.
 
@@ -227,7 +229,8 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `7a438eb` | TL dispute tabs for emails; `TL_Resolved` status and `tl_resolve_dispute`; QA sees only forwarded disputes; `disputeQueue` filter and new counts |
 | `84bbc19` | Whole-number IQS in the ring/labels; 💡 removed from parameter reasoning |
 | `c5eb13b`, `6f2acba` | Parameter weights (%) and the IQS ring + header card in the TL detail panel (shared `ScoreRing`) |
-| (this change) | Email pages follow the chat/call page template: title/subtitle only, tabs left + PeriodFilter right, one card with filter bar + table + pager, KPI cards on the Evaluated tab, QA tab order and labels as in chats, client-side paging (`TablePaging`) |
+| `ec215c7` | Email pages follow the chat/call page template: title/subtitle only, tabs left + PeriodFilter right, one card with filter bar + table + pager, KPI cards on the Evaluated tab, QA tab order and labels as in chats, client-side paging (`TablePaging`) |
+| (this change) | Email detail drawers: evaluation (ring + parameters) on the left, conversation on the right, as in chats (QA and TL swapped; agent already matched) |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 
