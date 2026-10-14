@@ -747,7 +747,7 @@ export default function TLEmailQualityPage() {
                                           <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>{def.name}</div>
                                           <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>{def.description}</div>
                                           {reason && (
-                                            <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>💡 {reason}</div>
+                                            <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>{reason}</div>
                                           )}
                                         </div>
                                         <div style={{ flexShrink: 0, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: MONO }}>{paramLabel(val)}</div>

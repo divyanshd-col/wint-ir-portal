@@ -107,7 +107,8 @@ const chip: React.CSSProperties = {
 
 
 // ─── SVG Score Ring (identical to EvalPanel) ──────────────────────────────────
-function ScoreRing({ score }: { score: number | null }) {
+function ScoreRing({ score: rawScore }: { score: number | null }) {
+  const score = rawScore == null ? null : Math.round(Number(rawScore));
   if (score == null) {
     return (
       <svg width="60" height="60" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
@@ -811,15 +812,15 @@ export default function EmailEvaluationPage() {
                                         IQS
                                       </div>
                                       <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--qa-text)', marginTop: 2 }}>
-                                        {currentIQS != null ? `${currentIQS}%` : 'Pending'}
+                                        {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : 'Pending'}
                                       </div>
                                       {isSessionOverridden && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          Adjusted from {item.quality_score}%
+                                          Adjusted from {Math.round(Number(item.quality_score))}%
                                         </div>
                                       ) : hasOverride && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          QA Override from {item.quality_score}%
+                                          QA Override from {Math.round(Number(item.quality_score))}%
                                         </div>
                                       ) : null}
                                     </div>
@@ -902,7 +903,7 @@ export default function EmailEvaluationPage() {
                                             </div>
                                             {reason && (
                                               <div style={{ fontSize: 11, color: '#4b5563', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>
-                                                💡 {reason}
+                                                {reason}
                                               </div>
                                             )}
                                           </div>
