@@ -67,7 +67,17 @@ const DISPUTE_LABELS: Record<string, string> = {
 };
 
 /** Dispute status in plain words (mirrors the chat dispute labels); a dash when there is no dispute. */
-export function disputeLabel(status: string | null | undefined): string {
+export function disputeLabel(status: string | null | undefined, qaName?: any): string {
+  const nameStr = typeof qaName === 'string' && qaName.trim() ? qaName.trim() : null;
+  if (status === 'Under_Review') {
+    return nameStr && nameStr.toLowerCase() !== 'qa' ? `Forwarded to ${nameStr}` : 'Forwarded to QA';
+  }
+  if (status === 'Resolved') {
+    return nameStr && nameStr.toLowerCase() !== 'qa' ? `Resolved by ${nameStr}` : 'Resolved by QA';
+  }
+  if (status === 'Rejected') {
+    return nameStr && nameStr.toLowerCase() !== 'qa' ? `Rejected by ${nameStr}` : 'Rejected by QA';
+  }
   return DISPUTE_LABELS[status ?? ''] ?? '—';
 }
 

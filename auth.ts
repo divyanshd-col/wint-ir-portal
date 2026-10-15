@@ -61,7 +61,7 @@ export const authOptions: NextAuthOptions = {
             }
             await recordLogin(user.user_id).catch(() => {});
             await audit('login_success', { targetEmail: email, detail: { user_id: user.user_id } }).catch(() => {});
-            return { id: email, name: email, email, role: user.role } as any;
+            return { id: email, name: user.name || email, email, role: user.role } as any;
           }
         } catch (err) {
           // Re-throw the explicit status messages above; only swallow DB errors
@@ -81,7 +81,7 @@ export const authOptions: NextAuthOptions = {
         if (!valid) return null;
 
         const role: UserRole = found.role ?? (found.isAdmin ? 'admin' : 'agent');
-        return { id: email, name: email, email, role } as any;
+        return { id: email, name: found.agentName || (found as any).name || email, email, role } as any;
       },
     }),
   ],
@@ -90,6 +90,7 @@ export const authOptions: NextAuthOptions = {
       if (account && user) {
         token.role = (user as any).role ?? 'agent';
         token.isAdmin = token.role === 'admin';
+        if ((user as any).name) token.name = (user as any).name;
         try {
           const { getSkillsForPersona } = await import('./lib/skills');
           token.skills = await getSkillsForPersona(token.role);
@@ -104,9 +105,10 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         session.user.role = token.role as UserRole | undefined;
         session.user.isAdmin = token.isAdmin ?? false;
+        if (token.name) session.user.name = token.name as string;
         try {
           const { getSkillsForPersona } = await import('./lib/skills');
-          session.user.skills = await getSkillsForPersona(token.role as string);
+          token.skills = await getSkillsForPersona(token.role as string);
         } catch {
           session.user.skills = token.skills || [];
         }
@@ -118,8 +120,11 @@ export const authOptions: NextAuthOptions = {
       // After sign-in, land on /quality: every role can access it and its page
       // role-routes internally (agent → own dashboard, QA/TL/admin → team view).
       // The old /analytics target bounced QA and agents off middleware back to /.
-      if (url === baseUrl || url === `${baseUrl}/`) {
+      if (url === baseUrl || url === `${baseUrl}/` || url === '/' || url === '') {
         return `${baseUrl}/quality`;
+      }
+      if (url.startsWith('/')) {
+        return `${baseUrl}${url}`;
       }
       // Honour explicit callbackUrl (e.g. signOut → /login)
       return url.startsWith(baseUrl) ? url : baseUrl;

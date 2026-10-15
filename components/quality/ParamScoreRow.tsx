@@ -12,7 +12,7 @@ const OPTIONS: { val: ParamChoice; label: string }[] = [
  * weight on the same line, the AI reasoning underneath. Pass `onChange` to make it editable (QA); without it the buttons are
  * a read-only display (TL, agent). `description` is shown as a tooltip on the name.
  */
-export default function ParamScoreRow({ name, description, value, allowNA, weight, reason, onChange, last }: {
+export default function ParamScoreRow({ name, description, value, allowNA, weight, reason, onChange, last, disputed }: {
   name: string;
   description?: string;
   value: unknown;
@@ -21,6 +21,7 @@ export default function ParamScoreRow({ name, description, value, allowNA, weigh
   reason?: string;
   onChange?: (v: ParamChoice) => void;
   last?: boolean;
+  disputed?: boolean;
 }) {
   const selected = paramChoice(value);
   const editable = Boolean(onChange);
@@ -31,7 +32,20 @@ export default function ParamScoreRow({ name, description, value, allowNA, weigh
   return (
     <div style={{ padding: '14px 16px', borderBottom: last ? 'none' : '1px solid var(--qa-border-sub)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span title={description} style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0, color: 'var(--qa-text)' }}>{name}</span>
+        <span title={description} style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0, color: 'var(--qa-text)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {name}
+          {disputed && (
+            <span style={{
+              height: 18, padding: '0 6px', borderRadius: 4,
+              background: '#fef2f2', border: '1px solid #fecaca',
+              color: '#991b1b', fontSize: 10, fontWeight: 700,
+              textTransform: 'uppercase', letterSpacing: '0.04em',
+              display: 'inline-flex', alignItems: 'center',
+            }}>
+              Disputed
+            </span>
+          )}
+        </span>
         {asText ? (
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', fontFamily: 'ui-monospace, monospace' }}>{paramLabel(value)}</span>
         ) : (

@@ -12,15 +12,52 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { query } from '@/lib/cx/db';
+import { randomUUID } from 'crypto';
+import {
+  storeAppendIQSFlag,
+  storeUpdateIQSFlag,
+  storeAppendFlagComment,
+  storeAppendAuditEntry,
+  type IQSFlag,
+} from '@/lib/store';
 import {
   evaluateSingleReplySync,
   submitPendingEmailBatchJob,
   collectAndProcessEmailBatchResults,
 } from '@/lib/email/gemini-batch-evaluator';
 
+async function getSubmitterName(emailOrName: string): Promise<string> {
+  if (!emailOrName) return 'Yashvi Chajjer';
+  const clean = emailOrName.trim();
+  if (clean.toLowerCase() === 'qa reviewer' || clean.toLowerCase() === 'qa') {
+    return 'Yashvi Chajjer';
+  }
+  try {
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig();
+    const configUser = config.users.find(u =>
+      (u.email || u.username)?.toLowerCase() === clean.toLowerCase() ||
+      (u.agentName || '').toLowerCase() === clean.toLowerCase()
+    );
+    if (configUser?.agentName) return configUser.agentName;
+    const { getUserByEmail, getUserByName } = await import('@/lib/users');
+    const dbUser = (await getUserByEmail(clean).catch(() => null)) || (await getUserByName(clean).catch(() => null));
+    if (dbUser?.name) return dbUser.name;
+  } catch {}
+  if (clean.includes('@')) {
+    const local = clean.split('@')[0];
+    return local.split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+  return clean;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const session = await getServerSession(authOptions).catch(() => null);
+    const userRole = (session?.user as any)?.role;
+    const isAdmin = userRole === 'admin' || Boolean((session?.user as any)?.isAdmin);
+
     const agentName = searchParams.get('agentName');
     const status = searchParams.get('status');
     const reviewStatus = searchParams.get('reviewStatus');
@@ -54,6 +91,9 @@ export async function GET(req: NextRequest) {
       // Finalized & submitted by QA
       whereClauses.push(`e.review_status = 'reviewed'`);
     } else if (tab === 'unscored' || reviewStatus === 'unscored' || status === 'Unscored') {
+      if (!isAdmin) {
+        return NextResponse.json({ error: 'Forbidden: Unscored emails section is admin only' }, { status: 403 });
+      }
       // Ingested, awaiting AI batch or sync evaluation
       whereClauses.push(`e.evaluation_status IN ('Pending', 'In_Batch')`);
     } else if (status) {
@@ -127,9 +167,11 @@ export async function GET(req: NextRequest) {
         c.merged_into_ticket_id,
         c.thread_summary,
         intent.val AS intent_l1,
-        COALESCE(e.qa_override_score, e.quality_score) AS effective_score
+        COALESCE(e.qa_override_score, e.quality_score) AS effective_score,
+        COALESCE(e.reviewed_by, ag.qa_name) AS qa_name
       FROM email_reply_evaluations e
       JOIN email_conversations c ON e.ticket_id = c.id
+      LEFT JOIN agents ag ON LOWER(ag.name) = LOWER(e.agent_name)
       LEFT JOIN LATERAL (
         SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
         FROM robylon_webhook_payloads w,
@@ -200,15 +242,33 @@ export async function GET(req: NextRequest) {
     `;
     const agentBreakdown = await query(tlBreakdownQuery, rangeParams);
 
+    const mappedItems = await Promise.all(
+      (items || []).map(async (item: any) => {
+        let reviewer = item.reviewed_by;
+        if (reviewer) {
+          reviewer = await getSubmitterName(reviewer);
+        }
+        let qaName = item.qa_name;
+        if (qaName) {
+          qaName = await getSubmitterName(qaName);
+        }
+        return {
+          ...item,
+          reviewed_by: reviewer,
+          qa_name: qaName || reviewer || 'Yashvi Chajjer',
+        };
+      })
+    );
+
     return NextResponse.json({
       ok: true,
-      items: items || [],
+      items: mappedItems,
       summary: {
         totalCount: Number(summary.total_count || 0),
         pendingCount: Number(summary.pending_review_count || 0),
         pendingReviewCount: Number(summary.pending_review_count || 0),
         reviewedCount: Number(summary.reviewed_count || 0),
-        unscoredCount: Number(summary.unscored_count || 0),
+        unscoredCount: isAdmin ? Number(summary.unscored_count || 0) : 0,
         completedCount: Number(summary.completed_count || 0),
         avgScore: Number(summary.avg_score || 0),
         complianceBreachCount: Number(summary.compliance_breach_count || 0),
@@ -240,18 +300,33 @@ export async function POST(req: NextRequest) {
       }
 
       const session = await getServerSession(authOptions).catch(() => null);
-      const reviewerEmail = (session?.user as any)?.email || session?.user?.name || body.reviewedBy || 'QA Reviewer';
+      const sessionUser = session?.user as any;
+      const rawReviewer = sessionUser?.name && !sessionUser.name.includes('@')
+        ? sessionUser.name
+        : (sessionUser?.email || body.reviewedBy || '');
+      const reviewerName = await getSubmitterName(rawReviewer);
+      const reviewerEmail = sessionUser?.email || '';
+      const role = sessionUser?.role || 'quality';
 
       const finalScore = score !== undefined && score !== null
         ? Number(score)
         : (overrideScore !== undefined && overrideScore !== null ? Number(overrideScore) : null);
 
+      // Check if this evaluation has an active dispute
+      const evalRows = await query<any>(
+        `SELECT id, ticket_id, message_id, flag_id, dispute_status, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
+        [messageId]
+      );
+      const existing = evalRows?.[0];
+      const wasDispute = existing && (existing.dispute_status === 'Under_Review' || existing.dispute_status === 'Raised');
+
       await query(
         `UPDATE email_reply_evaluations
          SET qa_override_score = $1,
              qa_notes = COALESCE($2, qa_notes),
-             parameter_scores = CASE WHEN $3::text IS NOT NULL THEN $3::jsonb ELSE parameter_scores END,
+             parameter_scores = CASE WHEN $3::text IS NOT NULL THEN COALESCE(parameter_scores, '{}'::jsonb) || $3::jsonb ELSE parameter_scores END,
              review_status = 'reviewed',
+             dispute_status = CASE WHEN dispute_status IN ('Under_Review', 'Raised') THEN 'Resolved' ELSE dispute_status END,
              reviewed_by = $4,
              reviewed_at = NOW(),
              compliance_passed = COALESCE($5, compliance_passed),
@@ -262,58 +337,271 @@ export async function POST(req: NextRequest) {
           finalScore,
           qaNotes || null,
           parameterScores ? JSON.stringify(parameterScores) : null,
-          reviewerEmail,
+          reviewerName,
           compliancePassed !== undefined ? Boolean(compliancePassed) : null,
           complianceIssues ? complianceIssues : null,
           messageId,
         ]
       );
 
-      return NextResponse.json({ ok: true, message: 'Review submitted successfully' });
+      // If resolving an active dispute, synchronize the linked iqs_flag and append discussion/audit entries
+      if (wasDispute && existing?.flag_id) {
+        const resolutionNote = qaNotes || 'Dispute reviewed and resolved by QA';
+
+        await storeUpdateIQSFlag(existing.flag_id, {
+          status: 'reviewed',
+          reviewedBy: reviewerName,
+          reviewedAt: new Date().toISOString(),
+          reviewNote: resolutionNote,
+          updatedAt: new Date().toISOString(),
+        });
+
+        await storeAppendFlagComment({
+          id: randomUUID(),
+          flagId: existing.flag_id,
+          authorEmail: reviewerEmail,
+          authorName: reviewerName,
+          role: 'quality',
+          content: `QA Review Submitted: Dispute resolved${finalScore !== null ? ` with score ${finalScore}%` : ''}${qaNotes ? ` - Notes: ${qaNotes}` : ''}`,
+          createdAt: new Date().toISOString(),
+        });
+
+        await storeAppendAuditEntry({
+          id: randomUUID(),
+          action: 'dispute_resolved',
+          chatId: existing.ticket_id || messageId,
+          actorEmail: reviewerEmail,
+          actorRole: role,
+          ts: new Date().toISOString(),
+          meta: { flagId: existing.flag_id, messageId, decision: 'Resolved', newScore: finalScore, notes: qaNotes, reviewerName },
+        } as any);
+      }
+
+      return NextResponse.json({
+        ok: true,
+        message: 'Review submitted successfully',
+        wasDispute: Boolean(wasDispute),
+      });
     }
 
-    // Action 2: Agent raises a dispute (Page 7)
+    // Action 2: Agent or TL raises a dispute
     if (action === 'raise_dispute') {
-      const { messageId, notes } = body;
+      const { messageId, notes, challengedParams } = body;
       if (!messageId) {
         return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
       }
 
+      const session = await getServerSession(authOptions).catch(() => null);
+      const email = ((session?.user as any)?.email || session?.user?.name || '') as string;
+      const role = ((session?.user as any)?.role || 'agent') as string;
+      const isTL = role === 'tl' || body.raisedByRole === 'tl';
+      const effectiveRaisedByRole = isTL ? 'tl' : 'ir';
+      const initialDisputeStatus = isTL ? 'Under_Review' : 'Raised';
+      const initialFlagStatus = isTL ? 'tl_forwarded' : 'pending';
+
+      const submitterName = await getSubmitterName(email);
+
+      // Fetch existing evaluation
+      const evalRows = await query<any>(
+        `SELECT id, ticket_id, message_id, agent_name, flag_id FROM email_reply_evaluations WHERE message_id = $1`,
+        [messageId]
+      );
+      if (!evalRows.length) {
+        return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
+      }
+      const existing = evalRows[0];
+      const flagId = existing.flag_id || randomUUID();
+      const paramsArray = Array.isArray(challengedParams) ? challengedParams : [];
+
+      const flag: IQSFlag = {
+        id: flagId,
+        scoreId: messageId,
+        chatId: existing.ticket_id || messageId,
+        messageId,
+        agentName: existing.agent_name || submitterName,
+        agentEmail: email,
+        agentNote: notes || '',
+        challengedParams: paramsArray,
+        flaggedAt: new Date().toISOString(),
+        raisedByRole: effectiveRaisedByRole,
+        paramCategory: 'qa',
+        status: initialFlagStatus,
+      };
+
+      await storeAppendIQSFlag(flag);
+
       await query(
         `UPDATE email_reply_evaluations
-         SET dispute_status = 'Raised',
-             dispute_notes = $1,
+         SET dispute_status = $1,
+             dispute_notes = $2,
+             flag_id = $3,
+             challenged_params = $4::jsonb,
              updated_at = NOW()
-         WHERE message_id = $2`,
-        [notes || 'Dispute raised by agent regarding score.', messageId]
+         WHERE message_id = $5`,
+        [initialDisputeStatus, notes || 'Dispute raised regarding evaluation.', flagId, JSON.stringify(paramsArray), messageId]
       );
 
-      return NextResponse.json({ ok: true, message: 'Dispute submitted successfully' });
+      if (isTL) {
+        const agentRows = await query<any>(`SELECT qa_name FROM agents WHERE name ILIKE $1`, [existing.agent_name]);
+        const targetQa = agentRows[0]?.qa_name ? await getSubmitterName(agentRows[0].qa_name) : 'Yashvi Chajjer';
+
+        await storeAppendFlagComment({
+          id: randomUUID(),
+          flagId,
+          authorEmail: email,
+          authorName: submitterName,
+          role: 'tl',
+          content: notes ? `Forwarded to ${targetQa}: ${notes}` : `Forwarded to ${targetQa}`,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
+      const auditAction = isTL ? 'tl_dispute_raised' : 'ir_dispute_raised';
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: auditAction,
+        chatId: existing.ticket_id || messageId,
+        actorEmail: email,
+        actorRole: role,
+        ts: new Date().toISOString(),
+        meta: { flagId, messageId, challengedParams: paramsArray, agentName: existing.agent_name, submitterName },
+      } as any);
+
+      return NextResponse.json({ ok: true, flagId, message: 'Dispute submitted successfully' });
+    }
+
+    // Action 2b: Agent cancels a pending dispute
+    if (action === 'cancel_dispute') {
+      const { messageId } = body;
+      if (!messageId) {
+        return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
+      }
+
+      const session = await getServerSession(authOptions).catch(() => null);
+      const email = ((session?.user as any)?.email || session?.user?.name || '') as string;
+      const role = ((session?.user as any)?.role || 'agent') as string;
+
+      const evalRows = await query<any>(
+        `SELECT id, ticket_id, message_id, dispute_status, flag_id FROM email_reply_evaluations WHERE message_id = $1`,
+        [messageId]
+      );
+      if (!evalRows.length) {
+        return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
+      }
+      const existing = evalRows[0];
+      if (existing.dispute_status !== 'Raised') {
+        return NextResponse.json({ error: 'Can only cancel pending disputes awaiting TL review' }, { status: 400 });
+      }
+
+      if (existing.flag_id) {
+        await storeUpdateIQSFlag(existing.flag_id, {
+          status: 'cancelled',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      await query(
+        `UPDATE email_reply_evaluations
+         SET dispute_status = 'None',
+             dispute_notes = NULL,
+             challenged_params = '[]'::jsonb,
+             updated_at = NOW()
+         WHERE message_id = $1`,
+        [messageId]
+      );
+
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: 'dispute_cancelled',
+        chatId: existing.ticket_id || messageId,
+        actorEmail: email,
+        actorRole: role,
+        ts: new Date().toISOString(),
+        meta: { flagId: existing.flag_id, messageId },
+      } as any);
+
+      return NextResponse.json({ ok: true, message: 'Dispute cancelled successfully' });
     }
 
     // Action 3: QA resolves/rejects dispute (Page 7)
     if (action === 'resolve_dispute') {
-      const { messageId, decision, notes, newScore } = body; // decision: 'Resolved' | 'Rejected'
+      const { messageId, decision, notes, newScore, parameterScores } = body; // decision: 'Resolved' | 'Rejected'
       if (!messageId || !decision) {
         return NextResponse.json({ error: 'messageId and decision are required' }, { status: 400 });
       }
 
       const session = await getServerSession(authOptions).catch(() => null);
-      const reviewerEmail = (session?.user as any)?.email || session?.user?.name || 'QA Reviewer';
+      const sessionUser = session?.user as any;
+      const rawReviewer = sessionUser?.name && !sessionUser.name.includes('@')
+        ? sessionUser.name
+        : (sessionUser?.email || body.reviewedBy || '');
+      const reviewerName = await getSubmitterName(rawReviewer);
+      const reviewerEmail = sessionUser?.email || '';
+      const role = sessionUser?.role || 'quality';
 
-      const updateScore = newScore !== undefined ? Number(newScore) : null;
+      const evalRows = await query<any>(
+        `SELECT id, ticket_id, message_id, flag_id, quality_score, qa_override_score FROM email_reply_evaluations WHERE message_id = $1`,
+        [messageId]
+      );
+      if (!evalRows.length) {
+        return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
+      }
+      const existing = evalRows[0];
+      const flagId = existing.flag_id;
+
+      const updateScore = newScore !== undefined && newScore !== null ? Number(newScore) : null;
+      const finalNote = notes || `Dispute marked as ${decision}`;
+
+      if (flagId) {
+        await storeUpdateIQSFlag(flagId, {
+          status: 'reviewed',
+          reviewedBy: reviewerName,
+          reviewedAt: new Date().toISOString(),
+          reviewNote: finalNote,
+          updatedAt: new Date().toISOString(),
+        });
+
+        await storeAppendFlagComment({
+          id: randomUUID(),
+          flagId,
+          authorEmail: reviewerEmail,
+          authorName: reviewerName,
+          role: 'quality',
+          content: `QA Decision: ${decision}${notes ? ` - ${notes}` : ''}`,
+          createdAt: new Date().toISOString(),
+        });
+      }
+
       await query(
         `UPDATE email_reply_evaluations
          SET dispute_status = $1::varchar,
              qa_notes = COALESCE(qa_notes, '') || ' [Dispute Decision: ' || $1::text || ' - ' || $2::text || ']',
-             qa_override_score = COALESCE($3::numeric, qa_override_score),
+             qa_override_score = CASE WHEN $3::numeric IS NOT NULL THEN $3::numeric ELSE qa_override_score END,
+             parameter_scores = CASE WHEN $4::text IS NOT NULL THEN COALESCE(parameter_scores, '{}'::jsonb) || $4::jsonb ELSE parameter_scores END,
              review_status = 'reviewed',
-             reviewed_by = COALESCE(reviewed_by, $4),
+             reviewed_by = COALESCE($5, reviewed_by),
              reviewed_at = NOW(),
              updated_at = NOW()
-         WHERE message_id = $5`,
-        [decision, notes || '', updateScore, reviewerEmail, messageId]
+         WHERE message_id = $6`,
+        [
+          decision,
+          notes || '',
+          updateScore,
+          parameterScores ? JSON.stringify(parameterScores) : null,
+          reviewerName,
+          messageId,
+        ]
       );
+
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: 'dispute_resolved',
+        chatId: existing.ticket_id || messageId,
+        actorEmail: reviewerEmail,
+        actorRole: role,
+        ts: new Date().toISOString(),
+        meta: { flagId, messageId, decision, newScore: updateScore, notes },
+      } as any);
 
       return NextResponse.json({ ok: true, message: `Dispute marked as ${decision}` });
     }
@@ -325,16 +613,80 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'messageId is required' }, { status: 400 });
       }
 
+      const session = await getServerSession(authOptions).catch(() => null);
+      const email = ((session?.user as any)?.email || session?.user?.name || '') as string;
+      const role = ((session?.user as any)?.role || 'tl') as string;
+      const submitterName = await getSubmitterName(email);
+
+      const evalRows = await query<any>(
+        `SELECT id, ticket_id, message_id, flag_id, dispute_notes, challenged_params, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
+        [messageId]
+      );
+      if (!evalRows.length) {
+        return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
+      }
+      const existing = evalRows[0];
+      let flagId = existing.flag_id;
+
+      if (!flagId) {
+        // Backfill flag if it didn't exist
+        flagId = randomUUID();
+        const flag: IQSFlag = {
+          id: flagId,
+          scoreId: messageId,
+          chatId: existing.ticket_id || messageId,
+          messageId,
+          agentName: existing.agent_name || 'Agent',
+          agentEmail: email,
+          agentNote: existing.dispute_notes || '',
+          challengedParams: existing.challenged_params || [],
+          flaggedAt: new Date().toISOString(),
+          raisedByRole: 'ir',
+          paramCategory: 'qa',
+          status: 'tl_forwarded',
+        };
+        await storeAppendIQSFlag(flag);
+      } else {
+        await storeUpdateIQSFlag(flagId, {
+          status: 'tl_forwarded',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       await query(
         `UPDATE email_reply_evaluations
          SET dispute_status = 'Under_Review',
-             dispute_notes = COALESCE(dispute_notes, '') || CASE WHEN $1::text IS NOT NULL THEN ' [TL Forward: ' || $1 || ']' ELSE '' END,
+             flag_id = $1,
+             dispute_notes = COALESCE(dispute_notes, '') || CASE WHEN $2::text IS NOT NULL AND $2::text != '' THEN ' [TL Forward: ' || $2 || ']' ELSE '' END,
              updated_at = NOW()
-         WHERE message_id = $2`,
-        [notes || null, messageId]
+         WHERE message_id = $3`,
+        [flagId, notes || null, messageId]
       );
 
-      return NextResponse.json({ ok: true, message: 'Dispute forwarded to QA successfully' });
+      const agentRows = await query<any>(`SELECT qa_name FROM agents WHERE name ILIKE $1`, [existing.agent_name]);
+      const targetQa = agentRows[0]?.qa_name ? await getSubmitterName(agentRows[0].qa_name) : 'Yashvi Chajjer';
+
+      await storeAppendFlagComment({
+        id: randomUUID(),
+        flagId,
+        authorEmail: email,
+        authorName: submitterName,
+        role: 'tl',
+        content: notes?.trim() ? `Forwarded to ${targetQa}: ${notes.trim()}` : `Forwarded to ${targetQa}`,
+        createdAt: new Date().toISOString(),
+      });
+
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: 'tl_forwarded_dispute',
+        chatId: existing.ticket_id || messageId,
+        actorEmail: email,
+        actorRole: role,
+        ts: new Date().toISOString(),
+        meta: { flagId, messageId, notes },
+      } as any);
+
+      return NextResponse.json({ ok: true, flagId, message: 'Dispute forwarded to QA successfully' });
     }
 
     // Action 3c: TL resolves a raised dispute at TL level (no QA review needed)
@@ -348,15 +700,57 @@ export async function POST(req: NextRequest) {
       if (!['admin', 'tl'].includes(role)) {
         return NextResponse.json({ error: 'Only a team lead can resolve a dispute at TL level' }, { status: 403 });
       }
+      const email = ((session?.user as any)?.email || session?.user?.name || '') as string;
+      const submitterName = await getSubmitterName(email);
+
+      const evalRows = await query<any>(
+        `SELECT id, ticket_id, message_id, flag_id, dispute_notes FROM email_reply_evaluations WHERE message_id = $1`,
+        [messageId]
+      );
+      if (!evalRows.length) {
+        return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
+      }
+      const existing = evalRows[0];
+      const flagId = existing.flag_id;
+
+      if (flagId) {
+        await storeUpdateIQSFlag(flagId, {
+          status: 'tl_resolved',
+          reviewedBy: email,
+          reviewedAt: new Date().toISOString(),
+          reviewNote: notes || 'Resolved query at TL level',
+          updatedAt: new Date().toISOString(),
+        });
+
+        await storeAppendFlagComment({
+          id: randomUUID(),
+          flagId,
+          authorEmail: email,
+          authorName: submitterName,
+          role: 'tl',
+          content: `Resolved by TL: ${notes || 'Resolved query at TL level'}`,
+          createdAt: new Date().toISOString(),
+        });
+      }
 
       await query(
         `UPDATE email_reply_evaluations
          SET dispute_status = 'TL_Resolved',
              dispute_notes = COALESCE(dispute_notes, '') || ' [TL Resolved: ' || $1 || ']',
              updated_at = NOW()
-         WHERE message_id = $2 AND dispute_status = 'Raised'`,
+         WHERE message_id = $2`,
         [notes || 'Resolved query at TL level', messageId]
       );
+
+      await storeAppendAuditEntry({
+        id: randomUUID(),
+        action: 'dispute_resolved',
+        chatId: existing.ticket_id || messageId,
+        actorEmail: email,
+        actorRole: role,
+        ts: new Date().toISOString(),
+        meta: { flagId, messageId, notes, resolvedBy: 'tl' },
+      } as any);
 
       return NextResponse.json({ ok: true, message: 'Dispute resolved at TL level' });
     }

@@ -21,6 +21,7 @@ interface Props {
   raisedByName?: string | null;
   reviewedBy?: string | null;
   reviewerRole?: string | null;
+  qaName?: string | null;
   flaggedAt?: string | null;
   reviewedAt?: string | null;
   compact?: boolean;
@@ -85,6 +86,27 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
+const QA_NAME_MAP: Record<string, string> = {
+  'qa reviewer': 'Yashvi Chajjer',
+  'qa': 'Yashvi Chajjer',
+  'yashvi@wintwealth.com': 'Yashvi Chajjer',
+  'dipti@wintwealth.com': 'Dipti',
+  'nandani.s@wintwealth.com': 'Nandani',
+  'isna.rizvi@wintwealth.com': 'Isna',
+};
+
+function formatAuthorName(name: string): string {
+  if (!name) return 'User';
+  const clean = name.trim();
+  const lower = clean.toLowerCase();
+  if (QA_NAME_MAP[lower]) return QA_NAME_MAP[lower];
+  if (lower.includes('@')) {
+    const local = clean.split('@')[0];
+    return local.split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+  return clean;
+}
+
 export function DisputeThread({
   flagId,
   agentNote,
@@ -94,6 +116,7 @@ export function DisputeThread({
   raisedByName,
   reviewedBy,
   reviewerRole,
+  qaName,
   flaggedAt,
   reviewedAt,
   compact = false,
@@ -180,7 +203,7 @@ export function DisputeThread({
           <span>💬</span> Dispute Activity & Comments
         </div>
         <span style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)' }}>
-          {comments.length + (agentNote ? 1 : 0) + (reviewNote ? 1 : 0)} messages
+          {comments.length + (agentNote ? 1 : 0)} messages
         </span>
       </div>
 
@@ -241,6 +264,18 @@ export function DisputeThread({
         ) : (
           comments.map(c => {
             const isForward = c.content.toLowerCase().includes('forwarded to');
+            const qaComment = comments.find(comm => comm.role === 'quality' && comm.authorName && comm.authorName.toLowerCase() !== 'qa reviewer');
+            const threadQaName = qaName || reviewedBy || qaComment?.authorName || 'Yashvi Chajjer';
+            const cleanQaName = formatAuthorName(threadQaName);
+            const badgeText = isForward
+              ? (cleanQaName && cleanQaName.toLowerCase() !== 'qa' ? `FORWARDED TO ${cleanQaName.toUpperCase()}` : 'FORWARDED TO QA')
+              : null;
+
+            let displayContent = c.content;
+            if (isForward && cleanQaName && cleanQaName.toLowerCase() !== 'qa') {
+              displayContent = displayContent.replace(/Forwarded to QA/gi, `Forwarded to ${cleanQaName}`);
+            }
+
             return (
               <div key={c.id} style={{
                 background: isForward ? '#fcfaef' : '#FFFFFF',
@@ -250,7 +285,7 @@ export function DisputeThread({
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #18181B)' }}>
-                    {c.authorName}
+                    {formatAuthorName(c.authorName)}
                   </span>
                   <RoleBadge role={c.role} />
                   {isForward && (
@@ -263,7 +298,7 @@ export function DisputeThread({
                       borderRadius: 4,
                       padding: '1px 5px',
                     }}>
-                      FORWARDED TO QA
+                      {badgeText}
                     </span>
                   )}
                   <span style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginLeft: 'auto' }}>
@@ -271,49 +306,13 @@ export function DisputeThread({
                   </span>
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--qa-text, #27272A)', lineHeight: 1.5, whiteSpace: 'pre-wrap', fontWeight: isForward ? 600 : 400 }}>
-                  {c.content}
+                  {displayContent}
                 </div>
               </div>
             );
           })
         )}
 
-
-        {/* Resolution Note (if dispute resolved) */}
-        {reviewNote && (
-          <div style={{
-            background: '#ecfdf5',
-            border: '1px solid #a7f3d0',
-            borderRadius: 8,
-            padding: '10px 12px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: '#065f46' }}>
-                {reviewedBy ? (reviewedBy.includes('@') ? (reviewedBy.split('@')[0].charAt(0).toUpperCase() + reviewedBy.split('@')[0].slice(1)) : reviewedBy) : 'QA Reviewer'}
-              </span>
-              <RoleBadge role={reviewerRole || 'quality'} />
-              <span style={{
-                fontSize: 10,
-                fontWeight: 600,
-                background: '#d1fae5',
-                color: '#065f46',
-                border: '1px solid #6ee7b7',
-                borderRadius: 4,
-                padding: '1px 5px',
-              }}>
-                RESOLUTION NOTE
-              </span>
-              {reviewedAt && (
-                <span style={{ fontSize: 11, color: '#047857', marginLeft: 'auto' }}>
-                  {fmtDateTime(reviewedAt)}
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 13, color: '#064e3b', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-              {reviewNote}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* New Comment Input */}

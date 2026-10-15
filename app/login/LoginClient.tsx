@@ -30,7 +30,18 @@ function LoginForm() {
           setLoginError('Invalid email or password.');
         }
       } else if (result?.url) {
-        window.location.href = result.url;
+        try {
+          const parsed = new URL(result.url, window.location.origin);
+          if (parsed.origin !== window.location.origin) {
+            const targetPath = parsed.pathname === '/' ? '/quality' : parsed.pathname;
+            window.location.href = targetPath + parsed.search + parsed.hash;
+          } else {
+            const targetPath = parsed.pathname === '/' ? '/quality' : result.url;
+            window.location.href = targetPath;
+          }
+        } catch {
+          window.location.href = '/quality';
+        }
       }
     } catch {
       setLoginError('Network error. Please try again.');

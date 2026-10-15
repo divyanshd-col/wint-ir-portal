@@ -9,6 +9,7 @@ import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging
 import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 
 interface AgentBreakdown {
@@ -43,6 +44,9 @@ interface EvaluationItem {
   customer_phone?: string;
   thread_summary?: any;
   dispute_notes?: string;
+  flag_id?: string;
+  challenged_params?: { param: string; note?: string }[];
+  reviewed_by?: string;
   updated_at?: string;
   reviewed_at?: string;
 }
@@ -123,6 +127,10 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
 
   useEffect(() => { load(); }, [load]);
 
+  const [modalItem, setModalItem] = useState<EvaluationItem | null>(null);
+  const [modalAction, setModalAction] = useState<'forward_dispute' | 'tl_resolve_dispute' | null>(null);
+  const [modalNotes, setModalNotes] = useState('');
+
   const act = async (item: EvaluationItem, action: 'forward_dispute' | 'tl_resolve_dispute', notes?: string) => {
     setActioning(item.message_id);
     setError(null);
@@ -134,6 +142,9 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
       });
       if (!res.ok) throw new Error(String(res.status));
       setRows(prev => prev.filter(r => r.message_id !== item.message_id));
+      setModalItem(null);
+      setModalAction(null);
+      setModalNotes('');
       onChanged();
     } catch {
       setError(action === 'forward_dispute' ? 'Could not forward that dispute — please retry.' : 'Could not resolve that dispute — please retry.');
@@ -142,10 +153,16 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
     }
   };
 
-  const resolveAtTL = (item: EvaluationItem) => {
-    const note = prompt('Enter a note explaining why this query was resolved at TL level:');
-    if (note === null) return;
-    act(item, 'tl_resolve_dispute', note || 'Resolved query at TL level');
+  const openResolveModal = (item: EvaluationItem) => {
+    setModalItem(item);
+    setModalAction('tl_resolve_dispute');
+    setModalNotes('');
+  };
+
+  const openForwardModal = (item: EvaluationItem) => {
+    setModalItem(item);
+    setModalAction('forward_dispute');
+    setModalNotes('');
   };
 
   const agentsInRows = Array.from(new Set(rows.map(r => r.agent_name).filter(Boolean))).sort();
@@ -157,9 +174,95 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
 
   return (
-    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' }}>
+    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden', position: 'relative' }}>
       {error && (
         <div style={{ padding: '10px 16px', fontSize: 13, color: '#b91c1c', background: '#fef2f2', borderBottom: '1px solid var(--qa-border)' }}>{error}</div>
+      )}
+
+      {/* Action Dialog Modal */}
+      {modalItem && modalAction && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: 20,
+        }}>
+          <div style={{
+            background: 'var(--qa-card, #FFFFFF)', borderRadius: 10, border: '1px solid var(--qa-border)',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+            maxWidth: 520, width: '100%', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14,
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--qa-text)' }}>
+              {modalAction === 'tl_resolve_dispute' ? 'Resolve Dispute at TL Level' : 'Forward Dispute to QA'}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>
+              Ticket: <strong style={{ fontFamily: MONO }}>{modalItem.ticket_id}</strong> · Agent: <strong>{modalItem.agent_name}</strong>
+            </div>
+
+            {modalItem.challenged_params && modalItem.challenged_params.length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-3)' }}>Challenged:</span>
+                {modalItem.challenged_params.map(cp => {
+                  const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                  return (
+                    <span key={cp.param} style={{
+                      fontSize: 11, fontWeight: 600, background: 'var(--qa-fill-light, #F4F4F5)', border: '1px solid var(--qa-border)',
+                      borderRadius: 4, padding: '2px 8px', color: 'var(--qa-text-2)',
+                    }}>
+                      {def?.name || cp.param}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            <div style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'var(--qa-gray-50)', padding: '10px 12px', borderRadius: 6, border: '1px solid var(--qa-border-sub)' }}>
+              &ldquo;{modalItem.dispute_notes}&rdquo;
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--qa-text)', marginBottom: 6 }}>
+                {modalAction === 'tl_resolve_dispute' ? 'Resolution explanation (required):' : 'Forward notes for QA (optional):'}
+              </label>
+              <textarea
+                rows={3}
+                value={modalNotes}
+                onChange={e => setModalNotes(e.target.value)}
+                placeholder={modalAction === 'tl_resolve_dispute' ? 'Explain resolution...' : 'Add context for QA...'}
+                style={{
+                  width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--qa-border)',
+                  background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, outline: 'none',
+                  resize: 'vertical', boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+              <button
+                type="button"
+                onClick={() => { setModalItem(null); setModalAction(null); }}
+                style={{
+                  height: 32, padding: '0 14px', borderRadius: 6, border: '1px solid var(--qa-border)',
+                  background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={actioning === modalItem.message_id || (modalAction === 'tl_resolve_dispute' && !modalNotes.trim())}
+                onClick={() => act(modalItem, modalAction, modalNotes)}
+                style={{
+                  height: 32, padding: '0 16px', borderRadius: 6, border: 'none',
+                  background: 'var(--qa-gray-700, #111111)', color: '#fff', fontSize: 12, fontWeight: 600,
+                  cursor: (modalAction === 'tl_resolve_dispute' && !modalNotes.trim()) ? 'not-allowed' : 'pointer',
+                  opacity: (modalAction === 'tl_resolve_dispute' && !modalNotes.trim()) ? 0.5 : 1,
+                }}
+              >
+                {actioning === modalItem.message_id ? 'Saving…' : (modalAction === 'tl_resolve_dispute' ? 'Confirm Resolve' : 'Confirm Forward')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
@@ -235,8 +338,8 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       {pending && (
                         <>
-                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => resolveAtTL(item)}>Resolve</button>
-                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => act(item, 'forward_dispute')}>
+                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => openResolveModal(item)}>Resolve</button>
+                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => openForwardModal(item)}>
                             {actioning === item.message_id ? '…' : 'Forward to QA'}
                           </button>
                         </>
@@ -256,10 +359,51 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
                             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
                               Dispute raised by {item.agent_name || 'agent'}
                             </div>
+
+                            {item.challenged_params && item.challenged_params.length > 0 && (
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
+                                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>
+                                  Challenged:
+                                </span>
+                                {item.challenged_params.map(cp => {
+                                  const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                                  return (
+                                    <span key={cp.param} title={cp.note} style={{
+                                      fontSize: 11, fontWeight: 600, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border)',
+                                      borderRadius: 4, padding: '2px 8px', color: 'var(--qa-text)',
+                                    }}>
+                                      {def?.name || cp.param}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
+
                             <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
                               {item.dispute_notes || '—'}
                             </div>
                           </div>
+
+                          {/* Dispute Thread */}
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                              Dispute Discussion Thread
+                            </div>
+                            <DisputeThread
+                              flagId={item.flag_id || item.message_id}
+                              agentNote={item.dispute_notes}
+                              agentName={item.agent_name}
+                              raisedByRole="agent"
+                              raisedByName={item.agent_name}
+                              reviewedBy={item.reviewed_by}
+                              qaName={(item as any).qa_name || item.reviewed_by}
+                              reviewerRole={item.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
+                              flaggedAt={item.sent_at}
+                              reviewedAt={item.reviewed_at}
+                              compact
+                            />
+                          </div>
+
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
                               Agent Outbound Response
