@@ -682,27 +682,103 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
     );
   };
 
+  const composer = (
+    <div className="w-full max-w-[760px] mx-auto">
+      <form
+        onSubmit={handleSubmit}
+        className="rounded-[26px] border border-[var(--color-border-tertiary)] bg-[var(--color-background-primary)] shadow-[0_6px_24px_rgba(0,0,0,0.06)] px-5 pt-4 pb-3"
+      >
+        {attachedImage && (
+          <div className="mb-3 flex items-start gap-2">
+            <div className="relative inline-block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={attachedImage.previewUrl} alt="Attached" className="h-16 w-auto rounded-lg object-cover border border-gray-200 shadow-sm" />
+              <button
+                type="button"
+                onClick={() => setAttachedImage(null)}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-500 text-white flex items-center justify-center hover:bg-gray-700 transition-colors"
+              >
+                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M1 1l6 6M7 1L1 7" />
+                </svg>
+              </button>
+            </div>
+            <span className="text-[12px] text-gray-400 mt-1">Screenshot attached</span>
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleImageSelect}
+        />
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              sendMessage(input);
+            }
+          }}
+          placeholder="Paste user issue, or try /sip-cancel, /refund-status..." // Fix 16 — input placeholder
+          rows={2}
+          className="w-full resize-none bg-transparent border-0 outline-none focus:outline-none focus:ring-0 text-[16px] leading-6 text-[var(--color-text-primary)] placeholder-gray-400 max-h-40"
+        />
+        <div className="flex items-center justify-between mt-2">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            title="Attach screenshot"
+            aria-label="Attach screenshot"
+            className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:bg-[var(--color-background-tertiary)] transition disabled:opacity-30"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.4 11.1l-9.2 9.2a5.5 5.5 0 0 1-7.8-7.8l9.2-9.2a3.7 3.7 0 0 1 5.2 5.2l-9.2 9.2a1.8 1.8 0 0 1-2.6-2.6l8.5-8.5" />
+            </svg>
+          </button>
+          <button
+            type="submit"
+            disabled={loading || (!input.trim() && !attachedImage)}
+            aria-label="Send"
+            className="w-10 h-10 rounded-full bg-[var(--color-text-primary)] text-[var(--color-background-primary)] flex items-center justify-center transition disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            </svg>
+          </button>
+        </div>
+      </form>
+      <p className="text-center text-[12px] text-gray-400 mt-3">Wint Wealth · Internal use only</p>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col h-full bg-[#f7f8fa]">
+    <div className="flex flex-col h-full bg-[var(--page-bg)]">
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto py-5">
-        <div className="max-w-4xl mx-auto px-6 space-y-4">
+      <div className={`flex-1 overflow-y-auto py-5 ${messages.length === 0 ? 'flex' : ''}`}>
+        <div className={`max-w-4xl mx-auto px-6 space-y-4 ${messages.length === 0 ? 'my-auto w-full' : ''}`}>
           {messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center px-4">
-              <div className="mb-5 bg-white rounded-xl px-4 py-2.5 shadow-sm border border-gray-100 inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/wint-logo.png" alt="Wint Wealth" width={110} height={40} className="object-contain block" />
-              </div>
-              <h2 className="text-[19px] font-[650] text-[#0a0a0a] mb-1.5 tracking-[-0.01em]">IR Support Assistant</h2>
-              <p className="text-[13.5px] text-gray-400 max-w-xs mb-8 leading-relaxed">
+            <div className="flex flex-col items-center text-center px-4 pb-10">
+              <h2
+                className="text-[40px] leading-[1.15] font-normal text-[var(--color-text-primary)] mb-3 tracking-[-0.01em]"
+                style={{ fontFamily: 'ui-serif, Georgia, "Times New Roman", serif' }}
+              >
+                IR Support Assistant
+              </h2>
+              <p className="text-[14px] text-gray-400 max-w-sm mb-8 leading-relaxed">
                 Select a common issue below or describe the investor&apos;s problem.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
+              {composer}
+              <div className="flex flex-wrap justify-center gap-2 w-full max-w-[760px] mt-6">
                 {SUGGESTED_QUESTIONS.map(q => (
                   <button
                     key={q}
                     onClick={() => sendMessage(q)}
-                    className="text-left px-4 py-3 bg-white border border-gray-200/80 rounded-xl text-[13.5px] font-[500] text-[#374151] hover:border-[#2d9e4f]/50 hover:bg-[#2d9e4f]/5 hover:text-[#2d9e4f] transition-all shadow-[0_1px_3px_rgba(0,0,0,0.05)]"
+                    className="px-3.5 py-2 border border-[var(--color-border-tertiary)] rounded-full text-[13px] text-[var(--color-text-secondary)] hover:bg-[var(--color-background-secondary)] hover:text-[var(--color-text-primary)] transition"
                   >
                     {q}
                   </button>
@@ -1156,74 +1232,12 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
         </div>{/* end max-w-4xl centered column */}
       </div>
 
-      {/* Input bar */}
-      <div className="border-t border-gray-200 bg-white px-6 py-4">
-        {/* Image preview */}
-        {attachedImage && (
-          <div className="mb-3 flex items-start gap-2">
-            <div className="relative inline-block">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={attachedImage.previewUrl} alt="Attached" className="h-16 w-auto rounded-lg object-cover border border-gray-200 shadow-sm" />
-              <button
-                type="button"
-                onClick={() => setAttachedImage(null)}
-                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-gray-500 text-white flex items-center justify-center hover:bg-gray-700 transition-colors"
-              >
-                <svg width="8" height="8" viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M1 1l6 6M7 1L1 7" />
-                </svg>
-              </button>
-            </div>
-            <span className="text-[12px] text-gray-400 mt-1">Screenshot attached</span>
-          </div>
-        )}
-        <form onSubmit={handleSubmit} className="flex gap-3 items-end">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageSelect}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={loading}
-            title="Attach screenshot"
-            className="shrink-0 p-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-400 hover:text-[#2d9e4f] hover:border-[#2d9e4f]/50 hover:bg-[#2d9e4f]/5 transition-all disabled:opacity-30"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="1" y="3" width="14" height="10" rx="1.5" />
-              <circle cx="5.5" cy="7" r="1.5" />
-              <path d="M1 11l4-3.5 3 2.5 2.5-2 4.5 3.5" />
-            </svg>
-          </button>
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendMessage(input);
-              }
-            }}
-            placeholder="Paste user issue, or try /sip-cancel, /refund-status..." // Fix 16 — input placeholder
-            rows={1}
-            className="flex-1 resize-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/40 focus:border-[#2d9e4f]/60 transition max-h-36 placeholder-gray-400"
-          />
-          <button
-            type="submit"
-            disabled={loading || (!input.trim() && !attachedImage)}
-            className="bg-[#2d9e4f] hover:bg-[#27883f] disabled:opacity-30 disabled:cursor-not-allowed text-white px-4 py-3 rounded-xl transition-all flex items-center gap-2 text-sm font-semibold shrink-0 shadow-sm"
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z" />
-            </svg>
-            Send
-          </button>
-        </form>
-      </div>
+      {/* Input bar (docked once the conversation has started) */}
+      {messages.length > 0 && (
+        <div className="bg-[var(--page-bg)] px-6 pb-4 pt-2">
+          {composer}
+        </div>
+      )}
     </div>
   );
 }

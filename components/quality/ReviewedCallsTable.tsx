@@ -112,13 +112,7 @@ const CallEvalRow = React.memo(function CallEvalRow({
           )}
         </td>
         <td style={tdNum}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
-            fontFamily: 'ui-monospace, monospace',
-            background: call.iqsScore && call.iqsScore < 60 ? '#fee2e2' : '#dcfce7',
-            color:      call.iqsScore && call.iqsScore < 60 ? '#b91c1c' : '#15803d',
-          }}>
+          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
             {call.iqsScore ?? '—'}
           </span>
         </td>

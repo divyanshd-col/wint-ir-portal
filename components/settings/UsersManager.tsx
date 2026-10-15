@@ -482,7 +482,7 @@ export default function UsersManager({
                 <tr className="border-b border-gray-100 bg-gray-50/60">
                   <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Member</th>
                   <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Team Lead</th>
-                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">QA Reviewer</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">QA</th>
                 </tr>
               </thead>
               <tbody>

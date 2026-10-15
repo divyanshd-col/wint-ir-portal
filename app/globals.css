@@ -16,7 +16,7 @@
   --accent-on:      #ffffff;  /* text/icon on top of --accent */
 
   /* ── QA Analytics design tokens (wireframe) ─────────────────────────── */
-  --qa-bg:           #F7F7F8;
+  --qa-bg:           #F5F3EE;  /* the app-wide warm page ground (see topbar.css) */
   --qa-card:         #FFFFFF;
   --qa-border:       #E4E4E7;
   --qa-border-sub:   #F0F0F2;
@@ -29,6 +29,7 @@
   --qa-gray-700:     #2D2D31;
   --qa-gray-50:      #FAFAFB;
   --qa-gray-100:     #F4F4F5;
+  --qa-on-text:      #FFFFFF;  /* text on a filled --qa-text surface (active pills, primary buttons) */
 
   /* ── Design system tokens ─────────────────────────────────────────── */
   --color-background-primary:   #ffffff;
@@ -67,7 +68,7 @@ body {
 /* ── QualityShell Layout Classes ── */
 .quality-shell-container {
   background: var(--qa-bg);
-  min-height: 100vh;
+  min-height: calc(100vh - var(--topbar-h, 0px));
   font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
   font-size: 14px;
   color: var(--qa-text);
@@ -153,10 +154,10 @@ body {
 .quality-shell-sidebar {
   width: 220px;
   flex-shrink: 0;
-  background: var(--qa-card);
-  border-right: 1px solid var(--qa-border);
+  background: var(--sb-bg);
+  border-right: 1px solid var(--sb-border);
   padding: 16px 0;
-  min-height: calc(100vh - 64px);
+  min-height: calc(100vh - var(--topbar-h, 0px));
 }
 
 .quality-shell-sidebar-title {
@@ -168,23 +169,27 @@ body {
 }
 
 .quality-shell-sidebar-link {
-  height: 44px;
-  padding: 0 16px;
+  height: 40px;
+  margin: 0 12px 2px;
+  padding: 0 12px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 10px;
   font-size: 14px;
-  color: var(--qa-text);
+  color: var(--sb-text);
   text-decoration: none;
   position: relative;
-  border-left: 3px solid transparent;
   background: transparent;
   font-weight: 400;
 }
 
+.quality-shell-sidebar-link:hover { background: var(--sb-hover); }
+
 .quality-shell-sidebar-link.active {
-  border-left: 3px solid var(--qa-text);
-  background: var(--qa-gray-100);
+  background: var(--sb-active-bg);
+  box-shadow: var(--sb-active-shadow);
+  color: var(--sb-active-text);
   font-weight: 500;
 }
 
@@ -204,3 +209,8 @@ body {
   min-width: 0;
   max-width: 1400px;
 }
+
+/* Email bodies in the quality review panels: tight like chat transcripts, no dangling space after the last paragraph. */
+.email-html-body { overflow-wrap: anywhere; }
+.email-html-body p, .email-html-body div { margin-top: 0; margin-bottom: 0.6em; }
+.email-html-body > :last-child { margin-bottom: 0; }

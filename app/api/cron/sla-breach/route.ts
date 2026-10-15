@@ -7,10 +7,12 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { runSlaBreachCron } from '@/lib/sla-breach';
-import { fetchBreachingTickets } from '@/lib/sla-breach-db';
+import { fetchOpenTickets } from '@/lib/sla-breach-db';
 import { sendSlackMessage } from '@/lib/slack';
 
 export const dynamic = 'force-dynamic';
+// Query + Slack post take ~1s; 30s covers a cold start and a Neon wake-up (cron-job.org also gives up after 30s).
+export const maxDuration = 30;
 
 export async function GET(req: NextRequest) {
   const result = await runSlaBreachCron({
@@ -18,7 +20,7 @@ export async function GET(req: NextRequest) {
     secret: process.env.SLA_CRON_SECRET,
     trigger: req.nextUrl.searchParams.get('trigger'),
     now: new Date(),
-    fetchRows: fetchBreachingTickets,
+    fetchOpenTickets,
     mentions: process.env.SLA_SLACK_MENTIONS,
     post: async ({ text, blocks }) => {
       const channel = process.env.SLA_SLACK_CHANNEL || process.env.SLACK_WEBHOOK_URL || '';

@@ -563,13 +563,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                     </td>
                     <td style={tdNum}>
                       {chat.botIqsScore !== null ? (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
-                          fontFamily: 'ui-monospace, monospace',
-                          background: chat.botIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                          color:      chat.botIqsScore < 60 ? '#b91c1c' : '#713f12',
-                        }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                           {chat.botIqsScore}
                         </span>
                       ) : (
@@ -578,13 +572,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                     </td>
                     <td style={tdNum}>
                       {chat.iqsScore !== null ? (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
-                          fontFamily: 'ui-monospace, monospace',
-                          background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                          color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                        }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                           {chat.iqsScore}
                         </span>
                       ) : (
@@ -607,35 +595,11 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                     </td>
                     <td style={td}>
                       {chat.status === 'reopened' ? (
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          height: 18,
-                          padding: '0 5px',
-                          borderRadius: 4,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          background: '#f3e8ff',
-                          color: '#6b21a8',
-                        }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
                           Reopened
                         </span>
                       ) : (
-                        <span style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          height: 18,
-                          padding: '0 5px',
-                          borderRadius: 4,
-                          fontSize: 10,
-                          fontWeight: 600,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.05em',
-                          background: '#e0f2fe',
-                          color: '#0369a1',
-                        }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
                           Pending
                         </span>
                       )}

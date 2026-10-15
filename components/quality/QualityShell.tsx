@@ -58,19 +58,28 @@ const DocumentIcon = () => (
   </svg>
 );
 
+const MailIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>
+  </svg>
+);
+
 export const NAV_ALL: NavItem[] = [
   { label: 'Analytics',        href: '/quality',                icon: StarIcon,       roles: ['admin', 'quality', 'tl', 'agent'], skill: 'quality:analytics:access' },
-  { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'],                skill: 'quality:chat_eval:access' },
-  { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'],                skill: 'quality:call_eval:access' },
-  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin'],                           skill: 'tl:team_analytics:access' },
-  { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'],                     skill: 'tl:member_analytics:access' },
-  { label: 'My Analytics',     href: '/tl/member-analytics',    icon: UserIcon,       roles: ['agent'],                           skill: 'agent:my_analytics:access' },
-  { label: 'My Quality Chats', href: '/agent/quality-chats',    icon: ChatIcon,       roles: ['agent'],                           skill: 'agent:my_chats:access' },
-  { label: 'My Quality Calls', href: '/agent/quality-calls',    icon: PhoneIcon,      roles: ['agent'],                           skill: 'agent:my_calls:access' },
-  { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['admin', 'tl'],                     skill: 'tl:quality_chats:access' },
-  { label: 'Quality Calls',    href: '/tl/quality-calls',       icon: PhoneIcon,      roles: ['admin', 'tl'],                     skill: 'tl:quality_calls:access' },
-  { label: 'My Reports',       href: '/agent/reports',          icon: DocumentIcon,   roles: ['agent'],                           skill: 'agent:reports:access' },
-  { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin', 'tl'],                     skill: 'tl:reports:access' },
+  { label: 'Chat Evaluation',  href: '/quality/chat-evaluation', icon: ChatIcon,       roles: ['admin', 'quality'],                skill: 'quality:chat_eval:access', section: 'QA' },
+  { label: 'Call Evaluation',  href: '/quality/call-evaluation', icon: PhoneIcon,      roles: ['admin', 'quality'],                skill: 'quality:call_eval:access', section: 'QA' },
+  { label: 'Email Evaluation', href: '/quality/email-evaluation', icon: MailIcon,      roles: ['admin', 'quality'],                section: 'QA' },
+  { label: 'Team Analytics',   href: '/tl',                     icon: TrendingUpIcon, roles: ['admin'],                           skill: 'tl:team_analytics:access', section: 'TL' },
+  { label: 'Member Analytics', href: '/tl/member-analytics',    icon: UserIcon,       roles: ['admin', 'tl'],                     skill: 'tl:member_analytics:access', section: 'TL' },
+  { label: 'Quality Chats',    href: '/tl/quality-chats',       icon: ChatIcon,       roles: ['admin', 'tl'],                     skill: 'tl:quality_chats:access', section: 'TL' },
+  { label: 'Quality Calls',    href: '/tl/quality-calls',       icon: PhoneIcon,      roles: ['admin', 'tl'],                     skill: 'tl:quality_calls:access', section: 'TL' },
+  { label: 'Quality Emails',   href: '/tl/quality-emails',      icon: MailIcon,       roles: ['admin', 'tl'],                     section: 'TL' },
+  { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin', 'tl'],                     skill: 'tl:reports:access', section: 'TL' },
+  { label: 'My Analytics',     href: '/tl/member-analytics',    icon: UserIcon,       roles: ['agent'],                           skill: 'agent:my_analytics:access', section: 'IR Agent' },
+  { label: 'My Quality Chats', href: '/agent/quality-chats',    icon: ChatIcon,       roles: ['agent'],                           skill: 'agent:my_chats:access', section: 'IR Agent' },
+  { label: 'My Quality Calls', href: '/agent/quality-calls',    icon: PhoneIcon,      roles: ['agent'],                           skill: 'agent:my_calls:access', section: 'IR Agent' },
+  { label: 'My Quality Emails', href: '/agent/quality-emails',  icon: MailIcon,       roles: ['agent'],                           section: 'IR Agent' },
+  { label: 'My Reports',       href: '/agent/reports',          icon: DocumentIcon,   roles: ['agent'],                           skill: 'agent:reports:access', section: 'IR Agent' },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

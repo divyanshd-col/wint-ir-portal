@@ -606,7 +606,7 @@ export default function AgentAnalyticsDashboard({}: Props) {
                           <div style={S({ display: 'flex', flexDirection: 'column', gap: 12 })}>
                             {result.items.map((item, i) => {
                               const tagStyle = item.tag === 'Strength'
-                                ? { background: 'var(--qa-text)', color: '#fff' }
+                                ? { background: 'var(--qa-text)', color: 'var(--qa-on-text)' }
                                 : item.tag === 'Watch'
                                 ? { background: 'var(--qa-fill-med)', color: 'var(--qa-text)' }
                                 : { background: 'var(--qa-card)', color: 'var(--qa-text-2)', border: '1px solid var(--qa-border)' };

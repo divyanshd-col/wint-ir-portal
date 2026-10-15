@@ -356,14 +356,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                   <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
                   <td style={tdNum}>
                     {(d.callIqsScore ?? d.iqsScore) != null ? (
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 32, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
-                        fontFamily: 'ui-monospace, monospace',
-                        background: (d.callIqsScore ?? d.iqsScore ?? 0) >= 85 ? '#f0fdf4' : (d.callIqsScore ?? d.iqsScore ?? 0) >= 70 ? '#fefce8' : '#fef2f2',
-                        color: (d.callIqsScore ?? d.iqsScore ?? 0) >= 85 ? '#166534' : (d.callIqsScore ?? d.iqsScore ?? 0) >= 70 ? '#854d0e' : '#991b1b',
-                        border: `1px solid ${(d.callIqsScore ?? d.iqsScore ?? 0) >= 85 ? '#bbf7d0' : (d.callIqsScore ?? d.iqsScore ?? 0) >= 70 ? '#fef08a' : '#fecaca'}`,
-                      }}>
+                      <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                         {d.callIqsScore ?? d.iqsScore}
                       </span>
                     ) : (
@@ -374,13 +367,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     {d.csatScore == null ? (
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                     ) : (
-                      <span style={{
-                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                        minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
-                        fontFamily: 'ui-monospace, monospace',
-                        background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-                        border: '1px solid var(--qa-border)',
-                      }}>
+                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>
                         {d.csatScore === 1 ? 'Bad' : d.csatScore === 3 ? 'Neutral' : 'Good'}
                       </span>
                     )}
