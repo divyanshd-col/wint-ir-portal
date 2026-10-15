@@ -329,11 +329,7 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
                       </td>
                       <td style={tdMono}>{chat.msgCount}</td>
                       <td style={td}>
-                        <span style={{
-                          fontSize: 11, padding: '2px 8px', borderRadius: 12, fontWeight: 600,
-                          background: chat.iqsStatus === 'skipped' ? 'rgba(234, 179, 8, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                          color: chat.iqsStatus === 'skipped' ? '#ca8a04' : '#dc2626',
-                        }}>
+                        <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text-2)' }}>
                           {chat.iqsStatus === 'skipped' ? 'Skipped' : 'Unscored'}
                         </span>
                       </td>

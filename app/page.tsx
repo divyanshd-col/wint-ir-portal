@@ -2,8 +2,9 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import { readConfig } from '@/lib/config';
-import HomeClient from '@/components/HomeClient';
 
+// "/" has no page of its own: it sends each user to their home. Chat lives at /chat (top bar tab).
+// The checks below are the same ones the target pages make, so a redirect can never bounce back here.
 export default async function Home() {
   const config = await readConfig();
   if (!config.isConfigured) redirect('/setup');
@@ -11,21 +12,11 @@ export default async function Home() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/login');
 
-  const isAdmin = (session.user as any)?.isAdmin ?? false;
+  const user = session.user as { isAdmin?: boolean; role?: string; skills?: string[] };
+  const { hasSkill, getSkillsForPersona } = await import('@/lib/skills');
+  const withSkills = { ...user, skills: user.skills || (await getSkillsForPersona(user.role)) };
 
-  if (isAdmin) redirect('/analytics');
-
-  const username = (session.user?.name || session.user?.email || 'Investor') as string;
-  const role = (session.user as any)?.role ?? 'agent';
-  const historyEnabled = config.conversationHistoryEnabled ?? false;
-  const flags = {
-    callAnalysis: config.callAnalysisEnabled ?? false,
-    cxDashboard: config.cxDashboardEnabled ?? false,
-  };
-
-  return (
-    <div className="flex h-screen bg-[#f5f5f0] overflow-hidden">
-      <HomeClient username={username} isAdmin={isAdmin} role={role} historyEnabled={historyEnabled} flags={flags} />
-    </div>
-  );
+  if (hasSkill(withSkills, 'analytics:access')) redirect('/analytics');
+  if (['admin', 'quality', 'tl', 'agent'].includes(user.role ?? '') && hasSkill(withSkills, 'quality:analytics:access')) redirect('/quality');
+  redirect('/chat');
 }

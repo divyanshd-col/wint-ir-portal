@@ -286,7 +286,9 @@ export default function MemberAnalyticsDashboard() {
               <div style={{
                 position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 40,
                 background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8,
-                boxShadow: '0 8px 24px rgba(0,0,0,0.1)', minWidth: 180, overflow: 'hidden',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.1)', minWidth: 220,
+                // long agent lists scroll inside the panel instead of running off the page
+                maxHeight: 'min(360px, calc(100vh - 220px))', overflowY: 'auto', overflowX: 'hidden', overscrollBehavior: 'contain',
               }}>
                 {agents.map(a => (
                   <button
@@ -325,7 +327,7 @@ export default function MemberAnalyticsDashboard() {
                   background: period === p ? 'var(--qa-text)' : 'transparent',
                   border: 0, borderRight: p !== 'custom' ? '1px solid var(--qa-border)' : 'none',
                   fontSize: 13, fontFamily: 'inherit', cursor: 'pointer',
-                  color: period === p ? '#fff' : 'var(--qa-text-2)',
+                  color: period === p ? 'var(--qa-on-text, #fff)' : 'var(--qa-text-2)',
                   fontWeight: period === p ? 600 : 400,
                 }}
               >

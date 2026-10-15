@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { isHttpsRequest } from '@/lib/auth-cookie';
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -18,7 +19,25 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  // Support both secure (__Secure-next-auth.session-token) and non-secure (next-auth.session-token)
+  // cookie names regardless of whether NEXTAUTH_URL has https or localhost http.
+  let token = null;
+  const hasSecure = req.cookies.has('__Secure-next-auth.session-token');
+  const hasPlain = req.cookies.has('next-auth.session-token');
+
+  if (hasSecure) {
+    token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: true });
+  }
+  if (!token && hasPlain) {
+    token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: false });
+  }
+  if (!token && !hasSecure && !hasPlain) {
+    const isHttps = isHttpsRequest(req.headers.get('x-forwarded-proto'), req.nextUrl.protocol);
+    token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: isHttps });
+    if (!token) {
+      token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: !isHttps });
+    }
+  }
   if (!token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }

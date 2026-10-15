@@ -518,24 +518,19 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
   return (
     <div className="min-h-screen bg-[#f5f3ee] flex font-sans antialiased">
       {/* Left nav */}
-      <aside className="w-56 shrink-0 bg-white border-r border-gray-100 flex flex-col sticky top-0 h-screen">
-        <div className="px-5 py-5 border-b border-gray-100">
-          <a href="/chat" className="flex items-center gap-2 text-gray-500 hover:text-gray-900 transition text-xs font-medium mb-4">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 3L5 8l5 5" /></svg>
-            Back to chat
-          </a>
+      <aside className="w-56 shrink-0 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] flex flex-col sticky top-0 h-screen">
+        <div className="px-5 py-5 border-b border-[var(--sb-border)]">
           <h1 className="text-base font-bold text-gray-900">Settings</h1>
-          {isAdmin && <p className="text-xs text-gray-400 mt-0.5">Admin</p>}
         </div>
         <nav className="flex-1 px-3 py-4 space-y-0.5">
           {SECTIONS.map(s => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
-              className={`w-full text-left px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+              className={`w-full text-left px-3 h-10 rounded-[10px] text-sm font-medium transition-all ${
                 activeSection === s.id
-                  ? 'bg-[#2d9e4f] text-white'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                  ? 'bg-[var(--sb-active-bg)] text-[var(--sb-active-text)] shadow-[var(--sb-active-shadow)]'
+                  : 'text-[var(--sb-text)] hover:bg-[var(--sb-hover)] hover:text-[var(--sb-active-text)]'
               }`}
             >
               {s.label}

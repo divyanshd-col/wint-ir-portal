@@ -120,30 +120,12 @@ const CallEvalRow = React.memo(function CallEvalRow({
           )}
         </td>
         <td style={tdNum}>
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            minWidth: 36, height: 22, borderRadius: 6, fontSize: 12,
-            fontFamily: 'ui-monospace, monospace',
-            background: call.iqsScore && call.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-            color:      call.iqsScore && call.iqsScore < 60 ? '#b91c1c' : '#713f12',
-          }}>
+          <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
             {call.iqsScore ?? '—'}
           </span>
         </td>
         <td style={td}>
-          <span style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            height: 18,
-            padding: '0 5px',
-            borderRadius: 4,
-            fontSize: 10,
-            fontWeight: 600,
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em',
-            background: call.status === 'reviewed' ? '#dcfce7' : call.status === 'reopened' ? '#f3e8ff' : '#e0f2fe',
-            color: call.status === 'reviewed' ? '#15803d' : call.status === 'reopened' ? '#6b21a8' : '#0369a1',
-          }}>
+          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
             {call.status}
           </span>
         </td>
