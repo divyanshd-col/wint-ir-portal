@@ -224,83 +224,106 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
           const messageId = item.metadata?.message_id;
           if (!messageId) continue;
 
-          if (item.error) {
-            console.error(`[gemini-batch] Item error for message ${messageId}:`, item.error);
+          try {
+            if (item.error) {
+              console.error(`[gemini-batch] Item error for message ${messageId}:`, item.error);
+              await query(
+                `UPDATE email_reply_evaluations
+                 SET evaluation_status = 'Failed',
+                     qa_notes = $1,
+                     updated_at = NOW()
+                 WHERE message_id = $2`,
+                [JSON.stringify(item.error), messageId]
+              );
+              continue;
+            }
+
+            const rawText =
+              item.response?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+
+            let parsedResult: any = {};
+            try {
+              parsedResult = JSON.parse(rawText);
+            } catch {
+              const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+              try {
+                parsedResult = JSON.parse(cleaned);
+              } catch {
+                const firstBrace = rawText.indexOf('{');
+                const lastBrace = rawText.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace > firstBrace) {
+                  try {
+                    parsedResult = JSON.parse(rawText.slice(firstBrace, lastBrace + 1));
+                  } catch {
+                    parsedResult = {};
+                  }
+                }
+              }
+            }
+
+            const rawParamScores = parsedResult.parameter_scores || {};
+            const parameterReasoning = parsedResult.parameter_reasoning || {};
+            const parameterScores = {
+              ...rawParamScores,
+              ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
+            };
+            const calculatedScore = calculateEmailIQS(rawParamScores);
+            const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
+              ? calculatedScore
+              : Number(parsedResult.quality_score ?? 0);
+            const compliancePassed = Boolean(parsedResult.compliance_passed ?? true);
+            const complianceIssues = Array.isArray(parsedResult.compliance_issues)
+              ? parsedResult.compliance_issues
+              : [];
+            const summaryNote = parsedResult.summary || '';
+
+            await query(
+              `UPDATE email_reply_evaluations
+               SET quality_score = $1,
+                   compliance_passed = $2,
+                   compliance_issues = $3,
+                   parameter_scores = $4,
+                   qa_notes = COALESCE(qa_notes, $5),
+                   evaluation_status = 'Completed',
+                   review_status = 'pending',
+                   evaluated_at = NOW(),
+                   updated_at = NOW()
+               WHERE message_id = $6`,
+              [
+                qualityScore,
+                compliancePassed,
+                complianceIssues,
+                JSON.stringify(parameterScores),
+                summaryNote || null,
+                messageId,
+              ]
+            );
+
+            evaluatedRepliesCount++;
+
+            // Step 4 of Implementation Plan: Compliance Slack Alert on failure
+            if (!compliancePassed || complianceIssues.length > 0) {
+              const replySnippet = item.metadata?.agent_reply_text || '';
+              await sendEmailComplianceSlackAlert({
+                ticketId: item.metadata?.ticket_id || 'Unknown',
+                messageId,
+                agentName: item.metadata?.agent_name || 'Agent',
+                qualityScore,
+                complianceIssues,
+                replySnippet,
+                evaluatedAt: new Date().toISOString(),
+              }).catch(err => console.warn(`[gemini-batch] Slack alert failed for ${messageId}:`, err.message));
+            }
+          } catch (itemErr: any) {
+            console.error(`[gemini-batch] Error processing evaluation for ${messageId}:`, itemErr.message);
             await query(
               `UPDATE email_reply_evaluations
                SET evaluation_status = 'Failed',
                    qa_notes = $1,
                    updated_at = NOW()
                WHERE message_id = $2`,
-              [JSON.stringify(item.error), messageId]
+              [`Failed processing evaluation: ${itemErr.message}`, messageId]
             );
-            continue;
-          }
-
-          const rawText =
-            item.response?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-
-          let parsedResult: any = {};
-          try {
-            parsedResult = JSON.parse(rawText);
-          } catch (pe) {
-            // strip markdown code fencing if any
-            const cleaned = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-            parsedResult = JSON.parse(cleaned);
-          }
-
-          const rawParamScores = parsedResult.parameter_scores || {};
-          const parameterReasoning = parsedResult.parameter_reasoning || {};
-          const parameterScores = {
-            ...rawParamScores,
-            ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
-          };
-          const calculatedScore = calculateEmailIQS(rawParamScores);
-          const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
-            ? calculatedScore
-            : Number(parsedResult.quality_score ?? 0);
-          const compliancePassed = Boolean(parsedResult.compliance_passed ?? true);
-          const complianceIssues = Array.isArray(parsedResult.compliance_issues)
-            ? parsedResult.compliance_issues
-            : [];
-          const summaryNote = parsedResult.summary || '';
-
-          await query(
-            `UPDATE email_reply_evaluations
-             SET quality_score = $1,
-                 compliance_passed = $2,
-                 compliance_issues = $3,
-                 parameter_scores = $4,
-                 qa_notes = COALESCE(qa_notes, $5),
-                 evaluation_status = 'Completed',
-                 review_status = 'pending',
-                 evaluated_at = NOW(),
-                 updated_at = NOW()
-             WHERE message_id = $6`,
-            [
-              qualityScore,
-              compliancePassed,
-              complianceIssues,
-              JSON.stringify(parameterScores),
-              summaryNote || null,
-              messageId,
-            ]
-          );
-
-          evaluatedRepliesCount++;
-
-          // Step 4 of Implementation Plan: Compliance Slack Alert on failure
-          if (!compliancePassed || complianceIssues.length > 0) {
-            const replySnippet = item.metadata?.agent_reply_text || '';
-            await sendEmailComplianceSlackAlert({
-              ticketId: item.metadata?.ticket_id || 'Unknown',
-              messageId,
-              agentName: item.metadata?.agent_name || 'Agent',
-              qualityScore,
-              complianceIssues,
-              replySnippet,
-              evaluatedAt: new Date().toISOString(),
-            });
           }
         }
 

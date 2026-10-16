@@ -222,6 +222,8 @@ export default function EmailEvaluationPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
+  const [dispositionFilter, setDispositionFilter] = useState('');
+  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
   const [availableAgents, setAvailableAgents] = useState<string[]>([
     'Aman Sharma',
     'Apoorv',
@@ -294,6 +296,7 @@ export default function EmailEvaluationPage() {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (agentFilter) params.set('agentName', agentFilter);
+      if (dispositionFilter) params.set('disposition', dispositionFilter);
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
       params.set('from', from);
       params.set('to', to);
@@ -309,6 +312,9 @@ export default function EmailEvaluationPage() {
           const names = data.agentBreakdown.map((a: any) => a.agent_name).filter(Boolean);
           setAvailableAgents(prev => Array.from(new Set([...prev, ...names])).sort());
         }
+        if (data.assignedDispositions && Array.isArray(data.assignedDispositions)) {
+          setAvailableDispositions(data.assignedDispositions);
+        }
         setItems(data.items || []);
       }
     } catch (err) {
@@ -316,7 +322,7 @@ export default function EmailEvaluationPage() {
     } finally {
       setLoading(false);
     }
-  }, [tab, search, agentFilter, period]);
+  }, [tab, search, agentFilter, dispositionFilter, period]);
 
   useEffect(() => {
     fetchData();
@@ -449,7 +455,7 @@ export default function EmailEvaluationPage() {
     transition: 'background 0.15s, color 0.15s',
   });
 
-  const hasFilters = Boolean(search || agentFilter);
+  const hasFilters = Boolean(search || agentFilter || dispositionFilter);
   const cols = TAB_COLS[tab];
   const iqsOf = (i: EvaluationItem) => Number(i.effective_score ?? i.quality_score ?? -1);
   const sortedItems = !sort ? items : [...items].sort((a, b) => {
@@ -459,11 +465,16 @@ export default function EmailEvaluationPage() {
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
-  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
+  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${dispositionFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
 
   const agentOptions = Array.from(new Set([
     ...availableAgents,
     ...items.map(i => i.agent_name).filter(Boolean),
+  ])).sort();
+
+  const dispositionOptions = Array.from(new Set([
+    ...availableDispositions,
+    ...items.map(i => i.intent_l1).filter((d): d is string => Boolean(d)),
   ])).sort();
 
   return (
@@ -603,10 +614,35 @@ export default function EmailEvaluationPage() {
             ))}
           </select>
 
+          {/* Disposition Filter Dropdown */}
+          <select
+            value={dispositionFilter}
+            onChange={(e) => setDispositionFilter(e.target.value)}
+            style={{
+              height: 32,
+              padding: '0 10px',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              background: 'var(--qa-card)',
+              color: dispositionFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
+              fontSize: 13,
+              fontFamily: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="">{isAdmin ? 'All Dispositions' : 'All My Dispositions'}</option>
+            {dispositionOptions.map((disp) => (
+              <option key={disp} value={disp}>
+                {disp}
+              </option>
+            ))}
+          </select>
+
           {/* Reset Filters */}
           <button
             disabled={!hasFilters}
-            onClick={() => { setSearch(''); setAgentFilter(''); }}
+            onClick={() => { setSearch(''); setAgentFilter(''); setDispositionFilter(''); }}
             style={{
               ...chip,
               color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
