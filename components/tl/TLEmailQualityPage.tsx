@@ -437,6 +437,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
 
 export default function TLEmailQualityPage() {
   const [agents, setAgents] = useState<AgentBreakdown[]>([]);
+  const [availableAgents, setAvailableAgents] = useState<string[]>([]);
   const [replies, setReplies] = useState<EvaluationItem[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>('');
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
@@ -460,6 +461,11 @@ export default function TLEmailQualityPage() {
       const data = await res.json();
       if (data.ok) {
         setAgents(data.agentBreakdown || []);
+        if (Array.isArray(data.availableAgents) && data.availableAgents.length > 0) {
+          setAvailableAgents(data.availableAgents);
+        } else {
+          setAvailableAgents((data.agentBreakdown || []).map((a: any) => a.agent_name));
+        }
         if (data.summary) setCounts({ evaluated: data.summary.completedCount, raised: data.summary.tlPendingDisputesCount, reviewed: data.summary.tlHistoryDisputesCount });
         setReplies(data.items || []);
       }
@@ -702,7 +708,9 @@ export default function TLEmailQualityPage() {
             style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: selectedAgent ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
           >
             <option value="">All Agents</option>
-            {agents.map(a => <option key={a.agent_name} value={a.agent_name}>{a.agent_name}</option>)}
+            {(availableAgents.length > 0 ? availableAgents : agents.map(a => a.agent_name)).map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
           </select>
           {selectedAgent && (
             <button onClick={() => setSelectedAgent('')} style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>

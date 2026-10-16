@@ -51,14 +51,137 @@ async function getSubmitterName(emailOrName: string): Promise<string> {
   return clean;
 }
 
+async function getScopedAgentNamesForUser(
+  userEmail: string,
+  userName: string,
+  userRole: string,
+  isAdmin: boolean
+): Promise<string[] | null> {
+  if (isAdmin || userRole === 'admin' || userRole === 'quality') {
+    return null; // Unrestricted access for Admin and QA
+  }
+  if (userRole === 'tl') {
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig().catch(() => ({ users: [] }));
+    const configUser = config.users?.find((u: any) =>
+      (u.email || u.username || '').toLowerCase() === (userEmail || '').toLowerCase()
+    );
+    let tlAgentName = configUser?.agentName || '';
+    if (!tlAgentName && userEmail) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(userEmail).catch(() => null);
+      if (dbUser?.name) tlAgentName = dbUser.name;
+    }
+    if (!tlAgentName) tlAgentName = userName || userEmail;
+
+    const { getAgentNamesByTL } = await import('@/lib/robylon/db');
+    let scoped = await getAgentNamesByTL(tlAgentName);
+    if (!scoped.length && userEmail && tlAgentName !== userEmail) {
+      scoped = await getAgentNamesByTL(userEmail);
+    }
+    return scoped;
+  }
+  if (userRole === 'agent') {
+    const { readConfig } = await import('@/lib/config');
+    const config = await readConfig().catch(() => ({ users: [] }));
+    const configUser = config.users?.find((u: any) =>
+      (u.email || u.username || '').toLowerCase() === (userEmail || '').toLowerCase()
+    );
+    let selfAgentName = configUser?.agentName || '';
+    if (!selfAgentName && userEmail) {
+      const { getUserByEmail } = await import('@/lib/users');
+      const dbUser = await getUserByEmail(userEmail).catch(() => null);
+      if (dbUser?.name) selfAgentName = dbUser.name;
+    }
+    if (!selfAgentName) selfAgentName = userName || (userEmail.includes('@') ? userEmail.split('@')[0] : userEmail);
+    if (selfAgentName) {
+      const matchedRows = await query<{ name: string }>(
+        `SELECT name FROM agents WHERE LOWER(name) = LOWER($1) OR name ILIKE $1 || ' %' OR $1 ILIKE name || ' %'`,
+        [selfAgentName]
+      );
+      return matchedRows.length ? matchedRows.map(r => r.name) : [selfAgentName];
+    }
+    return [];
+  }
+  return null;
+}
+
+async function getScopedDispositionsForUser(
+  userEmail: string,
+  userRole: string,
+  isAdmin: boolean
+): Promise<{ scopedDispositions: string[] | null; allDispositions: string[] }> {
+  const { readConfig } = await import('@/lib/config');
+  const config = await readConfig().catch(() => ({ users: [], qaDispositionMap: [] }));
+  const emailLower = (userEmail || '').trim().toLowerCase();
+
+  const allDispositions = Array.from(
+    new Set((config.qaDispositionMap ?? []).flatMap((e: any) => e.dispositions || []))
+  ).filter(Boolean) as string[];
+
+  if (isAdmin || userRole === 'admin') {
+    return { scopedDispositions: null, allDispositions };
+  }
+
+  if (userRole === 'quality') {
+    const qaEntry = (config.qaDispositionMap ?? []).find((e: any) => (e.email || '').toLowerCase() === emailLower);
+    const configUser = config.users?.find((u: any) => (u.email || u.username || '').toLowerCase() === emailLower);
+    const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
+    return {
+      scopedDispositions: Array.isArray(userDisps) ? userDisps : [],
+      allDispositions,
+    };
+  }
+
+  return { scopedDispositions: null, allDispositions };
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const session = await getServerSession(authOptions).catch(() => null);
-    const userRole = (session?.user as any)?.role;
+    const userRole = (session?.user as any)?.role || '';
+    const userEmail = (((session?.user as any)?.email || '') as string).trim();
+    const userName = (((session?.user as any)?.name || '') as string).trim();
     const isAdmin = userRole === 'admin' || Boolean((session?.user as any)?.isAdmin);
 
+    const scopedAgentNames = await getScopedAgentNamesForUser(userEmail, userName, userRole, isAdmin);
+    const { scopedDispositions, allDispositions } = await getScopedDispositionsForUser(userEmail, userRole, isAdmin);
+
+    if (
+      (scopedAgentNames !== null && scopedAgentNames.length === 0) ||
+      (scopedDispositions !== null && scopedDispositions.length === 0)
+    ) {
+      return NextResponse.json({
+        ok: true,
+        items: [],
+        total: 0,
+        summary: {
+          totalCount: 0,
+          pendingCount: 0,
+          pendingReviewCount: 0,
+          reviewedCount: 0,
+          unscoredCount: 0,
+          completedCount: 0,
+          avgScore: 0,
+          complianceBreachCount: 0,
+          activeDisputesCount: 0,
+          reviewedDisputesCount: 0,
+          qaDisputesCount: 0,
+          tlPendingDisputesCount: 0,
+          tlHistoryDisputesCount: 0,
+          qaOverridesCount: 0,
+        },
+        agentBreakdown: [],
+        availableAgents: [],
+        assignedDispositions: [],
+      });
+    }
+
+    const scopedLower = scopedAgentNames ? scopedAgentNames.map(a => a.trim().toLowerCase()) : [];
+
     const agentName = searchParams.get('agentName');
+    const dispositionParam = searchParams.get('disposition');
     const status = searchParams.get('status');
     const reviewStatus = searchParams.get('reviewStatus');
     const tab = searchParams.get('tab');
@@ -75,12 +198,59 @@ export async function GET(req: NextRequest) {
     const limit = Math.min(Number(searchParams.get('limit') || 100), 500);
     const offset = Number(searchParams.get('offset') || 0);
 
+    let effectiveDispositions: string[] | null = null;
+    let singleDisposition: string | null = null;
+
+    if (dispositionParam && dispositionParam !== 'all') {
+      const dTrimmed = dispositionParam.trim();
+      const dLower = dTrimmed.toLowerCase();
+      if (scopedDispositions !== null) {
+        const allowed = scopedDispositions.map(d => d.trim().toLowerCase());
+        if (allowed.includes(dLower)) {
+          singleDisposition = dTrimmed;
+        } else {
+          singleDisposition = '__FORBIDDEN__';
+        }
+      } else {
+        singleDisposition = dTrimmed;
+      }
+    } else if (scopedDispositions !== null) {
+      effectiveDispositions = scopedDispositions;
+    }
+
     let whereClauses: string[] = ['1=1'];
     const params: any[] = [];
 
     if (agentName) {
-      params.push(agentName);
-      whereClauses.push(`e.agent_name ILIKE $${params.length}`);
+      const reqLower = agentName.trim().toLowerCase();
+      const isAllowed = !scopedAgentNames || scopedLower.includes(reqLower) || scopedLower.some(n => n.startsWith(reqLower) || reqLower.startsWith(n));
+      if (isAllowed) {
+        params.push(agentName.trim());
+        whereClauses.push(`TRIM(e.agent_name) ILIKE $${params.length}`);
+      } else {
+        whereClauses.push('1 = 0');
+      }
+    } else if (scopedAgentNames) {
+      params.push(scopedLower);
+      whereClauses.push(`LOWER(TRIM(e.agent_name)) = ANY($${params.length}::text[])`);
+    }
+
+    // Disposition scoping & filtering
+    if (singleDisposition === '__FORBIDDEN__') {
+      whereClauses.push('1 = 0');
+    } else if (singleDisposition) {
+      params.push(singleDisposition.toLowerCase());
+      whereClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${params.length}`);
+    } else if (effectiveDispositions) {
+      const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
+      params.push(lowerDisps);
+      const dispIdx = params.length;
+      if (tab === 'reviewed') {
+        params.push(userEmail.toLowerCase());
+        whereClauses.push(`(LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${dispIdx}::text[]) OR LOWER(COALESCE(e.reviewed_by, '')) = $${params.length})`);
+      } else {
+        whereClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${dispIdx}::text[])`);
+      }
     }
 
     // QA Review workflow filtering
@@ -176,7 +346,7 @@ export async function GET(req: NextRequest) {
         SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
         FROM robylon_webhook_payloads w,
              jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
-        WHERE w.source = 'email' AND w.chat_id = c.chat_id
+        WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
           AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
         ORDER BY w.received_at DESC LIMIT 1
       ) intent ON true
@@ -198,12 +368,54 @@ export async function GET(req: NextRequest) {
       rangeParams.push(toDate.includes('T') ? toDate : `${toDate}T23:59:59.999Z`);
       rangeClauses.push(`e.sent_at <= $${rangeParams.length}`);
     }
-    const rangeAnd = rangeClauses.length ? `AND ${rangeClauses.join(' AND ')}` : '';
 
     // 2. Fetch Aggregated Statistics & Tab Counts for Dashboard
-    // Summary cards also follow the agent filter, so an agent's banner is their own numbers (the member breakdown stays team-wide).
-    const statsClauses = agentName ? [...rangeClauses, `e.agent_name ILIKE $${rangeParams.length + 1}`] : rangeClauses;
-    const statsParams = agentName ? [...rangeParams, agentName] : rangeParams;
+    // Summary cards follow the date range, agent scoping/filter, and disposition scoping/filter
+    const statsClauses: string[] = [...rangeClauses];
+    const statsParams: any[] = [...rangeParams];
+
+    if (agentName) {
+      const reqLower = agentName.trim().toLowerCase();
+      const isAllowed = !scopedAgentNames || scopedLower.includes(reqLower) || scopedLower.some(n => n.startsWith(reqLower) || reqLower.startsWith(n));
+      if (isAllowed) {
+        statsParams.push(agentName.trim());
+        statsClauses.push(`TRIM(e.agent_name) ILIKE $${statsParams.length}`);
+      } else {
+        statsClauses.push('1 = 0');
+      }
+    } else if (scopedAgentNames) {
+      statsParams.push(scopedLower);
+      statsClauses.push(`LOWER(TRIM(e.agent_name)) = ANY($${statsParams.length}::text[])`);
+    }
+
+    const hasDispositionFilter = singleDisposition !== null || effectiveDispositions !== null;
+    let statsFrom = 'FROM email_reply_evaluations e';
+    if (hasDispositionFilter) {
+      statsFrom = `
+        FROM email_reply_evaluations e
+        JOIN email_conversations c ON e.ticket_id = c.id
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
+          FROM robylon_webhook_payloads w,
+               jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
+          WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
+            AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
+          ORDER BY w.received_at DESC LIMIT 1
+        ) intent ON true
+      `;
+
+      if (singleDisposition === '__FORBIDDEN__') {
+        statsClauses.push('1 = 0');
+      } else if (singleDisposition) {
+        statsParams.push(singleDisposition.toLowerCase());
+        statsClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${statsParams.length}`);
+      } else if (effectiveDispositions) {
+        const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
+        statsParams.push(lowerDisps);
+        statsClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${statsParams.length}::text[])`);
+      }
+    }
+
     const statsWhere = statsClauses.length ? `WHERE ${statsClauses.join(' AND ')}` : '';
     const statsQuery = `
       SELECT 
@@ -220,13 +432,58 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.dispute_status = 'Raised' THEN 1 END)::int AS tl_pending_disputes_count,
         COUNT(CASE WHEN e.dispute_status IN ('Under_Review', 'Resolved', 'Rejected', 'TL_Resolved') THEN 1 END)::int AS tl_history_disputes_count,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS qa_overrides_count
-      FROM email_reply_evaluations e
+      ${statsFrom}
       ${statsWhere}
     `;
     const statsRes = await query(statsQuery, statsParams);
     const summary = statsRes?.[0] || {};
 
     // 3. Member-Level Breakdown for Team Lead View
+    const tlBreakdownClauses: string[] = ['e.agent_name IS NOT NULL'];
+    const tlBreakdownParams: any[] = [];
+    if (fromDate) {
+      tlBreakdownParams.push(fromDate);
+      tlBreakdownClauses.push(`e.sent_at >= $${tlBreakdownParams.length}`);
+    }
+    if (toDate) {
+      const toValue = toDate.includes('T') ? toDate : `${toDate}T23:59:59.999Z`;
+      tlBreakdownParams.push(toValue);
+      tlBreakdownClauses.push(`e.sent_at <= $${tlBreakdownParams.length}`);
+    }
+    if (scopedAgentNames) {
+      tlBreakdownParams.push(scopedLower);
+      tlBreakdownClauses.push(`LOWER(TRIM(e.agent_name)) = ANY($${tlBreakdownParams.length}::text[])`);
+    }
+
+    let tlBreakdownFrom = 'FROM email_reply_evaluations e';
+    if (hasDispositionFilter) {
+      tlBreakdownFrom = `
+        FROM email_reply_evaluations e
+        JOIN email_conversations c ON e.ticket_id = c.id
+        LEFT JOIN LATERAL (
+          SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
+          FROM robylon_webhook_payloads w,
+               jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
+          WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
+            AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
+          ORDER BY w.received_at DESC LIMIT 1
+        ) intent ON true
+      `;
+
+      if (singleDisposition === '__FORBIDDEN__') {
+        tlBreakdownClauses.push('1 = 0');
+      } else if (singleDisposition) {
+        tlBreakdownParams.push(singleDisposition.toLowerCase());
+        tlBreakdownClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${tlBreakdownParams.length}`);
+      } else if (effectiveDispositions) {
+        const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
+        tlBreakdownParams.push(lowerDisps);
+        tlBreakdownClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${tlBreakdownParams.length}::text[])`);
+      }
+    }
+
+    const tlBreakdownWhere = `WHERE ${tlBreakdownClauses.join(' AND ')}`;
+
     const tlBreakdownQuery = `
       SELECT 
         e.agent_name,
@@ -235,12 +492,12 @@ export async function GET(req: NextRequest) {
         COUNT(CASE WHEN e.compliance_passed = FALSE THEN 1 END)::int AS compliance_errors,
         COUNT(CASE WHEN e.dispute_status IN ('Raised', 'Under_Review') THEN 1 END)::int AS disputes_raised,
         COUNT(CASE WHEN e.qa_override_score IS NOT NULL THEN 1 END)::int AS overrides_count
-      FROM email_reply_evaluations e
-      WHERE e.agent_name IS NOT NULL ${rangeAnd}
+      ${tlBreakdownFrom}
+      ${tlBreakdownWhere}
       GROUP BY e.agent_name
       ORDER BY total_replies DESC
     `;
-    const agentBreakdown = await query(tlBreakdownQuery, rangeParams);
+    const agentBreakdown = await query(tlBreakdownQuery, tlBreakdownParams);
 
     const mappedItems = await Promise.all(
       (items || []).map(async (item: any) => {
@@ -280,6 +537,8 @@ export async function GET(req: NextRequest) {
         qaOverridesCount: Number(summary.qa_overrides_count || 0),
       },
       agentBreakdown: agentBreakdown || [],
+      availableAgents: scopedAgentNames || (agentBreakdown || []).map((a: any) => a.agent_name),
+      assignedDispositions: scopedDispositions || allDispositions,
     });
   } catch (err: any) {
     console.error('[api/email-evaluations] Error:', err);
@@ -318,6 +577,35 @@ export async function POST(req: NextRequest) {
         [messageId]
       );
       const existing = evalRows?.[0];
+      if (!existing) {
+        return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
+      }
+
+      if (role === 'quality' && !sessionUser?.isAdmin) {
+        const { scopedDispositions } = await getScopedDispositionsForUser(reviewerEmail, role, false);
+        if (scopedDispositions !== null && scopedDispositions.length > 0) {
+          const intentRows = await query<any>(`
+            SELECT intent.val AS intent_l1
+            FROM email_reply_evaluations e
+            JOIN email_conversations c ON e.ticket_id = c.id
+            LEFT JOIN LATERAL (
+              SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
+              FROM robylon_webhook_payloads w,
+                   jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
+              WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
+                AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
+              ORDER BY w.received_at DESC LIMIT 1
+            ) intent ON true
+            WHERE e.message_id = $1
+          `, [messageId]);
+          const itemIntent = (intentRows[0]?.intent_l1 || '').trim().toLowerCase();
+          const allowed = scopedDispositions.map(d => d.trim().toLowerCase());
+          if (itemIntent && !allowed.includes(itemIntent)) {
+            return NextResponse.json({ error: 'Forbidden: You are not assigned to this email disposition' }, { status: 403 });
+          }
+        }
+      }
+
       const wasDispute = existing && (existing.dispute_status === 'Under_Review' || existing.dispute_status === 'Raised');
 
       await query(
@@ -547,6 +835,32 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
+
+      if (role === 'quality' && !sessionUser?.isAdmin) {
+        const { scopedDispositions } = await getScopedDispositionsForUser(reviewerEmail, role, false);
+        if (scopedDispositions !== null && scopedDispositions.length > 0) {
+          const intentRows = await query<any>(`
+            SELECT intent.val AS intent_l1
+            FROM email_reply_evaluations e
+            JOIN email_conversations c ON e.ticket_id = c.id
+            LEFT JOIN LATERAL (
+              SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
+              FROM robylon_webhook_payloads w,
+                   jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
+              WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
+                AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
+              ORDER BY w.received_at DESC LIMIT 1
+            ) intent ON true
+            WHERE e.message_id = $1
+          `, [messageId]);
+          const itemIntent = (intentRows[0]?.intent_l1 || '').trim().toLowerCase();
+          const allowed = scopedDispositions.map(d => d.trim().toLowerCase());
+          if (itemIntent && !allowed.includes(itemIntent)) {
+            return NextResponse.json({ error: 'Forbidden: You are not assigned to this email disposition' }, { status: 403 });
+          }
+        }
+      }
+
       const flagId = existing.flag_id;
 
       const updateScore = newScore !== undefined && newScore !== null ? Number(newScore) : null;
@@ -626,6 +940,17 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
+
+      if (role === 'tl') {
+        const tlAgents = await getScopedAgentNamesForUser(email, submitterName, 'tl', false);
+        if (tlAgents && tlAgents.length > 0) {
+          const lowerTL = tlAgents.map(a => a.trim().toLowerCase());
+          if (!lowerTL.includes((existing.agent_name || '').trim().toLowerCase())) {
+            return NextResponse.json({ error: 'Forbidden: You can only act on disputes for your assigned agents' }, { status: 403 });
+          }
+        }
+      }
+
       let flagId = existing.flag_id;
 
       if (!flagId) {
@@ -704,13 +1029,24 @@ export async function POST(req: NextRequest) {
       const submitterName = await getSubmitterName(email);
 
       const evalRows = await query<any>(
-        `SELECT id, ticket_id, message_id, flag_id, dispute_notes FROM email_reply_evaluations WHERE message_id = $1`,
+        `SELECT id, ticket_id, message_id, flag_id, dispute_notes, agent_name FROM email_reply_evaluations WHERE message_id = $1`,
         [messageId]
       );
       if (!evalRows.length) {
         return NextResponse.json({ error: 'Evaluation not found' }, { status: 404 });
       }
       const existing = evalRows[0];
+
+      if (role === 'tl') {
+        const tlAgents = await getScopedAgentNamesForUser(email, submitterName, 'tl', false);
+        if (tlAgents && tlAgents.length > 0) {
+          const lowerTL = tlAgents.map(a => a.trim().toLowerCase());
+          if (!lowerTL.includes((existing.agent_name || '').trim().toLowerCase())) {
+            return NextResponse.json({ error: 'Forbidden: You can only resolve disputes for your assigned agents' }, { status: 403 });
+          }
+        }
+      }
+
       const flagId = existing.flag_id;
 
       if (flagId) {
