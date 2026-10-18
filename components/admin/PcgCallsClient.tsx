@@ -267,6 +267,27 @@ export default function PcgCallsClient() {
     setIsPlaying(false);
   };
 
+  // Open coaching chat view for a given topic or RM
+  const handleOpenCoachingChat = (opts: { rmName?: string; categoryKey?: '13_pitching' | 'upselling' | 'support' }) => {
+    setSelectedCategory('coaching_available');
+    if (opts.rmName) {
+      setAdminRmFilter(opts.rmName);
+    }
+    const match = calls.find(c => {
+      const matchRm = !opts.rmName || c.rmName === opts.rmName;
+      const matchCat = !opts.categoryKey || c.categoryKey === opts.categoryKey;
+      return matchRm && matchCat && (c.aiCoachingTip !== null || c.needsAttention);
+    }) || calls.find(c => {
+      const matchRm = !opts.rmName || c.rmName === opts.rmName;
+      const matchCat = !opts.categoryKey || c.categoryKey === opts.categoryKey;
+      return matchRm && matchCat;
+    }) || calls[0];
+
+    if (match) {
+      handleOpenCallView(match);
+    }
+  };
+
   // Action: Agent Raises Dispute Inline
   const handleSubmitDispute = () => {
     if (!activeCallAudit) return;
@@ -1132,7 +1153,7 @@ export default function PcgCallsClient() {
                       : 'bg-purple-50 text-purple-900 border border-purple-200 hover:bg-purple-100'
                   }`}
                 >
-                  Team AI Coaching Intelligence
+                  Team Coaching Insights
                 </button>
               </>
             )}
@@ -1496,42 +1517,33 @@ export default function PcgCallsClient() {
               </div>
             )}
 
-            {/* 3. Team AI Training & Coaching Intelligence (Dedicated Admin Section) */}
+            {/* 3. Team Coaching Insights (Dedicated Admin Section) */}
             {selectedCategory === 'ai_coaching_insights' && (
-              <div className="bg-white rounded-2xl border border-purple-100 shadow-sm overflow-hidden p-6 space-y-6 animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden p-6 space-y-6 animate-in fade-in duration-200">
                 {/* Header */}
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-100 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#F0F0F2] pb-4">
                   <div>
-                    <div className="flex items-center gap-2">
-                      
+                    <div className="flex items-center gap-2.5">
                       <h3 className="text-base font-bold text-gray-900">
-                        Overall Team AI Training &amp; Coaching Insights
+                        Team Coaching Insights
                       </h3>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
                         100% Team Coverage
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1 max-w-2xl leading-relaxed">
-                      Comprehensive executive intelligence on AI coaching interventions delivered across all relationship managers, coaching topic concentration, trajectory improvement, and focus queues.
+                      Executive intelligence on AI coaching interventions delivered across all relationship managers, coaching topic concentration, trajectory improvement, and focus queues.
                     </p>
                   </div>
-
-                  <button
-                    onClick={() => setSelectedCategory('coaching_available')}
-                    className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-3.5 py-2 rounded-xl border border-purple-200 transition-all flex items-center gap-2 shadow-sm"
-                  >
-                    <span>View Coaching Chats &amp; Calls</span>
-                    <span>→</span>
-                  </button>
                 </div>
 
                 {/* High-Level Diagnostic KPI Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl border border-purple-100 bg-purple-50/40 space-y-1">
+                  <div className="p-4 rounded-xl border border-purple-100 bg-purple-50/30 space-y-1">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 block">
                       Team Members Coached
                     </span>
-                    <div className="text-2xl font-black font-mono text-gray-900">8 / 8 RMs</div>
+                    <div className="text-2xl font-black font-mono text-gray-900">9 / 9 RMs</div>
                     <p className="text-xs text-gray-500 mt-1">
                       100% of active RMs across Team Gokul &amp; Vaishnavi received AI guidance.
                     </p>
@@ -1553,7 +1565,7 @@ export default function PcgCallsClient() {
                     </span>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/40 space-y-1">
+                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30 space-y-1">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block">
                       Score Improvement
                     </span>
@@ -1566,7 +1578,7 @@ export default function PcgCallsClient() {
                     </span>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/40 space-y-1">
+                  <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30 space-y-1">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 block">
                       Safe Pitch Compliance
                     </span>
@@ -1591,27 +1603,24 @@ export default function PcgCallsClient() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Topic 1 */}
-                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/60 space-y-2 hover:border-purple-200 transition-colors">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-2">
-                            
-                            <h5 className="text-xs font-bold text-gray-900">
-                              Mandatory SEBI Risk Disclosures &amp; Non-Guaranteed Yield
-                            </h5>
-                          </div>
+                          <h5 className="text-xs font-bold text-gray-900">
+                            Mandatory SEBI Risk Disclosures &amp; Non-Guaranteed Yield
+                          </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">18 calls (33% of guidance)</strong> • Current Mastery: <span className="text-emerald-700 font-bold">88%</span>
                           </p>
                         </div>
                         <button
-                          onClick={() => setSelectedCategory('coaching_available')}
-                          className="px-2 py-1 text-[11px] font-bold bg-white text-purple-700 hover:bg-purple-50 border border-purple-200 rounded-lg shrink-0 shadow-sm"
+                          onClick={() => handleOpenCoachingChat({ categoryKey: '13_pitching' })}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
                         >
                           View Chats →
                         </button>
                       </div>
-                      <p className="text-xs text-gray-600 bg-white p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
+                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
                         "Ensure crisp distinction between 13% indicative IRR and guaranteed bank deposits; always cite regulated NBFC partner disclaimers before closing."
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
@@ -1622,27 +1631,24 @@ export default function PcgCallsClient() {
                     </div>
 
                     {/* Topic 2 */}
-                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/60 space-y-2 hover:border-purple-200 transition-colors">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-2">
-                            
-                            <h5 className="text-xs font-bold text-gray-900">
-                              Investor Suitability Profiling before 13% Pitching
-                            </h5>
-                          </div>
+                          <h5 className="text-xs font-bold text-gray-900">
+                            Investor Suitability Profiling before 13% Pitching
+                          </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">14 calls (26% of guidance)</strong> • Current Mastery: <span className="text-emerald-700 font-bold">82%</span>
                           </p>
                         </div>
                         <button
-                          onClick={() => setSelectedCategory('coaching_available')}
-                          className="px-2 py-1 text-[11px] font-bold bg-white text-purple-700 hover:bg-purple-50 border border-purple-200 rounded-lg shrink-0 shadow-sm"
+                          onClick={() => handleOpenCoachingChat({ categoryKey: '13_pitching' })}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
                         >
                           View Chats →
                         </button>
                       </div>
-                      <p className="text-xs text-gray-600 bg-white p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
+                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
                         "Always ask the investor's current debt portfolio allocation and liquidity horizon before proposing lock-in products."
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
@@ -1653,27 +1659,24 @@ export default function PcgCallsClient() {
                     </div>
 
                     {/* Topic 3 */}
-                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/60 space-y-2 hover:border-purple-200 transition-colors">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-2">
-                            
-                            <h5 className="text-xs font-bold text-gray-900">
-                              Liquidity Lock-in &amp; Secondary Market Exit Mechanisms
-                            </h5>
-                          </div>
+                          <h5 className="text-xs font-bold text-gray-900">
+                            Liquidity Lock-in &amp; Secondary Market Exit Mechanisms
+                          </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">12 calls (22% of guidance)</strong> • Current Mastery: <span className="text-amber-700 font-bold">79%</span>
                           </p>
                         </div>
                         <button
-                          onClick={() => setSelectedCategory('coaching_available')}
-                          className="px-2 py-1 text-[11px] font-bold bg-white text-purple-700 hover:bg-purple-50 border border-purple-200 rounded-lg shrink-0 shadow-sm"
+                          onClick={() => handleOpenCoachingChat({ categoryKey: 'upselling' })}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
                         >
                           View Chats →
                         </button>
                       </div>
-                      <p className="text-xs text-gray-600 bg-white p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
+                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
                         "Proactively clarify lock-in tenure and explain how secondary market sale mechanisms operate if the investor requires premature capital."
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
@@ -1684,27 +1687,24 @@ export default function PcgCallsClient() {
                     </div>
 
                     {/* Topic 4 */}
-                    <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/60 space-y-2 hover:border-purple-200 transition-colors">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
                       <div className="flex items-start justify-between gap-2">
                         <div>
-                          <div className="flex items-center gap-2">
-                            
-                            <h5 className="text-xs font-bold text-gray-900">
-                              Active Listening, Objection Handling &amp; Speech Pacing
-                            </h5>
-                          </div>
+                          <h5 className="text-xs font-bold text-gray-900">
+                            Active Listening, Objection Handling &amp; Speech Pacing
+                          </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">10 calls (19% of guidance)</strong> • Current Mastery: <span className="text-emerald-700 font-bold">85%</span>
                           </p>
                         </div>
                         <button
-                          onClick={() => setSelectedCategory('coaching_available')}
-                          className="px-2 py-1 text-[11px] font-bold bg-white text-purple-700 hover:bg-purple-50 border border-purple-200 rounded-lg shrink-0 shadow-sm"
+                          onClick={() => handleOpenCoachingChat({ categoryKey: 'support' })}
+                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
                         >
                           View Chats →
                         </button>
                       </div>
-                      <p className="text-xs text-gray-600 bg-white p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
+                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
                         "Pause and acknowledge investor skepticism on high yields; avoid speaking over customer during hesitation points."
                       </p>
                       <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
@@ -1721,12 +1721,9 @@ export default function PcgCallsClient() {
                   {/* Left Column: Who has improved */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        
-                        <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
-                          Who Has Improved (Positive Trajectory)
-                        </h4>
-                      </div>
+                      <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                        Who Has Improved (Positive Trajectory)
+                      </h4>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
                         4 RMs Demonstrating Lift
                       </span>
@@ -1739,7 +1736,7 @@ export default function PcgCallsClient() {
                         { name: 'Aravind', team: 'Vaishnavi', prev: '83%', now: '89%', delta: '+6%', skill: 'Exceptional active listening and zero compliance flags' },
                         { name: 'Gaurav Nautiyal', team: 'Gokul', prev: '80%', now: '85%', delta: '+5%', skill: 'Overcame bank FD comparisons with structured walk-through' },
                       ].map((rm) => (
-                        <div key={rm.name} className="p-3 rounded-xl border border-emerald-100 bg-emerald-50/30 flex items-center justify-between gap-3">
+                        <div key={rm.name} className="p-3 rounded-xl border border-emerald-100 bg-emerald-50/20 flex items-center justify-between gap-3">
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-xs text-gray-900">{rm.name}</span>
@@ -1753,8 +1750,8 @@ export default function PcgCallsClient() {
                           <div className="text-right shrink-0">
                             <span className="text-xs font-mono font-bold text-emerald-700 block">{rm.now} IQS</span>
                             <button
-                              onClick={() => { setSelectedRm(rm.name); setActiveTab('scorecard'); }}
-                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline mt-0.5"
+                              onClick={() => { setSelectedRm(rm.name); handleTabChange('scorecard'); }}
+                              className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline mt-0.5 cursor-pointer"
                             >
                               Open Scorecard
                             </button>
@@ -1767,12 +1764,9 @@ export default function PcgCallsClient() {
                   {/* Right Column: Who needs improvement */}
                   <div className="space-y-3">
                     <div className="flex items-center justify-between border-b border-amber-100 pb-2">
-                      <div className="flex items-center gap-1.5">
-                        
-                        <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
-                          Who Needs Improvement (Coaching Focus Queue)
-                        </h4>
-                      </div>
+                      <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                        Who Needs Improvement (Coaching Focus Queue)
+                      </h4>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
                         4 RMs in Coaching Queue
                       </span>
@@ -1785,7 +1779,7 @@ export default function PcgCallsClient() {
                         { name: 'Sujal Dadwani', team: 'Vaishnavi', current: '83%', priority: 'Medium', focus: 'Active listening & pacing; avoid rushing the 13% yield pitch' },
                         { name: 'Antara Chakrabarty', team: 'Vaishnavi', current: '84%', priority: 'Medium', focus: 'Investor suitability profiling before introducing 13% yield' },
                       ].map((rm) => (
-                        <div key={rm.name} className="p-3 rounded-xl border border-amber-200 bg-amber-50/30 flex items-center justify-between gap-3">
+                        <div key={rm.name} className="p-3 rounded-xl border border-amber-200 bg-amber-50/20 flex items-center justify-between gap-3">
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-xs text-gray-900">{rm.name}</span>
@@ -1801,8 +1795,8 @@ export default function PcgCallsClient() {
                           <div className="text-right shrink-0">
                             <span className="text-xs font-mono font-bold text-amber-800 block">{rm.current} IQS</span>
                             <button
-                              onClick={() => { setSelectedRm(rm.name); setActivePersona('agent'); setSelectedCategory('coaching_available'); }}
-                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-bold underline mt-0.5"
+                              onClick={() => handleOpenCoachingChat({ rmName: rm.name })}
+                              className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline mt-0.5 cursor-pointer"
                             >
                               Inspect Chats
                             </button>
@@ -1812,32 +1806,6 @@ export default function PcgCallsClient() {
                     </div>
                   </div>
                 </div>
-
-                {/* Direct Coaching Chats Link Banner */}
-                <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 border border-purple-200 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    
-                    <div>
-                      <p className="text-xs font-bold text-gray-900">
-                        Ready to audit the exact dialogue turns and chats where coaching was triggered?
-                      </p>
-                      <p className="text-[11px] text-gray-600">
-                        Click below to view the calls list filtered to calls with active coaching recommendations. Each call includes the full transcript with AI suggestions.
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setSelectedCategory('coaching_available');
-                      const tableElem = document.getElementById('pcg-calls-table');
-                      if (tableElem) tableElem.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    className="px-4 py-2 bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs rounded-xl shadow transition-all flex items-center gap-1.5"
-                  >
-                    <span>Inspect Coaching Chats in Calls Table</span>
-                    <span>↓</span>
-                  </button>
-                </div>
               </div>
             )}
           </div>
@@ -1846,6 +1814,7 @@ export default function PcgCallsClient() {
 
 
         {/* ── 6. CALLS AUDIT LIST ────────────────────────────────────────────── */}
+        {selectedCategory !== 'ai_coaching_insights' && (
         <div id="pcg-calls-table" className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden">
           {/* Coaching Insights Active Banner */}
           {selectedCategory === 'coaching_available' && (
@@ -2024,6 +1993,7 @@ export default function PcgCallsClient() {
             </div>
           )}
         </div>
+        )}
       </div>
       )}
 
