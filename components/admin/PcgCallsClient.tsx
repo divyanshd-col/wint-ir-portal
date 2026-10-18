@@ -106,17 +106,15 @@ export default function PcgCallsClient() {
   );
 
   useEffect(() => {
-    if (!isSuperAdmin) {
-      if (userRole === 'agent') {
-        setActivePersona('agent');
-        if (loggedInUserName) setSelectedRm(loggedInUserName);
-      } else if (userRole === 'tl' && activePersona === 'admin') {
-        setActivePersona('tl');
-      }
-    } else if (userRole === 'agent' && loggedInUserName) {
-      setSelectedRm(loggedInUserName);
+    if (userRole === 'agent') {
+      setActivePersona('agent');
+      if (loggedInUserName) setSelectedRm(loggedInUserName);
+    } else if (userRole === 'tl') {
+      setActivePersona('tl');
+    } else {
+      setActivePersona('admin');
     }
-  }, [userRole, isSuperAdmin, loggedInUserName]);
+  }, [userRole, loggedInUserName]);
 
   // Sync tab with URL search params
   useEffect(() => {
@@ -665,37 +663,6 @@ export default function PcgCallsClient() {
           </div>
         </div>
 
-        {/* Persona Switcher Tabs - Role Scoped */}
-        {userRole === 'agent' && !isSuperAdmin ? null : (
-          <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
-            <button
-              onClick={() => { setActivePersona('agent'); setSelectedRm('Dhanush'); }}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-                activePersona === 'agent' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
-              }`}
-            >
-              Agent View
-            </button>
-            <button
-              onClick={() => { setActivePersona('tl'); setSelectedTl('Gokul'); }}
-              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-                activePersona === 'tl' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
-              }`}
-            >
-              Team Lead (TL) View
-            </button>
-            {(userRole === 'admin' || isSuperAdmin) && (
-              <button
-                onClick={() => setActivePersona('admin')}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-                  activePersona === 'admin' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
-                }`}
-              >
-                Admin View
-              </button>
-            )}
-          </div>
-        )}
 
         {/* Option Bar Switcher: Calls & Analytics | Scorecard | Disputes */}
         <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
@@ -938,11 +905,15 @@ export default function PcgCallsClient() {
                   <span className="text-xs text-[#71717A]">Team:</span>
                   <select
                     value={adminTlFilter}
-                    onChange={(e) => { setAdminTlFilter(e.target.value as any); setPage(1); }}
+                    onChange={(e) => {
+                      setAdminTlFilter(e.target.value as any);
+                      setAdminRmFilter('all');
+                      setPage(1);
+                    }}
                     className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
                   >
                     <option value="all">All Teams (Gokul &amp; Vaishnavi)</option>
-                    <option value="Gokul">Team Gokul (4 RMs)</option>
+                    <option value="Gokul">Team Gokul (5 RMs)</option>
                     <option value="Vaishnavi">Team Vaishnavi (4 RMs)</option>
                   </select>
                 </div>
@@ -954,10 +925,16 @@ export default function PcgCallsClient() {
                     onChange={(e) => { setAdminRmFilter(e.target.value); setPage(1); }}
                     className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
                   >
-                    <option value="all">All RMs (8)</option>
-                    {rms.map((r) => (
-                      <option key={r.name} value={r.name}>{r.name}</option>
-                    ))}
+                    <option value="all">All RMs ({rms.length})</option>
+                    {rms
+                      .filter((r) => {
+                        if (adminTlFilter === 'Gokul') return ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'].includes(r.name);
+                        if (adminTlFilter === 'Vaishnavi') return ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'].includes(r.name);
+                        return true;
+                      })
+                      .map((r) => (
+                        <option key={r.name} value={r.name}>{r.name}</option>
+                      ))}
                   </select>
                 </div>
               </div>
