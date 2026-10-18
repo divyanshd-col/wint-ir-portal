@@ -608,11 +608,7 @@ export default function PcgCallsClient() {
         </div>
 
         {/* Persona Switcher Tabs - Role Scoped */}
-        {userRole === 'agent' && !isSuperAdmin ? (
-          <div className="inline-flex items-center px-3 py-1.5 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7] text-xs font-semibold text-zinc-700">
-            <span>👤 RM / Agent View</span>
-          </div>
-        ) : (
+        {userRole === 'agent' && !isSuperAdmin ? null : (
           <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
             <button
               onClick={() => { setActivePersona('agent'); setSelectedRm('Dhanush'); }}
@@ -731,106 +727,101 @@ export default function PcgCallsClient() {
         </div>
       ) : activeTab === 'disputes' ? (
         <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
-          {/* Persona Header for Disputes */}
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                  {activePersona === 'agent' ? 'RM Personal Hub' : activePersona === 'tl' ? 'Team Leadership Hub' : 'Executive Console'}
-                </span>
-                <h2 className="text-lg font-bold text-[#111111]">
-                  {activePersona === 'agent'
-                    ? `Disputes & Appeals — ${selectedRm}`
-                    : activePersona === 'tl'
-                    ? `Team Quality Disputes & Appeals — Team ${selectedTl}`
-                    : 'Organization Disputes & Appeals Console'}
-                </h2>
+          {/* Persona Header for Disputes - Only for TL and Admin */}
+          {activePersona !== 'agent' && (
+            <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
+                    {activePersona === 'tl' ? 'Team Leadership Hub' : 'Executive Console'}
+                  </span>
+                  <h2 className="text-lg font-bold text-[#111111]">
+                    {activePersona === 'tl'
+                      ? `Team Quality Disputes & Appeals — Team ${selectedTl}`
+                      : 'Organization Disputes & Appeals Console'}
+                  </h2>
+                </div>
+                <p className="text-xs text-[#71717A] mt-1">
+                  Review agent disputes challenging AI scores, audit audio evidence and transcript turns, and submit binding override decisions.
+                </p>
               </div>
-              <p className="text-xs text-[#71717A] mt-1">
-                {activePersona === 'agent'
-                  ? 'Track call evaluations you challenged, review decisions made by your Team Leader, and inspect revised scores.'
-                  : 'Review agent disputes challenging AI scores, audit audio evidence and transcript turns, and submit binding override decisions.'}
-              </p>
             </div>
-          </div>
+          )}
           {renderDisputesTable()}
         </div>
       ) : (
         <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
-        {/* ── 1. PERSONA CONTEXT HEADER ───────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                {activePersona === 'agent' ? 'RM Personal Hub' : activePersona === 'tl' ? 'Team Leadership Hub' : 'Executive Console'}
-              </span>
-              <h2 className="text-lg font-bold text-[#111111]">
-                {activePersona === 'agent'
-                  ? `Agent Dashboard — ${selectedRm}`
-                  : activePersona === 'tl'
-                  ? `Team Leader Console — Team ${selectedTl}`
-                  : 'Organization PCG Analytics & Administration'}
-              </h2>
+        {/* ── 1. PERSONA CONTEXT HEADER (Only for TL and Admin) ──────────────── */}
+        {activePersona !== 'agent' && (
+          <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
+                  {activePersona === 'tl' ? 'Team Leadership Hub' : 'Executive Console'}
+                </span>
+                <h2 className="text-lg font-bold text-[#111111]">
+                  {activePersona === 'tl'
+                    ? `Team Leader Console — Team ${selectedTl}`
+                    : 'Organization PCG Analytics & Administration'}
+                </h2>
+              </div>
+              <p className="text-xs text-[#71717A] mt-1">
+                {activePersona === 'tl'
+                  ? 'Team oversight, low-score alerts (<85%), dropped call diagnostics, and RM scorecards.'
+                  : 'Complete cross-team visibility across all RMs, Team Leads, and categories.'}
+              </p>
             </div>
-            <p className="text-xs text-[#71717A] mt-1">
-              {activePersona === 'agent'
-                ? 'Your verified call audits, 100% AI evaluated. Coaching insights shown for calls needing attention.'
-                : activePersona === 'tl'
-                ? 'Team oversight, low-score alerts (<85%), dropped call diagnostics, and RM scorecards.'
-                : 'Complete cross-team visibility across all RMs, Team Leads, and categories.'}
-            </p>
-          </div>
 
-          {/* Switchers within persona - Only for TL and Admin, RM strictly sees own scores */}
-
-          {activePersona === 'tl' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#71717A]">Team Lead:</span>
-              <select
-                value={selectedTl}
-                onChange={(e) => { setSelectedTl(e.target.value); setPage(1); }}
-                className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-zinc-50"
-              >
-                <option value="Gokul">Team Gokul (4 RMs)</option>
-                <option value="Vaishnavi">Team Vaishnavi (4 RMs)</option>
-              </select>
-            </div>
-          )}
-
-          {activePersona === 'admin' && (
-            <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-[#71717A]">Team:</span>
+            {/* Switchers within persona - Only for TL and Admin, RM strictly sees own scores */}
+            {activePersona === 'tl' && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#71717A]">Team Lead:</span>
                 <select
-                  value={adminTlFilter}
-                  onChange={(e) => { setAdminTlFilter(e.target.value as any); setPage(1); }}
-                  className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
+                  value={selectedTl}
+                  onChange={(e) => { setSelectedTl(e.target.value); setPage(1); }}
+                  className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-zinc-50"
                 >
-                  <option value="all">All Teams (Gokul &amp; Vaishnavi)</option>
                   <option value="Gokul">Team Gokul (4 RMs)</option>
                   <option value="Vaishnavi">Team Vaishnavi (4 RMs)</option>
                 </select>
               </div>
+            )}
 
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-[#71717A]">RM:</span>
-                <select
-                  value={adminRmFilter}
-                  onChange={(e) => { setAdminRmFilter(e.target.value); setPage(1); }}
-                  className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
-                >
-                  <option value="all">All RMs (8)</option>
-                  {rms.map((r) => (
-                    <option key={r.name} value={r.name}>{r.name}</option>
-                  ))}
-                </select>
+            {activePersona === 'admin' && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#71717A]">Team:</span>
+                  <select
+                    value={adminTlFilter}
+                    onChange={(e) => { setAdminTlFilter(e.target.value as any); setPage(1); }}
+                    className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
+                  >
+                    <option value="all">All Teams (Gokul &amp; Vaishnavi)</option>
+                    <option value="Gokul">Team Gokul (4 RMs)</option>
+                    <option value="Vaishnavi">Team Vaishnavi (4 RMs)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#71717A]">RM:</span>
+                  <select
+                    value={adminRmFilter}
+                    onChange={(e) => { setAdminRmFilter(e.target.value); setPage(1); }}
+                    className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50"
+                  >
+                    <option value="all">All RMs (8)</option>
+                    {rms.map((r) => (
+                      <option key={r.name} value={r.name}>{r.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* ── 2. TOP METRIC CARDS ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className={`grid gap-4 ${activePersona === 'agent' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 md:grid-cols-4'}`}>
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
               {activePersona === 'agent' ? 'My Quality Score' : activePersona === 'tl' ? 'Team Avg IQS' : 'Org Avg IQS'}
@@ -872,22 +863,24 @@ export default function PcgCallsClient() {
             </p>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-              {activePersona === 'agent' ? 'Weekly Rank' : 'Needs Attention (<85%)'}
-            </p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-extrabold font-mono text-[#111111]">
-                {activePersona === 'agent' ? rmRankDisplay : `${summary?.needsAttentionCount || 28}`}
-              </span>
-              <span className="text-xs font-semibold text-amber-600">
-                {activePersona === 'agent' ? 'in Team' : 'calls flagged'}
-              </span>
+          {activePersona !== 'agent' && (
+            <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
+              <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+                Needs Attention (&lt;85%)
+              </p>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-extrabold font-mono text-[#111111]">
+                  {summary?.needsAttentionCount || 28}
+                </span>
+                <span className="text-xs font-semibold text-amber-600">
+                  calls flagged
+                </span>
+              </div>
+              <p className="text-[11px] text-[#71717A] mt-1">
+                Immediate coaching queue
+              </p>
             </div>
-            <p className="text-[11px] text-[#71717A] mt-1">
-              {activePersona === 'agent' ? 'Top 10% performer' : 'Immediate coaching queue'}
-            </p>
-          </div>
+          )}
         </div>
 
         {/* ── 3. UNANSWERED CALLS DIAGNOSTIC (Customer vs RM) ───────────────── */}
