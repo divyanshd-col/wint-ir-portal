@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { activeTab, isAuthPath, topTabs } from '@/lib/nav';
 
@@ -77,34 +77,24 @@ import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 export default function TopBar() {
   const pathname = usePathname() || '/';
   const { data: session, status } = useSession();
-  if (isAuthPath(pathname) || status === 'unauthenticated') return null;
-
   const user = session?.user as any;
-  const role = user?.role ?? 'agent';
-  const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const platformDomain = user?.platformDomain || 'cx';
   const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
-  const searchParams = useSearchParams();
-  const pcgTab = searchParams?.get('tab') || 'calls';
+
+  if (isAuthPath(pathname) || status === 'unauthenticated' || activeDomain === 'pcg' || pathname.startsWith('/admin/pcg-calls')) return null;
+  const role = user?.role ?? 'agent';
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const tabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   const current = activeTab(pathname);
 
-  const isTabActive = (t: { key: string }) => {
-    if (activeDomain === 'pcg') {
-      if (t.key === 'pcg-scorecard') return pcgTab === 'scorecard';
-      if (t.key === 'pcg-disputes') return pcgTab === 'disputes';
-      if (t.key === 'pcg-calls') return pcgTab === 'calls';
-      return false;
-    }
-    return current === t.key;
-  };
+  const isTabActive = (t: { key: string }) => current === t.key;
 
   return (
     <>
       {/* Pages size themselves with h-screen / min-h-screen: take the bar's height off, only while it is shown. */}
       <style>{'.h-screen{height:calc(100vh - var(--topbar-h))}.min-h-screen{min-height:calc(100vh - var(--topbar-h))}'}</style>
       <header className="topbar">
-        <Link href={activeDomain === 'pcg' ? '/admin/pcg-calls' : '/'} className="topbar-logo" aria-label="Wint Wealth home">
+        <Link href="/" className="topbar-logo" aria-label="Wint Wealth home">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/wint-logo.png" alt="Wint Wealth" width={22} height={22} />
         </Link>

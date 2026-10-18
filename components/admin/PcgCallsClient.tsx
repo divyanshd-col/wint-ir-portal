@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { IQSRing, IQSPill } from '@/components/quality/IQSRing';
 import { iqsTheme } from '@/lib/quality';
 import PcgScorecardView from './PcgScorecardView';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 
 // Type definitions
 interface CallParameter {
@@ -78,6 +79,7 @@ export default function PcgCallsClient() {
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role || 'admin';
   const isSuperAdmin = Boolean((session?.user as any)?.isSuperAdmin);
+  const platformDomain = (session?.user as any)?.platformDomain || 'pcg';
   const loggedInUserName = (session?.user as any)?.name || '';
 
   // Persona switcher: 'agent' | 'tl' | 'admin'
@@ -710,6 +712,34 @@ export default function PcgCallsClient() {
               />
             </div>
           )}
+
+          {/* Workspace Switcher for Super Admins */}
+          {(isSuperAdmin || platformDomain === 'both') && (
+            <div className="ml-1">
+              <WorkspaceSwitcher compact={true} />
+            </div>
+          )}
+
+          {/* User Profile & Sign Out */}
+          <div className="flex items-center gap-2 pl-3 ml-1 border-l border-[#E4E4E7]">
+            <div className="w-7 h-7 rounded-full bg-[#111111] text-white flex items-center justify-center text-xs font-bold">
+              {loggedInUserName ? loggedInUserName.slice(0, 2).toUpperCase() : 'AT'}
+            </div>
+            <div className="hidden sm:block text-left">
+              <div className="text-xs font-bold text-[#111111] leading-tight">{loggedInUserName || 'Aahan Thaker'}</div>
+              <div className="text-[10px] text-[#71717A] capitalize font-medium">{userRole === 'agent' ? 'RM' : userRole}</div>
+            </div>
+            <button
+              onClick={() => signOut({ callbackUrl: '/login' })}
+              title="Sign out"
+              className="ml-1 p-1.5 text-zinc-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-xs font-medium flex items-center gap-1"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" />
+              </svg>
+              <span className="hidden md:inline">Sign out</span>
+            </button>
+          </div>
         </div>
       </div>
 

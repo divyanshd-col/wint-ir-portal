@@ -23,15 +23,9 @@ const TABS: (NavTab & { skill: string })[] = [
   { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' },
 ];
 
-const PCG_TABS: NavTab[] = [
-  { key: 'pcg-calls',     label: 'Calls & Analytics',  href: '/admin/pcg-calls?tab=calls' },
-  { key: 'pcg-scorecard', label: 'Scorecard',          href: '/admin/pcg-calls?tab=scorecard' },
-  { key: 'pcg-disputes',  label: 'Disputes & Appeals', href: '/admin/pcg-calls?tab=disputes' },
-];
-
 export function topTabs(role: string | undefined, skills: string[] | undefined, activeDomain: 'cx' | 'pcg' = 'cx'): NavTab[] {
   if (activeDomain === 'pcg') {
-    return PCG_TABS;
+    return [];
   }
   return TABS.filter((t) => hasNavSkill(role, skills, t.skill)).map(({ key, label, href }) => ({ key, label, href }));
 }
