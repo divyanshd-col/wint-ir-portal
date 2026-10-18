@@ -71,6 +71,7 @@ export const NAV_ALL: NavItem[] = [
   { label: 'Quality Calls',    href: '/tl/quality-calls',       icon: PhoneIcon,      roles: ['admin', 'tl'],                     skill: 'tl:quality_calls:access' },
   { label: 'My Reports',       href: '/agent/reports',          icon: DocumentIcon,   roles: ['agent'],                           skill: 'agent:reports:access' },
   { label: 'IR Reports',       href: '/tl/reports',             icon: DocumentIcon,   roles: ['admin', 'tl'],                     skill: 'tl:reports:access' },
+  { label: 'PCG Calls',        href: '/admin/pcg-calls',        icon: PhoneIcon,      roles: ['admin'] },
 ];
 
 const ROLE_LABELS: Record<string, string> = {

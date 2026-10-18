@@ -22,7 +22,7 @@ function getS3Client(): S3Client | null {
 }
 
 export async function GET(req: NextRequest) {
-  const { response } = await requireRole(['admin']);
+  const { response } = await requireRole(['admin', 'tl', 'agent', 'quality']);
   if (response) return response;
 
   const { searchParams } = new URL(req.url);
