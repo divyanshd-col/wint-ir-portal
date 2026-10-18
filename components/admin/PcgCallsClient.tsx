@@ -1592,121 +1592,181 @@ export default function PcgCallsClient() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                     <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                      Main Coaching Topics Delivered to Team
+                      Coaching by Quality Parameters
                     </h4>
                     <span className="text-xs text-gray-500">Ranked by Coaching Frequency</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Topic 1 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
-                      <div className="flex items-start justify-between gap-2">
+                    {/* Parameter 1 */}
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-3 hover:border-purple-300 transition-all shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2.5">
                         <div>
-                          <h5 className="text-xs font-bold text-gray-900">
-                            Mandatory SEBI Risk Disclosures &amp; Non-Guaranteed Yield
+                          <h5 className="text-sm font-bold text-gray-900">
+                            Compliance &amp; No Return Guarantees
                           </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">18 calls (33% of guidance)</strong> • Current Mastery: <span className="text-emerald-700 font-bold">88%</span>
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleOpenCoachingChat({ categoryKey: '13_pitching' })}
-                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
-                        >
-                          View Chats →
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleOpenCoachingChat({ rmName: 'Swati Singh', categoryKey: '13_pitching' })}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View Chats →
+                          </button>
+                          <button
+                            onClick={() => { setSelectedRm('Swati Singh'); handleTabChange('scorecard'); }}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View RM Performance →
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
-                        "Ensure crisp distinction between 13% indicative IRR and guaranteed bank deposits; always cite regulated NBFC partner disclaimers before closing."
-                      </p>
-                      <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
-                        <span className="font-semibold text-emerald-700">✓ Improved: Dhanush, Gaurav</span>
-                        <span className="text-gray-300">•</span>
-                        <span className="font-semibold text-amber-700">Needs Review: Swati Singh</span>
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            Needs Review: <strong>Swati Singh</strong>
+                          </span>
+                          <span className="text-[11px] text-gray-500 font-medium">Team Vaishnavi • 81% IQS</span>
+                        </div>
+                        <button
+                          onClick={() => handleOpenCoachingChat({ rmName: 'Swati Singh', categoryKey: '13_pitching' })}
+                          className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline cursor-pointer"
+                        >
+                          Inspect Chats →
+                        </button>
                       </div>
                     </div>
 
-                    {/* Topic 2 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
-                      <div className="flex items-start justify-between gap-2">
+                    {/* Parameter 2 */}
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-3 hover:border-purple-300 transition-all shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2.5">
                         <div>
-                          <h5 className="text-xs font-bold text-gray-900">
-                            Investor Suitability Profiling before 13% Pitching
+                          <h5 className="text-sm font-bold text-gray-900">
+                            Investor Suitability Profiling &amp; Need Discovery
                           </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">14 calls (26% of guidance)</strong> • Current Mastery: <span className="text-emerald-700 font-bold">82%</span>
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleOpenCoachingChat({ categoryKey: '13_pitching' })}
-                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
-                        >
-                          View Chats →
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleOpenCoachingChat({ rmName: 'Antara Chakrabarty', categoryKey: '13_pitching' })}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View Chats →
+                          </button>
+                          <button
+                            onClick={() => { setSelectedRm('Antara Chakrabarty'); handleTabChange('scorecard'); }}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View RM Performance →
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
-                        "Always ask the investor's current debt portfolio allocation and liquidity horizon before proposing lock-in products."
-                      </p>
-                      <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
-                        <span className="font-semibold text-emerald-700">✓ Improved: Samskriti, Aravind</span>
-                        <span className="text-gray-300">•</span>
-                        <span className="font-semibold text-amber-700">Needs Review: Antara Chakrabarty</span>
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            Needs Review: <strong>Antara Chakrabarty</strong>
+                          </span>
+                          <span className="text-[11px] text-gray-500 font-medium">Team Vaishnavi • 84% IQS</span>
+                        </div>
+                        <button
+                          onClick={() => handleOpenCoachingChat({ rmName: 'Antara Chakrabarty', categoryKey: '13_pitching' })}
+                          className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline cursor-pointer"
+                        >
+                          Inspect Chats →
+                        </button>
                       </div>
                     </div>
 
-                    {/* Topic 3 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
-                      <div className="flex items-start justify-between gap-2">
+                    {/* Parameter 3 */}
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-3 hover:border-purple-300 transition-all shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2.5">
                         <div>
-                          <h5 className="text-xs font-bold text-gray-900">
-                            Liquidity Lock-in &amp; Secondary Market Exit Mechanisms
+                          <h5 className="text-sm font-bold text-gray-900">
+                            Liquidity vs Yield Comparison
                           </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">12 calls (22% of guidance)</strong> • Current Mastery: <span className="text-amber-700 font-bold">79%</span>
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleOpenCoachingChat({ categoryKey: 'upselling' })}
-                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
-                        >
-                          View Chats →
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleOpenCoachingChat({ rmName: 'Yaashvi Arora', categoryKey: 'upselling' })}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View Chats →
+                          </button>
+                          <button
+                            onClick={() => { setSelectedRm('Yaashvi Arora'); handleTabChange('scorecard'); }}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View RM Performance →
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
-                        "Proactively clarify lock-in tenure and explain how secondary market sale mechanisms operate if the investor requires premature capital."
-                      </p>
-                      <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
-                        <span className="font-semibold text-emerald-700">✓ Improved: Dhanush, Sujal</span>
-                        <span className="text-gray-300">•</span>
-                        <span className="font-semibold text-amber-700">Needs Review: Yaashvi Arora</span>
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            Needs Review: <strong>Yaashvi Arora</strong>
+                          </span>
+                          <span className="text-[11px] text-gray-500 font-medium">Team Gokul • 82% IQS</span>
+                        </div>
+                        <button
+                          onClick={() => handleOpenCoachingChat({ rmName: 'Yaashvi Arora', categoryKey: 'upselling' })}
+                          className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline cursor-pointer"
+                        >
+                          Inspect Chats →
+                        </button>
                       </div>
                     </div>
 
-                    {/* Topic 4 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-2 hover:border-purple-300 transition-colors">
-                      <div className="flex items-start justify-between gap-2">
+                    {/* Parameter 4 */}
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white space-y-3 hover:border-purple-300 transition-all shadow-xs">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2.5">
                         <div>
-                          <h5 className="text-xs font-bold text-gray-900">
-                            Active Listening, Objection Handling &amp; Speech Pacing
+                          <h5 className="text-sm font-bold text-gray-900">
+                            Active Listening &amp; Objection Handling
                           </h5>
                           <p className="text-[11px] text-gray-500 mt-0.5">
                             Frequency: <strong className="text-gray-800">10 calls (19% of guidance)</strong> • Current Mastery: <span className="text-emerald-700 font-bold">85%</span>
                           </p>
                         </div>
-                        <button
-                          onClick={() => handleOpenCoachingChat({ categoryKey: 'support' })}
-                          className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shrink-0 shadow-sm transition-all cursor-pointer"
-                        >
-                          View Chats →
-                        </button>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => handleOpenCoachingChat({ rmName: 'Sujal Dadwani', categoryKey: 'support' })}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View Chats →
+                          </button>
+                          <button
+                            onClick={() => { setSelectedRm('Sujal Dadwani'); handleTabChange('scorecard'); }}
+                            className="px-2.5 py-1 text-[11px] font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          >
+                            View RM Performance →
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-600 bg-gray-50 p-2.5 rounded-lg border border-gray-200/60 italic leading-relaxed">
-                        "Pause and acknowledge investor skepticism on high yields; avoid speaking over customer during hesitation points."
-                      </p>
-                      <div className="flex items-center gap-2 text-[11px] text-gray-500 pt-1 flex-wrap">
-                        <span className="font-semibold text-emerald-700">✓ Improved: Aravind, Samskriti</span>
-                        <span className="text-gray-300">•</span>
-                        <span className="font-semibold text-amber-700">Needs Review: Sujal Dadwani</span>
+                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                            Needs Review: <strong>Sujal Dadwani</strong>
+                          </span>
+                          <span className="text-[11px] text-gray-500 font-medium">Team Vaishnavi • 83% IQS</span>
+                        </div>
+                        <button
+                          onClick={() => handleOpenCoachingChat({ rmName: 'Sujal Dadwani', categoryKey: 'support' })}
+                          className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:underline cursor-pointer"
+                        >
+                          Inspect Chats →
+                        </button>
                       </div>
                     </div>
                   </div>
