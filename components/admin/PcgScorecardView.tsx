@@ -62,6 +62,75 @@ export interface PcgWeeklyReport {
 
 // Sample PCG Weekly Scorecards matching the exact schema and richness of RM reports
 const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
+  // ── AAHAN THAKER (RM) ────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-aahan-w1',
+    rmName: 'Aahan Thaker',
+    tlName: 'Gokul',
+    weekStart: '2026-10-06T00:00:00Z',
+    weekEnd: '2026-10-12T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-12T18:30:00Z',
+    comments: [
+      {
+        id: 'c-aahan-1',
+        targetKey: 'general',
+        text: 'Discussed during 1-on-1: Solid product explanations on 13% Club; maintain steady pacing during secondary liquidity disclaimer.',
+        highlighted: true,
+        createdAt: '2026-10-12T19:15:00Z',
+      },
+    ],
+    numbers: {
+      callsHandled: 15,
+      averageScore: 87,
+      below85Count: 2,
+      connectRateText: '60.0% connected (9 of 15)',
+      complianceBreachesCount: 0,
+      scoresAdjustedCount: 1,
+    },
+    whatWentWell:
+      'Aahan demonstrated great professionalism and structured product explanations. Key coupon payout timelines and senior secured backing aspects were articulated clearly. Customer verification and call protocol were adhered to with high consistency.',
+    themes: [
+      {
+        pattern: 'Crisp Yield & Secondary Market Window Framing',
+        associatedParameters: ['Product Benefits', 'Liquidity Positioning'],
+        whyItMatters:
+          'Explaining the secondary liquidity window upfront reassures investors on emergency access while maintaining the 3-year investment horizon expectation.',
+        actionable:
+          'Proactively cite the secondary sale window when investors query early redemption options.',
+        isBreach: false,
+        rankScore: 88,
+        backingCallIds: ['6ad1b3fb6ff6ad4fe4a38288', '6ad1c607f5277b2f769dd72a'],
+      },
+      {
+        pattern: 'Firm Allotment & Follow-up Commitment',
+        associatedParameters: ['Follow-up Timeline', 'Next Steps'],
+        whyItMatters:
+          'HNW prospects appreciate firm callback slots rather than vague future check-ins.',
+        actionable:
+          'Lock down the next check-in with an exact date and time on WhatsApp/Calendar before disconnecting.',
+        isBreach: false,
+        rankScore: 85,
+        backingCallIds: ['6ad1c607f5277b2f769dd72a'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '6ad1b3fb6ff6ad4fe4a38288',
+        score: 88,
+        topic: '13% Club High-Yield Pitch',
+        summary: 'Clear positioning of indicative yield, monthly cash flows, and regulated NBFC partner structure.',
+      },
+      {
+        callId: '6ad1c607f5277b2f769dd72a',
+        score: 86,
+        topic: 'Upselling Senior Secured Debentures',
+        summary: 'Addressed investor questions on quarterly interest crediting directly to bank account.',
+      },
+    ],
+  },
   // ── DHANUSH (RM) ─────────────────────────────────────────────────────────────
   {
     id: 'pcg-rep-dhanush-w1',

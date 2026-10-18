@@ -72,25 +72,59 @@ interface TeamLeadSummary {
   rms: string[];
 }
 
+export type PcgTab = 'calls' | 'scorecard' | 'disputes';
+
 export default function PcgCallsClient() {
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role || 'admin';
   const isSuperAdmin = Boolean((session?.user as any)?.isSuperAdmin);
+  const loggedInUserName = (session?.user as any)?.name || '';
 
   // Persona switcher: 'agent' | 'tl' | 'admin'
   const defaultPersona: 'agent' | 'tl' | 'admin' =
     userRole === 'agent' ? 'agent' : userRole === 'tl' ? 'tl' : 'admin';
   const [activePersona, setActivePersona] = useState<'agent' | 'tl' | 'admin'>(defaultPersona);
 
+  // SubTab: 'calls' (calls list & analytics) | 'scorecard' (weekly RM scorecard) | 'disputes' (quality disputes)
+  const [activeTab, setActiveTab] = useState<PcgTab>('calls');
+
+  // Selected RM should lock to logged-in user when user is an agent
+  const [selectedRm, setSelectedRm] = useState<string>(
+    userRole === 'agent' && loggedInUserName ? loggedInUserName : 'Aahan Thaker'
+  );
+
   useEffect(() => {
     if (!isSuperAdmin) {
-      if (userRole === 'agent') setActivePersona('agent');
-      else if (userRole === 'tl' && activePersona === 'admin') setActivePersona('tl');
+      if (userRole === 'agent') {
+        setActivePersona('agent');
+        if (loggedInUserName) setSelectedRm(loggedInUserName);
+      } else if (userRole === 'tl' && activePersona === 'admin') {
+        setActivePersona('tl');
+      }
+    } else if (userRole === 'agent' && loggedInUserName) {
+      setSelectedRm(loggedInUserName);
     }
-  }, [userRole, isSuperAdmin]);
+  }, [userRole, isSuperAdmin, loggedInUserName]);
 
-  // SubTab: 'calls' (calls list & analytics) | 'scorecard' (RM-style weekly RM scorecard)
-  const [activeTab, setActiveTab] = useState<'calls' | 'scorecard'>('calls');
+  // Sync tab with URL search params
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabParam = urlParams.get('tab');
+      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls') {
+        setActiveTab(tabParam as PcgTab);
+      }
+    }
+  }, []);
+
+  const handleTabChange = (newTab: PcgTab) => {
+    setActiveTab(newTab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', newTab);
+      window.history.pushState({}, '', url.toString());
+    }
+  };
 
   // Server state
   const [calls, setCalls] = useState<PCGCall[]>([]);
@@ -107,7 +141,6 @@ export default function PcgCallsClient() {
   const [dateRange, setDateRange] = useState<'7d' | '30d' | 'custom'>('7d');
   const [customStartDate, setCustomStartDate] = useState('2026-10-01');
   const [customEndDate, setCustomEndDate] = useState('2026-10-12');
-  const [selectedRm, setSelectedRm] = useState<string>('Dhanush');
   const [selectedTl, setSelectedTl] = useState<string>('Gokul');
   const [adminTlFilter, setAdminTlFilter] = useState<'all' | 'Gokul' | 'Vaishnavi'>('all');
   const [adminRmFilter, setAdminRmFilter] = useState<string>('all');
@@ -358,12 +391,207 @@ export default function PcgCallsClient() {
   const disputeRaisedCalls = calls.filter((c) => c.disputeStatus === 'pending');
   const disputeReviewedCalls = calls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');
 
-  // RM Scorecard lookups
-  const myScorecard = rmScorecards.find((r) => r.rmName === selectedRm) || rmScorecards[0];
-  const teamRms = selectedTl === 'Vaishnavi' ? ['Vikram', 'Sneha', 'Karan', 'Meera'] : ['Dhanush', 'Priya', 'Rahul', 'Ananya'];
+  // RM Scorecard lookups & real computed metrics for RM view
+  const currentRmScorecard = rmScorecards.find((r) => r.rmName.toLowerCase() === selectedRm.toLowerCase());
+  const myScorecard = currentRmScorecard || rmScorecards[0];
+  const rmAnsweredCalls = calls.filter((c) => c.isAnswered);
+  const rmQualityScore = rmAnsweredCalls.length > 0
+    ? (rmAnsweredCalls.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnsweredCalls.length).toFixed(1)
+    : (currentRmScorecard ? `${currentRmScorecard.overallScore}.0` : '87.0');
+
+  const rmTotalCallsCount = summary?.totalCalls ?? calls.length;
+  const rmAnsweredCallsCount = summary?.answeredCalls ?? rmAnsweredCalls.length;
+  const rmUnansweredCallsCount = summary?.unansweredCalls ?? Math.max(0, rmTotalCallsCount - rmAnsweredCallsCount);
+  const rmConnectRate = rmTotalCallsCount > 0
+    ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100)
+    : 60;
+
+  const rmRankIndex = rmScorecards.findIndex(
+    (s) => s.rmName.toLowerCase() === selectedRm.toLowerCase()
+  );
+  const rmRankDisplay = rmRankIndex >= 0 ? `#${rmRankIndex + 1}` : '#2';
+
+  const teamRms = selectedTl === 'Vaishnavi' ? ['Vikram', 'Sneha', 'Karan', 'Meera'] : ['Aahan Thaker', 'Dhanush', 'Priya', 'Rahul', 'Ananya'];
   const teamRmScorecards = rmScorecards.filter((r) => teamRms.includes(r.rmName)).length > 0
     ? rmScorecards.filter((r) => teamRms.includes(r.rmName))
     : rmScorecards;
+
+  const renderDisputesTable = () => (
+    <div className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-sm">
+      <div className="p-4 border-b border-[#E4E4E7] flex flex-wrap items-center justify-between gap-4 bg-[#FAFAFB]/60">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-[#111111]">
+              {activePersona === 'agent' ? 'My Quality Disputes & Appeals' : 'Team Quality Disputes & Appeals'}
+            </h3>
+          </div>
+          <p className="text-xs text-[#71717A] mt-0.5">
+            {activePersona === 'agent'
+              ? 'Track call evaluations you challenged and review decisions made by your Team Leader.'
+              : 'Review agent disputes challenging AI scores, audit evidence, and record override decisions.'}
+          </p>
+        </div>
+
+        {/* Status Tabs */}
+        <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
+          <button
+            onClick={() => setDisputeTab('raised')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${
+              disputeTab === 'raised'
+                ? 'bg-white text-[#111111] shadow-sm font-bold'
+                : 'text-[#71717A] hover:text-[#111111]'
+            }`}
+          >
+            <span>Dispute Raised</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              disputeRaisedCalls.length > 0 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-zinc-200 text-zinc-600'
+            }`}>
+              {disputeRaisedCalls.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setDisputeTab('reviewed')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${
+              disputeTab === 'reviewed'
+                ? 'bg-white text-[#111111] shadow-sm font-bold'
+                : 'text-[#71717A] hover:text-[#111111]'
+            }`}
+          >
+            <span>✓</span>
+            <span>Dispute Reviewed</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+              disputeReviewedCalls.length > 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-600'
+            }`}>
+              {disputeReviewedCalls.length}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* TAB 1: DISPUTE RAISED TABLE */}
+      {disputeTab === 'raised' && (
+        <div className="overflow-x-auto">
+          {disputeRaisedCalls.length === 0 ? (
+            <div className="p-10 text-center text-zinc-400 text-xs">
+              No disputes currently raised or pending review.
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-4">Call ID</th>
+                  {activePersona !== 'agent' && <th className="py-3 px-4">RM Name</th>}
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Customer Phone</th>
+                  <th className="py-3 px-4">Current IQS</th>
+                  <th className="py-3 px-4">Dispute Justification</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F0F0F2]">
+                {disputeRaisedCalls.map((call) => (
+                  <tr key={call.id} className="hover:bg-amber-50/20 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-zinc-900">
+                      #{call.callId ? call.callId.slice(-6) : call.id}
+                    </td>
+                    {activePersona !== 'agent' && (
+                      <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                    )}
+                    <td className="py-3 px-4">
+                      <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
+                        {call.category}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-zinc-600">{call.phoneNumber}</td>
+                    <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
+                    <td className="py-3 px-4 text-amber-900 font-medium max-w-xs truncate">
+                      "{call.disputeReason || 'Agent challenged parameter score.'}"
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                         Pending TL Review
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => handleOpenCallView(call)}
+                        className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: DISPUTE REVIEWED TABLE */}
+      {disputeTab === 'reviewed' && (
+        <div className="overflow-x-auto">
+          {disputeReviewedCalls.length === 0 ? (
+            <div className="p-10 text-center text-zinc-400 text-xs">
+              No reviewed disputes recorded yet.
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
+                  <th className="py-3 px-4">Call ID</th>
+                  {activePersona !== 'agent' && <th className="py-3 px-4">RM Name</th>}
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Customer Phone</th>
+                  <th className="py-3 px-4">Revised IQS</th>
+                  <th className="py-3 px-4">TL Resolution Note</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F0F0F2]">
+                {disputeReviewedCalls.map((call) => (
+                  <tr key={call.id} className="hover:bg-emerald-50/20 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-zinc-900">
+                      #{call.callId ? call.callId.slice(-6) : call.id}
+                    </td>
+                    {activePersona !== 'agent' && (
+                      <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                    )}
+                    <td className="py-3 px-4">
+                      <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
+                        {call.category}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-zinc-600">{call.phoneNumber}</td>
+                    <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
+                    <td className="py-3 px-4 text-zinc-700 font-medium max-w-xs truncate">
+                      "{call.tlOverrideNote || 'Dispute reviewed and resolved by Team Leader.'}"
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                        <span>✓</span> Reviewed &amp; Resolved
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => handleOpenCallView(call)}
+                        className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#FAFAFB] text-[#111111] pb-24 font-sans">
@@ -415,27 +643,44 @@ export default function PcgCallsClient() {
           </div>
         )}
 
-        {/* View Mode Switcher: Calls & Analytics vs Weekly RM Scorecard */}
+        {/* Option Bar Switcher: Calls & Analytics | Scorecard | Disputes & Appeals */}
         <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
           <button
-            onClick={() => setActiveTab('calls')}
+            onClick={() => handleTabChange('calls')}
             className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
               activeTab === 'calls'
                 ? 'bg-white text-[#111111] shadow-sm font-bold'
                 : 'text-[#71717A] hover:text-[#111111]'
             }`}
           >
-            Calls &amp; Analytics
+            <span>Calls &amp; Analytics</span>
           </button>
           <button
-            onClick={() => setActiveTab('scorecard')}
+            onClick={() => handleTabChange('scorecard')}
             className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
               activeTab === 'scorecard'
                 ? 'bg-white text-[#111111] shadow-sm font-bold'
                 : 'text-[#71717A] hover:text-[#111111]'
             }`}
           >
-            Weekly RM Scorecard
+            <span>Scorecard</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('disputes')}
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+              activeTab === 'disputes'
+                ? 'bg-white text-[#111111] shadow-sm font-bold'
+                : 'text-[#71717A] hover:text-[#111111]'
+            }`}
+          >
+            <span>Disputes &amp; Appeals</span>
+            {disputeRaisedCalls.length > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                activeTab === 'disputes' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-zinc-200 text-zinc-600'
+              }`}>
+                {disputeRaisedCalls.length}
+              </span>
+            )}
           </button>
         </div>
 
@@ -481,8 +726,34 @@ export default function PcgCallsClient() {
             selectedTl={selectedTl}
             onSelectTl={(tl) => setSelectedTl(tl)}
             onOpenCallView={(cid) => handleOpenCallById(cid)}
-            onSwitchToCallsTab={() => setActiveTab('calls')}
+            onSwitchToCallsTab={() => handleTabChange('calls')}
           />
+        </div>
+      ) : activeTab === 'disputes' ? (
+        <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
+          {/* Persona Header for Disputes */}
+          <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
+                  {activePersona === 'agent' ? 'RM Personal Hub' : activePersona === 'tl' ? 'Team Leadership Hub' : 'Executive Console'}
+                </span>
+                <h2 className="text-lg font-bold text-[#111111]">
+                  {activePersona === 'agent'
+                    ? `Disputes & Appeals — ${selectedRm}`
+                    : activePersona === 'tl'
+                    ? `Team Quality Disputes & Appeals — Team ${selectedTl}`
+                    : 'Organization Disputes & Appeals Console'}
+                </h2>
+              </div>
+              <p className="text-xs text-[#71717A] mt-1">
+                {activePersona === 'agent'
+                  ? 'Track call evaluations you challenged, review decisions made by your Team Leader, and inspect revised scores.'
+                  : 'Review agent disputes challenging AI scores, audit audio evidence and transcript turns, and submit binding override decisions.'}
+              </p>
+            </div>
+          </div>
+          {renderDisputesTable()}
         </div>
       ) : (
         <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
@@ -510,21 +781,7 @@ export default function PcgCallsClient() {
             </p>
           </div>
 
-          {/* Switchers within persona */}
-          {activePersona === 'agent' && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[#71717A]">Switch RM:</span>
-              <select
-                value={selectedRm}
-                onChange={(e) => { setSelectedRm(e.target.value); setPage(1); }}
-                className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-zinc-50"
-              >
-                {rms.map((r) => (
-                  <option key={r.name} value={r.name}>{r.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
+          {/* Switchers within persona - Only for TL and Admin, RM strictly sees own scores */}
 
           {activePersona === 'tl' && (
             <div className="flex items-center gap-2">
@@ -580,7 +837,7 @@ export default function PcgCallsClient() {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-extrabold font-mono text-[#111111]">
-                {activePersona === 'agent' ? '88.0%' : activePersona === 'tl' ? '83.4%' : '84.2%'}
+                {activePersona === 'agent' ? `${rmQualityScore}%` : activePersona === 'tl' ? '83.4%' : '84.2%'}
               </span>
               <span className="text-xs font-semibold text-emerald-600">▲ +2.4%</span>
             </div>
@@ -593,22 +850,26 @@ export default function PcgCallsClient() {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-extrabold font-mono text-[#111111]">
-                {summary?.totalCalls || 142}
+                {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls || 142)}
               </span>
               <span className="text-xs text-[#71717A]">calls</span>
             </div>
-            <p className="text-[11px] text-[#71717A] mt-1">{summary?.answeredCalls || 97} connected</p>
+            <p className="text-[11px] text-[#71717A] mt-1">
+              {activePersona === 'agent' ? rmAnsweredCallsCount : (summary?.answeredCalls || 97)} connected
+            </p>
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">Connect Rate</p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-extrabold font-mono text-[#111111]">
-                {summary?.totalCalls ? Math.round((summary.answeredCalls / summary.totalCalls) * 100) : 68}%
+                {activePersona === 'agent' ? rmConnectRate : (summary?.totalCalls ? Math.round((summary.answeredCalls / summary.totalCalls) * 100) : 68)}%
               </span>
               <span className="text-xs text-[#71717A]">pickup</span>
             </div>
-            <p className="text-[11px] text-[#71717A] mt-1">{summary?.unansweredCalls || 45} unanswered</p>
+            <p className="text-[11px] text-[#71717A] mt-1">
+              {activePersona === 'agent' ? rmUnansweredCallsCount : (summary?.unansweredCalls || 45)} unanswered
+            </p>
           </div>
 
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
@@ -617,7 +878,7 @@ export default function PcgCallsClient() {
             </p>
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-2xl font-extrabold font-mono text-[#111111]">
-                {activePersona === 'agent' ? '#2' : `${summary?.needsAttentionCount || 28}`}
+                {activePersona === 'agent' ? rmRankDisplay : `${summary?.needsAttentionCount || 28}`}
               </span>
               <span className="text-xs font-semibold text-amber-600">
                 {activePersona === 'agent' ? 'in Team' : 'calls flagged'}
@@ -777,59 +1038,7 @@ export default function PcgCallsClient() {
           )}
         </div>
 
-        {/* ── 5. PROPER RM SCORECARD SECTION (FOR AGENT & TL) ────────────────── */}
-
-        {/* 5A. AGENT VIEW: RM WEEKLY SCORECARD SECTION */}
-        {activePersona === 'agent' && (
-          <div
-            onClick={() => setActiveTab('scorecard')}
-            className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden p-6 hover:border-indigo-300 hover:shadow-md transition-all cursor-pointer group"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-xs text-indigo-700 font-mono shrink-0 group-hover:scale-105 transition-transform">
-                  RM
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-base font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">
-                      RM Weekly Scorecards — {selectedRm}
-                    </h3>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      ✓ 100% AI Evaluated
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
-                      RM Standard
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 max-w-xl leading-relaxed">
-                    Access your weekly report cards, aggregate numbers, 1-on-1 coaching themes, compliance flags, and low-scoring call evidence. Click to open your scorecards.
-                  </p>
-                  <div className="flex items-center gap-4 mt-3 text-xs text-gray-600 font-medium flex-wrap">
-                    <span className="flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                      Latest Average IQS: <strong className="font-mono text-gray-900">88%</strong>
-                    </span>
-                    <span className="text-gray-300">•</span>
-                    <span>142 calls evaluated</span>
-                    <span className="text-gray-300">•</span>
-                    <span>3 weekly evaluation cycles available</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                <button
-                  type="button"
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 group-hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-2 group-hover:shadow"
-                >
-                  <span>View All Scorecard Reports</span>
-                  <span>→</span>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* ── 5. PROPER RM SCORECARD SECTION (FOR TL) ────────────────── */}
 
         {/* 5B. TL VIEW: RM-STYLE AGENT SCORECARDS GRID & AGENT-WISE ANALYTICS */}
         {activePersona === 'tl' && (
@@ -1519,185 +1728,7 @@ export default function PcgCallsClient() {
           </div>
         )}
 
-        {/* ── 5B. DISPUTES MANAGEMENT SECTION (DISPUTE RAISED & DISPUTE REVIEWED TABS) ── */}
-        {activePersona !== 'admin' && (
-        <div className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-sm">
-          <div className="p-4 border-b border-[#E4E4E7] flex flex-wrap items-center justify-between gap-4 bg-[#FAFAFB]/60">
-            <div>
-              <div className="flex items-center gap-2">
-                
-                <h3 className="text-sm font-bold text-[#111111]">
-                  {activePersona === 'agent' ? 'My Quality Disputes & Appeals' : 'Team Quality Disputes & Appeals'}
-                </h3>
-              </div>
-              <p className="text-xs text-[#71717A] mt-0.5">
-                {activePersona === 'agent'
-                  ? 'Track call evaluations you challenged and review decisions made by your Team Leader.'
-                  : 'Review agent disputes challenging AI scores, audit evidence, and record override decisions.'}
-              </p>
-            </div>
 
-            {/* Status Tabs */}
-            <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
-              <button
-                onClick={() => setDisputeTab('raised')}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                  disputeTab === 'raised'
-                    ? 'bg-white text-[#111111] shadow-sm font-bold'
-                    : 'text-[#71717A] hover:text-[#111111]'
-                }`}
-              >
-                
-                <span>Dispute Raised</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  disputeRaisedCalls.length > 0 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-zinc-200 text-zinc-600'
-                }`}>
-                  {disputeRaisedCalls.length}
-                </span>
-              </button>
-
-              <button
-                onClick={() => setDisputeTab('reviewed')}
-                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-2 ${
-                  disputeTab === 'reviewed'
-                    ? 'bg-white text-[#111111] shadow-sm font-bold'
-                    : 'text-[#71717A] hover:text-[#111111]'
-                }`}
-              >
-                <span>✓</span>
-                <span>Dispute Reviewed</span>
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                  disputeReviewedCalls.length > 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-600'
-                }`}>
-                  {disputeReviewedCalls.length}
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* TAB 1: DISPUTE RAISED TABLE */}
-          {disputeTab === 'raised' && (
-            <div className="overflow-x-auto">
-              {disputeRaisedCalls.length === 0 ? (
-                <div className="p-10 text-center text-zinc-400 text-xs">
-                  No disputes currently raised or pending review.
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Call ID</th>
-                      {activePersona !== 'agent' && <th className="py-3 px-4">RM Name</th>}
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Customer Phone</th>
-                      <th className="py-3 px-4">Current IQS</th>
-                      <th className="py-3 px-4">Dispute Justification</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F0F0F2]">
-                    {disputeRaisedCalls.map((call) => (
-                      <tr key={call.id} className="hover:bg-amber-50/20 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-zinc-900">
-                          #{call.callId ? call.callId.slice(-6) : call.id}
-                        </td>
-                        {activePersona !== 'agent' && (
-                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
-                        )}
-                        <td className="py-3 px-4">
-                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
-                            {call.category}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-mono text-zinc-600">{call.phoneNumber}</td>
-                        <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                        <td className="py-3 px-4 text-amber-900 font-medium max-w-xs truncate">
-                          "{call.disputeReason || 'Agent challenged parameter score.'}"
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                             Pending TL Review
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleOpenCallView(call)}
-                            className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: DISPUTE REVIEWED TABLE */}
-          {disputeTab === 'reviewed' && (
-            <div className="overflow-x-auto">
-              {disputeReviewedCalls.length === 0 ? (
-                <div className="p-10 text-center text-zinc-400 text-xs">
-                  No reviewed disputes recorded yet.
-                </div>
-              ) : (
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
-                      <th className="py-3 px-4">Call ID</th>
-                      {activePersona !== 'agent' && <th className="py-3 px-4">RM Name</th>}
-                      <th className="py-3 px-4">Category</th>
-                      <th className="py-3 px-4">Customer Phone</th>
-                      <th className="py-3 px-4">Revised IQS</th>
-                      <th className="py-3 px-4">TL Resolution Note</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-center">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F0F0F2]">
-                    {disputeReviewedCalls.map((call) => (
-                      <tr key={call.id} className="hover:bg-emerald-50/20 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-zinc-900">
-                          #{call.callId ? call.callId.slice(-6) : call.id}
-                        </td>
-                        {activePersona !== 'agent' && (
-                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
-                        )}
-                        <td className="py-3 px-4">
-                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
-                            {call.category}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-mono text-zinc-600">{call.phoneNumber}</td>
-                        <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                        <td className="py-3 px-4 text-zinc-700 font-medium max-w-xs truncate">
-                          "{call.tlOverrideNote || 'Dispute reviewed and resolved by Team Leader.'}"
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            <span>✓</span> Reviewed &amp; Resolved
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleOpenCallView(call)}
-                            className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-        </div>
-        )}
 
         {/* ── 6. CALLS AUDIT LIST ────────────────────────────────────────────── */}
         <div id="pcg-calls-table" className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden">

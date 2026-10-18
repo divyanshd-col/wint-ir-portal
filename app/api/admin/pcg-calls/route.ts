@@ -91,7 +91,7 @@ const TRANSCRIPT_TEMPLATES: Record<string, Array<{ speaker: 'RM' | 'Customer'; t
 
 // TL to RM mappings for team views
 const TL_TEAMS: Record<string, string[]> = {
-  Gokul: ['Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'],
+  Gokul: ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'],
   Vaishnavi: ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'],
 };
 
@@ -120,8 +120,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   let paramIdx = 1;
 
   if (rmFilter && rmFilter !== 'all') {
-    whereClauses.push(`COALESCE(NULLIF(called_by, ''), NULLIF(agent_name, ''), 'Unknown RM') = $${paramIdx++}`);
+    whereClauses.push(`(LOWER(COALESCE(NULLIF(called_by, ''), NULLIF(agent_name, ''), 'Unknown RM')) = LOWER($${paramIdx}::text) OR LOWER(called_by) LIKE LOWER($${paramIdx}::text) || '%')`);
     sqlParams.push(rmFilter);
+    paramIdx++;
   }
 
   if (tlFilter && tlFilter !== 'all' && TL_TEAMS[tlFilter]) {
@@ -175,14 +176,16 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
        ORDER BY rm_name ASC`
     );
 
-    // 3. Fetch summary metrics
+    // 3. Fetch summary metrics scoped to whereSql
     const summaryResult = await query<{ total_duration: string; total_calls: string; answered_calls: string; unanswered_calls: string }>(
       `SELECT 
          COALESCE(SUM(duration_seconds), 0) as total_duration, 
          COUNT(*) as total_calls,
          COUNT(CASE WHEN duration_seconds > 0 AND recording_url IS NOT NULL AND recording_url != '' THEN 1 END) as answered_calls,
          COUNT(CASE WHEN duration_seconds = 0 OR duration_seconds IS NULL OR recording_url IS NULL OR recording_url = '' THEN 1 END) as unanswered_calls
-       FROM pcg_call_recordings`
+       FROM pcg_call_recordings
+       ${whereSql}`,
+      sqlParams
     );
 
     // 4. Fetch paginated calls data

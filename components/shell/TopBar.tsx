@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { activeTab, isAuthPath, topTabs } from '@/lib/nav';
 
@@ -84,8 +84,20 @@ export default function TopBar() {
   const isSuperAdmin = Boolean(user?.isSuperAdmin);
   const platformDomain = user?.platformDomain || 'cx';
   const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
+  const searchParams = useSearchParams();
+  const pcgTab = searchParams?.get('tab') || 'calls';
   const tabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   const current = activeTab(pathname);
+
+  const isTabActive = (t: { key: string }) => {
+    if (activeDomain === 'pcg') {
+      if (t.key === 'pcg-scorecard') return pcgTab === 'scorecard';
+      if (t.key === 'pcg-disputes') return pcgTab === 'disputes';
+      if (t.key === 'pcg-calls') return pcgTab === 'calls';
+      return false;
+    }
+    return current === t.key;
+  };
 
   return (
     <>
@@ -97,11 +109,14 @@ export default function TopBar() {
           <img src="/wint-logo.png" alt="Wint Wealth" width={22} height={22} />
         </Link>
         <nav className="topbar-tabs" aria-label="Main">
-          {tabs.map((t) => (
-            <Link key={t.key} href={t.href} className={`topbar-tab${current === t.key ? ' active' : ''}`} aria-current={current === t.key ? 'page' : undefined}>
-              {t.label}
-            </Link>
-          ))}
+          {tabs.map((t) => {
+            const active = isTabActive(t);
+            return (
+              <Link key={t.key} href={t.href} className={`topbar-tab${active ? ' active' : ''}`} aria-current={active ? 'page' : undefined}>
+                {t.label}
+              </Link>
+            );
+          })}
         </nav>
         <div className="topbar-right">
           {/* Netflix-style Workspace Switcher for Super Admins */}

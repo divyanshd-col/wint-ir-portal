@@ -1,6 +1,6 @@
 /** Top-level navigation rules: which tabs a user sees, which one is active, where each role lands. Pure, so it is unit-tested. */
 
-export type TabKey = 'chat' | 'analytics' | 'quality' | 'settings' | 'pcg-calls' | 'pcg-scorecard';
+export type TabKey = 'chat' | 'analytics' | 'quality' | 'settings' | 'pcg-calls' | 'pcg-scorecard' | 'pcg-disputes';
 export interface NavTab { key: TabKey; label: string; href: string }
 
 // Same defaults the sidebars use when a session carries no explicit skills.
@@ -24,8 +24,9 @@ const TABS: (NavTab & { skill: string })[] = [
 ];
 
 const PCG_TABS: NavTab[] = [
-  { key: 'pcg-calls',     label: 'PCG Calls & Analytics', href: '/admin/pcg-calls' },
-  { key: 'pcg-scorecard', label: 'RM Weekly Scorecards',  href: '/admin/pcg-calls?tab=scorecard' },
+  { key: 'pcg-calls',     label: 'Calls & Analytics',  href: '/admin/pcg-calls?tab=calls' },
+  { key: 'pcg-scorecard', label: 'Scorecard',          href: '/admin/pcg-calls?tab=scorecard' },
+  { key: 'pcg-disputes',  label: 'Disputes & Appeals', href: '/admin/pcg-calls?tab=disputes' },
 ];
 
 export function topTabs(role: string | undefined, skills: string[] | undefined, activeDomain: 'cx' | 'pcg' = 'cx'): NavTab[] {
