@@ -32,6 +32,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Call ID parameter is required' }, { status: 400 });
   }
 
+  // For testing branch: handle synthetic dummy calls without database query
+  if (id.startsWith('runo-') || !isNaN(Number(id))) {
+    return NextResponse.json({ error: 'Audio recording not stored for synthetic testing call' }, { status: 404 });
+  }
+
   try {
     // 1. Lookup call recording from database
     const rows = await query<{ recording_url: string }>(

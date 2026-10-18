@@ -101,7 +101,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
           'Proactively cite the secondary sale window when investors query early redemption options.',
         isBreach: false,
         rankScore: 88,
-        backingCallIds: ['6ad1b3fb6ff6ad4fe4a38288', '6ad1c607f5277b2f769dd72a'],
+        backingCallIds: ['runo-101', 'runo-102'],
       },
       {
         pattern: 'Firm Allotment & Follow-up Commitment',

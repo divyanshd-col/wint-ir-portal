@@ -456,7 +456,7 @@ export default function PcgCallsClient() {
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-[#111111]">
-              {activePersona === 'agent' ? 'My Quality Disputes & Appeals' : 'Team Quality Disputes & Appeals'}
+              {activePersona === 'agent' ? 'My Quality Disputes' : 'Team Quality Disputes'}
             </h3>
           </div>
           <p className="text-xs text-[#71717A] mt-0.5">
@@ -697,7 +697,7 @@ export default function PcgCallsClient() {
           </div>
         )}
 
-        {/* Option Bar Switcher: Calls & Analytics | Scorecard | Disputes & Appeals */}
+        {/* Option Bar Switcher: Calls & Analytics | Scorecard | Disputes */}
         <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
           <button
             onClick={() => handleTabChange('calls')}
@@ -727,7 +727,7 @@ export default function PcgCallsClient() {
                 : 'text-[#71717A] hover:text-[#111111]'
             }`}
           >
-            <span>Disputes &amp; Appeals</span>
+            <span>Disputes</span>
             {disputeRaisedCalls.length > 0 && (
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
                 activeTab === 'disputes' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-zinc-200 text-zinc-600'
@@ -882,8 +882,8 @@ export default function PcgCallsClient() {
                   </span>
                   <h2 className="text-lg font-bold text-[#111111]">
                     {activePersona === 'tl'
-                      ? `Team Quality Disputes & Appeals — Team ${selectedTl}`
-                      : 'Organization Disputes & Appeals Console'}
+                      ? `Team Quality Disputes — Team ${selectedTl}`
+                      : 'Organization Disputes Console'}
                   </h2>
                 </div>
                 <p className="text-xs text-[#71717A] mt-1">
