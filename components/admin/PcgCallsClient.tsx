@@ -1026,46 +1026,6 @@ export default function PcgCallsClient() {
           )}
         </div>
 
-        {/* ── 3. UNANSWERED CALLS DIAGNOSTIC (Customer vs RM) ───────────────── */}
-        {(activePersona === 'tl' || activePersona === 'admin') && (
-          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                
-                <h3 className="text-sm font-bold text-[#111111]">Unanswered Calls Diagnostic (Who didn't connect?)</h3>
-              </div>
-              <span className="text-xs text-[#71717A]">
-                Total Unanswered: <span className="font-mono font-bold text-[#111111]">{summary?.unansweredCalls || 446}</span>
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div className="p-3 bg-zinc-50 rounded-lg border border-zinc-200">
-                <div className="flex items-center justify-between font-semibold text-[#111111]">
-                  <span>Customer Didn't Answer (81%)</span>
-                  <span className="font-mono font-bold">{summary?.unansweredBreakdown?.customerRangOut + summary?.unansweredBreakdown?.customerBusy || 362} calls</span>
-                </div>
-                <div className="mt-2 text-[#71717A] space-y-1">
-                  <div className="flex justify-between"><span>• Rang out (no answer):</span><span className="font-mono font-medium text-zinc-900">{summary?.unansweredBreakdown?.customerRangOut || 290}</span></div>
-                  <div className="flex justify-between"><span>• User Busy / Declined:</span><span className="font-mono font-medium text-zinc-900">{summary?.unansweredBreakdown?.customerBusy || 72}</span></div>
-                </div>
-              </div>
-
-              <div className="p-3 bg-amber-50/60 rounded-lg border border-amber-200">
-                <div className="flex items-center justify-between font-semibold text-amber-900">
-                  <span className="flex items-center gap-1.5">
-                    RM Didn't Connect (19%) — Coaching Area
-                  </span>
-                  <span className="font-mono font-bold">{summary?.unansweredBreakdown?.rmDroppedEarly + summary?.unansweredBreakdown?.rmMissed || 84} calls</span>
-                </div>
-                <div className="mt-2 text-amber-800 space-y-1">
-                  <div className="flex justify-between"><span>• RM cancelled early (&lt;5s):</span><span className="font-mono font-bold text-amber-900">{summary?.unansweredBreakdown?.rmDroppedEarly || 68}</span></div>
-                  <div className="flex justify-between"><span>• RM missed incoming dialer leg:</span><span className="font-mono font-bold text-amber-900">{summary?.unansweredBreakdown?.rmMissed || 16}</span></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ── 4. CATEGORY FILTER PILLS ────────────────────────────────────────── */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E4E4E7]">
