@@ -860,18 +860,16 @@ export default function PcgCallsClient() {
         </div>
       ) : activeTab === 'disputes' ? (
         <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
-          {/* Persona Header for Disputes - Only for TL and Admin */}
-          {activePersona !== 'agent' && (
+          {/* Persona Header for Disputes - Only for Admin */}
+          {activePersona === 'admin' && (
             <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                    {activePersona === 'tl' ? 'Team Leadership Hub' : 'Executive Console'}
+                    Executive Console
                   </span>
                   <h2 className="text-lg font-bold text-[#111111]">
-                    {activePersona === 'tl'
-                      ? `Team Quality Disputes — Team ${selectedTl}`
-                      : 'Organization Disputes Console'}
+                    Organization Disputes Console
                   </h2>
                 </div>
                 <p className="text-xs text-[#71717A] mt-1">
@@ -884,41 +882,22 @@ export default function PcgCallsClient() {
         </div>
       ) : (
         <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
-        {/* ── 1. PERSONA CONTEXT HEADER (Only for TL and Admin) ──────────────── */}
-        {activePersona !== 'agent' && (
+        {/* ── 1. PERSONA CONTEXT HEADER (Only for Admin) ──────────────── */}
+        {activePersona === 'admin' && (
           <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <div>
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                  {activePersona === 'tl' ? 'Team Leadership Hub' : 'Executive Console'}
+                  Executive Console
                 </span>
                 <h2 className="text-lg font-bold text-[#111111]">
-                  {activePersona === 'tl'
-                    ? `Team Leader Console — Team ${selectedTl}`
-                    : 'Organization PCG Analytics & Administration'}
+                  Organization PCG Analytics &amp; Administration
                 </h2>
               </div>
               <p className="text-xs text-[#71717A] mt-1">
-                {activePersona === 'tl'
-                  ? 'Team oversight, low-score alerts (<85%), dropped call diagnostics, and RM scorecards.'
-                  : 'Complete cross-team visibility across all RMs, Team Leads, and categories.'}
+                Complete cross-team visibility across all RMs, Team Leads, and categories.
               </p>
             </div>
-
-            {/* Switchers within persona - Only for TL and Admin, RM strictly sees own scores */}
-            {activePersona === 'tl' && (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-[#71717A]">Team Lead:</span>
-                <select
-                  value={selectedTl}
-                  onChange={(e) => { setSelectedTl(e.target.value); setPage(1); }}
-                  className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-zinc-50"
-                >
-                  <option value="Gokul">Team Gokul (4 RMs)</option>
-                  <option value="Vaishnavi">Team Vaishnavi (4 RMs)</option>
-                </select>
-              </div>
-            )}
 
             {activePersona === 'admin' && (
               <div className="flex items-center gap-3 flex-wrap">
