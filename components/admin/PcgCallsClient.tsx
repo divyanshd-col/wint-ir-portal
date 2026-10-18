@@ -207,8 +207,11 @@ export default function PcgCallsClient() {
   }, [profileMenuOpen]);
 
   useEffect(() => {
-    fetchData();
-  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, adminTlFilter, adminRmFilter]);
+    const handler = setTimeout(() => {
+      fetchData();
+    }, 250);
+    return () => clearTimeout(handler);
+  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, adminTlFilter, adminRmFilter, searchQuery]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -226,8 +229,9 @@ export default function PcgCallsClient() {
       }
       if (activePersona === 'agent' && selectedRm) {
         p.set('rm_name', selectedRm);
-      } else if (activePersona === 'tl' && selectedTl) {
-        p.set('tl_name', selectedTl);
+      } else if (activePersona === 'tl') {
+        if (selectedTl) p.set('tl_name', selectedTl);
+        if (adminRmFilter !== 'all') p.set('rm_name', adminRmFilter);
       } else if (activePersona === 'admin') {
         if (adminTlFilter !== 'all') p.set('tl_name', adminTlFilter);
         if (adminRmFilter !== 'all') p.set('rm_name', adminRmFilter);
@@ -464,10 +468,24 @@ export default function PcgCallsClient() {
   );
   const rmRankDisplay = rmRankIndex >= 0 ? `#${rmRankIndex + 1}` : '#2';
 
-  const teamRms = selectedTl === 'Vaishnavi' ? ['Vikram', 'Sneha', 'Karan', 'Meera'] : ['Aahan Thaker', 'Dhanush', 'Priya', 'Rahul', 'Ananya'];
+  const gokulRms = ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'];
+  const vaishnaviRms = ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'];
+  const allKnownRms = [...gokulRms, ...vaishnaviRms];
+  const teamRms = selectedTl === 'Vaishnavi' ? vaishnaviRms : gokulRms;
   const teamRmScorecards = rmScorecards.filter((r) => teamRms.includes(r.rmName)).length > 0
     ? rmScorecards.filter((r) => teamRms.includes(r.rmName))
     : rmScorecards;
+
+  const availableRmsForTable = (rms.length > 0 ? rms : allKnownRms.map((name) => ({ name, count: 0 }))).filter((r) => {
+    if (activePersona === 'tl') {
+      return teamRms.includes(r.name);
+    }
+    if (activePersona === 'admin' && adminTlFilter !== 'all') {
+      if (adminTlFilter === 'Gokul') return gokulRms.includes(r.name);
+      if (adminTlFilter === 'Vaishnavi') return vaishnaviRms.includes(r.name);
+    }
+    return true;
+  });
 
   const renderDisputesTable = () => (
     <div className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-sm">
@@ -1650,13 +1668,35 @@ export default function PcgCallsClient() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {activePersona !== 'agent' && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#71717A] font-medium">Agent:</span>
+                  <select
+                    id="table-agent-filter"
+                    value={adminRmFilter}
+                    onChange={(e) => {
+                      setAdminRmFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs focus:border-[#111111] cursor-pointer"
+                  >
+                    <option value="all">All Agents ({availableRmsForTable.length})</option>
+                    {availableRmsForTable.map((r) => (
+                      <option key={r.name} value={r.name}>
+                        {r.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <input
                 type="text"
                 placeholder="Search Call ID or Phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-56 outline-none focus:border-[#111111]"
+                className="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-52 outline-none focus:border-[#111111] shadow-2xs bg-white"
               />
             </div>
           </div>
