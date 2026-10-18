@@ -1006,100 +1006,7 @@ export default function PcgCallsClient() {
         </div>
 
 
-        {/* ── 4. CATEGORY FILTER PILLS ────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E4E4E7]">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-[#71717A] font-semibold mr-1">Call Category:</span>
-            <button
-              onClick={() => setSelectedCategory('all')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                selectedCategory === 'all'
-                  ? 'bg-[#111111] text-white shadow-sm'
-                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
-            >
-              All Categories ({calls.length})
-            </button>
-            <button
-              onClick={() => setSelectedCategory('13_pitching')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                selectedCategory === '13_pitching'
-                  ? 'bg-[#111111] text-white shadow-sm'
-                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
-            >
-              13% Club / Pitching
-            </button>
-            <button
-              onClick={() => setSelectedCategory('upselling')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                selectedCategory === 'upselling'
-                  ? 'bg-[#111111] text-white shadow-sm'
-                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
-            >
-              Upselling Calls
-            </button>
-            <button
-              onClick={() => setSelectedCategory('support')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                selectedCategory === 'support'
-                  ? 'bg-[#111111] text-white shadow-sm'
-                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
-              }`}
-            >
-              General / Support
-            </button>
-            <button
-              onClick={() => setSelectedCategory(selectedCategory === 'coaching_available' ? 'all' : 'coaching_available')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                selectedCategory === 'coaching_available'
-                  ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-300'
-                  : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
-              }`}
-            >
-              Coaching Insights Available
-            </button>
 
-            {/* Admin Dedicated View Pills */}
-            {activePersona === 'admin' && (
-              <>
-                <button
-                  onClick={() => setSelectedCategory(selectedCategory === 'tl_analytics' ? 'all' : 'tl_analytics')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                    selectedCategory === 'tl_analytics'
-                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
-                      : 'bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
-                  }`}
-                >
-                  Overall TL Analytics
-                </button>
-                <button
-                  onClick={() => setSelectedCategory(selectedCategory === 'rm_performance' ? 'all' : 'rm_performance')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                    selectedCategory === 'rm_performance'
-                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
-                      : 'bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
-                  }`}
-                >
-                  Team-Wide RM Performance
-                </button>
-                <button
-                  onClick={() => setSelectedCategory(selectedCategory === 'ai_coaching_insights' ? 'all' : 'ai_coaching_insights')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                    selectedCategory === 'ai_coaching_insights'
-                      ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-300'
-                      : 'bg-purple-50 text-purple-900 border border-purple-200 hover:bg-purple-100'
-                  }`}
-                >
-                  Team Coaching Insights
-                </button>
-              </>
-            )}
-          </div>
-
-
-        </div>
 
         {/* ── 5. PROPER RM SCORECARD SECTION (FOR TL) ────────────────── */}
 
@@ -1615,6 +1522,99 @@ export default function PcgCallsClient() {
         )}
 
 
+
+        {/* ── 4. CATEGORY FILTER PILLS ────────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E4E4E7]">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[#71717A] font-semibold mr-1">Call Category:</span>
+            <button
+              onClick={() => setSelectedCategory('all')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                selectedCategory === 'all'
+                  ? 'bg-[#111111] text-white shadow-sm'
+                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+              }`}
+            >
+              All Categories ({calls.length})
+            </button>
+            <button
+              onClick={() => setSelectedCategory('13_pitching')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                selectedCategory === '13_pitching'
+                  ? 'bg-[#111111] text-white shadow-sm'
+                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+              }`}
+            >
+              13% Club / Pitching
+            </button>
+            <button
+              onClick={() => setSelectedCategory('upselling')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                selectedCategory === 'upselling'
+                  ? 'bg-[#111111] text-white shadow-sm'
+                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+              }`}
+            >
+              Upselling Calls
+            </button>
+            <button
+              onClick={() => setSelectedCategory('support')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                selectedCategory === 'support'
+                  ? 'bg-[#111111] text-white shadow-sm'
+                  : 'bg-[#F4F4F5] text-[#71717A] hover:text-[#111111]'
+              }`}
+            >
+              General / Support
+            </button>
+            <button
+              onClick={() => setSelectedCategory(selectedCategory === 'coaching_available' ? 'all' : 'coaching_available')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                selectedCategory === 'coaching_available'
+                  ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-300'
+                  : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              Coaching Insights Available
+            </button>
+
+            {/* Admin Dedicated View Pills */}
+            {activePersona === 'admin' && (
+              <>
+                <button
+                  onClick={() => setSelectedCategory(selectedCategory === 'tl_analytics' ? 'all' : 'tl_analytics')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                    selectedCategory === 'tl_analytics'
+                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
+                      : 'bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
+                  }`}
+                >
+                  Overall TL Analytics
+                </button>
+                <button
+                  onClick={() => setSelectedCategory(selectedCategory === 'rm_performance' ? 'all' : 'rm_performance')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                    selectedCategory === 'rm_performance'
+                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
+                      : 'bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
+                  }`}
+                >
+                  Team-Wide RM Performance
+                </button>
+                <button
+                  onClick={() => setSelectedCategory(selectedCategory === 'ai_coaching_insights' ? 'all' : 'ai_coaching_insights')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                    selectedCategory === 'ai_coaching_insights'
+                      ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-300'
+                      : 'bg-purple-50 text-purple-900 border border-purple-200 hover:bg-purple-100'
+                  }`}
+                >
+                  Team Coaching Insights
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* ── 6. CALLS AUDIT LIST ────────────────────────────────────────────── */}
         {selectedCategory !== 'ai_coaching_insights' && (
