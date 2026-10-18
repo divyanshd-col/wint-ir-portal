@@ -1539,56 +1539,52 @@ export default function PcgCallsClient() {
 
                 {/* High-Level Diagnostic KPI Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl border border-purple-100 bg-purple-50/30 space-y-1">
+                  <div className="p-4 rounded-xl border border-purple-100 bg-purple-50/30 space-y-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 block">
                       Team Members Coached
                     </span>
                     <div className="text-2xl font-black font-mono text-gray-900">9 / 9 RMs</div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      100% of active RMs across Team Gokul &amp; Vaishnavi received AI guidance.
-                    </p>
-                    <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                      ✓ Full Team Coverage
-                    </span>
+                    <div className="pt-1">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                        ✓ Full Team Coverage
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-1">
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block">
                       Total AI Coaching Insights
                     </span>
                     <div className="text-2xl font-black font-mono text-gray-900">54 Insights</div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Extracted across 42 evaluated audio calls with exact transcript dialogue turns.
-                    </p>
-                    <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-800">
-                      Auto-Generated in Realtime
-                    </span>
+                    <div className="pt-1">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-800">
+                        Auto-Generated in Realtime
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30 space-y-1">
+                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30 space-y-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block">
                       Score Improvement
                     </span>
                     <div className="text-2xl font-black font-mono text-emerald-700">+6.8% IQS</div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Average quality score lift within 7 days for RMs applying AI feedback.
-                    </p>
-                    <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
-                      ▲ Upward Rebound
-                    </span>
+                    <div className="pt-1">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                        ▲ Upward Rebound
+                      </span>
+                    </div>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30 space-y-1">
+                  <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30 space-y-1.5">
                     <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 block">
                       Safe Pitch Compliance
                     </span>
                     <div className="text-2xl font-black font-mono text-blue-700">94.2%</div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Zero high-risk regulatory violations post SEBI disclaimer coaching.
-                    </p>
-                    <span className="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                      SEBI Risk Guarded
-                    </span>
+                    <div className="pt-1">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                        SEBI Risk Guarded
+                      </span>
+                    </div>
                   </div>
                 </div>
 
