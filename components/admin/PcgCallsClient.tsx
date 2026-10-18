@@ -75,6 +75,16 @@ interface TeamLeadSummary {
 
 export type PcgTab = 'calls' | 'scorecard' | 'disputes';
 
+export const getRunoCallUrl = (callId: string | null | undefined) => {
+  if (!callId) return 'https://app-call.runo.in';
+  return `https://app-call.runo.in/#call/${encodeURIComponent(callId)}`;
+};
+
+export const formatCallId = (callId: string | null | undefined, fallbackId: string) => {
+  if (!callId) return fallbackId;
+  return callId.startsWith('runo-') ? callId.replace('runo-', '') : callId.slice(-6);
+};
+
 export default function PcgCallsClient() {
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role || 'admin';
@@ -517,8 +527,20 @@ export default function PcgCallsClient() {
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeRaisedCalls.map((call) => (
                   <tr key={call.id} className="hover:bg-amber-50/20 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-zinc-900">
-                      #{call.callId ? call.callId.slice(-6) : call.id}
+                    <td className="py-3 px-4">
+                      <a
+                        href={getRunoCallUrl(call.callId || call.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Open in Runo CRM`}
+                        className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 hover:text-emerald-900 hover:underline group cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span>#{formatCallId(call.callId, call.id)}</span>
+                        <svg className="w-3 h-3 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
                     </td>
                     {activePersona !== 'agent' && (
                       <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
@@ -578,8 +600,20 @@ export default function PcgCallsClient() {
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeReviewedCalls.map((call) => (
                   <tr key={call.id} className="hover:bg-emerald-50/20 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-zinc-900">
-                      #{call.callId ? call.callId.slice(-6) : call.id}
+                    <td className="py-3 px-4">
+                      <a
+                        href={getRunoCallUrl(call.callId || call.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`Open in Runo CRM`}
+                        className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 hover:text-emerald-900 hover:underline group cursor-pointer"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span>#{formatCallId(call.callId, call.id)}</span>
+                        <svg className="w-3 h-3 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                      </a>
                     </td>
                     {activePersona !== 'agent' && (
                       <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
@@ -1906,8 +1940,20 @@ export default function PcgCallsClient() {
                         call.needsAttention ? 'bg-amber-50/20' : ''
                       }`}
                     >
-                      <td className="py-3 px-4 font-mono font-bold text-zinc-900">
-                        #{call.callId ? call.callId.slice(-6) : call.id}
+                      <td className="py-3 px-4">
+                        <a
+                          href={getRunoCallUrl(call.callId || call.id)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Open in Runo CRM"
+                          className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-emerald-700 hover:underline group cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span>#{formatCallId(call.callId, call.id)}</span>
+                          <svg className="w-3 h-3 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
                       </td>
 
                       {activePersona !== 'agent' && (
@@ -2011,9 +2057,18 @@ export default function PcgCallsClient() {
             {/* Drawer Header */}
             <div className="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-zinc-50">
               <div className="flex flex-wrap items-center gap-3">
-                <span className="font-mono font-bold text-base text-[#111111]">
-                  Call #{activeCallAudit.callId ? activeCallAudit.callId.slice(-6) : activeCallAudit.id}
-                </span>
+                <a
+                  href={getRunoCallUrl(activeCallAudit.callId || activeCallAudit.id)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Open in Runo CRM"
+                  className="inline-flex items-center gap-1.5 font-mono font-bold text-base text-[#111111] hover:text-emerald-700 hover:underline group cursor-pointer"
+                >
+                  <span>Call #{formatCallId(activeCallAudit.callId, activeCallAudit.id)}</span>
+                  <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                  </svg>
+                </a>
                 <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
                   activeCallAudit.categoryKey === '13_pitching'
                     ? 'bg-blue-50 text-blue-700 border border-blue-200'

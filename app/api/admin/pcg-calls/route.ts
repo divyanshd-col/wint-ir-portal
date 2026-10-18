@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireRole } from '@/lib/api-guard';
-import { query } from '@/lib/cx/db';
 import { withLogging } from '@/lib/log';
 
 const ROUTE = 'admin/pcg-calls';
 
-// Deterministic hash to give consistent category & scores to calls without DB schema migration
+// Deterministic hash helper
 function hashString(str: string): number {
   let hash = 0;
   for (let i = 0; i < str.length; i++) {
@@ -38,15 +37,15 @@ const PARAM_DEFINITIONS: Record<string, Array<{ name: string; maxWeight: number 
     { name: 'Technical / Tax Information Accuracy', maxWeight: 25 },
     { name: 'Active Listening & Customer Empathy', maxWeight: 20 },
     { name: 'Prompt Resolution & Ownership', maxWeight: 15 },
-    { name: 'Greeting & Closing Protocol', maxWeight: 10 },
-    { name: 'Confirmation of Satisfaction', maxWeight: 10 },
+    { name: 'Verification & Account Security', maxWeight: 10 },
+    { name: 'Call Wrap-up & Ticket Tracking', maxWeight: 10 },
   ],
 };
 
 const COACHING_TIPS_POOL: Record<string, string[]> = {
   '13_pitching': [
-    'Turn 14: Customer hesitated on 3-year lock-in. Instead of accepting the delay immediately, highlight regular monthly interest payouts and Wint secondary market early exit options.',
-    'Turn 8: Missed quantifying the return comparison. When investor cited 7.5% bank FD, explicitly illustrate the ~550 bps net alpha delivered by 13% Club.',
+    'Turn 8: Do not state that 13% Club returns are guaranteed. Emphasize that all corporate assets undergo rigorous due diligence with monthly cash flows.',
+    'Turn 14: Failed to uncover customer investment objective before quoting minimum ticket size. Ask what horizon they have in mind first.',
     'Turn 19: Customer requested time to discuss with family. Commit to a firm callback slot and offer to send a 1-page summary on WhatsApp rather than leaving it open-ended.',
   ],
   'upselling': [
@@ -63,8 +62,8 @@ const COACHING_TIPS_POOL: Record<string, string[]> = {
 
 const TRANSCRIPT_TEMPLATES: Record<string, Array<{ speaker: 'RM' | 'Customer'; text: string; time: string }>> = {
   '13_pitching': [
-    { speaker: 'RM', text: 'Hello, am I speaking with Mr. Sharma? This is Dhanush from Wint Wealth PCG team.', time: '00:03' },
-    { speaker: 'Customer', text: 'Yes Dhanush, tell me. I received an alert about the 13% Club product.', time: '00:10' },
+    { speaker: 'RM', text: 'Hello, am I speaking with Mr. Sharma? This is Aahan from Wint Wealth PCG team.', time: '00:03' },
+    { speaker: 'Customer', text: 'Yes Aahan, tell me. I received an alert about the 13% Club product.', time: '00:10' },
     { speaker: 'RM', text: 'Glad you saw that! I wanted to walk you through how the 13% Club offers fixed monthly returns backed by vetted corporate assets.', time: '00:22' },
     { speaker: 'Customer', text: 'Is there a lock-in period? What if I need funds in an emergency?', time: '00:45' },
     { speaker: 'RM', text: 'It has a standard 36-month horizon, but with monthly cash flow payouts and liquidity support via our secondary market window.', time: '01:05' },
@@ -95,6 +94,207 @@ const TL_TEAMS: Record<string, string[]> = {
   Vaishnavi: ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'],
 };
 
+const DUMMY_RMS = [
+  { name: 'Aahan Thaker', tl: 'Gokul', count: 20 },
+  { name: 'Dhanush', tl: 'Gokul', count: 16 },
+  { name: 'Yaashvi Arora', tl: 'Gokul', count: 14 },
+  { name: 'Samskriti Rao', tl: 'Gokul', count: 12 },
+  { name: 'Gaurav Nautiyal', tl: 'Gokul', count: 10 },
+  { name: 'Aravind', tl: 'Vaishnavi', count: 14 },
+  { name: 'Sujal Dadwani', tl: 'Vaishnavi', count: 12 },
+  { name: 'Antara Chakrabarty', tl: 'Vaishnavi', count: 10 },
+  { name: 'Swati Singh', tl: 'Vaishnavi', count: 8 },
+];
+
+export interface DummyPCGCall {
+  id: string;
+  callId: string;
+  rmName: string;
+  tlName: string;
+  phoneNumber: string;
+  callType: string;
+  tag: string | null;
+  durationSeconds: number;
+  startTime: string;
+  isAnswered: boolean;
+  hasRecording: boolean;
+  category: string;
+  categoryKey: '13_pitching' | 'upselling' | 'support';
+  iqsScore: number;
+  gates: { status: 'PASS' | 'FAIL'; reason?: string | null };
+  needsAttention: boolean;
+  unansweredBy: 'Customer' | 'RM' | null;
+  unansweredReason: string | null;
+  parameters: Array<{
+    id: string;
+    name: string;
+    maxScore: number;
+    earnedScore: number;
+    status: 'Yes' | 'Half' | 'No';
+    quote: string;
+  }>;
+  aiCoachingTip: string | null;
+  transcriptTurns: Array<{ speaker: 'RM' | 'Customer'; text: string; time: string }>;
+  disputeStatus: 'none' | 'pending' | 'resolved';
+}
+
+// Generate realistic synthetic dummy calls
+function buildDummyCalls(): DummyPCGCall[] {
+  const dummyList: DummyPCGCall[] = [];
+  let globalId = 100;
+
+  // Curated scores for Aahan Thaker so his overall average IQS is ~87%
+  const aahanScores = [94, 88, 92, 85, 78, 86, 90, 89, 76, 95, 88, 91, 84, 96];
+
+  DUMMY_RMS.forEach((rm) => {
+    for (let i = 0; i < rm.count; i++) {
+      globalId++;
+      // Answered ~65%, Unanswered ~35%
+      const isAnswered = (i % 3 !== 2);
+      const durationSeconds = isAnswered ? (65 + ((globalId * 37) % 275)) : 0;
+
+      // Categories
+      const catMod = (globalId * 3 + i) % 10;
+      const categoryKey: '13_pitching' | 'upselling' | 'support' =
+        !isAnswered ? '13_pitching' : (catMod < 5 ? '13_pitching' : catMod < 8 ? 'upselling' : 'support');
+      const category = categoryKey === '13_pitching' ? '13% Club / Pitching' : categoryKey === 'upselling' ? 'Upselling Calls' : 'General / Support';
+
+      // Timestamps spread across last 14 days
+      const daysAgo = (globalId % 13);
+      const hoursAgo = (globalId * 7) % 24;
+      const startTime = new Date(Date.UTC(2026, 9, 18 - daysAgo, hoursAgo, 15, 0)).toISOString();
+
+      // IQS Score
+      let iqsScore = 0;
+      let gateStatus: 'PASS' | 'FAIL' = 'PASS';
+      let gateReason: string | null = null;
+
+      if (isAnswered) {
+        if (rm.name === 'Aahan Thaker') {
+          iqsScore = aahanScores[i % aahanScores.length];
+        } else {
+          const sMod = (globalId * 11) % 100;
+          if (sMod < 15) iqsScore = 72 + (globalId % 8);
+          else if (sMod < 35) iqsScore = 80 + (globalId % 5);
+          else if (sMod < 80) iqsScore = 86 + (globalId % 9);
+          else iqsScore = 95 + (globalId % 5);
+        }
+
+        // Compliance tripwire gate (~4% fails)
+        if (globalId % 26 === 0) {
+          gateStatus = 'FAIL';
+          gateReason = 'Turn 18: Advice Tripwire — Assured returns without disclosing secondary market risk.';
+        }
+      }
+
+      const needsAttention = isAnswered && (iqsScore < 85 || gateStatus === 'FAIL');
+
+      // Unanswered diagnostics
+      let unansweredBy: 'Customer' | 'RM' | null = null;
+      let unansweredReason: string | null = null;
+      if (!isAnswered) {
+        if (globalId % 6 === 0) {
+          unansweredBy = 'RM';
+          unansweredReason = 'RM Dropped Early (<5s)';
+        } else if (globalId % 8 === 0) {
+          unansweredBy = 'RM';
+          unansweredReason = 'RM Missed Incoming Call';
+        } else if (globalId % 4 === 0) {
+          unansweredBy = 'Customer';
+          unansweredReason = 'Customer Busy / Declined';
+        } else {
+          unansweredBy = 'Customer';
+          unansweredReason = 'Rang Out (No Answer)';
+        }
+      }
+
+      // Parameters
+      const paramDefs = PARAM_DEFINITIONS[categoryKey] || PARAM_DEFINITIONS['13_pitching'];
+      const parameters = paramDefs.map((def, pIdx) => {
+        const pHash = (globalId * 7 + pIdx * 19) % 100;
+        let pStatus: 'Yes' | 'Half' | 'No' = 'Yes';
+        let earned = def.maxWeight;
+        if (iqsScore < 85) {
+          if (pHash < 40) {
+            pStatus = 'No';
+            earned = 0;
+          } else if (pHash < 70) {
+            pStatus = 'Half';
+            earned = Math.round(def.maxWeight / 2);
+          }
+        }
+        return {
+          id: `P${pIdx + 1}`,
+          name: def.name,
+          maxScore: def.maxWeight,
+          earnedScore: earned,
+          status: pStatus,
+          quote: pStatus !== 'Yes'
+            ? `Turn ${10 + pIdx}: Customer hesitated; agent gave brief response without citing policy.`
+            : `Turn ${4 + pIdx}: Clear verified statement adhering to protocol.`,
+        };
+      });
+
+      // Coaching tip
+      let aiCoachingTip: string | null = null;
+      if (needsAttention) {
+        const tips = COACHING_TIPS_POOL[categoryKey] || COACHING_TIPS_POOL['13_pitching'];
+        aiCoachingTip = tips[globalId % tips.length];
+      }
+
+      // Transcript turns
+      const transcriptTurns = TRANSCRIPT_TEMPLATES[categoryKey] || TRANSCRIPT_TEMPLATES['13_pitching'];
+
+      // Dispute status: realistic sample for testing
+      let disputeStatus: 'none' | 'pending' | 'resolved' = 'none';
+      if (rm.name === 'Aahan Thaker') {
+        if (i === 3) disputeStatus = 'pending';
+        if (i === 6) disputeStatus = 'pending';
+        if (i === 9) disputeStatus = 'resolved';
+        if (i === 12) disputeStatus = 'resolved';
+      } else if (globalId % 18 === 0) {
+        disputeStatus = 'pending';
+      } else if (globalId % 24 === 0) {
+        disputeStatus = 'resolved';
+      }
+
+      // Synthetic Runo Call ID & synthetic masked phone number
+      const callId = `runo-${globalId}`;
+      const dummyPhone = `+91 98765 ${String(10000 + globalId).slice(-5)}`;
+
+      dummyList.push({
+        id: String(globalId),
+        callId,
+        rmName: rm.name,
+        tlName: `Team ${rm.tl}`,
+        phoneNumber: dummyPhone,
+        callType: i % 7 === 0 ? 'incoming' : 'outgoing',
+        tag: !isAnswered ? (unansweredReason?.toLowerCase().includes('busy') ? 'busy' : 'unanswered') : null,
+        durationSeconds,
+        startTime,
+        isAnswered,
+        hasRecording: isAnswered,
+        category,
+        categoryKey,
+        iqsScore,
+        gates: { status: gateStatus, reason: gateReason },
+        needsAttention,
+        unansweredBy,
+        unansweredReason,
+        parameters,
+        aiCoachingTip,
+        transcriptTurns,
+        disputeStatus,
+      });
+    }
+  });
+
+  return dummyList;
+}
+
+// Cached in-memory dummy pool
+const ALL_DUMMY_CALLS = buildDummyCalls();
+
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   try {
     const { response } = await requireRole(['admin', 'tl', 'agent', 'quality']);
@@ -111,360 +311,160 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const rmFilter = searchParams.get('rm_name')?.trim();
   const tlFilter = searchParams.get('tl_name')?.trim();
   const callStatusFilter = searchParams.get('status')?.trim(); // 'all' | 'answered' | 'unanswered' | 'needs_attention'
-  const categoryFilter = searchParams.get('category')?.trim(); // 'all' | '13_pitching' | 'upselling' | 'support'
-  const searchFilter = searchParams.get('search')?.trim();
-
-  // Base WHERE clause
-  const whereClauses: string[] = [];
-  const sqlParams: any[] = [];
-  let paramIdx = 1;
-
-  if (rmFilter && rmFilter !== 'all') {
-    whereClauses.push(`(LOWER(COALESCE(NULLIF(called_by, ''), NULLIF(agent_name, ''), 'Unknown RM')) = LOWER($${paramIdx}::text) OR LOWER(called_by) LIKE LOWER($${paramIdx}::text) || '%')`);
-    sqlParams.push(rmFilter);
-    paramIdx++;
-  }
-
-  if (tlFilter && tlFilter !== 'all' && TL_TEAMS[tlFilter]) {
-    const teamRms = TL_TEAMS[tlFilter];
-    whereClauses.push(`COALESCE(NULLIF(called_by, ''), NULLIF(agent_name, ''), 'Unknown RM') = ANY($${paramIdx++})`);
-    sqlParams.push(teamRms);
-  }
-
-  if (callStatusFilter === 'answered') {
-    whereClauses.push(`duration_seconds > 0 AND recording_url IS NOT NULL AND recording_url != ''`);
-  } else if (callStatusFilter === 'unanswered') {
-    whereClauses.push(`(duration_seconds = 0 OR duration_seconds IS NULL OR recording_url IS NULL OR recording_url = '')`);
-  }
-
+  const categoryFilter = searchParams.get('category')?.trim(); // 'all' | '13_pitching' | 'upselling' | 'support' | 'coaching_available'
+  const searchFilter = searchParams.get('search')?.trim().toLowerCase();
   const dateFrom = searchParams.get('date_from')?.trim();
   const dateTo = searchParams.get('date_to')?.trim();
   const dateRangeParam = searchParams.get('date_range')?.trim();
 
-  if (dateFrom && dateTo) {
-    whereClauses.push(`(start_time >= $${paramIdx++}::timestamptz AND start_time < ($${paramIdx++}::timestamptz + INTERVAL '1 day'))`);
-    sqlParams.push(dateFrom, dateTo);
-  } else if (dateRangeParam === '7d') {
-    // 7 days window
-    whereClauses.push(`(start_time IS NULL OR start_time >= NOW() - INTERVAL '7 days' OR start_time >= (SELECT MAX(start_time) - INTERVAL '7 days' FROM pcg_call_recordings))`);
-  } else if (dateRangeParam === '30d') {
-    // 30 days window
-    whereClauses.push(`(start_time IS NULL OR start_time >= NOW() - INTERVAL '30 days' OR start_time >= (SELECT MAX(start_time) - INTERVAL '30 days' FROM pcg_call_recordings))`);
+  // Filter in-memory dummy calls
+  let filtered = ALL_DUMMY_CALLS;
+
+  if (rmFilter && rmFilter !== 'all') {
+    filtered = filtered.filter(c => c.rmName.toLowerCase() === rmFilter.toLowerCase());
+  }
+
+  if (tlFilter && tlFilter !== 'all' && TL_TEAMS[tlFilter]) {
+    const teamMembers = TL_TEAMS[tlFilter];
+    filtered = filtered.filter(c => teamMembers.includes(c.rmName));
+  }
+
+  if (callStatusFilter === 'answered') {
+    filtered = filtered.filter(c => c.isAnswered);
+  } else if (callStatusFilter === 'unanswered') {
+    filtered = filtered.filter(c => !c.isAnswered);
+  } else if (callStatusFilter === 'needs_attention') {
+    filtered = filtered.filter(c => c.needsAttention);
+  }
+
+  if (categoryFilter && categoryFilter !== 'all') {
+    if (categoryFilter === 'coaching_available') {
+      filtered = filtered.filter(c => !!c.aiCoachingTip);
+    } else {
+      filtered = filtered.filter(c => c.categoryKey === categoryFilter);
+    }
   }
 
   if (searchFilter) {
-    whereClauses.push(`(phone_number LIKE $${paramIdx} OR user_phone LIKE $${paramIdx} OR call_id LIKE $${paramIdx} OR customer_id LIKE $${paramIdx})`);
-    sqlParams.push(`%${searchFilter}%`);
-    paramIdx++;
+    filtered = filtered.filter(c =>
+      c.callId.toLowerCase().includes(searchFilter) ||
+      c.phoneNumber.toLowerCase().includes(searchFilter) ||
+      c.rmName.toLowerCase().includes(searchFilter)
+    );
   }
 
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+  // Date filtering
+  if (dateFrom && dateTo) {
+    filtered = filtered.filter(c => c.startTime >= dateFrom && c.startTime <= `${dateTo}T23:59:59.999Z`);
+  } else if (dateRangeParam === '7d') {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    filtered = filtered.filter(c => c.startTime >= sevenDaysAgo);
+  } else if (dateRangeParam === '30d') {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+    filtered = filtered.filter(c => c.startTime >= thirtyDaysAgo);
+  }
 
-  try {
-    // 1. Fetch total count
-    const countResult = await query<{ total: string }>(
-      `SELECT COUNT(*) as total FROM pcg_call_recordings ${whereSql}`,
-      sqlParams
-    );
-    const total = parseInt(countResult[0]?.total || '0', 10);
+  // Total count for current filter
+  const total = filtered.length;
 
-    // 2. Fetch distinct RM list
-    const rmsResult = await query<{ rm_name: string; count: string }>(
-      `SELECT COALESCE(NULLIF(called_by, ''), NULLIF(agent_name, ''), 'Unknown RM') as rm_name, COUNT(*) as count 
-       FROM pcg_call_recordings 
-       GROUP BY rm_name 
-       ORDER BY rm_name ASC`
-    );
+  // Paginated calls
+  const paginatedCalls = filtered.slice(offset, offset + limit);
 
-    // 3. Fetch summary metrics scoped to whereSql
-    const summaryResult = await query<{ total_duration: string; total_calls: string; answered_calls: string; unanswered_calls: string }>(
-      `SELECT 
-         COALESCE(SUM(duration_seconds), 0) as total_duration, 
-         COUNT(*) as total_calls,
-         COUNT(CASE WHEN duration_seconds > 0 AND recording_url IS NOT NULL AND recording_url != '' THEN 1 END) as answered_calls,
-         COUNT(CASE WHEN duration_seconds = 0 OR duration_seconds IS NULL OR recording_url IS NULL OR recording_url = '' THEN 1 END) as unanswered_calls
-       FROM pcg_call_recordings
-       ${whereSql}`,
-      sqlParams
-    );
+  // Distinct RMs list for dropdowns
+  const rms = DUMMY_RMS.map(r => ({
+    name: r.name,
+    count: ALL_DUMMY_CALLS.filter(c => c.rmName === r.name).length,
+  }));
 
-    // 4. Fetch paginated calls data
-    const dataSqlParams = [...sqlParams, limit, offset];
-    const rows = await query<{
-      id: string;
-      call_id: string;
-      called_by: string | null;
-      agent_name: string | null;
-      phone_number: string | null;
-      user_phone: string | null;
-      call_type: string | null;
-      tag: string | null;
-      duration_seconds: number;
-      start_time: string | null;
-      created_at_time: string | null;
-      recording_url: string | null;
-    }>(
-      `SELECT id, call_id, called_by, agent_name, phone_number, user_phone, call_type, tag, duration_seconds, start_time, created_at_time, recording_url
-       FROM pcg_call_recordings
-       ${whereSql}
-       ORDER BY start_time DESC NULLS LAST, id DESC
-       LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
-      dataSqlParams
-    );
+  // Summary calculation strictly scoped to filtered calls
+  const answeredCount = filtered.filter(c => c.isAnswered).length;
+  const unansweredCount = filtered.filter(c => !c.isAnswered).length;
+  const totalDuration = filtered.reduce((acc, c) => acc + c.durationSeconds, 0);
 
-    // Enriched calls processing with deterministic categories, scores, parameters, and diagnostics
-    const enrichedCalls = rows.map((r) => {
-      const rmName = r.called_by?.trim() || r.agent_name?.trim() || 'Unknown RM';
-      const isAnswered = (r.duration_seconds || 0) > 0 && !!r.recording_url;
-      const h = hashString(r.call_id || r.id);
-
-      // Determine category (13% Club / Pitching, Upselling, Support)
-      let categoryKey: '13_pitching' | 'upselling' | 'support';
-      let categoryName: string;
-      if (!isAnswered) {
-        categoryKey = '13_pitching';
-        categoryName = '13% Club / Pitching';
-      } else if (r.duration_seconds > 240) {
-        categoryKey = h % 2 === 0 ? '13_pitching' : 'upselling';
-        categoryName = categoryKey === '13_pitching' ? '13% Club / Pitching' : 'Upselling Calls';
-      } else if (r.duration_seconds > 90) {
-        const mod = h % 3;
-        categoryKey = mod === 0 ? '13_pitching' : mod === 1 ? 'upselling' : 'support';
-        categoryName = categoryKey === '13_pitching' ? '13% Club / Pitching' : categoryKey === 'upselling' ? 'Upselling Calls' : 'General / Support';
-      } else {
-        categoryKey = 'support';
-        categoryName = 'General / Support';
-      }
-
-      // Determine IQS Score & Compliance Gates
-      // Realistic distribution: ~70% above 85, ~30% below 85
-      let iqsScore: number;
-      let gateStatus: 'PASS' | 'FAIL' = 'PASS';
-      let gateReason: string | null = null;
-
-      if (!isAnswered) {
-        iqsScore = 0;
-      } else {
-        const scoreMod = h % 100;
-        if (scoreMod < 15) {
-          iqsScore = 65 + (h % 15); // 65 - 79
-        } else if (scoreMod < 32) {
-          iqsScore = 80 + (h % 5);  // 80 - 84 (Needs Attention)
-        } else if (scoreMod < 75) {
-          iqsScore = 85 + (h % 10); // 85 - 94
-        } else {
-          iqsScore = 95 + (h % 6);  // 95 - 100
-        }
-
-        // Compliance gate check: ~5% fail for test scenarios
-        if (h % 22 === 0) {
-          gateStatus = 'FAIL';
-          gateReason = 'Turn 18: Advice Tripwire — Assured returns without disclosing secondary market risk.';
-        }
-      }
-
-      const needsAttention = isAnswered && (iqsScore < 85 || gateStatus === 'FAIL');
-
-      // Unanswered Diagnostic (Customer vs RM)
-      let unansweredBy: 'Customer' | 'RM' | null = null;
-      let unansweredReason: string | null = null;
-
-      if (!isAnswered) {
-        const startMs = r.start_time ? new Date(r.start_time).getTime() : 0;
-        const createdMs = r.created_at_time ? new Date(r.created_at_time).getTime() : 0;
-        const ringSecs = createdMs > startMs ? Math.round((createdMs - startMs) / 1000) : (h % 35);
-
-        if (r.call_type === 'missed') {
-          unansweredBy = 'RM';
-          unansweredReason = 'RM Missed Incoming Call';
-        } else if (ringSecs < 5 || (h % 5 === 0)) {
-          unansweredBy = 'RM';
-          unansweredReason = 'RM Dropped Early (<5s)';
-        } else if (h % 3 === 0) {
-          unansweredBy = 'Customer';
-          unansweredReason = 'Customer Busy / Declined';
-        } else if (h % 7 === 0) {
-          unansweredBy = 'Customer';
-          unansweredReason = 'Switched Off / Unreachable';
-        } else {
-          unansweredBy = 'Customer';
-          unansweredReason = 'Rang Out (No Answer)';
-        }
-      }
-
-      // Generate category-specific parameter evaluations
-      const paramDefs = PARAM_DEFINITIONS[categoryKey] || PARAM_DEFINITIONS['13_pitching'];
-      const parameters = paramDefs.map((def, idx) => {
-        const paramHash = (h + idx * 17) % 100;
-        let scoreState: 'Yes' | 'Half' | 'No' = 'Yes';
-        let earnedPoints = def.maxWeight;
-
-        if (iqsScore < 85) {
-          if (paramHash < 40) {
-            scoreState = 'No';
-            earnedPoints = 0;
-          } else if (paramHash < 70) {
-            scoreState = 'Half';
-            earnedPoints = Math.round(def.maxWeight / 2);
-          }
-        }
-
-        return {
-          id: `P${idx + 1}`,
-          name: def.name,
-          maxScore: def.maxWeight,
-          earnedScore: earnedPoints,
-          status: scoreState,
-          quote: scoreState !== 'Yes' ? `Turn ${10 + idx}: Customer hesitated; agent gave brief response without citing policy.` : `Turn ${4 + idx}: Clear verified statement adhering to protocol.`,
-        };
-      });
-
-      // Targeted Coaching Tip — Only shown if needsAttention is true!
-      let aiCoachingTip: string | null = null;
-      if (needsAttention) {
-        const tips = COACHING_TIPS_POOL[categoryKey] || COACHING_TIPS_POOL['13_pitching'];
-        aiCoachingTip = tips[h % tips.length];
-      }
-
-      // Transcript turns
-      const transcriptTurns = TRANSCRIPT_TEMPLATES[categoryKey] || TRANSCRIPT_TEMPLATES['13_pitching'];
-
-      // Assign TL
-      let tlName = 'Team Gokul';
-      if (TL_TEAMS.Vaishnavi.includes(rmName)) {
-        tlName = 'Team Vaishnavi';
-      }
-
-      // Initial dispute state
-      const disputeState = h % 19 === 0 ? 'pending' : h % 29 === 0 ? 'resolved' : 'none';
-
-      return {
-        id: r.id,
-        callId: r.call_id,
-        rmName,
-        tlName,
-        phoneNumber: r.phone_number || r.user_phone || 'N/A',
-        callType: r.call_type || 'N/A',
-        tag: r.tag || null,
-        durationSeconds: r.duration_seconds || 0,
-        startTime: r.start_time,
-        isAnswered,
-        hasRecording: !!r.recording_url,
-        category: categoryName,
-        categoryKey,
-        iqsScore,
-        gates: { status: gateStatus, reason: gateReason },
-        needsAttention,
-        unansweredBy,
-        unansweredReason,
-        parameters,
-        aiCoachingTip,
-        transcriptTurns,
-        disputeStatus: disputeState,
-      };
-    });
-
-    // Filter by category or needs_attention or coaching_available if requested
-    let finalCalls = enrichedCalls;
-    if (categoryFilter && categoryFilter !== 'all') {
-      if (categoryFilter === 'coaching_available') {
-        finalCalls = finalCalls.filter(c => !!c.aiCoachingTip);
-      } else {
-        finalCalls = finalCalls.filter(c => c.categoryKey === categoryFilter);
-      }
+  // RM Leaderboard & Scorecards calculated across the dataset
+  const rmScores: Record<string, { total: number; answered: number; pitch: number[]; upsell: number[]; support: number[]; flags: number }> = {};
+  ALL_DUMMY_CALLS.forEach(c => {
+    if (!rmScores[c.rmName]) {
+      rmScores[c.rmName] = { total: 0, answered: 0, pitch: [], upsell: [], support: [], flags: 0 };
     }
-    if (callStatusFilter === 'needs_attention') {
-      finalCalls = finalCalls.filter(c => c.needsAttention);
+    rmScores[c.rmName].total++;
+    if (c.isAnswered) {
+      rmScores[c.rmName].answered++;
+      if (c.categoryKey === '13_pitching') rmScores[c.rmName].pitch.push(c.iqsScore);
+      if (c.categoryKey === 'upselling') rmScores[c.rmName].upsell.push(c.iqsScore);
+      if (c.categoryKey === 'support') rmScores[c.rmName].support.push(c.iqsScore);
+      if (c.gates.status === 'FAIL') rmScores[c.rmName].flags++;
     }
+  });
 
-    // Generate RM Leaderboard & Scorecards
-    const rmScores: Record<string, { total: number; answered: number; pitch: number[]; upsell: number[]; support: number[]; flags: number }> = {};
-    enrichedCalls.forEach(c => {
-      if (!rmScores[c.rmName]) {
-        rmScores[c.rmName] = { total: 0, answered: 0, pitch: [], upsell: [], support: [], flags: 0 };
-      }
-      rmScores[c.rmName].total++;
-      if (c.isAnswered) {
-        rmScores[c.rmName].answered++;
-        if (c.categoryKey === '13_pitching') rmScores[c.rmName].pitch.push(c.iqsScore);
-        if (c.categoryKey === 'upselling') rmScores[c.rmName].upsell.push(c.iqsScore);
-        if (c.categoryKey === 'support') rmScores[c.rmName].support.push(c.iqsScore);
-        if (c.gates.status === 'FAIL') rmScores[c.rmName].flags++;
-      }
-    });
+  const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
 
-    const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
+  const rmScorecards = Object.entries(rmScores).map(([name, data]) => {
+    const allScores = [...data.pitch, ...data.upsell, ...data.support];
+    const overall = avg(allScores) || 82;
+    const trend = overall >= 85 ? 'improving' : overall < 78 ? 'declining' : 'stable';
+    return {
+      rmName: name,
+      totalCalls: data.total,
+      connectRate: data.total ? Math.round((data.answered / data.total) * 100) : 0,
+      pitchScore: avg(data.pitch) || (overall + 2),
+      upsellScore: avg(data.upsell) || (overall - 1),
+      supportScore: avg(data.support) || overall,
+      overallScore: overall,
+      trend,
+      complianceFlags: data.flags,
+      topWeakness: overall < 85 ? 'Objection Handling on lock-in periods' : 'Brand introduction consistency',
+    };
+  }).sort((a, b) => b.overallScore - a.overallScore);
 
-    const rmScorecards = Object.entries(rmScores).map(([name, data]) => {
-      const allScores = [...data.pitch, ...data.upsell, ...data.support];
-      const overall = avg(allScores) || 82;
-      const trend = overall >= 85 ? 'improving' : overall < 78 ? 'declining' : 'stable';
-      return {
-        rmName: name,
-        totalCalls: data.total,
-        connectRate: data.total ? Math.round((data.answered / data.total) * 100) : 0,
-        pitchScore: avg(data.pitch) || (overall + 2),
-        upsellScore: avg(data.upsell) || (overall - 1),
-        supportScore: avg(data.support) || overall,
-        overallScore: overall,
-        trend,
-        complianceFlags: data.flags,
-        topWeakness: overall < 85 ? 'Objection Handling on lock-in periods' : 'Brand introduction consistency',
-      };
-    }).sort((a, b) => b.overallScore - a.overallScore);
-
-    return NextResponse.json({
-      success: true,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-      rms: rmsResult.map(r => ({ name: r.rm_name, count: parseInt(r.count, 10) })),
-      rmScorecards,
-      teamLeads: [
-        {
-          tlName: 'Gokul',
-          teamSize: 4,
-          totalCalls: 1240,
-          connectRate: 64,
-          avgScore: 83.4,
-          callsUnder85: 28,
-          rms: TL_TEAMS.Gokul,
-        },
-        {
-          tlName: 'Vaishnavi',
-          teamSize: 4,
-          totalCalls: 980,
-          connectRate: 67,
-          avgScore: 85.1,
-          callsUnder85: 14,
-          rms: TL_TEAMS.Vaishnavi,
-        },
-      ],
-      summary: {
-        totalCalls: parseInt(summaryResult[0]?.total_calls || '0', 10),
-        answeredCalls: parseInt(summaryResult[0]?.answered_calls || '0', 10),
-        unansweredCalls: parseInt(summaryResult[0]?.unanswered_calls || '0', 10),
-        totalDurationSeconds: parseInt(summaryResult[0]?.total_duration || '0', 10),
-        activeRmsCount: rmsResult.filter(r => r.rm_name !== 'Unknown RM').length,
-        categoryCounts: {
-          pitching: Math.round(total * 0.42),
-          upselling: Math.round(total * 0.34),
-          support: Math.round(total * 0.24),
-        },
-        unansweredBreakdown: {
-          customerRangOut: Math.round(parseInt(summaryResult[0]?.unanswered_calls || '0', 10) * 0.65),
-          customerBusy: Math.round(parseInt(summaryResult[0]?.unanswered_calls || '0', 10) * 0.18),
-          rmDroppedEarly: Math.round(parseInt(summaryResult[0]?.unanswered_calls || '0', 10) * 0.12),
-          rmMissed: Math.round(parseInt(summaryResult[0]?.unanswered_calls || '0', 10) * 0.05),
-        },
-        needsAttentionCount: Math.round(parseInt(summaryResult[0]?.answered_calls || '0', 10) * 0.28),
-        complianceFlagsCount: 6,
+  return NextResponse.json({
+    success: true,
+    total,
+    page,
+    limit,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+    rms,
+    rmScorecards,
+    teamLeads: [
+      {
+        tlName: 'Gokul',
+        teamSize: 5,
+        totalCalls: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Gokul.includes(c.rmName)).length,
+        connectRate: 67,
+        avgScore: 86.8,
+        callsUnder85: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Gokul.includes(c.rmName) && c.needsAttention).length,
+        rms: TL_TEAMS.Gokul,
       },
-      calls: finalCalls,
-    });
-  } catch (error: any) {
-    console.error('[admin/pcg-calls] Error fetching PCG calls:', error);
-    return NextResponse.json({ error: 'Failed to fetch PCG calls' }, { status: 500 });
-  }
+      {
+        tlName: 'Vaishnavi',
+        teamSize: 4,
+        totalCalls: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName)).length,
+        connectRate: 65,
+        avgScore: 85.1,
+        callsUnder85: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName) && c.needsAttention).length,
+        rms: TL_TEAMS.Vaishnavi,
+      },
+    ],
+    summary: {
+      totalCalls: total,
+      answeredCalls: answeredCount,
+      unansweredCalls: unansweredCount,
+      totalDurationSeconds: totalDuration,
+      activeRmsCount: new Set(filtered.map(c => c.rmName)).size,
+      categoryCounts: {
+        pitching: filtered.filter(c => c.categoryKey === '13_pitching').length,
+        upselling: filtered.filter(c => c.categoryKey === 'upselling').length,
+        support: filtered.filter(c => c.categoryKey === 'support').length,
+      },
+      unansweredBreakdown: {
+        customerRangOut: filtered.filter(c => c.unansweredReason?.includes('Rang Out')).length,
+        customerBusy: filtered.filter(c => c.unansweredReason?.includes('Busy')).length,
+        rmDroppedEarly: filtered.filter(c => c.unansweredReason?.includes('Dropped Early')).length,
+        rmMissed: filtered.filter(c => c.unansweredReason?.includes('Missed')).length,
+      },
+      needsAttentionCount: filtered.filter(c => c.needsAttention).length,
+      complianceFlagsCount: filtered.filter(c => c.gates.status === 'FAIL').length,
+    },
+    calls: paginatedCalls,
+  });
 });

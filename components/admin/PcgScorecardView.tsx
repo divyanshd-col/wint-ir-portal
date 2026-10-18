@@ -112,19 +112,19 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
           'Lock down the next check-in with an exact date and time on WhatsApp/Calendar before disconnecting.',
         isBreach: false,
         rankScore: 85,
-        backingCallIds: ['6ad1c607f5277b2f769dd72a'],
+        backingCallIds: ['runo-102'],
       },
     ],
     breaches: [],
     evidence: [
       {
-        callId: '6ad1b3fb6ff6ad4fe4a38288',
+        callId: 'runo-101',
         score: 88,
         topic: '13% Club High-Yield Pitch',
         summary: 'Clear positioning of indicative yield, monthly cash flows, and regulated NBFC partner structure.',
       },
       {
-        callId: '6ad1c607f5277b2f769dd72a',
+        callId: 'runo-102',
         score: 86,
         topic: 'Upselling Senior Secured Debentures',
         summary: 'Addressed investor questions on quarterly interest crediting directly to bank account.',
@@ -1246,9 +1246,18 @@ export default function PcgScorecardView({
                       >
                         <div className="flex-1 space-y-1">
                           <div className="flex items-center gap-2">
-                            <span className="bg-gray-100 text-gray-700 text-xs font-bold px-2 py-0.5 rounded border border-gray-200 font-mono">
-                              Call #{breach.callId}
-                            </span>
+                            <a
+                              href={`https://app-call.runo.in/#call/${encodeURIComponent(breach.callId)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open Call in Runo CRM"
+                              className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-indigo-600 text-xs font-bold px-2 py-0.5 rounded border border-gray-200 font-mono inline-flex items-center gap-1 cursor-pointer transition-colors"
+                            >
+                              <span>Call #{breach.callId}</span>
+                              <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
                             <span className="bg-red-50 text-red-700 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-red-100">
                               Flagged
                             </span>
@@ -1311,7 +1320,18 @@ export default function PcgScorecardView({
                         <tr key={ev.callId} className="hover:bg-gray-50 transition-all">
                           <td className="p-3.5 font-mono font-bold text-indigo-600 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
-                              <span>#{ev.callId}</span>
+                              <a
+                                href={`https://app-call.runo.in/#call/${encodeURIComponent(ev.callId)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open Call in Runo CRM"
+                                className="hover:underline hover:text-indigo-800 inline-flex items-center gap-1 cursor-pointer"
+                              >
+                                <span>#{ev.callId}</span>
+                                <svg className="w-3 h-3 text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </a>
                               <button
                                 onClick={() => handleCopy(ev.callId)}
                                 className="text-gray-400 hover:text-indigo-600"
