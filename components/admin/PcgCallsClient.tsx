@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
+import { useSession } from 'next-auth/react';
 import { IQSRing, IQSPill } from '@/components/quality/IQSRing';
 import { iqsTheme } from '@/lib/quality';
 import PcgScorecardView from './PcgScorecardView';
@@ -72,8 +73,21 @@ interface TeamLeadSummary {
 }
 
 export default function PcgCallsClient() {
+  const { data: session } = useSession();
+  const userRole = (session?.user as any)?.role || 'admin';
+  const isSuperAdmin = Boolean((session?.user as any)?.isSuperAdmin);
+
   // Persona switcher: 'agent' | 'tl' | 'admin'
-  const [activePersona, setActivePersona] = useState<'agent' | 'tl' | 'admin'>('tl');
+  const defaultPersona: 'agent' | 'tl' | 'admin' =
+    userRole === 'agent' ? 'agent' : userRole === 'tl' ? 'tl' : 'admin';
+  const [activePersona, setActivePersona] = useState<'agent' | 'tl' | 'admin'>(defaultPersona);
+
+  useEffect(() => {
+    if (!isSuperAdmin) {
+      if (userRole === 'agent') setActivePersona('agent');
+      else if (userRole === 'tl' && activePersona === 'admin') setActivePersona('tl');
+    }
+  }, [userRole, isSuperAdmin]);
 
   // SubTab: 'calls' (calls list & analytics) | 'scorecard' (RM-style weekly RM scorecard)
   const [activeTab, setActiveTab] = useState<'calls' | 'scorecard'>('calls');
@@ -365,33 +379,41 @@ export default function PcgCallsClient() {
           </div>
         </div>
 
-        {/* Persona Switcher Tabs */}
-        <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
-          <button
-            onClick={() => { setActivePersona('agent'); setSelectedRm('Dhanush'); }}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              activePersona === 'agent' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
-            }`}
-          >
-            Agent View
-          </button>
-          <button
-            onClick={() => { setActivePersona('tl'); setSelectedTl('Gokul'); }}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              activePersona === 'tl' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
-            }`}
-          >
-            Team Lead (TL) View
-          </button>
-          <button
-            onClick={() => setActivePersona('admin')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              activePersona === 'admin' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
-            }`}
-          >
-            Admin View
-          </button>
-        </div>
+        {/* Persona Switcher Tabs - Role Scoped */}
+        {userRole === 'agent' && !isSuperAdmin ? (
+          <div className="inline-flex items-center px-3 py-1.5 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7] text-xs font-semibold text-zinc-700">
+            <span>👤 RM / Agent View</span>
+          </div>
+        ) : (
+          <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
+            <button
+              onClick={() => { setActivePersona('agent'); setSelectedRm('Dhanush'); }}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+                activePersona === 'agent' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
+              }`}
+            >
+              Agent View
+            </button>
+            <button
+              onClick={() => { setActivePersona('tl'); setSelectedTl('Gokul'); }}
+              className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+                activePersona === 'tl' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
+              }`}
+            >
+              Team Lead (TL) View
+            </button>
+            {(userRole === 'admin' || isSuperAdmin) && (
+              <button
+                onClick={() => setActivePersona('admin')}
+                className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
+                  activePersona === 'admin' ? 'bg-white text-[#111111] shadow-sm font-bold' : 'text-[#71717A] hover:text-[#111111]'
+                }`}
+              >
+                Admin View
+              </button>
+            )}
+          </div>
+        )}
 
         {/* View Mode Switcher: Calls & Analytics vs Weekly RM Scorecard */}
         <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">

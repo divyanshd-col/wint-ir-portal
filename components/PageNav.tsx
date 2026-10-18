@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 
 export interface AnalyticsNavData {
   sessions: { id: string; title: string }[];
@@ -173,106 +174,150 @@ export default function PageNav({ username, role, isAdmin, skills: propSkills, f
   const canSeeSettings     = checkSkill('settings:manage:access');
   const canSeePcgCalls     = isAdmin || userRole === 'admin';
 
+  const isSuperAdmin = Boolean((session?.user as any)?.isSuperAdmin);
+  const platformDomain = (session?.user as any)?.platformDomain || 'cx';
+  const activeDomain = (session?.user as any)?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
+
   return (
     <aside className="w-64 bg-[#1a1a1a] flex-col shrink-0 hidden lg:flex h-screen sticky top-0">
-      {/* Logo */}
-      <div className="px-5 py-4 border-b border-white/10">
-        <Link href="/chat">
-          <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
-            <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
+      {/* Logo & Workspace Switcher */}
+      <div className="px-5 py-4 border-b border-white/10 space-y-3">
+        <div className="flex items-center justify-between">
+          <Link href={activeDomain === 'pcg' ? '/admin/pcg-calls' : '/chat'}>
+            <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
+              <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
+            </div>
+          </Link>
+          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+            {activeDomain === 'pcg' ? 'PCG Portal' : 'IR Portal'}
+          </span>
+        </div>
+
+        {/* Netflix-style Workspace Switcher for Super Admins */}
+        {(isSuperAdmin || platformDomain === 'both') && (
+          <div className="pt-1">
+            <WorkspaceSwitcher />
           </div>
-        </Link>
-        <p className="text-gray-500 text-xs mt-2">
-          IR Portal{role ? ` · ${role.charAt(0).toUpperCase() + role.slice(1)}` : ''}
-        </p>
+        )}
       </div>
 
       {/* Nav */}
       <nav className="px-4 py-4 flex-1 overflow-y-auto space-y-1">
-        <NavLink
-          href="/chat"
-          label="Chat"
-          icon={
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z" />
-            </svg>
-          }
-        />
-        {canSeeAnalytics && (
-          analytics
-            ? <AnalyticsNav {...analytics} />
-            : <NavLink href="/analytics" label="Analytics" icon={AnalyticsIcon} />
-        )}
-        {canSeeQuality && (
-          <NavLink
-            href="/quality"
-            label="Quality Tool"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z" />
-              </svg>
-            }
-          />
-        )}
-        {canSeePcgCalls && (
-          <NavLink
-            href="/admin/pcg-calls"
-            label="PCG Calls"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z" />
-              </svg>
-            }
-          />
-        )}
-        {flags?.cxDashboard && canSeeCx && (
-          <NavLink
-            href="/cx"
-            label="CX Dashboard"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="1" y="9" width="3" height="6" rx="0.5" />
-                <rect x="6" y="5" width="3" height="10" rx="0.5" />
-                <rect x="11" y="1" width="3" height="14" rx="0.5" />
-              </svg>
-            }
-          />
-        )}
-        {flags?.callAnalysis && canSeeCallAnalysis && (
-          <NavLink
-            href="/call-analysis"
-            label="Call Analysis"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
-              </svg>
-            }
-          />
-        )}
-        {canSeeTokens && (
-          <NavLink
-            href="/tokens"
-            label="Token Usage"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="3" y="3" width="10" height="10" rx="2" />
-                <path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2" strokeLinecap="round" />
-                <circle cx="8" cy="8" r="1.5" />
-              </svg>
-            }
-          />
-        )}
-        {canSeeSettings && (
-          <NavLink
-            href="/settings"
-            label="Settings"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="8" cy="8" r="2.5" />
-                <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
-              </svg>
-            }
-          />
+        {activeDomain === 'pcg' ? (
+          /* ── Dedicated PCG Navigation ──────────────────────────────── */
+          <>
+            <NavLink
+              href="/admin/pcg-calls"
+              label="PCG Calls & Analytics"
+              icon={
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z" />
+                </svg>
+              }
+            />
+            <NavLink
+              href="/admin/pcg-calls?tab=scorecard"
+              label="RM Weekly Scorecards"
+              icon={
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <polyline points="14 2 14 8 20 8"/>
+                  <line x1="16" y1="13" x2="8" y2="13"/>
+                  <line x1="16" y1="17" x2="8" y2="17"/>
+                </svg>
+              }
+            />
+            {(canSeeSettings || isSuperAdmin) && (
+              <NavLink
+                href="/settings"
+                label="Settings"
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="8" cy="8" r="2.5" />
+                    <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
+                  </svg>
+                }
+              />
+            )}
+          </>
+        ) : (
+          /* ── Standard CX Navigation ────────────────────────────────── */
+          <>
+            <NavLink
+              href="/chat"
+              label="Chat"
+              icon={
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z" />
+                </svg>
+              }
+            />
+            {canSeeAnalytics && (
+              analytics
+                ? <AnalyticsNav {...analytics} />
+                : <NavLink href="/analytics" label="Analytics" icon={AnalyticsIcon} />
+            )}
+            {canSeeQuality && (
+              <NavLink
+                href="/quality"
+                label="Quality Tool"
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z" />
+                  </svg>
+                }
+              />
+            )}
+            {flags?.cxDashboard && canSeeCx && (
+              <NavLink
+                href="/cx"
+                label="CX Dashboard"
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="1" y="9" width="3" height="6" rx="0.5" />
+                    <rect x="6" y="5" width="3" height="10" rx="0.5" />
+                    <rect x="11" y="1" width="3" height="14" rx="0.5" />
+                  </svg>
+                }
+              />
+            )}
+            {flags?.callAnalysis && canSeeCallAnalysis && (
+              <NavLink
+                href="/call-analysis"
+                label="Call Analysis"
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M3 2a1 1 0 00-1 1v1.5a9 9 0 009 9H12.5a1 1 0 001-1v-2a1 1 0 00-1-1h-2a1 1 0 00-1 1v.5A6 6 0 014.5 5h.5a1 1 0 001-1V2a1 1 0 00-1-1H3z"/>
+                  </svg>
+                }
+              />
+            )}
+            {canSeeTokens && (
+              <NavLink
+                href="/tokens"
+                label="Token Usage"
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <rect x="3" y="3" width="10" height="10" rx="2" />
+                    <path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2" strokeLinecap="round" />
+                    <circle cx="8" cy="8" r="1.5" />
+                  </svg>
+                }
+              />
+            )}
+            {canSeeSettings && (
+              <NavLink
+                href="/settings"
+                label="Settings"
+                icon={
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <circle cx="8" cy="8" r="2.5" />
+                    <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
+                  </svg>
+                }
+              />
+            )}
+          </>
         )}
       </nav>
 
