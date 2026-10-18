@@ -1119,19 +1119,7 @@ export default function PcgCallsClient() {
             )}
           </div>
 
-          {/* Low Score Filter Pill for TL */}
-          {activePersona === 'tl' && (
-            <button
-              onClick={() => setStatusFilter(statusFilter === 'needs_attention' ? 'all' : 'needs_attention')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                statusFilter === 'needs_attention'
-                  ? 'bg-red-600 text-white border-red-600 shadow-sm'
-                  : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-              }`}
-            >
-              Attention Queue (&lt;85% IQS)
-            </button>
-          )}
+
         </div>
 
         {/* ── 5. PROPER RM SCORECARD SECTION (FOR TL) ────────────────── */}
