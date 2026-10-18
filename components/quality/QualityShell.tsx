@@ -89,13 +89,27 @@ const ROLE_LABELS: Record<string, string> = {
   agent:   'IR Agent',
 };
 
+import { useSession } from 'next-auth/react';
+
+const PCG_NAV: NavItem[] = [
+  { label: 'PCG Calls & Analytics', href: '/admin/pcg-calls', icon: PhoneIcon, roles: ['admin', 'tl', 'agent'], section: 'PCG' },
+  { label: 'RM Weekly Scorecards',  href: '/admin/pcg-calls?tab=scorecard', icon: DocumentIcon, roles: ['admin', 'tl', 'agent'], section: 'PCG' },
+];
+
 export default function QualityShell({ role, name, skills, children }: Props) {
+  const { data: session } = useSession();
+  const user = session?.user as any;
+  const platformDomain = user?.platformDomain || 'cx';
+  const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
+
+  const nav = activeDomain === 'pcg' ? PCG_NAV : NAV_ALL;
+
   return (
     <RoleShell
       role={role}
       name={name}
       skills={skills}
-      navItems={NAV_ALL}
+      navItems={nav}
       roleLabel={ROLE_LABELS[role] ?? role}
     >
       {children}

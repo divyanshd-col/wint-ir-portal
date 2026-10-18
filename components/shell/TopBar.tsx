@@ -72,14 +72,19 @@ function AccountMenu({ name, email, role }: { name: string; email: string; role:
   );
 }
 
+import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
+
 export default function TopBar() {
   const pathname = usePathname() || '/';
   const { data: session, status } = useSession();
   if (isAuthPath(pathname) || status === 'unauthenticated') return null;
 
-  const user = session?.user as { name?: string; email?: string; role?: string; skills?: string[] } | undefined;
+  const user = session?.user as any;
   const role = user?.role ?? 'agent';
-  const tabs = status === 'authenticated' ? topTabs(role, user?.skills) : [];
+  const isSuperAdmin = Boolean(user?.isSuperAdmin);
+  const platformDomain = user?.platformDomain || 'cx';
+  const activeDomain: 'cx' | 'pcg' = user?.activeDomain || (platformDomain === 'pcg' ? 'pcg' : 'cx');
+  const tabs = status === 'authenticated' ? topTabs(role, user?.skills, activeDomain) : [];
   const current = activeTab(pathname);
 
   return (
@@ -87,7 +92,7 @@ export default function TopBar() {
       {/* Pages size themselves with h-screen / min-h-screen: take the bar's height off, only while it is shown. */}
       <style>{'.h-screen{height:calc(100vh - var(--topbar-h))}.min-h-screen{min-height:calc(100vh - var(--topbar-h))}'}</style>
       <header className="topbar">
-        <Link href="/" className="topbar-logo" aria-label="Wint Wealth home">
+        <Link href={activeDomain === 'pcg' ? '/admin/pcg-calls' : '/'} className="topbar-logo" aria-label="Wint Wealth home">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/wint-logo.png" alt="Wint Wealth" width={22} height={22} />
         </Link>
@@ -99,6 +104,12 @@ export default function TopBar() {
           ))}
         </nav>
         <div className="topbar-right">
+          {/* Netflix-style Workspace Switcher for Super Admins */}
+          {(isSuperAdmin || platformDomain === 'both') && (
+            <div className="mr-2">
+              <WorkspaceSwitcher compact={true} />
+            </div>
+          )}
           <ThemeToggle />
           {status === 'authenticated' && <AccountMenu name={user?.name ?? ''} email={user?.email ?? ''} role={role} />}
         </div>
