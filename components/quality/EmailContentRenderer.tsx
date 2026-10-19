@@ -276,6 +276,8 @@ export function CustomerSummaryBlock({
 
 // ─── Customer History Panel Component ─────────────────────────────────────────
 
+import TicketLinkButton from './TicketLinkButton';
+
 export interface HistoryEntry {
   id: string;
   chatId: string;
@@ -288,12 +290,17 @@ export interface HistoryEntry {
   iqs: number | null;
   status: string;
   csat?: string;
+  customerMessage?: string | null;
+  agentReply?: string | null;
+  messageId?: string | null;
+  ticketId?: string | null;
 }
 
 export interface EmailHistoryPanelProps {
   customerEmail?: string | null;
   chatId?: string | null;
   ticketId?: string | null;
+  currentMessageId?: string | null;
   onClose?: () => void;
 }
 
@@ -301,10 +308,13 @@ export function EmailHistoryPanel({
   customerEmail,
   chatId,
   ticketId,
+  currentMessageId,
   onClose,
 }: EmailHistoryPanelProps) {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [resolvedEmail, setResolvedEmail] = useState<string | null>(customerEmail || null);
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -320,6 +330,7 @@ export function EmailHistoryPanel({
       .then(data => {
         if (!mounted) return;
         setHistory(data.history || []);
+        if (data.customerEmail) setResolvedEmail(data.customerEmail);
       })
       .catch(() => {
         if (!mounted) return;
@@ -334,6 +345,10 @@ export function EmailHistoryPanel({
     };
   }, [customerEmail, chatId, ticketId]);
 
+  const displayEmail = resolvedEmail || customerEmail;
+  const emailCount = history.filter(h => h.channel === 'email').length;
+  const chatCount = history.filter(h => h.channel === 'chat').length;
+
   return (
     <div
       style={{
@@ -342,6 +357,7 @@ export function EmailHistoryPanel({
         borderRadius: 8,
         overflow: 'hidden',
         marginBottom: 14,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
       }}
     >
       <div
@@ -352,22 +368,39 @@ export function EmailHistoryPanel({
           padding: '8px 14px',
           background: 'var(--qa-gray-50, #FAFAFB)',
           borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+          flexWrap: 'wrap',
+          gap: 8,
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2, #6B6B6B)' }}>
             Customer History ({history.length} interaction{history.length === 1 ? '' : 's'})
           </span>
-          {customerEmail && (
-            <span style={{ fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)' }}>
-              · {customerEmail}
+          {displayEmail && (
+            <span style={{ fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontWeight: 500 }}>
+              · {displayEmail}
             </span>
+          )}
+          {history.length > 0 && (
+            <div style={{ display: 'inline-flex', gap: 4, marginLeft: 4 }}>
+              {emailCount > 0 && (
+                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', fontWeight: 600 }}>
+                  {emailCount} Email{emailCount === 1 ? '' : 's'}
+                </span>
+              )}
+              {chatCount > 0 && (
+                <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 4, background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 600 }}>
+                  {chatCount} Chat{chatCount === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
           )}
         </div>
         {onClose && (
           <button
             type="button"
             onClick={onClose}
+            title="Close History Panel"
             style={{
               background: 'transparent',
               border: 'none',
@@ -375,6 +408,7 @@ export function EmailHistoryPanel({
               fontSize: 14,
               color: 'var(--qa-text-3, #A1A1AA)',
               padding: '2px 6px',
+              borderRadius: 4,
             }}
           >
             ✕
@@ -382,20 +416,20 @@ export function EmailHistoryPanel({
         )}
       </div>
 
-      <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+      <div style={{ maxHeight: 280, overflowY: 'auto' }}>
         {loading ? (
-          <div style={{ padding: '16px', textAlign: 'center', fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)' }}>
-            Loading previous customer interactions…
+          <div style={{ padding: '20px', textAlign: 'center', fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)' }}>
+            Loading previous customer interactions &amp; threads…
           </div>
         ) : history.length === 0 ? (
-          <div style={{ padding: '16px', textAlign: 'center', fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)' }}>
+          <div style={{ padding: '20px', textAlign: 'center', fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)' }}>
             No prior conversation history found for this customer.
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: 'var(--qa-gray-50, #FAFAFB)', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)' }}>
-                {['Date', 'Channel', 'ID', 'Agent', 'Subject / Disposition', 'IQS', 'Status / CSAT'].map(h => (
+                {['', 'Date', 'Channel', 'ID', 'Agent', 'Subject / Summary', 'IQS', 'Status / CSAT'].map(h => (
                   <th
                     key={h}
                     style={{
@@ -415,82 +449,142 @@ export function EmailHistoryPanel({
               </tr>
             </thead>
             <tbody>
-              {history.map((h, i) => (
-                <tr
-                  key={`${h.id}_${i}`}
-                  style={{
-                    borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
-                    background: i % 2 === 0 ? 'transparent' : 'var(--qa-fill-light, #FAFAFB)',
-                  }}
-                >
-                  <td style={{ padding: '7px 12px', color: 'var(--qa-text-2, #6B6B6B)', whiteSpace: 'nowrap' }}>
-                    {h.date || '—'}
-                  </td>
-                  <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
-                    <span
+              {history.map((h, i) => {
+                const isExpanded = expandedId === h.id;
+                const isCurrent = Boolean(
+                  (currentMessageId && h.messageId === currentMessageId) ||
+                  (!currentMessageId && ticketId && (h.ticketId === ticketId || h.id === ticketId))
+                );
+
+                return (
+                  <React.Fragment key={`${h.id}_${i}`}>
+                    <tr
+                      onClick={() => setExpandedId(isExpanded ? null : h.id)}
                       style={{
-                        fontSize: 10,
-                        fontWeight: 600,
-                        padding: '1px 6px',
-                        borderRadius: 4,
-                        textTransform: 'uppercase',
-                        background: h.channel === 'email' ? '#eff6ff' : '#f0fdf4',
-                        color: h.channel === 'email' ? '#1d4ed8' : '#15803d',
-                        border: `1px solid ${h.channel === 'email' ? '#bfdbfe' : '#bbf7d0'}`,
+                        borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+                        background: isCurrent
+                          ? '#f0fdf4'
+                          : isExpanded
+                          ? 'var(--qa-fill-light, #FAFAFB)'
+                          : i % 2 === 0
+                          ? 'transparent'
+                          : 'var(--qa-fill-light, #FAFAFB)',
+                        cursor: 'pointer',
+                        transition: 'background 0.15s',
                       }}
+                      title="Click to view message snippet and details"
                     >
-                      {h.channel}
-                    </span>
-                  </td>
-                  <td style={{ padding: '7px 12px', fontFamily: 'ui-monospace, monospace', fontSize: 11 }}>
-                    {h.chatId && /^\d+$/.test(h.chatId.trim()) ? (
-                      <a
-                        href={`https://app.robylon.ai/unified-inbox/share/${h.chatId}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: '#2563eb', textDecoration: 'underline' }}
-                      >
-                        {h.chatId}
-                      </a>
-                    ) : (
-                      <span>{(h.chatId || h.id).slice(0, 8)}…</span>
+                      <td style={{ padding: '7px 8px 7px 12px', width: 16, color: 'var(--qa-text-3, #A1A1AA)', fontSize: 10, textAlign: 'center' }}>
+                        {isExpanded ? '▼' : '▶'}
+                      </td>
+                      <td style={{ padding: '7px 12px', color: 'var(--qa-text-2, #6B6B6B)', whiteSpace: 'nowrap' }}>
+                        {h.date || '—'}
+                      </td>
+                      <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }}>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            padding: '1px 6px',
+                            borderRadius: 4,
+                            textTransform: 'uppercase',
+                            background: h.channel === 'email' ? '#eff6ff' : '#f0fdf4',
+                            color: h.channel === 'email' ? '#1d4ed8' : '#15803d',
+                            border: `1px solid ${h.channel === 'email' ? '#bfdbfe' : '#bbf7d0'}`,
+                          }}
+                        >
+                          {h.channel}
+                        </span>
+                      </td>
+                      <td style={{ padding: '7px 12px', whiteSpace: 'nowrap' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <TicketLinkButton
+                            id={h.chatId || h.ticketId || h.id}
+                            label={h.chatId && /^\d+$/.test(h.chatId.trim()) ? h.chatId : `${(h.chatId || h.ticketId || h.id).slice(0, 8)}…`}
+                          />
+                          {isCurrent && (
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4, background: '#dcfce7', color: '#166534', border: '1px solid #86efac' }}>
+                              Current
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: '7px 12px', color: 'var(--qa-text, #111111)', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                        {h.agentName}
+                      </td>
+                      <td style={{ padding: '7px 12px', color: 'var(--qa-text-2, #6B6B6B)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {h.subject || h.disposition || 'Support Ticket'}
+                      </td>
+                      <td style={{ padding: '7px 12px' }}>
+                        {h.iqs != null ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              minWidth: 32,
+                              height: 20,
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              fontFamily: 'ui-monospace, monospace',
+                              background: h.iqs >= 85 ? '#f0fdf4' : h.iqs >= 70 ? '#fefce8' : '#fef2f2',
+                              color: h.iqs >= 85 ? '#166534' : h.iqs >= 70 ? '#854d0e' : '#991b1b',
+                              border: `1px solid ${h.iqs >= 85 ? '#bbf7d0' : h.iqs >= 70 ? '#fef08a' : '#fecaca'}`,
+                            }}
+                          >
+                            {h.iqs}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: 'var(--qa-text-2, #6B6B6B)' }}>
+                        {h.status || h.csat || 'Completed'}
+                      </td>
+                    </tr>
+
+                    {/* Expanded Detail Drawer */}
+                    {isExpanded && (
+                      <tr style={{ background: 'var(--qa-fill-light, #FAFAFB)', borderBottom: '1px solid var(--qa-border, #E4E4E7)' }}>
+                        <td colSpan={8} style={{ padding: '10px 14px 14px 34px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {h.customerMessage && (
+                              <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 6, padding: '10px 12px' }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 4 }}>
+                                  Customer Query
+                                </div>
+                                <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--qa-text, #111111)', whiteSpace: 'pre-wrap', maxHeight: 120, overflowY: 'auto' }}>
+                                  {stripHtml(h.customerMessage)}
+                                </div>
+                              </div>
+                            )}
+
+                            {h.agentReply && (
+                              <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 6, padding: '10px 12px' }}>
+                                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 4 }}>
+                                  Agent Reply ({h.agentName})
+                                </div>
+                                <div style={{ fontSize: 12, lineHeight: 1.5, color: 'var(--qa-text, #111111)', maxHeight: 150, overflowY: 'auto' }}>
+                                  <EmailMessageView content={h.agentReply} />
+                                </div>
+                              </div>
+                            )}
+
+                            {!h.customerMessage && !h.agentReply && (
+                              <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic' }}>
+                                {h.channel === 'chat'
+                                  ? `Chat interaction with ${h.agentName || 'Agent'}. Click the Ticket ID above to view the full Robylon chat transcript.`
+                                  : 'No message preview stored for this interaction.'}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td style={{ padding: '7px 12px', color: 'var(--qa-text, #111111)', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                    {h.agentName}
-                  </td>
-                  <td style={{ padding: '7px 12px', color: 'var(--qa-text-2, #6B6B6B)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {h.subject || h.disposition || 'Support Ticket'}
-                  </td>
-                  <td style={{ padding: '7px 12px' }}>
-                    {h.iqs != null ? (
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          minWidth: 32,
-                          height: 20,
-                          borderRadius: 4,
-                          fontSize: 11,
-                          fontWeight: 600,
-                          fontFamily: 'ui-monospace, monospace',
-                          background: h.iqs >= 85 ? '#f0fdf4' : h.iqs >= 70 ? '#fefce8' : '#fef2f2',
-                          color: h.iqs >= 85 ? '#166534' : h.iqs >= 70 ? '#854d0e' : '#991b1b',
-                          border: `1px solid ${h.iqs >= 85 ? '#bbf7d0' : h.iqs >= 70 ? '#fef08a' : '#fecaca'}`,
-                        }}
-                      >
-                        {h.iqs}
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '7px 12px', whiteSpace: 'nowrap', color: 'var(--qa-text-2, #6B6B6B)' }}>
-                    {h.status || h.csat || 'Completed'}
-                  </td>
-                </tr>
-              ))}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}

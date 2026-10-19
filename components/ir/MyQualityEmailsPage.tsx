@@ -844,6 +844,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                         customerEmail={item.customer_email}
                                         chatId={item.chat_id}
                                         ticketId={item.ticket_id}
+                                        currentMessageId={item.message_id}
                                         onClose={() => setHistoryOpen(false)}
                                       />
                                     )}
