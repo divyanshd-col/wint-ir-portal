@@ -993,6 +993,7 @@ export default function EmailEvaluationPage() {
                                       customerEmail={item.customer_email}
                                       chatId={item.chat_id}
                                       ticketId={item.ticket_id}
+                                      currentMessageId={item.message_id}
                                       onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
                                     />
                                   )}
