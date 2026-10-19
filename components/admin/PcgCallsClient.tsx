@@ -1998,8 +1998,8 @@ export default function PcgCallsClient() {
                       {activeCallAudit.transcriptTurns.map((turn, idx) => (
                         <div key={idx} className="space-y-1.5">
                           {turn.isPivotTurn && (
-                            <div className="my-2.5 py-1.5 px-3 bg-gradient-to-r from-amber-100/90 via-purple-100/90 to-blue-100/90 border border-amber-300/80 rounded-lg text-[11px] font-bold text-amber-950 flex items-center gap-2 justify-center shadow-2xs">
-                              <span className="text-xs">⚡</span>
+                            <div className="my-2.5 py-1.5 px-3 bg-zinc-50 border border-zinc-300 rounded-lg text-[11px] font-semibold text-zinc-800 flex items-center gap-2 justify-center shadow-2xs">
+                              <span className="text-xs text-zinc-500">⚡</span>
                               <span>RM Topic Pivot: Transitioned from Support Resolution to Re-investment Pitch</span>
                             </div>
                           )}
@@ -2016,11 +2016,7 @@ export default function PcgCallsClient() {
                                   {turn.speaker === 'RM' ? `RM (${activeCallAudit.rmName})` : 'Investor / Customer'}
                                 </span>
                                 {turn.segment && (
-                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
-                                    turn.segment.toLowerCase().includes('support')
-                                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                      : 'bg-purple-100 text-purple-800 border border-purple-200'
-                                  }`}>
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-zinc-100 text-zinc-700 border border-zinc-300">
                                     {turn.segment}
                                   </span>
                                 )}
