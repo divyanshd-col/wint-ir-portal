@@ -1778,7 +1778,6 @@ export default function PcgCallsClient() {
                             >
                               <span className="font-bold text-amber-600">+</span>
                               <span>{call.secondaryCategories.join(', ')}</span>
-                              <span className="text-[9px] bg-amber-200/90 text-amber-950 px-1 py-0.2 rounded font-black tracking-wider">AI</span>
                             </span>
                           )}
                         </div>
@@ -1889,7 +1888,6 @@ export default function PcgCallsClient() {
                   <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-2xs">
                     <span className="font-bold text-amber-600">+</span>
                     <span>{activeCallAudit.secondaryCategories.join(', ')}</span>
-                    <span className="text-[9px] bg-amber-200 text-amber-900 px-1 rounded font-bold uppercase tracking-wider">AI Autotag</span>
                   </span>
                 )}
                 <span className="text-xs text-[#71717A]">
@@ -1929,37 +1927,6 @@ export default function PcgCallsClient() {
               
               {/* ── LEFT COLUMN: Audio Player + Call Transcript Dialogue Turns ──── */}
               <div className="flex-1 flex flex-col overflow-y-auto p-5 space-y-4 bg-white">
-                {/* AI Multi-Category Autotag Insight Card */}
-                {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
-                  <div className="p-3.5 bg-gradient-to-r from-amber-50/90 via-purple-50/50 to-white border border-amber-200/80 rounded-xl shadow-2xs space-y-2">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-5 h-5 rounded-md bg-amber-600 text-white flex items-center justify-center text-[10px] font-black shadow-xs">
-                          AI
-                        </span>
-                        <span className="text-xs font-bold text-zinc-900">
-                          Multi-Category Autotag (2 Discussion Topics Detected)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 text-[11px]">
-                        <span className="font-semibold text-zinc-500">Primary:</span>
-                        <span className="font-bold text-purple-900 bg-purple-100/80 px-2 py-0.5 rounded border border-purple-200">
-                          {activeCallAudit.category}
-                        </span>
-                        <span className="text-zinc-300 font-bold">•</span>
-                        <span className="font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200">
-                          + {activeCallAudit.secondaryCategories.join(', ')}
-                        </span>
-                      </div>
-                    </div>
-                    {activeCallAudit.aiCategoryReasoning && (
-                      <p className="text-xs text-zinc-700 leading-relaxed bg-white/80 p-2.5 rounded-lg border border-amber-100">
-                        {activeCallAudit.aiCategoryReasoning}
-                      </p>
-                    )}
-                  </div>
-                )}
-
                 {/* Audio Player for Answered Calls */}
                 {activeCallAudit.isAnswered ? (
                   <div className="p-3.5 bg-zinc-900 text-white rounded-xl flex items-center justify-between gap-4 shadow-sm">
