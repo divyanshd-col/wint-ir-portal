@@ -133,6 +133,7 @@ const DUMMY_RMS = [
 export interface DummyPCGCall {
   id: string;
   callId: string;
+  clientName: string;
   rmName: string;
   tlName: string;
   phoneNumber: string;
@@ -164,6 +165,27 @@ export interface DummyPCGCall {
   transcriptTurns: Array<{ speaker: 'RM' | 'Customer'; text: string; time: string; segment?: string; isPivotTurn?: boolean }>;
   disputeStatus: 'none' | 'pending' | 'resolved';
 }
+
+const CLIENT_NAMES = [
+  'Amit Kapoor',
+  'Sunil Mehta',
+  'Rajesh Sharma',
+  'Vikram Verma',
+  'Pooja Nair',
+  'Ramesh Iyer',
+  'Ananya Deshmukh',
+  'Sanjay Patel',
+  'Naveen Reddy',
+  'Deepak Joshi',
+  'Priya Kulkarni',
+  'Arun Malhotra',
+  'Kavita Sen',
+  'Rohan Singhal',
+  'Meera Krishnan',
+  'Vivek Agarwal',
+  'Aditi Bose',
+  'Harish Choudhary',
+];
 
 // Generate realistic synthetic dummy calls
 function buildDummyCalls(): DummyPCGCall[] {
@@ -343,13 +365,20 @@ function buildDummyCalls(): DummyPCGCall[] {
         disputeStatus = 'resolved';
       }
 
-      // Synthetic Runo Call ID & synthetic masked phone number
+      // Synthetic Runo Call ID, client name & synthetic masked phone number
       const callId = `runo-${globalId}`;
       const dummyPhone = `+91 98765 ${String(10000 + globalId).slice(-5)}`;
+      let clientName = CLIENT_NAMES[globalId % CLIENT_NAMES.length];
+      if (rm.name === 'Aahan Thaker' && i === 1) clientName = 'Amit Kapoor';
+      else if (rm.name === 'Aahan Thaker' && i === 4) clientName = 'Sunil Mehta';
+      else if (rm.name === 'Dhanush' && i === 1) clientName = 'Pooja Nair';
+      else if (rm.name === 'Aravind' && i === 1) clientName = 'Ramesh Iyer';
+      else if (rm.name === 'Sujal Dadwani' && i === 2) clientName = 'Ananya Deshmukh';
 
       dummyList.push({
         id: String(globalId),
         callId,
+        clientName,
         rmName: rm.name,
         tlName: `Team ${rm.tl}`,
         phoneNumber: dummyPhone,
@@ -417,14 +446,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filtered = filtered.filter(c => teamMembers.includes(c.rmName));
   }
 
-  if (callStatusFilter === 'answered') {
-    filtered = filtered.filter(c => c.isAnswered);
-  } else if (callStatusFilter === 'unanswered') {
-    filtered = filtered.filter(c => !c.isAnswered);
-  } else if (callStatusFilter === 'needs_attention') {
-    filtered = filtered.filter(c => c.needsAttention);
-  }
-
   if (categoryFilter && categoryFilter !== 'all') {
     if (categoryFilter === 'coaching_available') {
       filtered = filtered.filter(c => !!c.aiCoachingTip);
@@ -440,6 +461,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filtered = filtered.filter(c =>
       c.callId.toLowerCase().includes(searchFilter) ||
       c.phoneNumber.toLowerCase().includes(searchFilter) ||
+      (c.clientName && c.clientName.toLowerCase().includes(searchFilter)) ||
       c.rmName.toLowerCase().includes(searchFilter)
     );
   }
@@ -455,7 +477,23 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filtered = filtered.filter(c => c.startTime >= thirtyDaysAgo);
   }
 
-  // Total count for current filter
+  // Summary calculation strictly scoped to filtered calls before evaluation table connected-only filter
+  const scopedTotal = filtered.length;
+  const answeredCount = filtered.filter(c => c.isAnswered).length;
+  const unansweredCount = filtered.filter(c => !c.isAnswered).length;
+  const totalDuration = filtered.reduce((acc, c) => acc + c.durationSeconds, 0);
+
+  // Evaluation table should NOT show calls which are not connected
+  if (callStatusFilter === 'unanswered') {
+    filtered = filtered.filter(c => !c.isAnswered);
+  } else if (callStatusFilter === 'needs_attention') {
+    filtered = filtered.filter(c => c.needsAttention && c.isAnswered);
+  } else {
+    // Default: Evaluation calls table only displays connected calls with evaluation data
+    filtered = filtered.filter(c => c.isAnswered);
+  }
+
+  // Total count for current filter (connected evaluation calls)
   const total = filtered.length;
 
   // Paginated calls
@@ -466,11 +504,6 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     name: r.name,
     count: ALL_DUMMY_CALLS.filter(c => c.rmName === r.name).length,
   }));
-
-  // Summary calculation strictly scoped to filtered calls
-  const answeredCount = filtered.filter(c => c.isAnswered).length;
-  const unansweredCount = filtered.filter(c => !c.isAnswered).length;
-  const totalDuration = filtered.reduce((acc, c) => acc + c.durationSeconds, 0);
 
   // RM Leaderboard & Scorecards calculated across the dataset
   const rmScores: Record<string, { total: number; answered: number; pitch: number[]; upsell: number[]; support: number[]; flags: number }> = {};
@@ -537,7 +570,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       },
     ],
     summary: {
-      totalCalls: total,
+      totalCalls: scopedTotal,
       answeredCalls: answeredCount,
       unansweredCalls: unansweredCount,
       totalDurationSeconds: totalDuration,
