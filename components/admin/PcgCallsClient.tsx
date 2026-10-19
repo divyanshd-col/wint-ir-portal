@@ -21,6 +21,8 @@ interface TranscriptTurn {
   speaker: 'RM' | 'Customer';
   text: string;
   time: string;
+  segment?: string;
+  isPivotTurn?: boolean;
 }
 
 interface PCGCall {
@@ -37,6 +39,9 @@ interface PCGCall {
   hasRecording: boolean;
   category: string;
   categoryKey: '13_pitching' | 'upselling' | 'support';
+  secondaryCategories?: string[];
+  allCategories?: string[];
+  aiCategoryReasoning?: string | null;
   iqsScore: number;
   gates: { status: 'PASS' | 'FAIL'; reason?: string };
   needsAttention: boolean;
@@ -1756,15 +1761,27 @@ export default function PcgCallsClient() {
                       </td>
 
                       <td className="py-3 px-4">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-semibold ${
-                          call.categoryKey === '13_pitching'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : call.categoryKey === 'upselling'
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
-                        }`}>
-                          {call.category}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-semibold ${
+                            call.categoryKey === '13_pitching'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : call.categoryKey === 'upselling'
+                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                              : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
+                          }`}>
+                            {call.category}
+                          </span>
+                          {call.secondaryCategories && call.secondaryCategories.length > 0 && (
+                            <span
+                              title={call.aiCategoryReasoning || `Also discussed: ${call.secondaryCategories.join(', ')}`}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs"
+                            >
+                              <span className="font-bold text-amber-600">+</span>
+                              <span>{call.secondaryCategories.join(', ')}</span>
+                              <span className="text-[9px] bg-amber-200/90 text-amber-950 px-1 py-0.2 rounded font-black tracking-wider">AI</span>
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       <td className="py-3 px-4 font-mono">
@@ -1868,6 +1885,13 @@ export default function PcgCallsClient() {
                 }`}>
                   {activeCallAudit.category}
                 </span>
+                {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
+                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-2xs">
+                    <span className="font-bold text-amber-600">+</span>
+                    <span>{activeCallAudit.secondaryCategories.join(', ')}</span>
+                    <span className="text-[9px] bg-amber-200 text-amber-900 px-1 rounded font-bold uppercase tracking-wider">AI Autotag</span>
+                  </span>
+                )}
                 <span className="text-xs text-[#71717A]">
                   RM: <span className="font-semibold text-zinc-900">{activeCallAudit.rmName}</span> ({activeCallAudit.tlName})
                 </span>
@@ -1905,6 +1929,37 @@ export default function PcgCallsClient() {
               
               {/* ── LEFT COLUMN: Audio Player + Call Transcript Dialogue Turns ──── */}
               <div className="flex-1 flex flex-col overflow-y-auto p-5 space-y-4 bg-white">
+                {/* AI Multi-Category Autotag Insight Card */}
+                {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
+                  <div className="p-3.5 bg-gradient-to-r from-amber-50/90 via-purple-50/50 to-white border border-amber-200/80 rounded-xl shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-5 h-5 rounded-md bg-amber-600 text-white flex items-center justify-center text-[10px] font-black shadow-xs">
+                          AI
+                        </span>
+                        <span className="text-xs font-bold text-zinc-900">
+                          Multi-Category Autotag (2 Discussion Topics Detected)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[11px]">
+                        <span className="font-semibold text-zinc-500">Primary:</span>
+                        <span className="font-bold text-purple-900 bg-purple-100/80 px-2 py-0.5 rounded border border-purple-200">
+                          {activeCallAudit.category}
+                        </span>
+                        <span className="text-zinc-300 font-bold">•</span>
+                        <span className="font-bold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200">
+                          + {activeCallAudit.secondaryCategories.join(', ')}
+                        </span>
+                      </div>
+                    </div>
+                    {activeCallAudit.aiCategoryReasoning && (
+                      <p className="text-xs text-zinc-700 leading-relaxed bg-white/80 p-2.5 rounded-lg border border-amber-100">
+                        {activeCallAudit.aiCategoryReasoning}
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Audio Player for Answered Calls */}
                 {activeCallAudit.isAnswered ? (
                   <div className="p-3.5 bg-zinc-900 text-white rounded-xl flex items-center justify-between gap-4 shadow-sm">
@@ -1974,21 +2029,39 @@ export default function PcgCallsClient() {
                   {activeCallAudit.isAnswered ? (
                     <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
                       {activeCallAudit.transcriptTurns.map((turn, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-3 rounded-xl text-xs transition-all ${
-                            turn.speaker === 'RM'
-                              ? 'bg-blue-50/70 border border-blue-200/80 ml-6'
-                              : 'bg-zinc-100/80 border border-zinc-200/70 mr-6'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between font-bold text-[11px] text-zinc-700 mb-1">
-                            <span className={turn.speaker === 'RM' ? 'text-blue-800' : 'text-zinc-800'}>
-                              {turn.speaker === 'RM' ? `RM (${activeCallAudit.rmName})` : 'Investor / Customer'}
-                            </span>
-                            <span className="font-mono text-[10px] text-zinc-400">{turn.time}</span>
+                        <div key={idx} className="space-y-1.5">
+                          {turn.isPivotTurn && (
+                            <div className="my-2.5 py-1.5 px-3 bg-gradient-to-r from-amber-100/90 via-purple-100/90 to-blue-100/90 border border-amber-300/80 rounded-lg text-[11px] font-bold text-amber-950 flex items-center gap-2 justify-center shadow-2xs">
+                              <span className="text-xs">⚡</span>
+                              <span>RM Topic Pivot: Transitioned from Support Resolution to Re-investment Pitch</span>
+                            </div>
+                          )}
+                          <div
+                            className={`p-3 rounded-xl text-xs transition-all ${
+                              turn.speaker === 'RM'
+                                ? 'bg-blue-50/70 border border-blue-200/80 ml-6'
+                                : 'bg-zinc-100/80 border border-zinc-200/70 mr-6'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between font-bold text-[11px] text-zinc-700 mb-1">
+                              <div className="flex items-center gap-2">
+                                <span className={turn.speaker === 'RM' ? 'text-blue-800' : 'text-zinc-800'}>
+                                  {turn.speaker === 'RM' ? `RM (${activeCallAudit.rmName})` : 'Investor / Customer'}
+                                </span>
+                                {turn.segment && (
+                                  <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                                    turn.segment.toLowerCase().includes('support')
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                      : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  }`}>
+                                    {turn.segment}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-mono text-[10px] text-zinc-400">{turn.time}</span>
+                            </div>
+                            <p className="text-zinc-900 leading-relaxed">{turn.text}</p>
                           </div>
-                          <p className="text-zinc-900 leading-relaxed">{turn.text}</p>
                         </div>
                       ))}
                     </div>
@@ -2014,12 +2087,19 @@ export default function PcgCallsClient() {
               {/* ── RIGHT COLUMN: Parameters Panel + Dispute / Override ─────────── */}
               <div className="w-full lg:w-[460px] flex flex-col overflow-y-auto p-5 space-y-4 bg-[#FAFAFB]">
                 {/* Parameters Header */}
-                <div className="flex items-center justify-between border-b border-[#E4E4E7] pb-2">
-                  <h4 className="text-xs font-bold text-[#111111] uppercase tracking-wider flex items-center gap-1.5">
-                    {activeCallAudit.category} Parameters
-                  </h4>
-                  {activeCallAudit.isAnswered && (
-                    <span className="text-xs font-mono font-bold">{getScoreBadge(activeCallAudit.iqsScore)}</span>
+                <div className="space-y-1 border-b border-[#E4E4E7] pb-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-[#111111] uppercase tracking-wider flex items-center gap-1.5">
+                      {activeCallAudit.category} Parameters
+                    </h4>
+                    {activeCallAudit.isAnswered && (
+                      <span className="text-xs font-mono font-bold">{getScoreBadge(activeCallAudit.iqsScore)}</span>
+                    )}
+                  </div>
+                  {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
+                    <p className="text-[10px] text-zinc-500 italic">
+                      Scored against primary intent ({activeCallAudit.parameters.length} parameters). Secondary topic ({activeCallAudit.secondaryCategories.join(', ')}) recorded for audit history.
+                    </p>
                   )}
                 </div>
 

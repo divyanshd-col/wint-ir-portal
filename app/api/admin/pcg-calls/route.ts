@@ -60,7 +60,7 @@ const COACHING_TIPS_POOL: Record<string, string[]> = {
   ],
 };
 
-const TRANSCRIPT_TEMPLATES: Record<string, Array<{ speaker: 'RM' | 'Customer'; text: string; time: string }>> = {
+const TRANSCRIPT_TEMPLATES: Record<string, Array<{ speaker: 'RM' | 'Customer'; text: string; time: string; segment?: string; isPivotTurn?: boolean }>> = {
   '13_pitching': [
     { speaker: 'RM', text: 'Hello, am I speaking with Mr. Sharma? This is Aahan from Wint Wealth PCG team.', time: '00:03' },
     { speaker: 'Customer', text: 'Yes Aahan, tell me. I received an alert about the 13% Club product.', time: '00:10' },
@@ -85,6 +85,30 @@ const TRANSCRIPT_TEMPLATES: Record<string, Array<{ speaker: 'RM' | 'Customer'; t
     { speaker: 'Customer', text: 'Sure, it is ABCDE1234F.', time: '00:45' },
     { speaker: 'RM', text: 'Thank you. I have verified your portfolio and emailed your Consolidated Tax Statement for FY 24-25 right to your inbox.', time: '01:10' },
     { speaker: 'Customer', text: 'Received it! Thank you so much for the quick resolution.', time: '01:25' },
+  ],
+  'mixed_upsell_support': [
+    { speaker: 'Customer', text: 'Hi Aahan, I noticed my quarterly coupon interest from Muthoot Capital didn\'t show up in my HDFC account yesterday. Can you check?', time: '00:04', segment: 'Support Query' },
+    { speaker: 'RM', text: 'Hello Mr. Kapoor! Let me check your transaction log right away. I see the payout was processed at 6 PM yesterday and will reflect in your HDFC account by 2 PM today.', time: '00:18', segment: 'Support Query' },
+    { speaker: 'Customer', text: 'Okay perfect, that\'s a relief. Was worried there was an account mismatch.', time: '00:34', segment: 'Support Query' },
+    { speaker: 'RM', text: 'No issue at all, your bank details are 100% verified. Also Mr. Kapoor, while I have you on the line, your CreditAccess bonds matured last week. We have a fresh AA-rated senior secured issuance yielding 11.25% open today.', time: '00:46', segment: 'Upselling Pitch', isPivotTurn: true },
+    { speaker: 'Customer', text: 'What is the tenure and payout frequency on that new issuance?', time: '01:05', segment: 'Upselling Pitch' },
+    { speaker: 'RM', text: 'It is a 24-month tenure with monthly interest payouts credited directly to your verified HDFC bank account, backed by 1.25x asset cover.', time: '01:22', segment: 'Upselling Pitch' },
+    { speaker: 'Customer', text: 'That fits my cash flow needs. Can you WhatsApp the term sheet and IM?', time: '01:45', segment: 'Upselling Pitch' },
+    { speaker: 'RM', text: 'Sent directly to your WhatsApp! I will follow up this evening to help reserve your units.', time: '02:05', segment: 'Upselling Pitch' },
+    { speaker: 'Customer', text: 'Sounds good, thanks Aahan.', time: '02:18', segment: 'Upselling Pitch' },
+  ],
+  'mixed_pitch_support': [
+    { speaker: 'RM', text: 'Good morning Mr. Mehta, Aahan here from Wint Wealth. You had registered on our platform to explore fixed-income senior secured bonds.', time: '00:05', segment: 'Support Query' },
+    { speaker: 'Customer', text: 'Yes Aahan, but while completing my profile, my KYC got stuck on DigiLocker Aadhaar verification.', time: '00:16', segment: 'Support Query' },
+    { speaker: 'RM', text: 'I can help you unlock that right away. Did it show an address mismatch or OTP timeout?', time: '00:30', segment: 'Support Query' },
+    { speaker: 'Customer', text: 'It showed an OTP timeout. Can we re-trigger it?', time: '00:42', segment: 'Support Query' },
+    { speaker: 'RM', text: 'I have reset the verification session from our end. Please refresh the Wint app and re-enter the OTP now.', time: '00:58', segment: 'Support Query' },
+    { speaker: 'Customer', text: 'Done, it says KYC verified! Now tell me, how does the 13% Club fixed return product compare to standard bank FDs?', time: '01:14', segment: 'New Pitching', isPivotTurn: true },
+    { speaker: 'RM', text: 'Unlike bank FDs which offer 6.5-7%, the 13% Club is backed by senior secured assets with 1.25x asset cover, giving fixed monthly returns.', time: '01:35', segment: 'New Pitching' },
+    { speaker: 'Customer', text: 'Is there a minimum ticket size to start?', time: '01:58', segment: 'New Pitching' },
+    { speaker: 'RM', text: 'You can start with ₹10,000, and interest is credited monthly right to your bank account.', time: '02:15', segment: 'New Pitching' },
+    { speaker: 'Customer', text: 'Sounds solid. Let me transfer ₹50,000 to test the first allocation.', time: '02:35', segment: 'New Pitching' },
+    { speaker: 'RM', text: 'Excellent! I will guide you through placing your first order as soon as funds reflect.', time: '02:50', segment: 'New Pitching' },
   ],
 };
 
@@ -120,6 +144,9 @@ export interface DummyPCGCall {
   hasRecording: boolean;
   category: string;
   categoryKey: '13_pitching' | 'upselling' | 'support';
+  secondaryCategories?: string[];
+  allCategories?: string[];
+  aiCategoryReasoning?: string | null;
   iqsScore: number;
   gates: { status: 'PASS' | 'FAIL'; reason?: string | null };
   needsAttention: boolean;
@@ -134,7 +161,7 @@ export interface DummyPCGCall {
     quote: string;
   }>;
   aiCoachingTip: string | null;
-  transcriptTurns: Array<{ speaker: 'RM' | 'Customer'; text: string; time: string }>;
+  transcriptTurns: Array<{ speaker: 'RM' | 'Customer'; text: string; time: string; segment?: string; isPivotTurn?: boolean }>;
   disputeStatus: 'none' | 'pending' | 'resolved';
 }
 
@@ -155,9 +182,9 @@ function buildDummyCalls(): DummyPCGCall[] {
 
       // Categories
       const catMod = (globalId * 3 + i) % 10;
-      const categoryKey: '13_pitching' | 'upselling' | 'support' =
+      let categoryKey: '13_pitching' | 'upselling' | 'support' =
         !isAnswered ? '13_pitching' : (catMod < 5 ? '13_pitching' : catMod < 8 ? 'upselling' : 'support');
-      const category = categoryKey === '13_pitching' ? '13% Club / Pitching' : categoryKey === 'upselling' ? 'Upselling Calls' : 'General / Support';
+      let category = categoryKey === '13_pitching' ? '13% Club / Pitching' : categoryKey === 'upselling' ? 'Upselling Calls' : 'General / Support';
 
       // Timestamps spread across last 14 days
       const daysAgo = (globalId % 13);
@@ -208,6 +235,64 @@ function buildDummyCalls(): DummyPCGCall[] {
         }
       }
 
+      // Specific Multi-Category (Mixed Intent) autotagged test calls
+      let isMultiCategoryCall = false;
+      let secondaryCategories: string[] | undefined = undefined;
+      let allCategories: string[] | undefined = undefined;
+      let aiCategoryReasoning: string | null = null;
+      let mixedTurns: Array<{ speaker: 'RM' | 'Customer'; text: string; time: string; segment?: string; isPivotTurn?: boolean }> | null = null;
+
+      if (rm.name === 'Aahan Thaker' && i === 1) {
+        isMultiCategoryCall = true;
+        categoryKey = 'upselling';
+        category = 'Upselling Calls';
+        secondaryCategories = ['General / Support'];
+        allCategories = ['upselling', 'support'];
+        aiCategoryReasoning = 'AI Autotag (2 Categories Detected): Turns 1-3 addressed customer support query on delayed coupon payout from Muthoot bond. Turns 4-9 pivoted to upselling a new 11.25% Senior Secured Bond for reinvestment. Scored on primary intent: Upselling (7 Parameters).';
+        mixedTurns = TRANSCRIPT_TEMPLATES['mixed_upsell_support'];
+      } else if (rm.name === 'Aahan Thaker' && i === 4) {
+        isMultiCategoryCall = true;
+        categoryKey = '13_pitching';
+        category = '13% Club / Pitching';
+        secondaryCategories = ['General / Support'];
+        allCategories = ['13_pitching', 'support'];
+        aiCategoryReasoning = 'AI Autotag (2 Categories Detected): Turns 1-5 resolved DigiLocker Aadhaar KYC timeout (Customer Support). Turns 6-11 conducted full 13% Club pitch discovering investment horizon & comparing with bank FDs (Pitching). Scored on primary intent: Pitching (13 Parameters).';
+        mixedTurns = TRANSCRIPT_TEMPLATES['mixed_pitch_support'];
+      } else if (rm.name === 'Dhanush' && i === 1) {
+        isMultiCategoryCall = true;
+        categoryKey = 'upselling';
+        category = 'Upselling Calls';
+        secondaryCategories = ['General / Support'];
+        allCategories = ['upselling', 'support'];
+        aiCategoryReasoning = 'AI Autotag (2 Categories Detected): Turns 1-3 handled Form 15G tax compliance inquiry (Support). Turns 4-8 pitched ₹1 Lakh reinvestment into NBFC Senior Secured NCD (Upselling). Scored on primary intent: Upselling (7 Parameters).';
+        mixedTurns = TRANSCRIPT_TEMPLATES['mixed_upsell_support'].map(t => ({
+          ...t,
+          text: t.text.replace(/Aahan/g, 'Dhanush')
+        }));
+      } else if (rm.name === 'Aravind' && i === 1) {
+        isMultiCategoryCall = true;
+        categoryKey = 'upselling';
+        category = 'Upselling Calls';
+        secondaryCategories = ['General / Support'];
+        allCategories = ['upselling', 'support'];
+        aiCategoryReasoning = 'AI Autotag (2 Categories Detected): Turns 1-4 assisted investor with bank IFSC update inquiry (Customer Support). Turns 5-9 pitched newly listed 11.60% XIRR Secondary Market Bond using idle wallet balance (Upselling). Scored on primary intent: Upselling (7 Parameters).';
+        mixedTurns = TRANSCRIPT_TEMPLATES['mixed_upsell_support'].map(t => ({
+          ...t,
+          text: t.text.replace(/Aahan/g, 'Aravind')
+        }));
+      } else if (rm.name === 'Sujal Dadwani' && i === 2) {
+        isMultiCategoryCall = true;
+        categoryKey = '13_pitching';
+        category = '13% Club / Pitching';
+        secondaryCategories = ['General / Support'];
+        allCategories = ['13_pitching', 'support'];
+        aiCategoryReasoning = 'AI Autotag (2 Categories Detected): Turns 1-4 resolved Demat account CDSL linking status (Customer Support). Turns 5-11 pitched 13% Club senior secured debt asset (Pitching). Scored on primary intent: Pitching (13 Parameters).';
+        mixedTurns = TRANSCRIPT_TEMPLATES['mixed_pitch_support'].map(t => ({
+          ...t,
+          text: t.text.replace(/Aahan/g, 'Sujal')
+        }));
+      }
+
       // Parameters
       const paramDefs = PARAM_DEFINITIONS[categoryKey] || PARAM_DEFINITIONS['13_pitching'];
       const parameters = paramDefs.map((def, pIdx) => {
@@ -243,7 +328,7 @@ function buildDummyCalls(): DummyPCGCall[] {
       }
 
       // Transcript turns
-      const transcriptTurns = TRANSCRIPT_TEMPLATES[categoryKey] || TRANSCRIPT_TEMPLATES['13_pitching'];
+      const transcriptTurns = mixedTurns || TRANSCRIPT_TEMPLATES[categoryKey] || TRANSCRIPT_TEMPLATES['13_pitching'];
 
       // Dispute status: realistic sample for testing
       let disputeStatus: 'none' | 'pending' | 'resolved' = 'none';
@@ -270,17 +355,20 @@ function buildDummyCalls(): DummyPCGCall[] {
         phoneNumber: dummyPhone,
         callType: i % 7 === 0 ? 'incoming' : 'outgoing',
         tag: !isAnswered ? (unansweredReason?.toLowerCase().includes('busy') ? 'busy' : 'unanswered') : null,
-        durationSeconds,
+        durationSeconds: isMultiCategoryCall ? (140 + (globalId % 35)) : durationSeconds,
         startTime,
-        isAnswered,
-        hasRecording: isAnswered,
+        isAnswered: isMultiCategoryCall ? true : isAnswered,
+        hasRecording: isMultiCategoryCall ? true : isAnswered,
         category,
         categoryKey,
-        iqsScore,
+        secondaryCategories,
+        allCategories,
+        aiCategoryReasoning,
+        iqsScore: isMultiCategoryCall ? (rm.name === 'Aahan Thaker' ? (i === 1 ? 88 : 92) : (85 + (globalId % 6))) : iqsScore,
         gates: { status: gateStatus, reason: gateReason },
-        needsAttention,
-        unansweredBy,
-        unansweredReason,
+        needsAttention: isMultiCategoryCall ? false : needsAttention,
+        unansweredBy: isMultiCategoryCall ? null : unansweredBy,
+        unansweredReason: isMultiCategoryCall ? null : unansweredReason,
         parameters,
         aiCoachingTip,
         transcriptTurns,
@@ -341,7 +429,10 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     if (categoryFilter === 'coaching_available') {
       filtered = filtered.filter(c => !!c.aiCoachingTip);
     } else {
-      filtered = filtered.filter(c => c.categoryKey === categoryFilter);
+      filtered = filtered.filter(c => 
+        c.categoryKey === categoryFilter || 
+        (c.allCategories && c.allCategories.includes(categoryFilter))
+      );
     }
   }
 
