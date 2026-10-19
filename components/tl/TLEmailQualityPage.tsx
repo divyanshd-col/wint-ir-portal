@@ -887,6 +887,7 @@ export default function TLEmailQualityPage() {
                                       customerEmail={reply.customer_email}
                                       chatId={reply.chat_id}
                                       ticketId={reply.ticket_id}
+                                      currentMessageId={reply.message_id}
                                       onClose={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: false }))}
                                     />
                                   )}
