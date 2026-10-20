@@ -224,7 +224,7 @@ export default function PcgCallsClient() {
     try {
       const p = new URLSearchParams({
         page: page.toString(),
-        limit: '25',
+        limit: '20',
         category: (selectedCategory === 'tl_analytics' || selectedCategory === 'rm_performance' || selectedCategory === 'ai_coaching_insights') ? 'all' : selectedCategory,
         status: statusFilter,
         date_range: dateRange,
@@ -440,13 +440,9 @@ export default function PcgCallsClient() {
   };
 
   const getScoreBadge = (score: number) => {
-    if (!score) return <span className="text-gray-400 font-mono text-xs">—</span>;
-    let bg = 'bg-red-50 text-red-700 border-red-200';
-    if (score >= 85) bg = 'bg-emerald-50 text-emerald-800 border-emerald-200';
-    else if (score >= 70) bg = 'bg-amber-50 text-amber-800 border-amber-200';
-
+    if (!score) return <span className="text-zinc-400 font-mono text-xs">—</span>;
     return (
-      <span className={`inline-flex items-center justify-center font-mono font-bold text-xs px-2.5 py-0.5 rounded-md border ${bg}`}>
+      <span className="inline-flex items-center justify-center font-mono font-bold text-xs px-2.5 py-0.5 rounded-md border border-zinc-200 bg-zinc-100 text-zinc-900">
         {score}%
       </span>
     );
@@ -522,7 +518,7 @@ export default function PcgCallsClient() {
           >
             <span>Dispute Raised</span>
             <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-              disputeRaisedCalls.length > 0 ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-zinc-200 text-zinc-600'
+              disputeRaisedCalls.length > 0 ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
             }`}>
               {disputeRaisedCalls.length}
             </span>
@@ -539,7 +535,7 @@ export default function PcgCallsClient() {
             <span>✓</span>
             <span>Dispute Reviewed</span>
             <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-              disputeReviewedCalls.length > 0 ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-zinc-200 text-zinc-600'
+              disputeReviewedCalls.length > 0 ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
             }`}>
               {disputeReviewedCalls.length}
             </span>
@@ -570,7 +566,7 @@ export default function PcgCallsClient() {
               </thead>
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeRaisedCalls.map((call) => (
-                  <tr key={call.id} className="hover:bg-amber-50/20 transition-colors">
+                  <tr key={call.id} className="hover:bg-zinc-50 transition-colors">
                     {activePersona !== 'agent' && (
                       <td className="py-3 px-4">
                         <a
@@ -578,11 +574,11 @@ export default function PcgCallsClient() {
                           target="_blank"
                           rel="noopener noreferrer"
                           title={`Open in Runo CRM`}
-                          className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 hover:text-emerald-900 hover:underline group cursor-pointer"
+                          className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <span>#{formatCallId(call.callId, call.id)}</span>
-                          <svg className="w-3 h-3 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                           </svg>
                         </a>
@@ -604,11 +600,11 @@ export default function PcgCallsClient() {
                       )}
                     </td>
                     <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                    <td className="py-3 px-4 text-amber-900 font-medium max-w-xs truncate">
+                    <td className="py-3 px-4 text-zinc-800 font-medium max-w-xs truncate">
                       "{call.disputeReason || 'Agent challenged parameter score.'}"
                     </td>
                     <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
                          Pending TL Review
                       </span>
                     </td>
@@ -651,7 +647,7 @@ export default function PcgCallsClient() {
               </thead>
               <tbody className="divide-y divide-[#F0F0F2]">
                 {disputeReviewedCalls.map((call) => (
-                  <tr key={call.id} className="hover:bg-emerald-50/20 transition-colors">
+                  <tr key={call.id} className="hover:bg-zinc-50 transition-colors">
                     {activePersona !== 'agent' && (
                       <td className="py-3 px-4">
                         <a
@@ -659,11 +655,11 @@ export default function PcgCallsClient() {
                           target="_blank"
                           rel="noopener noreferrer"
                           title={`Open in Runo CRM`}
-                          className="inline-flex items-center gap-1 font-mono font-bold text-emerald-700 hover:text-emerald-900 hover:underline group cursor-pointer"
+                          className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <span>#{formatCallId(call.callId, call.id)}</span>
-                          <svg className="w-3 h-3 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                           </svg>
                         </a>
@@ -689,7 +685,7 @@ export default function PcgCallsClient() {
                       "{call.tlOverrideNote || 'Dispute reviewed and resolved by Team Leader.'}"
                     </td>
                     <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
                         <span>✓</span> Reviewed &amp; Resolved
                       </span>
                     </td>
@@ -759,7 +755,7 @@ export default function PcgCallsClient() {
             <span>Disputes</span>
             {disputeRaisedCalls.length > 0 && (
               <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                activeTab === 'disputes' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-zinc-200 text-zinc-600'
+                activeTab === 'disputes' ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
               }`}>
                 {disputeRaisedCalls.length}
               </span>
@@ -864,7 +860,7 @@ export default function PcgCallsClient() {
                       setProfileMenuOpen(false);
                       signOut({ callbackUrl: '/login' });
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer"
                   >
                     <svg
                       width="14"
@@ -993,7 +989,7 @@ export default function PcgCallsClient() {
               <span className="text-2xl font-extrabold font-mono text-[#111111]">
                 {activePersona === 'agent' ? `${rmQualityScore}%` : activePersona === 'tl' ? '83.4%' : '84.2%'}
               </span>
-              <span className="text-xs font-semibold text-emerald-600">▲ +2.4%</span>
+              <span className="text-xs font-semibold text-zinc-600 font-mono">▲ +2.4%</span>
             </div>
             <p className="text-[11px] text-[#71717A] mt-1">100% AI Automated audits</p>
           </div>
@@ -1035,7 +1031,7 @@ export default function PcgCallsClient() {
                 <span className="text-2xl font-extrabold font-mono text-[#111111]">
                   {summary?.needsAttentionCount || 28}
                 </span>
-                <span className="text-xs font-semibold text-amber-600">
+                <span className="text-xs font-semibold text-zinc-700">
                   calls flagged
                 </span>
               </div>
@@ -1065,7 +1061,7 @@ export default function PcgCallsClient() {
                     IQS, Connect Rate, and category breakdown per agent · Team {selectedTl}
                   </p>
                 </div>
-                <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                <span className="text-xs font-medium text-zinc-800 bg-zinc-100 px-2.5 py-1 rounded-md border border-zinc-300">
                   ✓ Real-time Aggregation
                 </span>
               </div>
@@ -1098,23 +1094,23 @@ export default function PcgCallsClient() {
                         <td className="py-3 px-4 text-right font-mono font-medium">{rm.totalCalls}</td>
                         <td className="py-3 px-4 text-right font-mono">{rm.connectRate}%</td>
                         <td className="py-3 px-4 text-right">
-                          <IQSPill iqs={rm.overallScore} size="sm" />
+                          {getScoreBadge(rm.overallScore)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono">{rm.pitchScore}%</td>
                         <td className="py-3 px-4 text-right font-mono">{rm.upsellScore}%</td>
                         <td className="py-3 px-4 text-right font-mono">{rm.supportScore}%</td>
                         <td className="py-3 px-4 text-center">
                           {rm.trend === 'improving' ? (
-                            <span className="text-emerald-600 font-bold">▲ Improving</span>
+                            <span className="text-zinc-900 font-bold">▲ Improving</span>
                           ) : (
-                            <span className="text-red-600 font-bold">▼ Coaching</span>
+                            <span className="text-zinc-600 font-medium">▼ Coaching</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-center font-mono">
                           {rm.complianceFlags > 0 ? (
-                            <span className="text-red-600 font-bold">{rm.complianceFlags} Flags</span>
+                            <span className="text-zinc-900 font-bold underline">{rm.complianceFlags} Flags</span>
                           ) : (
-                            <span className="text-emerald-600 font-semibold">0 Flags</span>
+                            <span className="text-zinc-500 font-normal">0 Flags</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-gray-600 italic max-w-xs truncate">{rm.topWeakness}</td>
@@ -1138,7 +1134,7 @@ export default function PcgCallsClient() {
                     <div className="flex items-center gap-2">
                       
                       <h3 className="text-sm font-bold text-gray-900">Overall Team Leadership Analytics</h3>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 border border-zinc-300">
                         Active Category View
                       </span>
                     </div>
@@ -1153,7 +1149,7 @@ export default function PcgCallsClient() {
                     <select
                       value={adminBannerTlSelect}
                       onChange={(e) => setAdminBannerTlSelect(e.target.value as 'all' | 'Gokul' | 'Vaishnavi')}
-                      className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-800 outline-none focus:border-indigo-500 shadow-sm"
+                      className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-800 outline-none focus:border-zinc-900 shadow-sm"
                     >
                       <option value="all">All Team Leads (Gokul &amp; Vaishnavi)</option>
                       <option value="Gokul">Team Gokul (4 Relationship Managers)</option>
@@ -1181,9 +1177,7 @@ export default function PcgCallsClient() {
                               <p className="text-[11px] text-zinc-500">{tl.teamSize} Relationship Managers</p>
                             </div>
                           </div>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                            tl.avgScore >= 85 ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                          }`}>
+                          <span className="text-xs font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-900 border border-zinc-200">
                             Team IQS: {tl.avgScore}%
                           </span>
                         </div>
@@ -1199,7 +1193,7 @@ export default function PcgCallsClient() {
                           </div>
                           <div className="bg-white p-2 rounded-lg border border-zinc-100">
                             <span className="text-[10px] uppercase font-bold text-zinc-400 block">&lt;85% Attention</span>
-                            <span className={`text-sm font-extrabold font-mono ${tl.callsUnder85 > 20 ? 'text-amber-600' : 'text-zinc-900'}`}>
+                            <span className="text-sm font-extrabold font-mono text-zinc-900">
                               {tl.callsUnder85}
                             </span>
                           </div>
@@ -1211,7 +1205,7 @@ export default function PcgCallsClient() {
                             <button
                               key={rm}
                               onClick={() => { setSelectedRm(rm); setActivePersona('agent'); }}
-                              className="px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-zinc-200 text-zinc-700 hover:border-indigo-300 hover:text-indigo-600 transition-colors"
+                              className="px-2 py-0.5 rounded text-[11px] font-semibold bg-white border border-zinc-200 text-zinc-700 hover:border-zinc-400 hover:text-zinc-900 transition-colors"
                             >
                               {rm}
                             </button>
@@ -1231,7 +1225,7 @@ export default function PcgCallsClient() {
                     <div className="flex items-center gap-2">
                       
                       <h3 className="text-sm font-bold text-gray-900">Team-Wide RM Performance Grid</h3>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 border border-zinc-300">
                         Active Category View
                       </span>
                     </div>
@@ -1247,7 +1241,7 @@ export default function PcgCallsClient() {
                       <select
                         value={adminGridRmFilter}
                         onChange={(e) => setAdminGridRmFilter(e.target.value)}
-                        className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-800 outline-none focus:border-indigo-500 shadow-sm"
+                        className="text-xs font-bold bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-gray-800 outline-none focus:border-zinc-900 shadow-sm"
                       >
                         <option value="all">All 8 Active RMs</option>
                         {rmScorecards.map((rm) => (
@@ -1259,7 +1253,7 @@ export default function PcgCallsClient() {
                     {/* Open RM Scorecards Button (Moved from TL analytics) */}
                     <button
                       onClick={() => setActiveTab('scorecard')}
-                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3.5 py-1.5 rounded-lg border border-indigo-200 transition-all flex items-center gap-1.5 shadow-sm"
+                      className="text-xs font-bold text-zinc-900 hover:text-black bg-zinc-100 hover:bg-zinc-200 px-3.5 py-1.5 rounded-lg border border-zinc-300 transition-all flex items-center gap-1.5 shadow-sm"
                     >
                       <span>Open RM Scorecards</span>
                       <span>→</span>
@@ -1277,20 +1271,22 @@ export default function PcgCallsClient() {
                         <div
                           key={rm.rmName}
                           onClick={() => { setSelectedRm(rm.rmName); setActiveTab('scorecard'); }}
-                          className="bg-white rounded-2xl border border-gray-100 hover:border-indigo-300 hover:shadow-md transition-all p-4 flex items-start gap-3 cursor-pointer group"
+                          className="bg-white rounded-2xl border border-zinc-200 hover:border-zinc-400 hover:shadow-md transition-all p-4 flex items-start gap-3 cursor-pointer group"
                         >
-                          <IQSRing iqs={rm.overallScore} size={50} />
+                          <div className="w-12 h-12 rounded-full border border-zinc-300 bg-zinc-50 flex items-center justify-center font-mono font-bold text-xs text-zinc-900 shrink-0">
+                            {rm.overallScore}%
+                          </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-1">
-                              <p className="font-bold text-sm text-gray-900 group-hover:text-indigo-600 transition-colors truncate">
+                              <p className="font-bold text-sm text-zinc-900 group-hover:text-zinc-700 transition-colors truncate">
                                 {rm.rmName}
                               </p>
                               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 shrink-0">
                                 Team {tlAssignment}
                               </span>
                             </div>
-                            <p className="text-xs text-gray-500 mt-0.5">{rm.totalCalls} calls • {rm.connectRate}% connect</p>
-                            <p className="text-[11px] text-amber-800 font-medium truncate mt-1">
+                            <p className="text-xs text-zinc-500 mt-0.5">{rm.totalCalls} calls • {rm.connectRate}% connect</p>
+                            <p className="text-[11px] text-zinc-700 font-medium truncate mt-1">
                               Focus: {rm.topWeakness}
                             </p>
                           </div>
@@ -1311,7 +1307,7 @@ export default function PcgCallsClient() {
                       <h3 className="text-base font-bold text-gray-900">
                         Team Coaching Insights
                       </h3>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-800 border border-zinc-300">
                         100% Team Coverage
                       </span>
                     </div>
@@ -1323,13 +1319,13 @@ export default function PcgCallsClient() {
 
                 {/* High-Level Diagnostic KPI Cards */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="p-4 rounded-xl border border-purple-100 bg-purple-50/30 space-y-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-purple-700 block">
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600 block">
                       Team Members Coached
                     </span>
                     <div className="text-2xl font-black font-mono text-gray-900">9 / 9 RMs</div>
                     <div className="pt-1">
-                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-900">
                         ✓ Full Team Coverage
                       </span>
                     </div>
@@ -1347,25 +1343,25 @@ export default function PcgCallsClient() {
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-emerald-100 bg-emerald-50/30 space-y-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block">
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600 block">
                       Score Improvement
                     </span>
-                    <div className="text-2xl font-black font-mono text-emerald-700">+6.8% IQS</div>
+                    <div className="text-2xl font-black font-mono text-zinc-900">+6.8% IQS</div>
                     <div className="pt-1">
-                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-900">
                         ▲ Upward Rebound
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl border border-blue-100 bg-blue-50/30 space-y-1.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-blue-700 block">
+                  <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50 space-y-1.5">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600 block">
                       Safe Pitch Compliance
                     </span>
-                    <div className="text-2xl font-black font-mono text-blue-700">94.2%</div>
+                    <div className="text-2xl font-black font-mono text-zinc-900">94.2%</div>
                     <div className="pt-1">
-                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-900">
                         SEBI Risk Guarded
                       </span>
                     </div>
@@ -1382,20 +1378,20 @@ export default function PcgCallsClient() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Parameter 1 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-purple-300 transition-all shadow-xs flex items-center justify-between gap-3">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-zinc-400 transition-all shadow-xs flex items-center justify-between gap-3">
                       <h5 className="text-sm font-bold text-gray-900">
                         Compliance &amp; No Return Guarantees
                       </h5>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleOpenCoachingChat({ rmName: 'Swati Singh', categoryKey: '13_pitching' })}
-                          className="px-3 py-1.5 text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View Chats →
                         </button>
                         <button
                           onClick={() => { setSelectedRm('Swati Singh'); handleTabChange('scorecard'); }}
-                          className="px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View RM Performance →
                         </button>
@@ -1403,20 +1399,20 @@ export default function PcgCallsClient() {
                     </div>
 
                     {/* Parameter 2 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-purple-300 transition-all shadow-xs flex items-center justify-between gap-3">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-zinc-400 transition-all shadow-xs flex items-center justify-between gap-3">
                       <h5 className="text-sm font-bold text-gray-900">
                         Investor Suitability Profiling &amp; Need Discovery
                       </h5>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleOpenCoachingChat({ rmName: 'Antara Chakrabarty', categoryKey: '13_pitching' })}
-                          className="px-3 py-1.5 text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View Chats →
                         </button>
                         <button
                           onClick={() => { setSelectedRm('Antara Chakrabarty'); handleTabChange('scorecard'); }}
-                          className="px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View RM Performance →
                         </button>
@@ -1424,20 +1420,20 @@ export default function PcgCallsClient() {
                     </div>
 
                     {/* Parameter 3 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-purple-300 transition-all shadow-xs flex items-center justify-between gap-3">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-zinc-400 transition-all shadow-xs flex items-center justify-between gap-3">
                       <h5 className="text-sm font-bold text-gray-900">
                         Liquidity vs Yield Comparison
                       </h5>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleOpenCoachingChat({ rmName: 'Yaashvi Arora', categoryKey: 'upselling' })}
-                          className="px-3 py-1.5 text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View Chats →
                         </button>
                         <button
                           onClick={() => { setSelectedRm('Yaashvi Arora'); handleTabChange('scorecard'); }}
-                          className="px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View RM Performance →
                         </button>
@@ -1445,20 +1441,20 @@ export default function PcgCallsClient() {
                     </div>
 
                     {/* Parameter 4 */}
-                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-purple-300 transition-all shadow-xs flex items-center justify-between gap-3">
+                    <div className="p-4 rounded-xl border border-[#E4E4E7] bg-white hover:border-zinc-400 transition-all shadow-xs flex items-center justify-between gap-3">
                       <h5 className="text-sm font-bold text-gray-900">
                         Active Listening &amp; Objection Handling
                       </h5>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => handleOpenCoachingChat({ rmName: 'Sujal Dadwani', categoryKey: 'support' })}
-                          className="px-3 py-1.5 text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View Chats →
                         </button>
                         <button
                           onClick={() => { setSelectedRm('Sujal Dadwani'); handleTabChange('scorecard'); }}
-                          className="px-3 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
+                          className="px-3 py-1.5 text-xs font-bold bg-zinc-100 hover:bg-zinc-200 text-zinc-900 border border-zinc-300 rounded-lg shadow-xs transition-all cursor-pointer whitespace-nowrap"
                         >
                           View RM Performance →
                         </button>
@@ -1471,11 +1467,11 @@ export default function PcgCallsClient() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-2">
                   {/* Left Column: Who has improved */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b border-emerald-100 pb-2">
-                      <h4 className="text-xs font-bold text-emerald-950 uppercase tracking-wider">
+                    <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
+                      <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                         Who Has Improved (Positive Trajectory)
                       </h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 border border-zinc-300">
                         4 RMs Demonstrating Lift
                       </span>
                     </div>
@@ -1487,22 +1483,22 @@ export default function PcgCallsClient() {
                         { name: 'Aravind', team: 'Vaishnavi', prev: '83%', now: '89%', delta: '+6%', skill: 'Exceptional active listening and zero compliance flags' },
                         { name: 'Gaurav Nautiyal', team: 'Gokul', prev: '80%', now: '85%', delta: '+5%', skill: 'Overcame bank FD comparisons with structured walk-through' },
                       ].map((rm) => (
-                        <div key={rm.name} className="p-3 rounded-xl border border-emerald-100 bg-emerald-50/20 flex items-center justify-between gap-3">
+                        <div key={rm.name} className="p-3 rounded-xl border border-zinc-200 bg-zinc-50/50 flex items-center justify-between gap-3">
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-xs text-gray-900">{rm.name}</span>
                               <span className="text-[10px] text-gray-500 font-medium">Team {rm.team}</span>
-                              <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
+                              <span className="text-[10px] font-extrabold text-zinc-900 bg-zinc-200 px-1.5 py-0.2 rounded">
                                 {rm.delta} Lift
                               </span>
                             </div>
                             <p className="text-[11px] text-gray-600 mt-0.5">{rm.skill}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="text-xs font-mono font-bold text-emerald-700 block">{rm.now} IQS</span>
+                            <span className="text-xs font-mono font-bold text-zinc-900 block">{rm.now} IQS</span>
                             <button
                               onClick={() => { setSelectedRm(rm.name); handleTabChange('scorecard'); }}
-                              className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline mt-0.5 cursor-pointer"
+                              className="text-[11px] text-zinc-800 hover:text-black font-bold underline mt-0.5 cursor-pointer"
                             >
                               Open Scorecard
                             </button>
@@ -1514,11 +1510,11 @@ export default function PcgCallsClient() {
 
                   {/* Right Column: Who needs improvement */}
                   <div className="space-y-3">
-                    <div className="flex items-center justify-between border-b border-amber-100 pb-2">
-                      <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
+                    <div className="flex items-center justify-between border-b border-zinc-200 pb-2">
+                      <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-wider">
                         Who Needs Improvement (Coaching Focus Queue)
                       </h4>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 border border-zinc-300">
                         4 RMs in Coaching Queue
                       </span>
                     </div>
@@ -1530,24 +1526,24 @@ export default function PcgCallsClient() {
                         { name: 'Sujal Dadwani', team: 'Vaishnavi', current: '83%', priority: 'Medium', focus: 'Active listening & pacing; avoid rushing the 13% yield pitch' },
                         { name: 'Antara Chakrabarty', team: 'Vaishnavi', current: '84%', priority: 'Medium', focus: 'Investor suitability profiling before introducing 13% yield' },
                       ].map((rm) => (
-                        <div key={rm.name} className="p-3 rounded-xl border border-amber-200 bg-amber-50/20 flex items-center justify-between gap-3">
+                        <div key={rm.name} className="p-3 rounded-xl border border-zinc-200 bg-zinc-50/50 flex items-center justify-between gap-3">
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-xs text-gray-900">{rm.name}</span>
                               <span className="text-[10px] text-gray-500 font-medium">Team {rm.team}</span>
                               <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
-                                rm.priority === 'High' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'
+                                rm.priority === 'High' ? 'bg-zinc-900 text-white' : 'bg-zinc-200 text-zinc-800'
                               }`}>
                                 {rm.priority} Priority
                               </span>
                             </div>
-                            <p className="text-[11px] text-amber-900 font-medium mt-0.5">{rm.focus}</p>
+                            <p className="text-[11px] text-zinc-600 mt-0.5">{rm.focus}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="text-xs font-mono font-bold text-amber-800 block">{rm.current} IQS</span>
+                            <span className="text-xs font-mono font-bold text-zinc-900 block">{rm.current} IQS</span>
                             <button
                               onClick={() => handleOpenCoachingChat({ rmName: rm.name })}
-                              className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold underline mt-0.5 cursor-pointer"
+                              className="text-[11px] text-zinc-800 hover:text-black font-bold underline mt-0.5 cursor-pointer"
                             >
                               Inspect Chats
                             </button>
@@ -1612,8 +1608,8 @@ export default function PcgCallsClient() {
               onClick={() => setSelectedCategory(selectedCategory === 'coaching_available' ? 'all' : 'coaching_available')}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                 selectedCategory === 'coaching_available'
-                  ? 'bg-amber-600 text-white shadow-sm ring-2 ring-amber-300'
-                  : 'bg-amber-50 text-amber-900 border border-amber-200 hover:bg-amber-100'
+                  ? 'bg-[#111111] text-white shadow-sm'
+                  : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
               }`}
             >
               Coaching Insights Available
@@ -1626,8 +1622,8 @@ export default function PcgCallsClient() {
                   onClick={() => setSelectedCategory(selectedCategory === 'tl_analytics' ? 'all' : 'tl_analytics')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     selectedCategory === 'tl_analytics'
-                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
-                      : 'bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
+                      ? 'bg-[#111111] text-white shadow-sm'
+                      : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
                   }`}
                 >
                   Overall TL Analytics
@@ -1636,8 +1632,8 @@ export default function PcgCallsClient() {
                   onClick={() => setSelectedCategory(selectedCategory === 'rm_performance' ? 'all' : 'rm_performance')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     selectedCategory === 'rm_performance'
-                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-300'
-                      : 'bg-indigo-50 text-indigo-900 border border-indigo-200 hover:bg-indigo-100'
+                      ? 'bg-[#111111] text-white shadow-sm'
+                      : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
                   }`}
                 >
                   Team-Wide RM Performance
@@ -1646,8 +1642,8 @@ export default function PcgCallsClient() {
                   onClick={() => setSelectedCategory(selectedCategory === 'ai_coaching_insights' ? 'all' : 'ai_coaching_insights')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
                     selectedCategory === 'ai_coaching_insights'
-                      ? 'bg-purple-600 text-white shadow-sm ring-2 ring-purple-300'
-                      : 'bg-purple-50 text-purple-900 border border-purple-200 hover:bg-purple-100'
+                      ? 'bg-[#111111] text-white shadow-sm'
+                      : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
                   }`}
                 >
                   Team Coaching Insights
@@ -1662,16 +1658,15 @@ export default function PcgCallsClient() {
         <div id="pcg-calls-table" className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden">
           {/* Coaching Insights Active Banner */}
           {selectedCategory === 'coaching_available' && (
-            <div className="p-3 bg-amber-50 border-b border-amber-200 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-amber-900 font-semibold">
-                
+            <div className="p-3 bg-zinc-100 border-b border-zinc-200 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-zinc-900 font-semibold">
                 <span>
                   Showing {calls.length} calls with active AI Coaching Insights. Click <strong>"View"</strong> on any call to inspect the full chat transcript turns and coaching guidance.
                 </span>
               </div>
               <button
                 onClick={() => setSelectedCategory('all')}
-                className="text-xs text-amber-800 hover:text-amber-950 font-bold underline"
+                className="text-xs text-zinc-700 hover:text-black font-bold underline"
               >
                 Clear Filter
               </button>
@@ -1749,7 +1744,7 @@ export default function PcgCallsClient() {
                     <tr
                       key={call.id}
                       className={`hover:bg-zinc-50 transition-colors ${
-                        call.needsAttention ? 'bg-amber-50/20' : ''
+                        call.needsAttention ? 'bg-zinc-50' : ''
                       }`}
                     >
                       {activePersona !== 'agent' && (
@@ -1759,11 +1754,11 @@ export default function PcgCallsClient() {
                             target="_blank"
                             rel="noopener noreferrer"
                             title="Open in Runo CRM"
-                            className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-emerald-700 hover:underline group cursor-pointer"
+                            className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <span>#{formatCallId(call.callId, call.id)}</span>
-                            <svg className="w-3 h-3 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
                           </a>
@@ -1786,21 +1781,15 @@ export default function PcgCallsClient() {
 
                       <td className="py-3 px-4">
                         <div className="flex flex-col gap-1 items-start">
-                          <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-semibold ${
-                            call.categoryKey === '13_pitching'
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                              : call.categoryKey === 'upselling'
-                              ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                              : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
-                          }`}>
+                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
                             {call.category}
                           </span>
                           {call.secondaryCategories && call.secondaryCategories.length > 0 && (
                             <span
                               title={call.aiCategoryReasoning || `Also discussed: ${call.secondaryCategories.join(', ')}`}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs"
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 shadow-2xs"
                             >
-                              <span className="font-bold text-amber-600">+</span>
+                              <span className="font-bold text-zinc-500">+</span>
                               <span>{call.secondaryCategories.join(', ')}</span>
                             </span>
                           )}
@@ -1820,22 +1809,22 @@ export default function PcgCallsClient() {
                       <td className="py-3 px-4 font-semibold">
                         {activePersona === 'agent' ? (
                           call.gates.status === 'PASS' ? (
-                            <span className="text-emerald-700 font-bold" title="No compliance mistake detected">No</span>
+                            <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
                           ) : (
-                            <span className="text-red-600 font-bold" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
+                            <span className="text-black font-extrabold underline" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
                           )
                         ) : (
                           call.gates.status === 'PASS' ? (
-                            <span className="text-emerald-600 font-bold">PASS</span>
+                            <span className="text-zinc-600 font-medium">PASS</span>
                           ) : (
-                            <span className="text-red-600 font-bold">FAIL</span>
+                            <span className="text-black font-extrabold underline">FAIL</span>
                           )
                         )}
                       </td>
 
                       {activePersona !== 'agent' && (
                         <td className="py-3 px-4">
-                          <span className="text-emerald-700 font-medium">Connected</span>
+                          <span className="text-zinc-700 font-medium">Connected</span>
                         </td>
                       )}
 
@@ -1900,26 +1889,20 @@ export default function PcgCallsClient() {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open in Runo CRM"
-                    className="inline-flex items-center gap-1.5 font-mono font-bold text-base text-[#111111] hover:text-emerald-700 hover:underline group cursor-pointer"
+                    className="inline-flex items-center gap-1.5 font-mono font-bold text-base text-[#111111] hover:text-black hover:underline group cursor-pointer"
                   >
                     <span>Call #{formatCallId(activeCallAudit.callId, activeCallAudit.id)}</span>
-                    <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-emerald-700 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   </a>
                 )}
-                <span className={`px-2 py-0.5 rounded text-[11px] font-semibold ${
-                  activeCallAudit.categoryKey === '13_pitching'
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                    : activeCallAudit.categoryKey === 'upselling'
-                    ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                    : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
-                }`}>
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
                   {activeCallAudit.category}
                 </span>
                 {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
-                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-2xs">
-                    <span className="font-bold text-amber-600">+</span>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 flex items-center gap-1 shadow-2xs">
+                    <span className="font-bold text-zinc-500">+</span>
                     <span>{activeCallAudit.secondaryCategories.join(', ')}</span>
                   </span>
                 )}
@@ -1940,7 +1923,7 @@ export default function PcgCallsClient() {
                     <span className="text-xs font-semibold text-[#71717A]">IQS:</span>
                     {getScoreBadge(activeCallAudit.iqsScore)}
                     <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                      activeCallAudit.gates.status === 'PASS' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'
+                      activeCallAudit.gates.status === 'PASS' ? 'bg-zinc-100 text-zinc-700 border border-zinc-200' : 'bg-zinc-900 text-white font-bold'
                     }`}>
                       {activePersona === 'agent'
                         ? (activeCallAudit.gates.status === 'PASS' ? 'No Compliance Mistake' : 'Compliance Mistake (FAIL)')
@@ -2005,17 +1988,17 @@ export default function PcgCallsClient() {
                   </div>
                 ) : (
                   /* Diagnostic Card for Unanswered Calls */
-                  <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-200 space-y-2">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider">
+                  <div className="p-4 bg-zinc-100 rounded-xl border border-zinc-200 space-y-2">
+                    <div className="flex items-center gap-2 text-zinc-900 font-bold text-xs uppercase tracking-wider">
                       Dialer Disconnect Diagnostic
                     </div>
-                    <p className="text-xs font-semibold text-amber-950">
+                    <p className="text-xs font-semibold text-zinc-900">
                       Party Disconnected: {activeCallAudit.unansweredBy === 'RM' ? 'RM Disconnected Early (<5s)' : 'Customer Rang Out / No Pickup'}
                     </p>
-                    <p className="text-xs text-amber-900">
-                      Reason: <span className="font-mono font-bold">{activeCallAudit.unansweredReason}</span>
+                    <p className="text-xs text-zinc-700">
+                      Reason: <span className="font-mono font-bold text-zinc-900">{activeCallAudit.unansweredReason}</span>
                     </p>
-                    <p className="text-[11px] text-amber-800">
+                    <p className="text-[11px] text-zinc-600">
                       Dialer placed outbound call to {activeCallAudit.phoneNumber}. Customer handset did not bridge voice connection, hence no conversation audio or IQS scorecard was generated.
                     </p>
                   </div>
@@ -2045,13 +2028,13 @@ export default function PcgCallsClient() {
                           <div
                             className={`p-3 rounded-xl text-xs transition-all ${
                               turn.speaker === 'RM'
-                                ? 'bg-blue-50/70 border border-blue-200/80 ml-6'
+                                ? 'bg-zinc-50 border border-zinc-300 ml-6'
                                 : 'bg-zinc-100/80 border border-zinc-200/70 mr-6'
                             }`}
                           >
                             <div className="flex items-center justify-between font-bold text-[11px] text-zinc-700 mb-1">
                               <div className="flex items-center gap-2">
-                                <span className={turn.speaker === 'RM' ? 'text-blue-800' : 'text-zinc-800'}>
+                                <span className={turn.speaker === 'RM' ? 'text-zinc-900 font-extrabold' : 'text-zinc-800'}>
                                   {turn.speaker === 'RM' ? `RM (${activeCallAudit.rmName})` : 'Investor / Customer'}
                                 </span>
                                 {turn.segment && (
@@ -2077,9 +2060,9 @@ export default function PcgCallsClient() {
                         <span>[00:04] Customer handset ringing</span>
                         <span className="text-zinc-400">Ringing</span>
                       </div>
-                      <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-between font-mono text-amber-900 font-semibold">
+                      <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 flex items-center justify-between font-mono text-zinc-900 font-semibold">
                         <span>[00:26] Call disconnected: {activeCallAudit.unansweredReason}</span>
-                        <span className="text-amber-700">Timeout / Hangup</span>
+                        <span className="text-zinc-600">Timeout / Hangup</span>
                       </div>
                     </div>
                   )}
@@ -2117,10 +2100,10 @@ export default function PcgCallsClient() {
                           <span className="font-bold">{param.name}</span>
                           <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
                             param.status === 'Yes'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                              ? 'bg-zinc-100 text-zinc-800 border border-zinc-300'
                               : param.status === 'Half'
-                              ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                              : 'bg-red-100 text-red-800 border border-red-200'
+                              ? 'bg-zinc-100 text-zinc-600 border border-zinc-200'
+                              : 'bg-zinc-900 text-white font-bold'
                           }`}>
                             {param.status} ({param.earnedScore}/{param.maxScore} pts)
                           </span>
@@ -2141,16 +2124,16 @@ export default function PcgCallsClient() {
 
                 {/* AI Sales Coaching Tip (shown for calls needing attention) */}
                 {activeCallAudit.aiCoachingTip ? (
-                  <div className="p-3.5 bg-amber-50/90 rounded-xl border border-amber-200 shadow-sm space-y-1.5">
-                    <div className="flex items-center gap-2 text-amber-900 font-bold text-xs uppercase tracking-wider">
+                  <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-300 shadow-sm space-y-1.5">
+                    <div className="flex items-center gap-2 text-zinc-900 font-bold text-xs uppercase tracking-wider">
                        AI Sales Coaching Tip
                     </div>
-                    <p className="text-xs text-amber-950 leading-relaxed font-medium">
+                    <p className="text-xs text-zinc-800 leading-relaxed font-medium">
                       {activeCallAudit.aiCoachingTip}
                     </p>
                   </div>
                 ) : activeCallAudit.isAnswered ? (
-                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between text-xs text-emerald-800">
+                  <div className="p-3 bg-zinc-100 rounded-xl border border-zinc-300 flex items-center justify-between text-xs text-zinc-800">
                     <span>✓ Clean Call: No coaching intervention needed.</span>
                     <span className="font-mono font-bold">{activeCallAudit.iqsScore}% IQS</span>
                   </div>
@@ -2161,13 +2144,13 @@ export default function PcgCallsClient() {
                   
                   {/* Feedback Messages */}
                   {disputeFeedback && (
-                    <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-800 flex items-center gap-1.5">
+                    <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 text-xs font-semibold text-zinc-900 flex items-center gap-1.5">
                       <span>✓</span> {disputeFeedback}
                     </div>
                   )}
 
                   {overrideFeedback && (
-                    <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 text-xs font-semibold text-zinc-900 flex items-center gap-1.5">
                       <span>✓</span> {overrideFeedback}
                     </div>
                   )}
@@ -2178,19 +2161,19 @@ export default function PcgCallsClient() {
                   {(activePersona === 'agent' || activePersona === 'admin') && activeCallAudit.isAnswered && (
                     <div className="space-y-3">
                       {activeCallAudit.disputeStatus === 'pending' ? (
-                        <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-300 text-xs space-y-1">
-                          <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                        <div className="p-3.5 bg-zinc-100 rounded-xl border border-zinc-300 text-xs space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold text-zinc-900">
                              Dispute Pending Team Lead Review
                           </div>
-                          <p className="text-amber-800">
+                          <p className="text-zinc-800">
                             <span className="font-semibold">Reason:</span> "{activeCallAudit.disputeReason}"
                           </p>
-                          <p className="text-[11px] text-amber-700">
+                          <p className="text-[11px] text-zinc-600">
                             Your Team Leader will review the transcript and update your scorecard.
                           </p>
                         </div>
                       ) : activeCallAudit.disputeStatus === 'resolved' ? (
-                        <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800">
+                        <div className="p-3 bg-zinc-100 rounded-xl border border-zinc-300 text-xs text-zinc-800">
                           <span className="font-bold">✓ Dispute Resolved by TL:</span> {activeCallAudit.tlOverrideNote || 'Score adjusted.'}
                         </div>
                       ) : !isRaisingDispute ? (
@@ -2202,7 +2185,7 @@ export default function PcgCallsClient() {
                             </div>
                             <button
                               onClick={() => setIsRaisingDispute(true)}
-                              className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-colors shadow-sm"
+                              className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-bold transition-colors shadow-sm"
                             >
                               Raise Dispute
                             </button>
@@ -2210,8 +2193,8 @@ export default function PcgCallsClient() {
                         </div>
                       ) : (
                         /* Inline Dispute Form */
-                        <div className="p-3.5 bg-amber-50/70 rounded-xl border border-amber-300 text-xs space-y-3 shadow-sm">
-                          <div className="flex items-center justify-between font-bold text-amber-950">
+                        <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-300 text-xs space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between font-bold text-zinc-900">
                             <span>Raise Dispute on Parameters</span>
                             <button
                               onClick={() => setIsRaisingDispute(false)}
@@ -2221,7 +2204,7 @@ export default function PcgCallsClient() {
                             </button>
                           </div>
 
-                          <p className="text-[11px] text-amber-800">
+                          <p className="text-[11px] text-zinc-600">
                             Select the parameter(s) you believe should be re-evaluated:
                           </p>
 
@@ -2229,7 +2212,7 @@ export default function PcgCallsClient() {
                             {activeCallAudit.parameters.map((p) => (
                               <label
                                 key={p.id}
-                                className="flex items-center gap-2 p-1.5 bg-white rounded border border-amber-200 cursor-pointer text-xs"
+                                className="flex items-center gap-2 p-1.5 bg-white rounded border border-zinc-200 cursor-pointer text-xs"
                               >
                                 <input
                                   type="checkbox"
@@ -2240,7 +2223,7 @@ export default function PcgCallsClient() {
                                       [p.id]: e.target.checked,
                                     }))
                                   }
-                                  className="rounded text-blue-600"
+                                  className="rounded text-zinc-900"
                                 />
                                 <span className="font-semibold text-zinc-800 flex-1 truncate">{p.name}</span>
                                 <span className="text-[10px] text-zinc-500 font-mono">({p.status})</span>
@@ -2253,7 +2236,7 @@ export default function PcgCallsClient() {
                             value={agentDisputeNote}
                             onChange={(e) => setAgentDisputeNote(e.target.value)}
                             placeholder="Explain why you feel the parameter score should be reviewed…"
-                            className="w-full text-xs border border-zinc-300 rounded-lg p-2 bg-white outline-none focus:border-blue-600"
+                            className="w-full text-xs border border-zinc-300 rounded-lg p-2 bg-white outline-none focus:border-zinc-900"
                           />
 
                           <div className="flex justify-end gap-2">
@@ -2266,7 +2249,7 @@ export default function PcgCallsClient() {
                             <button
                               disabled={submittingDispute}
                               onClick={handleSubmitDispute}
-                              className="px-3.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold disabled:opacity-50"
+                              className="px-3.5 py-1 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-bold disabled:opacity-50"
                             >
                               {submittingDispute ? 'Submitting…' : 'Submit Dispute'}
                             </button>
@@ -2283,17 +2266,17 @@ export default function PcgCallsClient() {
                     <div className="p-3.5 bg-white rounded-xl border border-zinc-200 space-y-3 shadow-sm">
                       {/* If call has dispute pending from agent, show quick resolve buttons */}
                       {activeCallAudit.disputeStatus === 'pending' && (
-                        <div className="p-2.5 bg-amber-50 rounded-lg border border-amber-300 space-y-2">
-                          <p className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                        <div className="p-2.5 bg-zinc-100 rounded-lg border border-zinc-300 space-y-2">
+                          <p className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
                             Agent Dispute Pending:
                           </p>
-                          <p className="text-xs text-amber-950 italic">
+                          <p className="text-xs text-zinc-800 italic">
                             "{activeCallAudit.disputeReason}"
                           </p>
                           <div className="flex gap-2 pt-1">
                             <button
                               onClick={() => handleResolveDispute(true)}
-                              className="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold"
+                              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-black text-white text-xs font-bold"
                             >
                               ✓ Approve (+8 pts)
                             </button>
@@ -2315,7 +2298,7 @@ export default function PcgCallsClient() {
                           </span>
                         </div>
                         {activeCallAudit.tlOverrideNote && (
-                          <span className="text-[10px] text-emerald-700 font-semibold">Override Active</span>
+                          <span className="text-[10px] text-zinc-900 font-bold">Override Active</span>
                         )}
                       </div>
 

@@ -775,13 +775,13 @@ export default function PcgScorecardView({
             key={c.id}
             className={`p-4 rounded-xl border text-sm flex items-start justify-between gap-4 transition-all ${
               c.highlighted
-                ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-sm'
+                ? 'bg-zinc-100 border-zinc-300 text-zinc-900 shadow-sm'
                 : 'bg-gray-50 border-gray-200 text-gray-700'
             }`}
           >
             <div className="space-y-1">
               {c.highlighted && (
-                <span className="bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-amber-200 tracking-wider">
+                <span className="bg-zinc-200 text-zinc-900 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-zinc-300 tracking-wider">
                   Highlighted for 1-on-1 Discussion
                 </span>
               )}
@@ -793,14 +793,14 @@ export default function PcgScorecardView({
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => handleOpenComment(c.targetKey, commentTarget?.label || 'Edit Note', c)}
-                className="text-gray-400 hover:text-indigo-600 text-xs font-semibold"
+                className="text-gray-400 hover:text-black text-xs font-semibold"
               >
                 Edit
               </button>
               <span className="text-gray-300">|</span>
               <button
                 onClick={() => handleDeleteComment(c.id)}
-                className="text-gray-400 hover:text-red-600 text-xs font-semibold"
+                className="text-gray-400 hover:text-black text-xs font-semibold"
               >
                 Delete
               </button>
@@ -817,7 +817,7 @@ export default function PcgScorecardView({
       <aside className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-[#E4E4E7] bg-white flex flex-col shrink-0">
         <div className="p-4 border-b border-[#E4E4E7] bg-gray-50 flex items-center justify-between">
           <span className="font-bold text-gray-800 text-xs tracking-wide uppercase">Scorecard History</span>
-          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+          <span className="text-[10px] font-bold text-zinc-800 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-300">
             100% AI Evaluated
           </span>
         </div>
@@ -831,7 +831,7 @@ export default function PcgScorecardView({
             <select
               value={selectedAgentFilter}
               onChange={(e) => setSelectedAgentFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
+              className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
             >
               <option value="all">All Team RMs ({uniqueAgents.length})</option>
               {uniqueAgents.map((name) => (
@@ -851,7 +851,7 @@ export default function PcgScorecardView({
           <select
             value={selectedWeekFilter}
             onChange={(e) => setSelectedWeekFilter(e.target.value)}
-            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
+            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
           >
             <option value="all">All Available Cycles</option>
             {uniqueWeeks.map(([weekStart, label]) => (
@@ -869,7 +869,7 @@ export default function PcgScorecardView({
             placeholder={activePersona === 'agent' ? 'Filter by month or week…' : 'Search RM name or week…'}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium bg-gray-50 text-gray-700 placeholder-gray-400"
+            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 font-medium bg-gray-50 text-gray-700 placeholder-gray-400"
           />
         </div>
 
@@ -897,18 +897,18 @@ export default function PcgScorecardView({
                   }}
                   className={`w-full text-left p-3 rounded-xl transition-all duration-200 flex items-center justify-between group ${
                     isSelected
-                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 shadow-sm'
+                      ? 'bg-zinc-100 border border-zinc-300 text-zinc-900 shadow-sm'
                       : 'hover:bg-gray-50 border border-transparent text-gray-700'
                   }`}
                 >
                   <div className="truncate flex-1 pr-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-xs text-indigo-700 block truncate">
+                      <span className="font-bold text-xs text-zinc-900 block truncate">
                         {r.rmName}
                       </span>
                       {isUnread && (
                         <span
-                          className="w-2 h-2 min-w-[8px] rounded-full bg-indigo-600 inline-block animate-pulse"
+                          className="w-2 h-2 min-w-[8px] rounded-full bg-zinc-900 inline-block animate-pulse"
                           title="New unread report"
                         />
                       )}
@@ -921,10 +921,8 @@ export default function PcgScorecardView({
                     <span
                       className={`text-xs font-bold font-mono px-2 py-0.5 rounded-md ${
                         score >= 85
-                          ? 'bg-green-100 text-green-700 border border-green-200'
-                          : score >= 70
-                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
-                          : 'bg-red-100 text-red-700 border border-red-200'
+                          ? 'bg-zinc-100 text-zinc-900 border border-zinc-300'
+                          : 'bg-zinc-200 text-zinc-800 border border-zinc-300'
                       }`}
                     >
                       {score}%
@@ -948,7 +946,7 @@ export default function PcgScorecardView({
                   <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
                     PCG Weekly RM Scorecard
                   </h1>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-800 border border-zinc-300">
                     RM Standard
                   </span>
                 </div>
@@ -956,7 +954,7 @@ export default function PcgScorecardView({
                   Week of {formatDate(activeReport.weekStart)} to {formatDate(activeReport.weekEnd)}
                 </p>
                 <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                  <span className="text-sm font-bold text-indigo-700">
+                  <span className="text-sm font-bold text-zinc-900">
                     RM: {activeReport.rmName}
                   </span>
                   <span className="text-gray-300">•</span>
@@ -973,7 +971,7 @@ export default function PcgScorecardView({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleOpenComment('general', 'General 1-on-1 Feedback')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-indigo-500 hover:text-indigo-600 bg-white text-gray-700 text-xs font-semibold shadow-sm transition-all"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-zinc-500 hover:text-zinc-900 bg-white text-gray-700 text-xs font-semibold shadow-sm transition-all"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -1004,7 +1002,7 @@ export default function PcgScorecardView({
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                  <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
                     1
                   </span>
                   The Numbers
@@ -1028,15 +1026,7 @@ export default function PcgScorecardView({
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
                     Avg IQS Score
                   </span>
-                  <span
-                    className={`text-2xl font-extrabold font-mono mt-2 ${
-                      numbers?.averageScore >= 85
-                        ? 'text-green-600'
-                        : numbers?.averageScore >= 70
-                        ? 'text-amber-600'
-                        : 'text-red-600'
-                    }`}
-                  >
+                  <span className="text-2xl font-extrabold font-mono mt-2 text-zinc-900">
                     {numbers?.averageScore != null ? `${numbers.averageScore}%` : '—'}
                   </span>
                 </div>
@@ -1048,7 +1038,7 @@ export default function PcgScorecardView({
                   </span>
                   <span
                     className={`text-2xl font-extrabold font-mono mt-2 ${
-                      numbers?.below85Count > 0 ? 'text-amber-600' : 'text-gray-900'
+                      numbers?.below85Count > 0 ? 'text-zinc-900 font-bold' : 'text-gray-900'
                     }`}
                   >
                     {numbers?.below85Count ?? 0}
@@ -1061,7 +1051,7 @@ export default function PcgScorecardView({
                     Connect Rate &amp; Reachability
                   </span>
                   <span
-                    className="text-xs font-semibold text-gray-800 mt-3 bg-indigo-50 p-2 rounded-lg border border-indigo-100 text-center truncate"
+                    className="text-xs font-semibold text-gray-800 mt-3 bg-zinc-100 p-2 rounded-lg border border-zinc-200 text-center truncate"
                     title={numbers?.connectRateText}
                   >
                     {numbers?.connectRateText || 'no dials'}
@@ -1076,7 +1066,7 @@ export default function PcgScorecardView({
                   <span
                     className={`text-2xl font-extrabold font-mono mt-2 ${
                       numbers?.complianceBreachesCount > 0
-                        ? 'text-red-600 animate-pulse font-black'
+                        ? 'text-black font-black underline'
                         : 'text-gray-900'
                     }`}
                   >
@@ -1087,18 +1077,18 @@ export default function PcgScorecardView({
             </div>
 
             {/* ── 2. WHAT WENT WELL ──────────────────────────────────────────── */}
-            <div className="bg-green-50/50 border border-green-200/80 rounded-2xl p-6 relative overflow-hidden">
+            <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 relative overflow-hidden">
               <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none transform translate-y-4 translate-x-2">
-                <svg className="w-40 h-40 text-green-700" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-40 h-40 text-zinc-400" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 2l3.09 6.26 6.91.97-5 4.89 1.18 6.88L12 17.77l-6.18 3.25L7 14.12 2 9.23l6.91-.97L12 2z" />
                 </svg>
               </div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-extrabold text-green-800 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-xs font-extrabold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
                   <StarIcon /> What Went Well
                 </h3>
               </div>
-              <p className="text-green-950 font-medium text-sm leading-relaxed">
+              <p className="text-zinc-900 font-medium text-sm leading-relaxed">
                 {activeReport.whatWentWell}
               </p>
             </div>
@@ -1107,7 +1097,7 @@ export default function PcgScorecardView({
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                  <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
                     2
                   </span>
                   1-on-1 Discussion Points
@@ -1122,13 +1112,13 @@ export default function PcgScorecardView({
                       <div
                         key={index}
                         className={`bg-white rounded-2xl border shadow-sm p-6 space-y-4 transition-all hover:shadow-md ${
-                          theme.isBreach ? 'border-red-200 bg-red-50/10' : 'border-[#E4E4E7]'
+                          theme.isBreach ? 'border-zinc-300 bg-zinc-50' : 'border-[#E4E4E7]'
                         }`}
                       >
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex items-center gap-2 flex-wrap">
                             {theme.isBreach && (
-                              <span className="bg-red-100 text-red-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-red-200 tracking-wider">
+                              <span className="bg-zinc-900 text-white text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-zinc-900 tracking-wider">
                                 Compliance Breach Root
                               </span>
                             )}
@@ -1180,13 +1170,13 @@ export default function PcgScorecardView({
                               <span>Call #{cid}</span>
                               <button
                                 onClick={() => handleCopy(cid)}
-                                className="text-gray-400 hover:text-indigo-600"
+                                className="text-gray-400 hover:text-black"
                                 title="Copy Call ID"
                               >
                                 {copiedId === cid ? (
-                                  <span className="text-emerald-600 text-[10px]">Copied</span>
+                                  <span className="text-zinc-900 text-[10px] font-bold">Copied</span>
                                 ) : (
-                                  <span className="text-[10px] text-gray-400 hover:text-indigo-600">Copy</span>
+                                  <span className="text-[10px] text-gray-400 hover:text-black">Copy</span>
                                 )}
                               </button>
                               <button
@@ -1215,22 +1205,19 @@ export default function PcgScorecardView({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                    <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
                       3
                     </span>
                     Compliance Flags Surfaced
                   </h2>
-                  <span className="text-xs text-red-600 font-bold">
+                  <span className="text-xs text-zinc-900 font-bold underline">
                     {activeReport.breaches.length} Flagged
                   </span>
                 </div>
 
-                <div className="bg-amber-50/90 border border-amber-300 text-amber-900 p-4 sm:p-5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed shadow-sm flex items-start gap-3.5">
-                  <span className="text-xl sm:text-2xl flex-shrink-0 mt-0.5" role="img" aria-label="warning">
-                    
-                  </span>
+                <div className="bg-zinc-50 border border-zinc-300 text-zinc-900 p-4 sm:p-5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed shadow-sm flex items-start gap-3.5">
                   <div>
-                    <strong className="font-bold text-amber-950">Note on compliance flags: </strong>
+                    <strong className="font-bold text-zinc-900">Note on compliance flags: </strong>
                     <span>
                       These are flagged automatically by the AI speech classifier for human review. Verify against call audio and context.
                     </span>
@@ -1251,14 +1238,14 @@ export default function PcgScorecardView({
                               target="_blank"
                               rel="noopener noreferrer"
                               title="Open Call in Runo CRM"
-                              className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-indigo-600 text-xs font-bold px-2 py-0.5 rounded border border-gray-200 font-mono inline-flex items-center gap-1 cursor-pointer transition-colors"
+                              className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-black text-xs font-bold px-2 py-0.5 rounded border border-gray-200 font-mono inline-flex items-center gap-1 cursor-pointer transition-colors"
                             >
                               <span>Call #{breach.callId}</span>
                               <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                               </svg>
                             </a>
-                            <span className="bg-red-50 text-red-700 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-red-100">
+                            <span className="bg-zinc-900 text-white text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-zinc-900">
                               Flagged
                             </span>
                             {breach.note && (
@@ -1295,7 +1282,7 @@ export default function PcgScorecardView({
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                  <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
                     {activeReport.breaches && activeReport.breaches.length > 0 ? 4 : 3}
                   </span>
                   Full Evidence List (Low-Scoring Calls)
@@ -1318,23 +1305,23 @@ export default function PcgScorecardView({
                     <tbody className="divide-y divide-[#E4E4E7] text-xs text-gray-700">
                       {activeReport.evidence.map((ev) => (
                         <tr key={ev.callId} className="hover:bg-gray-50 transition-all">
-                          <td className="p-3.5 font-mono font-bold text-indigo-600 whitespace-nowrap">
+                          <td className="p-3.5 font-mono font-bold text-zinc-900 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
                               <a
                                 href={`https://app-call.runo.in/#call/${encodeURIComponent(ev.callId)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title="Open Call in Runo CRM"
-                                className="hover:underline hover:text-indigo-800 inline-flex items-center gap-1 cursor-pointer"
+                                className="hover:underline hover:text-black inline-flex items-center gap-1 cursor-pointer"
                               >
                                 <span>#{ev.callId}</span>
-                                <svg className="w-3 h-3 text-indigo-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-3.5 h-3.5 text-zinc-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                                 </svg>
                               </a>
                               <button
                                 onClick={() => handleCopy(ev.callId)}
-                                className="text-gray-400 hover:text-indigo-600"
+                                className="text-gray-400 hover:text-black"
                                 title="Copy Call ID"
                               >
                                 {copiedId === ev.callId ? 'Copied' : 'Copy ID'}
@@ -1346,17 +1333,15 @@ export default function PcgScorecardView({
                               <span
                                 className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${
                                   ev.score >= 85
-                                    ? 'bg-green-50 text-green-700 border border-green-200'
-                                    : ev.score >= 70
-                                    ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                    : 'bg-red-50 text-red-700 border border-red-200'
+                                    ? 'bg-zinc-100 text-zinc-800 border border-zinc-200'
+                                    : 'bg-zinc-200 text-zinc-900 border border-zinc-300'
                                 }`}
                               >
                                 {ev.score}%
                               </span>
                               {ev.isReviewed && (
                                 <span
-                                  className="text-[10px] font-semibold text-green-700 bg-green-50 px-1.5 py-0.2 rounded border border-green-200"
+                                  className="text-[10px] font-semibold text-zinc-800 bg-zinc-100 px-1.5 py-0.2 rounded border border-zinc-300"
                                   title={ev.reviewNote || 'Score updated by TL'}
                                 >
                                   ✓ TL Updated
@@ -1419,7 +1404,7 @@ export default function PcgScorecardView({
             </div>
 
             <div>
-              <span className="text-[10px] font-extrabold text-indigo-600 uppercase tracking-wider block">
+              <span className="text-[10px] font-extrabold text-zinc-700 uppercase tracking-wider block">
                 Target Section
               </span>
               <span className="text-xs font-semibold text-gray-800 mt-1 block">
@@ -1436,7 +1421,7 @@ export default function PcgScorecardView({
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Type 1-on-1 coaching observation or action plan agreed with the RM…"
                 rows={4}
-                className="w-full p-3 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-xs text-gray-700 focus:outline-none"
+                className="w-full p-3 rounded-lg border border-gray-300 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 text-xs text-gray-700 focus:outline-none"
               />
             </div>
 
@@ -1446,11 +1431,12 @@ export default function PcgScorecardView({
                 id="highlight-check-pcg"
                 checked={isHighlighted}
                 onChange={(e) => setIsHighlighted(e.target.checked)}
-                className="w-4 h-4 rounded text-amber-600 border-gray-300 focus:ring-amber-500"
-              />
+                className="w-4 h-4 rounded text-zinc-900 border-gray-300 focus:ring-zinc-900"
+              >
+              </input>
               <label
                 htmlFor="highlight-check-pcg"
-                className="text-xs font-bold text-amber-800 cursor-pointer select-none"
+                className="text-xs font-bold text-zinc-900 cursor-pointer select-none"
               >
                 Highlight / Flag for 1-on-1 discussion
               </label>
@@ -1471,7 +1457,7 @@ export default function PcgScorecardView({
               <button
                 onClick={handleSaveComment}
                 disabled={!commentText.trim()}
-                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white disabled:bg-indigo-300 text-xs font-bold rounded-lg shadow-sm transition-all"
+                className="px-4 py-2 bg-zinc-900 hover:bg-black text-white disabled:bg-zinc-300 text-xs font-bold rounded-lg shadow-sm transition-all"
               >
                 Save Note
               </button>
