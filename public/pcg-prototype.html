@@ -1488,6 +1488,13 @@
       const protoEmail = document.getElementById('proto-user-email');
       const protoBadge = document.getElementById('proto-user-role-badge');
 
+      const maTitle = document.getElementById('ma-title');
+
+      if (tabMember) {
+        tabMember.innerText = (role === 'agent') ? 'My Analytics' : 'Member Analytics';
+        tabMember.classList.remove('hidden');
+      }
+
       if (tabScorecard) {
         tabScorecard.innerText = (role === 'agent') ? 'My Scorecard' : 'RM Scorecard';
       }
@@ -1495,8 +1502,8 @@
       if (role === 'admin') {
         if (tabCalls) tabCalls.classList.add('hidden');
         if (tabTeam) tabTeam.classList.remove('hidden');
-        if (tabMember) tabMember.classList.remove('hidden');
         if (tabRmPerf) tabRmPerf.classList.remove('hidden');
+        if (maTitle) maTitle.innerText = "Member Analytics";
         setTab('team-analytics');
         thRm.classList.remove('hidden');
         agentFilterCont.classList.remove('hidden');
@@ -1509,8 +1516,8 @@
         if (tabCalls) tabCalls.classList.remove('hidden');
         if (tabTeam) tabTeam.classList.add('hidden');
         if (role === 'agent') {
-          if (tabMember) tabMember.classList.add('hidden');
           if (tabRmPerf) tabRmPerf.classList.add('hidden');
+          if (maTitle) maTitle.innerText = "My Analytics";
           setTab('calls');
           thRm.classList.add('hidden');
           agentFilterCont.classList.add('hidden');
@@ -1520,8 +1527,8 @@
           if (protoEmail) protoEmail.innerText = "aahan.thaker@wintwealth.com";
           if (protoBadge) { protoBadge.innerText = "RM"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
         } else {
-          if (tabMember) tabMember.classList.remove('hidden');
           if (tabRmPerf) tabRmPerf.classList.remove('hidden');
+          if (maTitle) maTitle.innerText = "Member Analytics";
           if (role === 'tl_gokul') {
             setTab('calls');
             thRm.classList.remove('hidden');

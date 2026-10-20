@@ -177,11 +177,11 @@ export default function PcgCallsClient() {
     }
   }, [userRole, loggedInUserName]);
 
-  // When activePersona is admin, remove Call Quality view; for agent, remove admin/TL views
+  // When activePersona is admin, remove Call Quality view; for agent, remove team-only views
   useEffect(() => {
     if (activePersona === 'admin' && (activeTab === 'calls' || activeTab === 'disputes')) {
       handleTabChange('team_analytics');
-    } else if (activePersona === 'agent' && (activeTab === 'member_analytics' || activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
+    } else if (activePersona === 'agent' && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
       handleTabChange('calls');
     }
   }, [activePersona, activeTab]);
@@ -194,7 +194,7 @@ export default function PcgCallsClient() {
       if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance') {
         if (activePersona === 'admin' && (tabParam === 'calls' || tabParam === 'disputes')) {
           setActiveTab('team_analytics');
-        } else if (activePersona === 'agent' && (tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
+        } else if (activePersona === 'agent' && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
           setActiveTab('calls');
         } else {
           setActiveTab(tabParam as PcgTab);
@@ -1109,30 +1109,28 @@ export default function PcgCallsClient() {
             </button>
           )}
 
-          {/* 3. Member Analytics Navigation Link (For Admin and TL) */}
-          {(activePersona === 'admin' || activePersona === 'tl') && (
-            <button
-              type="button"
-              onClick={() => handleTabChange('member_analytics')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
-                activeTab === 'member_analytics'
-                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+          {/* 3. Member Analytics / My Analytics Navigation Link */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('member_analytics')}
+            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
+              activeTab === 'member_analytics'
+                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+            }`}
+          >
+            <span
+              className={`inline-flex items-center justify-center shrink-0 ${
+                activeTab === 'member_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
               }`}
             >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${
-                  activeTab === 'member_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                  <circle cx="12" cy="7" r="4"/>
-                </svg>
-              </span>
-              <span className="flex-1">Member Analytics</span>
-            </button>
-          )}
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </span>
+            <span className="flex-1">{activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}</span>
+          </button>
 
           {/* 4. RM Scorecard Navigation Link */}
           <button
