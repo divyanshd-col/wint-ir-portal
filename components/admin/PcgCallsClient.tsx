@@ -1081,10 +1081,10 @@ export default function PcgCallsClient() {
               {activePersona === 'agent' ? 'My Quality Score' : activePersona === 'tl' ? 'Team Avg IQS' : 'Org Avg IQS'}
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-extrabold font-mono text-[#111111]">
+              <span className="text-2xl font-bold tabular-nums text-[#111111]">
                 {activePersona === 'agent' ? `${rmQualityScore}%` : activePersona === 'tl' ? '83.4%' : '84.2%'}
               </span>
-              <span className="text-xs font-semibold text-zinc-600 font-mono">▲ +2.4%</span>
+              <span className="text-xs font-semibold text-zinc-600">▲ +2.4%</span>
             </div>
             <p className="text-[11px] text-[#71717A] mt-1">100% AI Automated audits</p>
           </div>
@@ -1094,7 +1094,7 @@ export default function PcgCallsClient() {
               {activePersona === 'agent' ? 'My Total Calls' : 'Total Calls Attempted'}
             </p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-extrabold font-mono text-[#111111]">
+              <span className="text-2xl font-bold tabular-nums text-[#111111]">
                 {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls || 142)}
               </span>
               <span className="text-xs text-[#71717A]">calls</span>
@@ -1107,7 +1107,7 @@ export default function PcgCallsClient() {
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">Connect Rate</p>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-extrabold font-mono text-[#111111]">
+              <span className="text-2xl font-bold tabular-nums text-[#111111]">
                 {activePersona === 'agent' ? rmConnectRate : (summary?.totalCalls ? Math.round((summary.answeredCalls / summary.totalCalls) * 100) : 68)}%
               </span>
               <span className="text-xs text-[#71717A]">pickup</span>
@@ -1123,7 +1123,7 @@ export default function PcgCallsClient() {
                 Needs Attention (&lt;85%)
               </p>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-extrabold font-mono text-[#111111]">
+                <span className="text-2xl font-bold tabular-nums text-[#111111]">
                   {summary?.needsAttentionCount || 28}
                 </span>
                 <span className="text-xs font-semibold text-zinc-700">
@@ -1261,15 +1261,15 @@ export default function PcgCallsClient() {
                         <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-zinc-200">
                           <div className="bg-white p-2 rounded-lg border border-zinc-100">
                             <span className="text-[10px] uppercase font-bold text-zinc-400 block">Total Calls</span>
-                            <span className="text-sm font-extrabold font-mono text-zinc-900">{tl.totalCalls}</span>
+                            <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.totalCalls}</span>
                           </div>
                           <div className="bg-white p-2 rounded-lg border border-zinc-100">
                             <span className="text-[10px] uppercase font-bold text-zinc-400 block">Connect Rate</span>
-                            <span className="text-sm font-extrabold font-mono text-zinc-900">{tl.connectRate}%</span>
+                            <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.connectRate}%</span>
                           </div>
                           <div className="bg-white p-2 rounded-lg border border-zinc-100">
                             <span className="text-[10px] uppercase font-bold text-zinc-400 block">&lt;85% Attention</span>
-                            <span className="text-sm font-extrabold font-mono text-zinc-900">
+                            <span className="text-sm font-bold tabular-nums text-zinc-900">
                               {tl.callsUnder85}
                             </span>
                           </div>
