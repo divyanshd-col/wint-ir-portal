@@ -232,12 +232,6 @@ export default function PcgRmPerformanceDashboard({
               <option value="Vaishnavi">Team Vaishnavi</option>
             </select>
           </div>
-
-          <div style={{ display: 'inline-flex', background: '#f4f4f5', border: '1px solid #e4e4e7', borderRadius: 8, padding: 2 }}>
-            <span style={{ height: 30, padding: '0 12px', display: 'inline-flex', alignItems: 'center', fontSize: 12, fontWeight: 600, background: '#ffffff', color: '#18181b', borderRadius: 6, boxShadow: '0 1px 2px rgba(0,0,0,0.04)' }}>
-              Two-Week Rolling
-            </span>
-          </div>
         </div>
       </div>
 
