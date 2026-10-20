@@ -108,8 +108,6 @@ export const TL_SLACK_MEMBER_MAP: Record<string, string> = {
   sundar: 'U08TFU5GH51',
   'priya sundar': 'U08TFU5GH51',
   priya: 'U08TFU5GH51',
-  anusha: 'U08LEA04YUR',
-  rishitha: 'U08LE9TLT5F',
   vedant: 'U09HZTDQZBP',
   'vedant g': 'U09HZTDQZBP',
   sivaranjini: BOT_DEFAULT_TL_SLACK_ID,
@@ -137,6 +135,12 @@ export function getTLSlackMention(tlName?: string | null, agentName?: string | n
   if (effectiveTL.startsWith('<@') && effectiveTL.endsWith('>')) return effectiveTL;
 
   const clean = effectiveTL.toLowerCase();
+
+  // Rishitha and Anusha are no longer team leads — do not tag them in Slack
+  if (clean === 'rishitha' || clean === 'anusha') {
+    return 'N/A';
+  }
+
   if (TL_SLACK_MEMBER_MAP[clean]) {
     return `<@${TL_SLACK_MEMBER_MAP[clean]}>`;
   }

@@ -113,7 +113,25 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   const convEnded   = transcriptObj.conversation_ended || body.data?.closed_at || body.data?.ended_at || body.created_at || new Date().toISOString();
   const chatId      = String(body.chat_id || transcriptObj.chat_id || `wh_${Date.now()}`);
   const year        = convStarted ? new Date(convStarted).getUTCFullYear() : new Date().getUTCFullYear();
-  const agentName   = extractAgentName(rawMessages);
+
+  // Extract agent info from human_agent_info if available (matching voice calls and email pipelines)
+  const webhookAgentName = (
+    body.human_agent_info?.name ||
+    body.data?.human_agent_info?.name ||
+    body.agent_name ||
+    body.data?.agent_name ||
+    ''
+  ).trim();
+  const webhookAgentEmail = (
+    body.human_agent_info?.email ||
+    body.data?.human_agent_info?.email ||
+    body.agent_email ||
+    body.data?.agent_email ||
+    ''
+  ).trim();
+
+  const transcriptAgentName = extractAgentName(rawMessages);
+  const agentName = webhookAgentName || transcriptAgentName;
 
   // Extract mobile/phone number — check all known Robylon field locations
   const mobileNumber: string | undefined =
@@ -154,7 +172,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   // Upsert contact + agent
   const [contactId, agentId] = await Promise.all([
     upsertContact(mobileNumber),
-    upsertAgent(effectiveWebhookAgent),
+    upsertAgent(effectiveWebhookAgent, webhookAgentEmail || undefined),
   ]);
 
   // Persist conversation to PostgreSQL
@@ -271,6 +289,13 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
 
     if (!agentName && transcriptMessages.length) {
       agentName = extractAgentName(transcriptMessages);
+    }
+    if (!agentName && conv.raw_payload) {
+      agentName = (
+        (conv.raw_payload as any)?.human_agent_info?.name ||
+        (conv.raw_payload as any)?.data?.human_agent_info?.name ||
+        ''
+      ).trim();
     }
 
     const config = await readConfig();
