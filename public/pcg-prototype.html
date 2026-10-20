@@ -1739,8 +1739,8 @@
       } else {
         if (tabCalls) tabCalls.classList.remove('hidden');
         if (tabTeam) tabTeam.classList.add('hidden');
+        if (tabRmPerf) tabRmPerf.classList.add('hidden');
         if (role === 'agent') {
-          if (tabRmPerf) tabRmPerf.classList.add('hidden');
           if (maTitle) maTitle.innerText = "My Analytics";
           setTab('calls');
           thRm.classList.add('hidden');
@@ -1751,7 +1751,6 @@
           if (protoEmail) protoEmail.innerText = "aahan.thaker@wintwealth.com";
           if (protoBadge) { protoBadge.innerText = "RM"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
         } else {
-          if (tabRmPerf) tabRmPerf.classList.remove('hidden');
           if (maTitle) maTitle.innerText = "Member Analytics";
           if (role === 'tl_gokul') {
             setTab('calls');
@@ -1817,6 +1816,9 @@
     }
 
     function setTab(tab) {
+      if (tab === 'rm-performance' && currentRole !== 'admin') {
+        tab = 'calls';
+      }
       ['calls', 'team-analytics', 'rm-performance', 'member-analytics', 'scorecard', 'disputes'].forEach(t => {
         const btn = document.getElementById(`tab-${t}`);
         const view = document.getElementById(`view-${t}`);

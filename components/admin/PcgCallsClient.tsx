@@ -188,11 +188,11 @@ export default function PcgCallsClient() {
     }
   }, [userRole, loggedInUserName]);
 
-  // When activePersona is admin, remove Call Quality view; for agent, remove team-only views
+  // When activePersona is admin, remove Call Quality view; for agent and tl, remove admin-only views
   useEffect(() => {
     if (activePersona === 'admin' && (activeTab === 'calls' || activeTab === 'disputes')) {
       handleTabChange('team_analytics');
-    } else if (activePersona === 'agent' && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
+    } else if ((activePersona === 'agent' || activePersona === 'tl') && (activeTab === 'team_analytics' || activeTab === 'rm_performance')) {
       handleTabChange('calls');
     }
   }, [activePersona, activeTab]);
@@ -205,7 +205,7 @@ export default function PcgCallsClient() {
       if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics' || tabParam === 'rm_performance') {
         if (activePersona === 'admin' && (tabParam === 'calls' || tabParam === 'disputes')) {
           setActiveTab('team_analytics');
-        } else if (activePersona === 'agent' && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
+        } else if ((activePersona === 'agent' || activePersona === 'tl') && (tabParam === 'team_analytics' || tabParam === 'rm_performance')) {
           setActiveTab('calls');
         } else {
           setActiveTab(tabParam as PcgTab);
@@ -1164,7 +1164,7 @@ export default function PcgCallsClient() {
           </button>
 
           {/* 5. RM Performance Navigation Link */}
-          {(activePersona === 'admin' || activePersona === 'tl') && (
+          {activePersona === 'admin' && (
             <button
               type="button"
               onClick={() => handleTabChange('rm_performance')}
