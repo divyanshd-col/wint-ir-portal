@@ -36,6 +36,18 @@ export interface CallEvalPanelProps {
   onDone:            () => void;
   onClose:           () => void;
   colSpan?:          number;
+  initialSegments?:  any[];
+  initialRecordingUrl?: string | null;
+  standalone?:       boolean;
+  onOverrideSubmit?: (data: {
+    callId: string;
+    scores: Record<string, string>;
+    reasoning: Record<string, string>;
+    gates: any;
+    callGateResult: string;
+    note: string;
+    iqsScore: number | null;
+  }) => Promise<boolean | void> | void;
 }
 
 const PARAM_NAMES: Record<string, string> = {
@@ -288,10 +300,14 @@ export default function CallEvalPanel({
   onDone = () => {},
   onClose,
   colSpan = 6,
+  initialSegments,
+  initialRecordingUrl,
+  standalone = false,
+  onOverrideSubmit,
 }: CallEvalPanelProps) {
-  const [segments, setSegments] = useState<any[]>([]);
-  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [segments, setSegments] = useState<any[]>(initialSegments || []);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(initialRecordingUrl || null);
+  const [loading, setLoading] = useState(!initialSegments || initialSegments.length === 0);
   const [saving, setSaving] = useState(false);
   const [isReevaluating, setIsReevaluating] = useState(false);
   const [note, setNote] = useState(dispute?.reviewNote || '');
@@ -396,10 +412,19 @@ export default function CallEvalPanel({
   // Load call transcript segments and fallback evaluation details
   useEffect(() => {
     setHasUserEditedParams(false);
+    if (initialSegments && initialSegments.length > 0) {
+      setSegments(initialSegments);
+      setLoading(false);
+    }
+    if (initialRecordingUrl) {
+      setRecordingUrl(initialRecordingUrl);
+    }
     fetch(`/api/call-quality/transcript?callId=${encodeURIComponent(callId)}`)
       .then(r => r.json())
       .then(d => {
-        if (d.segments) setSegments(d.segments);
+        if (d.segments && Array.isArray(d.segments) && d.segments.length > 0) {
+          setSegments(d.segments);
+        }
         if (d.recordingUrl) setRecordingUrl(d.recordingUrl);
         if (d.chatId) setFetchedChatId(d.chatId);
         if (d.chatStatus) setFetchedChatStatus(d.chatStatus);
@@ -419,7 +444,7 @@ export default function CallEvalPanel({
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [callId]);
+  }, [callId, initialSegments, initialRecordingUrl]);
 
   const challengedMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -641,6 +666,27 @@ export default function CallEvalPanel({
       call_gate_result: overallGateResult,
     };
 
+    if (onOverrideSubmit) {
+      try {
+        await onOverrideSubmit({
+          callId,
+          scores,
+          reasoning,
+          gates: gatesPayload,
+          callGateResult: overallGateResult,
+          note,
+          iqsScore: displayedIqs,
+        });
+        onDone();
+        return;
+      } catch (err: any) {
+        alert(err.message || 'Failed to save evaluation override');
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+
     try {
       const res = await fetch('/api/call-quality/override-evaluation', {
         method: 'PATCH',
@@ -735,10 +781,9 @@ export default function CallEvalPanel({
 
   const effectiveMobile = mobileNumber || fetchedMobileNumber;
 
-  return (
-    <tr>
-      <td colSpan={colSpan} style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid var(--qa-border)' }}>
-        {/* Header bar */}
+  const panelContent = (
+    <>
+      {/* Header bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--qa-text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span>Call Evaluation Panel — ID: {callId} ({agentName})</span>
@@ -827,7 +872,28 @@ export default function CallEvalPanel({
                 {isSavingTranscript ? 'Saving transcript…' : isReevaluating ? 'Re-evaluating Call…' : 'Save & Re-evaluate Call'}
               </button>
             )}
-            <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 18, color: 'var(--qa-text-3)', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
+            <button
+              onClick={onClose}
+              title="Close / Collapse Panel"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: 28,
+                padding: '0 8px',
+                borderRadius: 6,
+                border: '1px solid var(--qa-border, #E4E4E7)',
+                background: '#fff',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--qa-text-2, #71717A)',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                lineHeight: 1,
+              }}
+            >
+              ^
+            </button>
           </div>
         </div>
 
@@ -1432,6 +1498,21 @@ export default function CallEvalPanel({
             )}
           </div>
         </div>
+    </>
+  );
+
+  if (standalone) {
+    return (
+      <div style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid var(--qa-border)', borderRadius: 10 }}>
+        {panelContent}
+      </div>
+    );
+  }
+
+  return (
+    <tr>
+      <td colSpan={colSpan} style={{ padding: '16px 20px', background: '#f8fafc', borderBottom: '1px solid var(--qa-border)' }}>
+        {panelContent}
       </td>
     </tr>
   );

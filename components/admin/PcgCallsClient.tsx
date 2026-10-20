@@ -7,6 +7,7 @@ import { iqsTheme } from '@/lib/quality';
 import PcgScorecardView from './PcgScorecardView';
 import PcgMemberAnalyticsDashboard from './PcgMemberAnalyticsDashboard';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
+import CallEvalPanel from '@/components/quality/CallEvalPanel';
 
 // Type definitions
 interface CallParameter {
@@ -92,6 +93,56 @@ export const formatCallId = (callId: string | null | undefined, fallbackId: stri
   return callId.startsWith('runo-') ? callId.replace('runo-', '') : callId.slice(-6);
 };
 
+export const formatCallIqsScores = (call: PCGCall) => {
+  const scores: Record<string, string> = {
+    P1: 'Yes', P2: 'Yes', P3: 'Yes', P5: 'Yes', P6: 'Yes',
+    P7: 'Yes', P8: 'Yes', P9: 'Yes', P10: 'Yes', P11: 'Yes'
+  };
+  const evidence: Record<string, string> = {
+    P1: 'All factual, legal and investment criteria were accurately stated.',
+    P2: 'Addressed all questions raised during discussion.',
+    P3: 'Clear next steps, follow-up timeline and expectation setting established.',
+    P5: 'Warm, professional greeting identifying representative and Wint Wealth.',
+    P6: 'Structured closing confirming next steps.',
+    P7: 'Customer profile and pre-requisites checked before proceeding.',
+    P8: 'Financial terminology and bond mechanics explained simply without confusing jargon.',
+    P9: "There were zero IR interruptions, no repeat-forced moments, and the rep acknowledged the customer's audio/language preference.",
+    P10: 'Zero filler words recorded and no dead air events reported in structure_events.',
+    P11: 'Tone summary contains zero/default values and speaker ID confidence is low, indicating audio tone analysis was unavailable.'
+  };
+
+  if (Array.isArray(call.parameters)) {
+    call.parameters.forEach((p, idx) => {
+      const pKey = p.id || `P${idx + 1}`;
+      scores[pKey] = p.status || 'Yes';
+      if (p.quote) {
+        evidence[pKey] = p.quote;
+      }
+    });
+  }
+
+  return { scores, evidence };
+};
+
+export const formatCallSegments = (call: PCGCall) => {
+  if (!call.transcriptTurns || call.transcriptTurns.length === 0) return [];
+  const segments: any[] = [];
+  call.transcriptTurns.forEach((turn, idx) => {
+    segments.push({
+      speaker: turn.speaker === 'RM' ? 'IR_EXECUTIVE' : 'INVESTOR',
+      text: turn.text,
+      ts: turn.time || `0:${(idx * 3 + 3).toString().padStart(2, '0')}`,
+    });
+    if (idx < call.transcriptTurns.length - 1) {
+      segments.push({
+        type: 'dead_air',
+        duration: '~1 seconds'
+      });
+    }
+  });
+  return segments;
+};
+
 export default function PcgCallsClient() {
   const { data: session } = useSession();
   const userRole = (session?.user as any)?.role || 'admin';
@@ -168,6 +219,8 @@ export default function PcgCallsClient() {
 
   // Active call view state
   const [activeCallAudit, setActiveCallAudit] = useState<PCGCall | null>(null);
+  const [expandedCallId, setExpandedCallId] = useState<string | null>(null);
+  const [expandedDisputeId, setExpandedDisputeId] = useState<string | null>(null);
 
   // Dispute Section Tab: 'raised' | 'reviewed'
   const [disputeTab, setDisputeTab] = useState<'raised' | 'reviewed'>('raised');
@@ -379,6 +432,54 @@ export default function PcgCallsClient() {
     setTimeout(() => setOverrideFeedback(null), 5000);
   };
 
+  // Action: Handle evaluation override from CallEvalPanel
+  const handleOverrideFromPanel = (
+    callId: string,
+    overrideData: {
+      scores: Record<string, string>;
+      reasoning: Record<string, string>;
+      note: string;
+      iqsScore: number | null;
+    }
+  ) => {
+    const newIqs = overrideData.iqsScore != null ? overrideData.iqsScore : 88;
+    const updatedCalls: PCGCall[] = calls.map(c => {
+      if (c.id === callId || c.callId === callId) {
+        const updatedParams: CallParameter[] = c.parameters.map(p => {
+          const newStatus = overrideData.scores[p.id];
+          if (newStatus) {
+            const earned = newStatus === 'Yes' ? p.maxScore : newStatus === 'Half' ? Math.round(p.maxScore / 2) : 0;
+            const validStatus: 'Yes' | 'Half' | 'No' = newStatus === 'Half' ? 'Half' : newStatus === 'No' ? 'No' : 'Yes';
+            return {
+              ...p,
+              status: validStatus,
+              earnedScore: earned,
+              quote: overrideData.reasoning[p.id] || p.quote
+            };
+          }
+          return p;
+        });
+
+        const updatedCall: PCGCall = {
+          ...c,
+          iqsScore: newIqs,
+          needsAttention: newIqs < 85,
+          parameters: updatedParams,
+          tlOverrideNote: overrideData.note || 'TL evaluation override submitted.',
+          disputeStatus: c.disputeStatus === 'pending' ? 'resolved' : 'overridden',
+        };
+        return updatedCall;
+      }
+      return c;
+    });
+
+    setCalls(updatedCalls);
+    if (activeCallAudit && (activeCallAudit.id === callId || activeCallAudit.callId === callId)) {
+      const updated = updatedCalls.find(c => c.id === callId || c.callId === callId);
+      if (updated) setActiveCallAudit(updated);
+    }
+  };
+
   // Open Call View by ID (used by RM Scorecard evidence links)
   const handleOpenCallById = (cid: string) => {
     const cleanId = cid.replace('#', '').trim();
@@ -566,59 +667,114 @@ export default function PcgCallsClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0F0F2]">
-                {disputeRaisedCalls.map((call) => (
-                  <tr key={call.id} className="hover:bg-zinc-50 transition-colors">
-                    {activePersona !== 'agent' && (
-                      <td className="py-3 px-4">
-                        <a
-                          href={getRunoCallUrl(call.callId || call.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={`Open in Runo CRM`}
-                          className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span>#{formatCallId(call.callId, call.id)}</span>
-                          <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </a>
-                      </td>
-                    )}
-                    {activePersona !== 'agent' && (
-                      <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
-                    )}
-                    <td className="py-3 px-4">
-                      <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
-                        {call.category}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {activePersona === 'agent' ? (
-                        <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
-                      ) : (
-                        <span className="font-mono text-zinc-600 font-normal">{call.phoneNumber}</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                    <td className="py-3 px-4 text-zinc-800 font-medium max-w-xs truncate">
-                      "{call.disputeReason || 'Agent challenged parameter score.'}"
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
-                         Pending TL Review
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => handleOpenCallView(call)}
-                        className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm"
+                {disputeRaisedCalls.map((call) => {
+                  const isExpanded = expandedDisputeId === call.id;
+                  return (
+                    <React.Fragment key={call.id}>
+                      <tr
+                        className={`hover:bg-zinc-50 transition-colors ${activePersona === 'tl' ? 'cursor-pointer' : ''}`}
+                        onClick={() => {
+                          if (activePersona === 'tl') {
+                            setExpandedDisputeId(isExpanded ? null : call.id);
+                          }
+                        }}
                       >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        {activePersona !== 'agent' && (
+                          <td className="py-3 px-4">
+                            <a
+                              href={getRunoCallUrl(call.callId || call.id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Open in Runo CRM`}
+                              className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span>#{formatCallId(call.callId, call.id)}</span>
+                              <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          </td>
+                        )}
+                        {activePersona !== 'agent' && (
+                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                        )}
+                        <td className="py-3 px-4">
+                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
+                            {call.category}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {activePersona === 'agent' ? (
+                            <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
+                          ) : (
+                            <span className="font-mono text-zinc-600 font-normal">{call.phoneNumber}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
+                        <td className="py-3 px-4 text-zinc-800 font-medium max-w-xs truncate">
+                          "{call.disputeReason || 'Agent challenged parameter score.'}"
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
+                             Pending TL Review
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => {
+                              if (activePersona === 'tl') {
+                                setExpandedDisputeId(isExpanded ? null : call.id);
+                              } else {
+                                handleOpenCallView(call);
+                              }
+                            }}
+                            className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1"
+                          >
+                            <span>{activePersona === 'tl' ? (isExpanded ? 'Hide' : 'Review') : 'View'}</span>
+                            {activePersona === 'tl' && <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {isExpanded && activePersona === 'tl' && (
+                        <CallEvalPanel
+                          callId={formatCallId(call.callId, call.id)}
+                          chatId={call.clientName ? `${call.callId || call.id.slice(-6)}` : null}
+                          mobileNumber={call.phoneNumber}
+                          agentName={call.rmName}
+                          iqsScore={call.iqsScore}
+                          calledAt={call.startTime || '2026-10-18T14:04:00.000Z'}
+                          disposition={call.category}
+                          gates={call.gates}
+                          iqsScores={formatCallIqsScores(call)}
+                          initialSegments={formatCallSegments(call)}
+                          initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
+                          mode="submit"
+                          allowReevaluate={true}
+                          dispute={{
+                            flagId: call.id,
+                            agentName: call.rmName,
+                            agentNote: call.disputeReason,
+                            raisedBy: 'agent',
+                            raisedByName: call.rmName,
+                            raisedAt: call.startTime,
+                            challengedParams: (call.parameters || []).filter(p => p.status !== 'Yes').map(p => ({
+                              param: p.id,
+                              note: p.quote || 'Challenged parameter score.'
+                            }))
+                          }}
+                          colSpan={8}
+                          onDone={() => setExpandedDisputeId(null)}
+                          onClose={() => setExpandedDisputeId(null)}
+                          onOverrideSubmit={async (overrideData) => {
+                            handleOverrideFromPanel(call.id, overrideData);
+                          }}
+                        />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -647,59 +803,99 @@ export default function PcgCallsClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F0F0F2]">
-                {disputeReviewedCalls.map((call) => (
-                  <tr key={call.id} className="hover:bg-zinc-50 transition-colors">
-                    {activePersona !== 'agent' && (
-                      <td className="py-3 px-4">
-                        <a
-                          href={getRunoCallUrl(call.callId || call.id)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title={`Open in Runo CRM`}
-                          className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span>#{formatCallId(call.callId, call.id)}</span>
-                          <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </a>
-                      </td>
-                    )}
-                    {activePersona !== 'agent' && (
-                      <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
-                    )}
-                    <td className="py-3 px-4">
-                      <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
-                        {call.category}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {activePersona === 'agent' ? (
-                        <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
-                      ) : (
-                        <span className="font-mono text-zinc-600 font-normal">{call.phoneNumber}</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
-                    <td className="py-3 px-4 text-zinc-700 font-medium max-w-xs truncate">
-                      "{call.tlOverrideNote || 'Dispute reviewed and resolved by Team Leader.'}"
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
-                        <span>✓</span> Reviewed &amp; Resolved
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <button
-                        onClick={() => handleOpenCallView(call)}
-                        className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm"
+                {disputeReviewedCalls.map((call) => {
+                  const isExpanded = expandedDisputeId === call.id;
+                  return (
+                    <React.Fragment key={call.id}>
+                      <tr
+                        className={`hover:bg-zinc-50 transition-colors ${activePersona === 'tl' ? 'cursor-pointer' : ''}`}
+                        onClick={() => {
+                          if (activePersona === 'tl') {
+                            setExpandedDisputeId(isExpanded ? null : call.id);
+                          }
+                        }}
                       >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        {activePersona !== 'agent' && (
+                          <td className="py-3 px-4">
+                            <a
+                              href={getRunoCallUrl(call.callId || call.id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Open in Runo CRM`}
+                              className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <span>#{formatCallId(call.callId, call.id)}</span>
+                              <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          </td>
+                        )}
+                        {activePersona !== 'agent' && (
+                          <td className="py-3 px-4 font-semibold text-zinc-800">{call.rmName}</td>
+                        )}
+                        <td className="py-3 px-4">
+                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200">
+                            {call.category}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {activePersona === 'agent' ? (
+                            <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
+                          ) : (
+                            <span className="font-mono text-zinc-600 font-normal">{call.phoneNumber}</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
+                        <td className="py-3 px-4 text-zinc-700 font-medium max-w-xs truncate">
+                          "{call.tlOverrideNote || 'Dispute reviewed and resolved by Team Leader.'}"
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-zinc-100 text-zinc-800 border border-zinc-300">
+                            <span>✓</span> Reviewed &amp; Resolved
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => {
+                              if (activePersona === 'tl') {
+                                setExpandedDisputeId(isExpanded ? null : call.id);
+                              } else {
+                                handleOpenCallView(call);
+                              }
+                            }}
+                            className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1"
+                          >
+                            <span>{activePersona === 'tl' ? (isExpanded ? 'Hide' : 'View') : 'View'}</span>
+                            {activePersona === 'tl' && <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>}
+                          </button>
+                        </td>
+                      </tr>
+
+                      {isExpanded && activePersona === 'tl' && (
+                        <CallEvalPanel
+                          callId={formatCallId(call.callId, call.id)}
+                          chatId={call.clientName ? `${call.callId || call.id.slice(-6)}` : null}
+                          mobileNumber={call.phoneNumber}
+                          agentName={call.rmName}
+                          iqsScore={call.iqsScore}
+                          calledAt={call.startTime || '2026-10-18T14:04:00.000Z'}
+                          disposition={call.category}
+                          gates={call.gates}
+                          iqsScores={formatCallIqsScores(call)}
+                          initialSegments={formatCallSegments(call)}
+                          initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
+                          mode="view"
+                          allowReevaluate={true}
+                          colSpan={8}
+                          onDone={() => setExpandedDisputeId(null)}
+                          onClose={() => setExpandedDisputeId(null)}
+                        />
+                      )}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -1769,63 +1965,109 @@ export default function PcgCallsClient() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F0F2]">
-                  {calls.filter((call) => call.isAnswered).map((call) => (
-                    <tr
-                      key={call.id}
-                      className={`hover:bg-zinc-50 transition-colors ${
-                        call.needsAttention ? 'bg-zinc-50' : ''
-                      }`}
-                    >
-                      {activePersona !== 'agent' && (
-                        <td className="py-3 px-4 font-semibold text-zinc-800">
-                          {call.rmName}
-                        </td>
-                      )}
-
-                      <td className="py-3 px-4">
-                        <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col gap-1 items-start">
-                          <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
-                            {call.category}
-                          </span>
-                          {call.secondaryCategories && call.secondaryCategories.length > 0 && (
-                            <span
-                              title={call.aiCategoryReasoning || `Also discussed: ${call.secondaryCategories.join(', ')}`}
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 shadow-2xs"
-                            >
-                              <span className="font-bold text-zinc-500">+</span>
-                              <span>{call.secondaryCategories.join(', ')}</span>
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {getScoreBadge(call.iqsScore)}
-                      </td>
-
-                      <td className="py-3 px-4 font-semibold">
-                        {call.gates.status === 'PASS' ? (
-                          <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
-                        ) : (
-                          <span className="text-black font-extrabold" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
-                        )}
-                      </td>
-
-                      {/* Actions */}
-                      <td className="py-3 px-4 text-center">
-                        <button
-                          onClick={() => handleOpenCallView(call)}
-                          className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm"
+                  {calls.filter((call) => call.isAnswered).map((call) => {
+                    const isExpanded = expandedCallId === call.id;
+                    return (
+                      <React.Fragment key={call.id}>
+                        <tr
+                          onClick={() => {
+                            if (activePersona === 'tl') {
+                              setExpandedCallId(isExpanded ? null : call.id);
+                            } else {
+                              handleOpenCallView(call);
+                            }
+                          }}
+                          className={`hover:bg-zinc-50 transition-colors cursor-pointer ${
+                            call.needsAttention ? 'bg-zinc-50' : ''
+                          } ${isExpanded ? 'bg-zinc-50 font-medium' : ''}`}
                         >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                          {activePersona !== 'agent' && (
+                            <td className="py-3 px-4 font-semibold text-zinc-800">
+                              {call.rmName}
+                            </td>
+                          )}
+
+                          <td className="py-3 px-4">
+                            <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            <div className="flex flex-col gap-1 items-start">
+                              <span className="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
+                                {call.category}
+                              </span>
+                              {call.secondaryCategories && call.secondaryCategories.length > 0 && (
+                                <span
+                                  title={call.aiCategoryReasoning || `Also discussed: ${call.secondaryCategories.join(', ')}`}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 shadow-2xs"
+                                >
+                                  <span className="font-bold text-zinc-500">+</span>
+                                  <span>{call.secondaryCategories.join(', ')}</span>
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-4">
+                            {getScoreBadge(call.iqsScore)}
+                          </td>
+
+                          <td className="py-3 px-4 font-semibold">
+                            {call.gates.status === 'PASS' ? (
+                              <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
+                            ) : (
+                              <span className="text-black font-extrabold" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
+                            )}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => {
+                                if (activePersona === 'tl') {
+                                  setExpandedCallId(isExpanded ? null : call.id);
+                                } else {
+                                  handleOpenCallView(call);
+                                }
+                              }}
+                              className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1.5"
+                            >
+                              <span>{activePersona === 'tl' ? (isExpanded ? 'Hide' : 'Evaluate') : 'View'}</span>
+                              {activePersona === 'tl' && (
+                                <span className="text-[10px] opacity-70">
+                                  {isExpanded ? '▲' : '▼'}
+                                </span>
+                              )}
+                            </button>
+                          </td>
+                        </tr>
+
+                        {isExpanded && activePersona === 'tl' && (
+                          <CallEvalPanel
+                            callId={formatCallId(call.callId, call.id)}
+                            chatId={call.clientName ? `${call.callId || call.id.slice(-6)}` : null}
+                            mobileNumber={call.phoneNumber}
+                            agentName={call.rmName}
+                            iqsScore={call.iqsScore}
+                            calledAt={call.startTime || '2026-10-18T14:04:00.000Z'}
+                            disposition={call.category}
+                            gates={call.gates}
+                            iqsScores={formatCallIqsScores(call)}
+                            initialSegments={formatCallSegments(call)}
+                            initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
+                            mode="submit"
+                            allowReevaluate={true}
+                            colSpan={6}
+                            onDone={() => setExpandedCallId(null)}
+                            onClose={() => setExpandedCallId(null)}
+                            onOverrideSubmit={async (overrideData) => {
+                              handleOverrideFromPanel(call.id, overrideData);
+                            }}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1933,8 +2175,33 @@ export default function PcgCallsClient() {
               </div>
             </div>
 
-            {/* Drawer Body: 2-Column Split Layout */}
-            <div className="flex-1 flex flex-col lg:flex-row overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[#E4E4E7]">
+            {/* Drawer Body: TL uses CallEvalPanel directly; Agent/Admin uses standard drawer */}
+            {activePersona === 'tl' && activeCallAudit.isAnswered ? (
+              <div className="flex-1 overflow-y-auto p-4 bg-[#FAFAFB]">
+                <CallEvalPanel
+                  standalone={true}
+                  callId={formatCallId(activeCallAudit.callId, activeCallAudit.id)}
+                  chatId={activeCallAudit.clientName ? `${activeCallAudit.callId || activeCallAudit.id.slice(-6)}` : null}
+                  mobileNumber={activeCallAudit.phoneNumber}
+                  agentName={activeCallAudit.rmName}
+                  iqsScore={activeCallAudit.iqsScore}
+                  calledAt={activeCallAudit.startTime || '2026-10-18T14:04:00.000Z'}
+                  disposition={activeCallAudit.category}
+                  gates={activeCallAudit.gates}
+                  iqsScores={formatCallIqsScores(activeCallAudit)}
+                  initialSegments={formatCallSegments(activeCallAudit)}
+                  initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
+                  mode="submit"
+                  allowReevaluate={true}
+                  onDone={() => setActiveCallAudit(null)}
+                  onClose={() => setActiveCallAudit(null)}
+                  onOverrideSubmit={async (overrideData) => {
+                    handleOverrideFromPanel(activeCallAudit.id, overrideData);
+                  }}
+                />
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col lg:flex-row overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[#E4E4E7]">
               
               {/* ── LEFT COLUMN: Audio Player + Call Transcript Dialogue Turns ──── */}
               <div className="flex-1 flex flex-col overflow-y-auto p-5 space-y-4 bg-white">
@@ -2339,6 +2606,7 @@ export default function PcgCallsClient() {
                 </div>
               </div>
             </div>
+            )}
           </div>
         </div>
       )}
