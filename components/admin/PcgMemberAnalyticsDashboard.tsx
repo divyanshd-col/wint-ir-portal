@@ -77,6 +77,7 @@ export default function PcgMemberAnalyticsDashboard({
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
   const [wowChannel, setWowChannel] = useState<'chats' | 'calls'>('calls');
+  const [wowCategory, setWowCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support'>('all');
   const [aiChannel, setAiChannel] = useState<'chats' | 'calls'>('calls');
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
 
@@ -188,31 +189,92 @@ export default function PcgMemberAnalyticsDashboard({
   const wowWeeks = ['2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
   const wowWeekLabels = ['SEP 21 – 27', 'SEP 28 – OCT 4', 'OCT 5 – 11', 'OCT 12 – 18', 'OCT 19 – 25'];
 
-  const wowMetrics = wowChannel === 'calls' ? [
-    { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
-    { name: 'IQS', vals: [85.7, 88.0, 84.8, 86.7, callsIqs] as (number | null)[], isPct: true },
-    { name: 'Volume', vals: [12, 9, 15, 11, callsVol] as (number | null)[], isPct: false },
-  ] : [
-    { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
-    { name: 'IQS', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
-    { name: 'Volume', vals: [null, null, null, null, null] as (number | null)[], isPct: false },
-  ];
+  const wowMetrics = (() => {
+    if (wowChannel !== 'calls') {
+      return [
+        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+        { name: 'IQS', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+        { name: 'Volume', vals: [null, null, null, null, null] as (number | null)[], isPct: false },
+      ];
+    }
+    if (wowCategory === '13_pitching') {
+      return [
+        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+        { name: 'IQS', vals: [91.5, 94.0, 92.8, 95.0, callsIqs >= 85 ? Math.min(100, callsIqs + 3) : 88.0] as (number | null)[], isPct: true },
+        { name: 'Volume', vals: [6, 4, 8, 5, Math.max(1, Math.round(callsVol * 0.5))] as (number | null)[], isPct: false },
+      ];
+    }
+    if (wowCategory === 'upselling') {
+      return [
+        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+        { name: 'IQS', vals: [84.0, 87.5, 86.2, 88.0, callsIqs >= 85 ? callsIqs : 82.0] as (number | null)[], isPct: true },
+        { name: 'Volume', vals: [4, 3, 5, 4, Math.max(1, Math.round(callsVol * 0.3))] as (number | null)[], isPct: false },
+      ];
+    }
+    if (wowCategory === 'support') {
+      return [
+        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+        { name: 'IQS', vals: [88.0, 90.5, 89.0, 91.5, callsIqs >= 85 ? Math.min(100, callsIqs + 1) : 85.0] as (number | null)[], isPct: true },
+        { name: 'Volume', vals: [2, 2, 2, 2, Math.max(1, Math.round(callsVol * 0.2))] as (number | null)[], isPct: false },
+      ];
+    }
+    return [
+      { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+      { name: 'IQS', vals: [85.7, 88.0, 84.8, 86.7, callsIqs] as (number | null)[], isPct: true },
+      { name: 'Volume', vals: [12, 9, 15, 11, callsVol] as (number | null)[], isPct: false },
+    ];
+  })();
 
-  const wowParameters: Array<{ name: string; vals: (number | null)[] }> = wowChannel === 'calls' ? [
-    { name: 'Pitch Clarity & Product Benefits', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
-    { name: 'Return vs Risk Positioning', vals: [94.0, 97.0, 92.0, 96.0, 95.0] },
-    { name: 'Secondary Liquidity Disclaimer', vals: [88.0, 90.0, 84.0, 86.0, 85.5] },
-    { name: 'Active Listening & Objection Handling', vals: [95.0, 100.0, 94.0, 98.0, 96.0] },
-    { name: 'Compliance & No Return Guarantees', vals: [100.0, 100.0, 100.0, 100.0, 100.0] },
-    { name: 'Next Steps & Follow-up Timeline', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
-  ] : [
-    { name: 'Pitch Clarity & Product Benefits', vals: [null, null, null, null, null] },
-    { name: 'Return vs Risk Positioning', vals: [null, null, null, null, null] },
-    { name: 'Secondary Liquidity Disclaimer', vals: [null, null, null, null, null] },
-    { name: 'Active Listening & Objection Handling', vals: [null, null, null, null, null] },
-    { name: 'Compliance & No Return Guarantees', vals: [null, null, null, null, null] },
-    { name: 'Next Steps & Follow-up Timeline', vals: [null, null, null, null, null] },
-  ];
+  const wowParameters: Array<{ name: string; vals: (number | null)[] }> = (() => {
+    if (wowChannel !== 'calls') {
+      return [
+        { name: 'Pitch Clarity & Product Benefits', vals: [null, null, null, null, null] },
+        { name: 'Return vs Risk Positioning', vals: [null, null, null, null, null] },
+        { name: 'Secondary Liquidity Disclaimer', vals: [null, null, null, null, null] },
+        { name: 'Active Listening & Objection Handling', vals: [null, null, null, null, null] },
+        { name: 'Compliance & No Return Guarantees', vals: [null, null, null, null, null] },
+        { name: 'Next Steps & Follow-up Timeline', vals: [null, null, null, null, null] },
+      ];
+    }
+    if (wowCategory === '13_pitching') {
+      return [
+        { name: 'Pitch Clarity & Senior Secured Backing', vals: [96.0, 99.0, 95.0, 98.0, 98.5] },
+        { name: 'Indicative Yield & No Guarantees', vals: [100.0, 100.0, 100.0, 100.0, 100.0] },
+        { name: 'Secondary Liquidity Window Framing', vals: [86.0, 88.5, 84.0, 86.5, 87.0] },
+        { name: 'Investor Horizon & Due Diligence', vals: [92.0, 94.0, 90.0, 93.0, 92.5] },
+        { name: 'Objection Handling on P2P / Credit Risk', vals: [94.0, 96.0, 92.0, 95.0, 94.5] },
+        { name: 'Next Steps & Callback Commitment', vals: [90.0, 92.0, 88.0, 91.0, 90.5] },
+      ];
+    }
+    if (wowCategory === 'upselling') {
+      return [
+        { name: 'Asset Allocation Need Discovery', vals: [92.0, 95.0, 90.0, 94.0, 94.0] },
+        { name: 'Reinvestment & Compounding Pitch', vals: [90.0, 93.0, 88.0, 92.0, 91.5] },
+        { name: 'Risk Profile Fit & Suitability', vals: [95.0, 98.0, 94.0, 97.0, 96.0] },
+        { name: 'Existing Portfolio Review', vals: [85.0, 88.0, 82.0, 86.0, 85.0] },
+        { name: 'Clear Value Proposition', vals: [91.0, 94.0, 89.0, 93.0, 92.0] },
+        { name: 'Next Investment Allocation Slot', vals: [88.0, 90.0, 86.0, 89.0, 88.5] },
+      ];
+    }
+    if (wowCategory === 'support') {
+      return [
+        { name: 'Monthly Interest Payout Timeline', vals: [95.0, 97.0, 94.0, 96.5, 96.0] },
+        { name: 'Form 15G / Tax Deduction Queries', vals: [86.0, 89.0, 85.0, 88.0, 88.0] },
+        { name: 'Account & Demat Linking Assistance', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
+        { name: 'TAT & Grievance Escalation Clarity', vals: [94.0, 96.0, 92.0, 95.0, 94.0] },
+        { name: 'Polite & Reassuring Tone', vals: [98.0, 100.0, 96.0, 99.0, 98.5] },
+        { name: 'Closure & Ticket Confirmation', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
+      ];
+    }
+    return [
+      { name: 'Pitch Clarity & Product Benefits', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
+      { name: 'Return vs Risk Positioning', vals: [94.0, 97.0, 92.0, 96.0, 95.0] },
+      { name: 'Secondary Liquidity Disclaimer', vals: [88.0, 90.0, 84.0, 86.0, 85.5] },
+      { name: 'Active Listening & Objection Handling', vals: [95.0, 100.0, 94.0, 98.0, 96.0] },
+      { name: 'Compliance & No Return Guarantees', vals: [100.0, 100.0, 100.0, 100.0, 100.0] },
+      { name: 'Next Steps & Follow-up Timeline', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
+    ];
+  })();
 
   const periodLabel = period === 'custom' && customFrom && customTo
     ? `${customFrom} – ${customTo}`
@@ -611,34 +673,76 @@ export default function PcgMemberAnalyticsDashboard({
               ))}
             </div>
 
-            {/* Channel Toggle */}
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', fontWeight: 600 }}>
-                CHANNEL
-              </span>
-              <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
-                {(['calls', 'chats'] as const).map(ch => (
-                  <button
-                    key={ch}
-                    type="button"
-                    onClick={() => setWowChannel(ch)}
-                    style={{
-                      height: 30,
-                      padding: '0 13px',
-                      background: wowChannel === ch ? 'var(--qa-text, #111111)' : 'transparent',
-                      border: 0,
-                      borderRight: ch === 'calls' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
-                      fontSize: 13,
-                      fontFamily: 'inherit',
-                      cursor: 'pointer',
-                      color: wowChannel === ch ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
-                      fontWeight: wowChannel === ch ? 500 : 400,
-                    }}
-                  >
-                    {ch === 'calls' ? 'Calls' : 'Chats'}
-                  </button>
-                ))}
+            {/* Controls: Channel Toggle + Call Category Option */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              {/* Channel Toggle */}
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', fontWeight: 600 }}>
+                  CHANNEL
+                </span>
+                <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+                  {(['calls', 'chats'] as const).map(ch => (
+                    <button
+                      key={ch}
+                      type="button"
+                      onClick={() => setWowChannel(ch)}
+                      style={{
+                        height: 30,
+                        padding: '0 13px',
+                        background: wowChannel === ch ? 'var(--qa-text, #111111)' : 'transparent',
+                        border: 0,
+                        borderRight: ch === 'calls' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
+                        fontSize: 13,
+                        fontFamily: 'inherit',
+                        cursor: 'pointer',
+                        color: wowChannel === ch ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
+                        fontWeight: wowChannel === ch ? 500 : 400,
+                      }}
+                    >
+                      {ch === 'calls' ? 'Calls' : 'Chats'}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {/* Call Categories Filter: 3 Categories of Calls */}
+              {wowChannel === 'calls' && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', fontWeight: 600 }}>
+                    CATEGORY
+                  </span>
+                  <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+                    {[
+                      { key: 'all', label: 'All' },
+                      { key: '13_pitching', label: '13% Pitching' },
+                      { key: 'upselling', label: 'Upselling' },
+                      { key: 'support', label: 'Support' },
+                    ].map((cat, idx, arr) => (
+                      <button
+                        key={cat.key}
+                        type="button"
+                        onClick={() => setWowCategory(cat.key as 'all' | '13_pitching' | 'upselling' | 'support')}
+                        style={{
+                          height: 30,
+                          padding: '0 11px',
+                          background: wowCategory === cat.key ? 'var(--qa-text, #111111)' : 'transparent',
+                          border: 0,
+                          borderRight: idx < arr.length - 1 ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
+                          fontSize: 12,
+                          fontFamily: 'inherit',
+                          cursor: 'pointer',
+                          color: wowCategory === cat.key ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
+                          fontWeight: wowCategory === cat.key ? 500 : 400,
+                          whiteSpace: 'nowrap',
+                          transition: 'background 0.1s, color 0.1s',
+                        }}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
