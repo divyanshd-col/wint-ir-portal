@@ -2055,14 +2055,11 @@ export default function PcgCallsClient() {
                             iqsScores={formatCallIqsScores(call)}
                             initialSegments={formatCallSegments(call)}
                             initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                            mode="submit"
+                            mode="view"
                             allowReevaluate={true}
                             colSpan={6}
                             onDone={() => setExpandedCallId(null)}
                             onClose={() => setExpandedCallId(null)}
-                            onOverrideSubmit={async (overrideData) => {
-                              handleOverrideFromPanel(call.id, overrideData);
-                            }}
                           />
                         )}
                       </React.Fragment>
@@ -2191,7 +2188,7 @@ export default function PcgCallsClient() {
                   iqsScores={formatCallIqsScores(activeCallAudit)}
                   initialSegments={formatCallSegments(activeCallAudit)}
                   initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
-                  mode="submit"
+                  mode={activeCallAudit.disputeStatus === 'pending' ? 'submit' : 'view'}
                   allowReevaluate={true}
                   onDone={() => setActiveCallAudit(null)}
                   onClose={() => setActiveCallAudit(null)}
