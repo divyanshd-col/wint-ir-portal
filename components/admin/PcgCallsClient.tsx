@@ -10,6 +10,7 @@ import PcgTeamAnalyticsDashboard from './PcgTeamAnalyticsDashboard';
 import PcgRmPerformanceDashboard from './PcgRmPerformanceDashboard';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
+import { ThemeToggle, AccountMenu } from '@/components/shell/TopBar';
 
 // Type definitions
 interface CallParameter {
@@ -257,27 +258,6 @@ export default function PcgCallsClient() {
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Profile Menu Dropdown State
-  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-  const profileMenuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!profileMenuOpen) return;
-    const onDown = (e: MouseEvent) => {
-      if (!profileMenuRef.current?.contains(e.target as Node)) {
-        setProfileMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setProfileMenuOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [profileMenuOpen]);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -1045,89 +1025,19 @@ export default function PcgCallsClient() {
 
           {/* Workspace Switcher for Super Admins */}
           {(isSuperAdmin || platformDomain === 'both') && (
-            <div className="ml-1">
+            <div className="mr-1">
               <WorkspaceSwitcher compact={true} />
             </div>
           )}
 
-          {/* User Profile Menu with Dropdown Sign Out */}
-          <div className="relative pl-3 ml-1 border-l border-[#E4E4E7]" ref={profileMenuRef}>
-            <button
-              type="button"
-              onClick={() => setProfileMenuOpen((prev) => !prev)}
-              aria-expanded={profileMenuOpen}
-              aria-haspopup="menu"
-              className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-zinc-100 transition-colors cursor-pointer select-none"
-            >
-              <div className="w-7 h-7 rounded-full bg-[#111111] text-white flex items-center justify-center text-xs font-bold shadow-xs">
-                {loggedInUserName ? loggedInUserName.slice(0, 2).toUpperCase() : 'AT'}
-              </div>
-              <div className="hidden sm:block text-left">
-                <div className="text-xs font-bold text-[#111111] leading-tight flex items-center gap-1">
-                  <span>{loggedInUserName || 'Aahan Thaker'}</span>
-                  <svg
-                    width="10"
-                    height="10"
-                    viewBox="0 0 16 16"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className={`text-zinc-500 transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`}
-                  >
-                    <path d="M4 6l4 4 4-4" />
-                  </svg>
-                </div>
-                <div className="text-[10px] text-[#71717A] capitalize font-medium">{userRole === 'agent' ? 'RM' : userRole}</div>
-              </div>
-            </button>
-
-            {/* Dropdown Menu */}
-            {profileMenuOpen && (
-              <div
-                className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-[#E4E4E7] py-1.5 z-50 text-left font-sans animate-in fade-in zoom-in-95 duration-100"
-                role="menu"
-              >
-                <div className="px-3.5 py-2 border-b border-[#F4F4F5]">
-                  <div className="text-xs font-bold text-[#111111]">{loggedInUserName || 'Aahan Thaker'}</div>
-                  {session?.user?.email && (
-                    <div className="text-[11px] text-[#71717A] truncate mt-0.5">{session.user.email}</div>
-                  )}
-                  <div className="mt-1.5">
-                    <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                      {userRole === 'agent' ? 'RM / Agent' : userRole === 'tl' ? 'Team Lead' : 'Administrator'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="p-1">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setProfileMenuOpen(false);
-                      signOut({ callbackUrl: '/login' });
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-semibold text-zinc-800 hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 16 16"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" />
-                    </svg>
-                    <span>Sign out</span>
-                  </button>
-                </div>
-              </div>
-            )}
+          <div className="flex items-center gap-1.5 ml-2">
+            <ThemeToggle />
+            <AccountMenu
+              name={loggedInUserName}
+              email={session?.user?.email ?? ''}
+              role={userRole}
+              roleLabel={userRole === 'agent' ? 'RM' : userRole === 'tl' ? 'Team Lead' : 'Admin'}
+            />
           </div>
         </div>
       </header>

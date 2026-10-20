@@ -74,9 +74,31 @@
           </select>
         </div>
 
-        <div class="flex items-center gap-2 pl-3 border-l border-[#E4E4E7]">
-          <div class="w-8 h-8 rounded-full bg-zinc-200 text-zinc-700 flex items-center justify-center font-bold text-xs">
-            <span id="user-avatar-text">AD</span>
+        <div class="flex items-center gap-1.5 pl-3 border-l border-[#E4E4E7]">
+          <!-- Moon Icon (Theme Toggle) -->
+          <button type="button" class="w-8 h-8 rounded-lg flex items-center justify-center text-[#71717A] hover:bg-zinc-100 transition-colors" title="Toggle theme">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          </button>
+
+          <!-- CX-Style Account Button -->
+          <div class="relative" id="prototype-profile-container">
+            <button type="button" onclick="toggleProtoProfileMenu(event)" class="inline-flex items-center gap-1.5 p-1 rounded-full hover:bg-zinc-100 transition-colors cursor-pointer select-none">
+              <span id="user-avatar-text" class="w-7 h-7 rounded-full bg-[#2d9e4f] text-white flex items-center justify-center font-bold text-xs shadow-2xs">S</span>
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" class="text-[#71717A]"><path d="M4 6l4 4 4-4" /></svg>
+            </button>
+
+            <!-- CX-Style Popover Menu -->
+            <div id="proto-profile-dropdown" class="hidden absolute right-0 top-full mt-2 w-60 bg-white rounded-xl shadow-xl border border-[#E4E4E7] p-1.5 z-50 text-left font-sans">
+              <div class="p-2.5 border-b border-[#E4E4E7] mb-1">
+                <div id="proto-user-name" class="text-sm font-semibold text-[#18181B]">Sivaranjini</div>
+                <div id="proto-user-email" class="text-xs text-[#71717A] mt-0.5">sivaranjini@wintwealth.com</div>
+                <span id="proto-user-role-badge" class="inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]">Admin</span>
+              </div>
+              <button type="button" onclick="alert('Signed out')" class="w-full flex items-center gap-2.5 px-2.5 py-2 text-sm text-[#18181B] hover:bg-zinc-100 rounded-lg transition-colors cursor-pointer text-left">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" /></svg>
+                <span>Sign out</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -1459,6 +1481,10 @@
 
       const tabCalls = document.getElementById('tab-calls');
       const tabTeam = document.getElementById('tab-team-analytics');
+      const protoName = document.getElementById('proto-user-name');
+      const protoEmail = document.getElementById('proto-user-email');
+      const protoBadge = document.getElementById('proto-user-role-badge');
+
       if (role === 'admin') {
         if (tabCalls) tabCalls.classList.add('hidden');
         if (tabTeam) tabTeam.classList.remove('hidden');
@@ -1466,7 +1492,10 @@
         thRm.classList.remove('hidden');
         agentFilterCont.classList.remove('hidden');
         document.getElementById('table-title').innerText = "Evaluated Call Audits";
-        avatarText.innerText = "AD";
+        avatarText.innerText = "S";
+        if (protoName) protoName.innerText = "Sivaranjini";
+        if (protoEmail) protoEmail.innerText = "sivaranjini@wintwealth.com";
+        if (protoBadge) { protoBadge.innerText = "Admin"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
       } else {
         if (tabCalls) tabCalls.classList.remove('hidden');
         if (tabTeam) tabTeam.classList.add('hidden');
@@ -1475,24 +1504,47 @@
           thRm.classList.add('hidden');
           agentFilterCont.classList.add('hidden');
           document.getElementById('table-title').innerText = "My Evaluated Calls (Aahan Thaker)";
-          avatarText.innerText = "AT";
+          avatarText.innerText = "A";
+          if (protoName) protoName.innerText = "Aahan Thaker";
+          if (protoEmail) protoEmail.innerText = "aahan.thaker@wintwealth.com";
+          if (protoBadge) { protoBadge.innerText = "RM"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
         } else if (role === 'tl_gokul') {
           setTab('calls');
           thRm.classList.remove('hidden');
           agentFilterCont.classList.remove('hidden');
           document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Gokul";
-          avatarText.innerText = "GK";
+          avatarText.innerText = "G";
+          if (protoName) protoName.innerText = "Gokul N";
+          if (protoEmail) protoEmail.innerText = "gokul@wintwealth.com";
+          if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
         } else if (role === 'tl_vaishnavi') {
           setTab('calls');
           thRm.classList.remove('hidden');
           agentFilterCont.classList.remove('hidden');
           document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Vaishnavi";
-          avatarText.innerText = "VN";
+          avatarText.innerText = "V";
+          if (protoName) protoName.innerText = "Vaishnavi S";
+          if (protoEmail) protoEmail.innerText = "vaishnavi@wintwealth.com";
+          if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
         }
       }
       populateMaAgentDropdown();
       renderTable();
     }
+
+    function toggleProtoProfileMenu(e) {
+      if (e) e.stopPropagation();
+      const menu = document.getElementById('proto-profile-dropdown');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      const container = document.getElementById('prototype-profile-container');
+      const menu = document.getElementById('proto-profile-dropdown');
+      if (menu && container && !container.contains(e.target)) {
+        menu.classList.add('hidden');
+      }
+    });
 
     function filterCategory(cat) {
       currentCategory = cat;
