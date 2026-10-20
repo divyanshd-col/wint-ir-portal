@@ -39,6 +39,7 @@ export interface CallEvalPanelProps {
   initialSegments?:  any[];
   initialRecordingUrl?: string | null;
   standalone?:       boolean;
+  hideShowChat?:     boolean;
   onOverrideSubmit?: (data: {
     callId: string;
     scores: Record<string, string>;
@@ -303,6 +304,7 @@ export default function CallEvalPanel({
   initialSegments,
   initialRecordingUrl,
   standalone = false,
+  hideShowChat = false,
   onOverrideSubmit,
 }: CallEvalPanelProps) {
   const [segments, setSegments] = useState<any[]>(initialSegments || []);
@@ -795,7 +797,7 @@ export default function CallEvalPanel({
             )}
           </h3>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {effectiveChatId && (
+            {!hideShowChat && effectiveChatId && (
               <a
                 href={`https://app.robylon.ai/unified-inbox/share/${effectiveChatId}`}
                 target="_blank"
@@ -1008,7 +1010,7 @@ export default function CallEvalPanel({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
-                {effectiveChatId && (
+                {!hideShowChat && effectiveChatId && (
                   <span
                     style={{
                       fontSize: 11,

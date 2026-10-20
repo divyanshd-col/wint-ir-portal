@@ -740,7 +740,7 @@ export default function PcgCallsClient() {
                       {isExpanded && activePersona === 'tl' && (
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
-                          chatId={call.clientName ? `${call.callId || call.id.slice(-6)}` : null}
+                          hideShowChat={true}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -876,7 +876,7 @@ export default function PcgCallsClient() {
                       {isExpanded && activePersona === 'tl' && (
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
-                          chatId={call.clientName ? `${call.callId || call.id.slice(-6)}` : null}
+                          hideShowChat={true}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -2045,7 +2045,7 @@ export default function PcgCallsClient() {
                         {isExpanded && activePersona === 'tl' && (
                           <CallEvalPanel
                             callId={formatCallId(call.callId, call.id)}
-                            chatId={call.clientName ? `${call.callId || call.id.slice(-6)}` : null}
+                            hideShowChat={true}
                             mobileNumber={call.phoneNumber}
                             agentName={call.rmName}
                             iqsScore={call.iqsScore}
@@ -2178,7 +2178,7 @@ export default function PcgCallsClient() {
                 <CallEvalPanel
                   standalone={true}
                   callId={formatCallId(activeCallAudit.callId, activeCallAudit.id)}
-                  chatId={activeCallAudit.clientName ? `${activeCallAudit.callId || activeCallAudit.id.slice(-6)}` : null}
+                  hideShowChat={true}
                   mobileNumber={activeCallAudit.phoneNumber}
                   agentName={activeCallAudit.rmName}
                   iqsScore={activeCallAudit.iqsScore}
