@@ -308,9 +308,9 @@ export default function PcgRmPerformanceDashboard({
                       style={{
                         fontSize: 11,
                         fontWeight: 600,
-                        color: '#047857',
-                        background: '#ecfdf5',
-                        border: '1px solid #a7f3d0',
+                        color: '#2563eb',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
                         borderRadius: 6,
                         padding: '2px 8px',
                         display: 'inline-flex',
@@ -321,12 +321,12 @@ export default function PcgRmPerformanceDashboard({
                         whiteSpace: 'nowrap',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#d1fae5';
-                        e.currentTarget.style.color = '#065f46';
+                        e.currentTarget.style.background = '#dbeafe';
+                        e.currentTarget.style.color = '#1d4ed8';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#ecfdf5';
-                        e.currentTarget.style.color = '#047857';
+                        e.currentTarget.style.background = '#eff6ff';
+                        e.currentTarget.style.color = '#2563eb';
                       }}
                     >
                       Show Scorecard →
@@ -420,9 +420,9 @@ export default function PcgRmPerformanceDashboard({
                         style={{
                           fontSize: 11,
                           fontWeight: 600,
-                          color: '#047857',
-                          background: '#ecfdf5',
-                          border: '1px solid #a7f3d0',
+                          color: '#2563eb',
+                          background: '#eff6ff',
+                          border: '1px solid #bfdbfe',
                           borderRadius: 6,
                           padding: '2px 8px',
                           display: 'inline-flex',
@@ -433,12 +433,12 @@ export default function PcgRmPerformanceDashboard({
                           whiteSpace: 'nowrap',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#d1fae5';
-                          e.currentTarget.style.color = '#065f46';
+                          e.currentTarget.style.background = '#dbeafe';
+                          e.currentTarget.style.color = '#1d4ed8';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = '#ecfdf5';
-                          e.currentTarget.style.color = '#047857';
+                          e.currentTarget.style.background = '#eff6ff';
+                          e.currentTarget.style.color = '#2563eb';
                         }}
                       >
                         Show Scorecard →
@@ -522,9 +522,9 @@ export default function PcgRmPerformanceDashboard({
                       style={{
                         fontSize: 11,
                         fontWeight: 600,
-                        color: '#047857',
-                        background: '#ecfdf5',
-                        border: '1px solid #a7f3d0',
+                        color: '#2563eb',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
                         borderRadius: 6,
                         padding: '2px 8px',
                         display: 'inline-flex',
@@ -535,12 +535,12 @@ export default function PcgRmPerformanceDashboard({
                         whiteSpace: 'nowrap',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#d1fae5';
-                        e.currentTarget.style.color = '#065f46';
+                        e.currentTarget.style.background = '#dbeafe';
+                        e.currentTarget.style.color = '#1d4ed8';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#ecfdf5';
-                        e.currentTarget.style.color = '#047857';
+                        e.currentTarget.style.background = '#eff6ff';
+                        e.currentTarget.style.color = '#2563eb';
                       }}
                     >
                       Show Scorecard →
