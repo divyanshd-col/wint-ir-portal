@@ -541,9 +541,9 @@ export default function PcgCallsClient() {
   };
 
   const getScoreBadge = (score: number) => {
-    if (!score) return <span className="text-zinc-400 font-mono text-xs">—</span>;
+    if (!score) return <span className="text-zinc-400 text-xs tabular-nums">—</span>;
     return (
-      <span className="inline-flex items-center justify-center font-mono font-bold text-xs px-2.5 py-0.5 rounded-md border border-zinc-200 bg-zinc-100 text-zinc-900">
+      <span className="inline-flex items-center justify-center font-bold text-xs px-2.5 py-0.5 rounded-md border border-zinc-200 bg-zinc-100 text-zinc-900 tabular-nums">
         {score}%
       </span>
     );
@@ -763,7 +763,7 @@ export default function PcgCallsClient() {
                               target="_blank"
                               rel="noopener noreferrer"
                               title={`Open in Runo CRM`}
-                              className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
+                              className="inline-flex items-center gap-1 font-bold tabular-nums text-zinc-900 hover:text-black hover:underline group cursor-pointer"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span>#{formatCallId(call.callId, call.id)}</span>
@@ -785,7 +785,7 @@ export default function PcgCallsClient() {
                           {activePersona === 'agent' ? (
                             <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
                           ) : (
-                            <span className="font-mono text-zinc-600 font-normal">{call.phoneNumber}</span>
+                            <span className="tabular-nums text-zinc-600 font-normal">{call.phoneNumber}</span>
                           )}
                         </td>
                         <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
@@ -899,7 +899,7 @@ export default function PcgCallsClient() {
                               target="_blank"
                               rel="noopener noreferrer"
                               title={`Open in Runo CRM`}
-                              className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
+                              className="inline-flex items-center gap-1 font-bold tabular-nums text-zinc-900 hover:text-black hover:underline group cursor-pointer"
                               onClick={(e) => e.stopPropagation()}
                             >
                               <span>#{formatCallId(call.callId, call.id)}</span>
@@ -921,7 +921,7 @@ export default function PcgCallsClient() {
                           {activePersona === 'agent' ? (
                             <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
                           ) : (
-                            <span className="font-mono text-zinc-600 font-normal">{call.phoneNumber}</span>
+                            <span className="tabular-nums text-zinc-600 font-normal">{call.phoneNumber}</span>
                           )}
                         </td>
                         <td className="py-3 px-4">{getScoreBadge(call.iqsScore)}</td>
@@ -1017,14 +1017,14 @@ export default function PcgCallsClient() {
                   type="date"
                   value={customStartDate}
                   onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="text-xs font-mono bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
+                  className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
                 />
                 <span className="text-xs text-[#71717A] font-medium">to</span>
                 <input
                   type="date"
                   value={customEndDate}
                   onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="text-xs font-mono bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
+                  className="text-xs tabular-nums font-medium bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
                 />
               </div>
             )}
@@ -1472,17 +1472,17 @@ export default function PcgCallsClient() {
                     {teamRmScorecards.map((rm) => (
                       <tr key={rm.rmName} className="hover:bg-gray-50/50 transition-colors">
                         <td className="py-3 px-4 font-bold text-gray-900 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-800 flex items-center justify-center font-mono text-[11px]">
+                          <span className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-800 flex items-center justify-center font-bold text-[11px]">
                             {rm.rmName.charAt(0)}
                           </span>
                           <span>{rm.rmName}</span>
                         </td>
-                        <td className="py-3 px-4 text-right font-mono font-medium">{rm.totalCalls}</td>
-                        <td className="py-3 px-4 text-right font-mono">{rm.connectRate}%</td>
+                        <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">{rm.totalCalls}</td>
+                        <td className="py-3 px-4 text-right tabular-nums font-medium text-gray-800">{rm.connectRate}%</td>
                         <td className="py-3 px-4 text-right">
                           {getScoreBadge(rm.overallScore)}
                         </td>
-                        <td className="py-3 px-4 text-center font-mono">
+                        <td className="py-3 px-4 text-center tabular-nums">
                           {rm.complianceFlags > 0 ? (
                             <span className="text-zinc-900 font-bold">{rm.complianceFlags} Flags</span>
                           ) : (
@@ -1648,7 +1648,7 @@ export default function PcgCallsClient() {
                           onClick={() => { setSelectedRm(rm.rmName); setActiveTab('scorecard'); }}
                           className="bg-white rounded-2xl border border-zinc-200 hover:border-zinc-400 hover:shadow-md transition-all p-4 flex items-start gap-3 cursor-pointer group"
                         >
-                          <div className="w-12 h-12 rounded-full border border-zinc-300 bg-zinc-50 flex items-center justify-center font-mono font-bold text-xs text-zinc-900 shrink-0">
+                          <div className="w-12 h-12 rounded-full border border-zinc-300 bg-zinc-50 flex items-center justify-center font-bold text-xs text-zinc-900 shrink-0 tabular-nums">
                             {rm.overallScore}%
                           </div>
                           <div className="min-w-0 flex-1">
@@ -1660,7 +1660,7 @@ export default function PcgCallsClient() {
                                 Team {tlAssignment}
                               </span>
                             </div>
-                            <p className="text-xs text-zinc-500 mt-0.5">{rm.totalCalls} calls • {rm.connectRate}% connect</p>
+                            <p className="text-xs text-zinc-500 mt-0.5 tabular-nums">{rm.totalCalls} calls • {rm.connectRate}% connect</p>
                             <p className="text-[11px] text-zinc-700 font-medium truncate mt-1">
                               Focus: {rm.topWeakness}
                             </p>
@@ -1698,7 +1698,7 @@ export default function PcgCallsClient() {
                     <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600 block">
                       Team Members Coached
                     </span>
-                    <div className="text-2xl font-black font-mono text-gray-900">9 / 9 RMs</div>
+                    <div className="text-2xl font-bold tabular-nums text-gray-900">9 / 9 RMs</div>
                     <div className="pt-1">
                       <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-900">
                         ✓ Full Team Coverage
@@ -1710,7 +1710,7 @@ export default function PcgCallsClient() {
                     <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-500 block">
                       Total AI Coaching Insights
                     </span>
-                    <div className="text-2xl font-black font-mono text-gray-900">54 Insights</div>
+                    <div className="text-2xl font-bold tabular-nums text-gray-900">54 Insights</div>
                     <div className="pt-1">
                       <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-800">
                         Auto-Generated in Realtime
@@ -1722,7 +1722,7 @@ export default function PcgCallsClient() {
                     <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600 block">
                       Score Improvement
                     </span>
-                    <div className="text-2xl font-black font-mono text-zinc-900">+6.8% IQS</div>
+                    <div className="text-2xl font-bold tabular-nums text-zinc-900">+6.8% IQS</div>
                     <div className="pt-1">
                       <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-900">
                         ▲ Upward Rebound
@@ -1734,7 +1734,7 @@ export default function PcgCallsClient() {
                     <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-600 block">
                       Safe Pitch Compliance
                     </span>
-                    <div className="text-2xl font-black font-mono text-zinc-900">94.2%</div>
+                    <div className="text-2xl font-bold tabular-nums text-zinc-900">94.2%</div>
                     <div className="pt-1">
                       <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-200 text-zinc-900">
                         SEBI Risk Guarded
@@ -1870,7 +1870,7 @@ export default function PcgCallsClient() {
                             <p className="text-[11px] text-gray-600 mt-0.5">{rm.skill}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="text-xs font-mono font-bold text-zinc-900 block">{rm.now} IQS</span>
+                            <span className="text-xs font-bold tabular-nums text-zinc-900 block">{rm.now} IQS</span>
                             <button
                               onClick={() => { setSelectedRm(rm.name); handleTabChange('scorecard'); }}
                               className="text-[11px] text-zinc-800 hover:text-black font-bold underline mt-0.5 cursor-pointer"
@@ -1915,7 +1915,7 @@ export default function PcgCallsClient() {
                             <p className="text-[11px] text-zinc-600 mt-0.5">{rm.focus}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <span className="text-xs font-mono font-bold text-zinc-900 block">{rm.current} IQS</span>
+                            <span className="text-xs font-bold tabular-nums text-zinc-900 block">{rm.current} IQS</span>
                             <button
                               onClick={() => handleOpenCoachingChat({ rmName: rm.name })}
                               className="text-[11px] text-zinc-800 hover:text-black font-bold underline mt-0.5 cursor-pointer"
@@ -2241,7 +2241,7 @@ export default function PcgCallsClient() {
                     target="_blank"
                     rel="noopener noreferrer"
                     title="Open in Runo CRM"
-                    className="inline-flex items-center gap-1.5 font-mono font-bold text-base text-[#111111] hover:text-black hover:underline group cursor-pointer"
+                    className="inline-flex items-center gap-1.5 font-bold tabular-nums text-base text-[#111111] hover:text-black hover:underline group cursor-pointer"
                   >
                     <span>Call #{formatCallId(activeCallAudit.callId, activeCallAudit.id)}</span>
                     <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2262,10 +2262,10 @@ export default function PcgCallsClient() {
                   RM: <span className="font-semibold text-zinc-900">{activeCallAudit.rmName}</span> ({activeCallAudit.tlName})
                 </span>
                 {activePersona !== 'agent' && (
-                  <span className="text-xs font-mono text-zinc-500">• {activeCallAudit.phoneNumber}</span>
+                  <span className="text-xs tabular-nums text-zinc-500">• {activeCallAudit.phoneNumber}</span>
                 )}
                 {activePersona !== 'agent' && (
-                  <span className="text-xs font-mono text-zinc-500">• {activeCallAudit.isAnswered ? formatDuration(activeCallAudit.durationSeconds) : 'Unanswered (00:00)'}</span>
+                  <span className="text-xs tabular-nums text-zinc-500">• {activeCallAudit.isAnswered ? formatDuration(activeCallAudit.durationSeconds) : 'Unanswered (00:00)'}</span>
                 )}
               </div>
 
@@ -2418,7 +2418,7 @@ export default function PcgCallsClient() {
                                   </span>
                                 )}
                               </div>
-                              <span className="font-mono text-[10px] text-zinc-400">{turn.time}</span>
+                              <span className="tabular-nums text-[10px] text-zinc-400">{turn.time}</span>
                             </div>
                             <p className="text-zinc-900 leading-relaxed">{turn.text}</p>
                           </div>
@@ -2427,15 +2427,15 @@ export default function PcgCallsClient() {
                     </div>
                   ) : (
                     <div className="space-y-2 text-xs">
-                      <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between font-mono">
+                      <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between tabular-nums">
                         <span>[00:00] Runo / Exotel outbound dial initiated to {activeCallAudit.phoneNumber}</span>
                         <span className="text-zinc-400">Initiated</span>
                       </div>
-                      <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between font-mono">
+                      <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between tabular-nums">
                         <span>[00:04] Customer handset ringing</span>
                         <span className="text-zinc-400">Ringing</span>
                       </div>
-                      <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 flex items-center justify-between font-mono text-zinc-900 font-semibold">
+                      <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 flex items-center justify-between tabular-nums text-zinc-900 font-semibold">
                         <span>[00:26] Call disconnected: {activeCallAudit.unansweredReason}</span>
                         <span className="text-zinc-600">Timeout / Hangup</span>
                       </div>
@@ -2453,7 +2453,7 @@ export default function PcgCallsClient() {
                       {activeCallAudit.category} Parameters
                     </h4>
                     {activeCallAudit.isAnswered && (
-                      <span className="text-xs font-mono font-bold">{getScoreBadge(activeCallAudit.iqsScore)}</span>
+                      <span className="text-xs font-bold tabular-nums">{getScoreBadge(activeCallAudit.iqsScore)}</span>
                     )}
                   </div>
                   {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
