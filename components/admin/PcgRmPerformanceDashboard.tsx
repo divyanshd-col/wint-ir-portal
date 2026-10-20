@@ -295,13 +295,42 @@ export default function PcgRmPerformanceDashboard({
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
                       {rm.currentIqs}%
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: '#047857' }}>
-                      IQS Score
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenScorecard && onOpenScorecard(rm.name);
+                      }}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: '#2563eb',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: 6,
+                        padding: '2px 8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#dbeafe';
+                        e.currentTarget.style.color = '#1d4ed8';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#eff6ff';
+                        e.currentTarget.style.color = '#2563eb';
+                      }}
+                    >
+                      Show Scorecard →
+                    </button>
                   </div>
                 </div>
               );
@@ -378,10 +407,42 @@ export default function PcgRmPerformanceDashboard({
                       </div>
                     </div>
 
-                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                       <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#b91c1c' }}>
                         {rm.currentIqs}%
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenScorecard && onOpenScorecard(rm.name);
+                        }}
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: '#2563eb',
+                          background: '#eff6ff',
+                          border: '1px solid #bfdbfe',
+                          borderRadius: 6,
+                          padding: '2px 8px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 3,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                          whiteSpace: 'nowrap',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = '#dbeafe';
+                          e.currentTarget.style.color = '#1d4ed8';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = '#eff6ff';
+                          e.currentTarget.style.color = '#2563eb';
+                        }}
+                      >
+                        Show Scorecard →
+                      </button>
                     </div>
                   </div>
                 );
@@ -447,14 +508,43 @@ export default function PcgRmPerformanceDashboard({
                     </div>
                   </div>
 
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: isPositive ? '#16a34a' : '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
                       <span>{isPositive ? '↑' : '↓'}</span>
                       <span>{isPositive ? `+${rm.delta2Wk.toFixed(1)}%` : `${rm.delta2Wk.toFixed(1)}%`}</span>
                     </div>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a' }}>
-                      2-Wk Rolling Diff
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenScorecard && onOpenScorecard(rm.name);
+                      }}
+                      style={{
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: '#2563eb',
+                        background: '#eff6ff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: 6,
+                        padding: '2px 8px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        whiteSpace: 'nowrap',
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = '#dbeafe';
+                        e.currentTarget.style.color = '#1d4ed8';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = '#eff6ff';
+                        e.currentTarget.style.color = '#2563eb';
+                      }}
+                    >
+                      Show Scorecard →
+                    </button>
                   </div>
                 </div>
               );

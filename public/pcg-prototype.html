@@ -1540,6 +1540,9 @@
       if (tab === 'member-analytics') {
         populateMaAgentDropdown();
       }
+      if (tab === 'scorecard') {
+        renderScorecardTable();
+      }
     }
 
     let taCurrentChannel = 'calls';
@@ -1893,9 +1896,11 @@
                 <div class="text-[11px] text-[#71717A] mt-0.5 truncate">${rm.calls} calls · ${rm.csat} CSAT</div>
               </div>
             </div>
-            <div class="text-right shrink-0">
+            <div class="text-right shrink-0 flex flex-col items-end gap-1">
               <div class="text-base font-bold font-mono text-emerald-600">${rm.currentIqs}%</div>
-              <span class="text-[10px] font-semibold text-emerald-700">IQS Score</span>
+              <button onclick="event.stopPropagation(); openScorecardFor('${rm.name}')" class="px-2 py-0.5 rounded text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1">
+                Show Scorecard →
+              </button>
             </div>
           </div>
         `).join('');
@@ -1929,8 +1934,11 @@
                     <div class="text-[11px] text-red-700 font-medium mt-0.5 truncate">Focus: ${rm.focusArea}</div>
                   </div>
                 </div>
-                <div class="text-right shrink-0">
+                <div class="text-right shrink-0 flex flex-col items-end gap-1">
                   <div class="text-base font-bold font-mono text-red-600">${rm.currentIqs}%</div>
+                  <button onclick="event.stopPropagation(); openScorecardFor('${rm.name}')" class="px-2 py-0.5 rounded text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1">
+                    Show Scorecard →
+                  </button>
                 </div>
               </div>
             `;
@@ -1958,16 +1966,68 @@
                   <div class="text-[11px] text-[#71717A] mt-0.5 truncate">${rm.prev2WkIqs}% → <strong class="text-[#18181B]">${rm.currentIqs}%</strong></div>
                 </div>
               </div>
-              <div class="text-right shrink-0">
+              <div class="text-right shrink-0 flex flex-col items-end gap-1">
                 <div class="text-base font-bold font-mono ${isPositive ? 'text-emerald-600' : 'text-red-600'} flex items-center justify-end gap-1">
                   <span>${isPositive ? '↑' : '↓'}</span>
                   <span>${isPositive ? `+${rm.delta2Wk.toFixed(1)}%` : `${rm.delta2Wk.toFixed(1)}%`}</span>
                 </div>
-                <span class="text-[10px] font-semibold text-[#71717A]">2-Wk Rolling Diff</span>
+                <button onclick="event.stopPropagation(); openScorecardFor('${rm.name}')" class="px-2 py-0.5 rounded text-[11px] font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 hover:text-blue-800 border border-blue-200 transition-colors cursor-pointer inline-flex items-center gap-1">
+                  Show Scorecard →
+                </button>
               </div>
             </div>
           `;
         }).join('');
+      }
+    }
+
+    const PCG_WEEKLY_SCORECARDS = [
+      { name: 'Yaashvi Arora', tl: 'Gokul', calls: 68, connect: '74%', pitch: '96%', upsell: '92%', overall: '94.2%', trend: '+2.4%' },
+      { name: 'Aditya R', tl: 'Gokul', calls: 72, connect: '72%', pitch: '95%', upsell: '91%', overall: '93.5%', trend: '+4.5%' },
+      { name: 'Aahan Thaker', tl: 'Gokul', calls: 74, connect: '70%', pitch: '93%', upsell: '89%', overall: '91.5%', trend: '+4.0%' },
+      { name: 'Aravind', tl: 'Vaishnavi', calls: 62, connect: '68%', pitch: '91%', upsell: '88%', overall: '89.8%', trend: '+3.2%' },
+      { name: 'Dhanush', tl: 'Gokul', calls: 58, connect: '66%', pitch: '90%', upsell: '86%', overall: '88.2%', trend: '+5.1%' },
+      { name: 'Sujal Dadwani', tl: 'Vaishnavi', calls: 56, connect: '65%', pitch: '89%', upsell: '84%', overall: '87.0%', trend: '+6.8%' },
+      { name: 'Samskriti Rao', tl: 'Gokul', calls: 52, connect: '63%', pitch: '87%', upsell: '83%', overall: '85.4%', trend: '+5.8%' },
+      { name: 'Antara Chakrabarty', tl: 'Vaishnavi', calls: 50, connect: '62%', pitch: '86%', upsell: '82%', overall: '84.2%', trend: '+1.8%' },
+      { name: 'Swati Singh', tl: 'Vaishnavi', calls: 56, connect: '61%', pitch: '72%', upsell: '67%', overall: '69.5%', trend: '-2.5%' },
+      { name: 'Gaurav Nautiyal', tl: 'Gokul', calls: 44, connect: '60%', pitch: '70%', upsell: '65%', overall: '68.0%', trend: '-3.5%' }
+    ];
+
+    function openScorecardFor(rmName) {
+      setTab('scorecard');
+      renderScorecardTable(rmName);
+    }
+
+    function renderScorecardTable(highlightRm = null) {
+      const tbody = document.getElementById('scorecard-table-body');
+      if (!tbody) return;
+      tbody.innerHTML = PCG_WEEKLY_SCORECARDS.map((sc, idx) => {
+        const isHighlighted = highlightRm && sc.name.toLowerCase() === highlightRm.toLowerCase();
+        const isPositive = !sc.trend.startsWith('-');
+        return `
+          <tr id="sc-row-${sc.name.replace(/\\s+/g, '-')}" class="transition-colors ${isHighlighted ? 'bg-blue-50/80 font-medium' : 'hover:bg-zinc-50'}">
+            <td class="py-3 px-4 font-bold ${idx < 3 ? 'text-amber-600' : 'text-zinc-500'}">#${idx + 1}</td>
+            <td class="py-3 px-4 font-semibold text-[#18181B] flex items-center gap-2">
+              <span>${sc.name}</span>
+              ${isHighlighted ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600 text-white">Selected Scorecard</span>' : ''}
+            </td>
+            <td class="py-3 px-4 text-zinc-600">Team ${sc.tl}</td>
+            <td class="py-3 px-4 font-mono">${sc.calls}</td>
+            <td class="py-3 px-4 font-mono">${sc.connect}</td>
+            <td class="py-3 px-4 font-mono">${sc.pitch}</td>
+            <td class="py-3 px-4 font-mono">${sc.upsell}</td>
+            <td class="py-3 px-4 font-bold font-mono ${parseFloat(sc.overall) >= 85 ? 'text-emerald-600' : parseFloat(sc.overall) <= 70 ? 'text-red-600' : 'text-zinc-700'}">${sc.overall}</td>
+            <td class="py-3 px-4 font-bold font-mono ${isPositive ? 'text-emerald-600' : 'text-red-600'}">${isPositive ? '↑ ' : '↓ '}${sc.trend}</td>
+          </tr>
+        `;
+      }).join('');
+
+      if (highlightRm) {
+        setTimeout(() => {
+          const el = document.getElementById(`sc-row-${highlightRm.replace(/\\s+/g, '-')}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
       }
     }
 

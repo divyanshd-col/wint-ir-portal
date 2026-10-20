@@ -484,6 +484,333 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       },
     ],
   },
+  // ── YAASHVI ARORA (PCG RM) ───────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-yaashvi-w1',
+    rmName: 'Yaashvi Arora',
+    tlName: 'Gokul',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 34,
+      averageScore: 94.2,
+      below85Count: 1,
+      csatText: '94% positive (16 of 17 rated good)',
+      connectRateText: '74% connect rate',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Yaashvi excelled in Pitch Clarity & Senior Secured Backing, consistently framing indicative yield and liquidity disclaimers with flawless precision.',
+    themes: [
+      {
+        pattern: 'Occasional delay in sending post-call summary message within 15 minutes of call end',
+        associatedParameters: ['Post-Call Recap & Follow-Through'],
+        whyItMatters:
+          'Prompt recap messages maintain investor confidence and document key discussions on lock-in periods.',
+        actionable:
+          'Use template recap messages immediately after wrapping the call to ensure 100% timely follow-through.',
+        isBreach: false,
+        rankScore: 88,
+        backingCallIds: ['176012'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '176012',
+        score: 84,
+        topic: '12.5% Senior Secured Bond Allocation',
+        summary: 'Excellent investment framing; recap message delivered 45 minutes after call end instead of standard 15-min SLA.',
+      },
+    ],
+  },
+  // ── GAURAV NAUTIYAL (PCG RM) ─────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-gaurav-w1',
+    rmName: 'Gaurav Nautiyal',
+    tlName: 'Gokul',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 22,
+      averageScore: 68.0,
+      below85Count: 9,
+      csatText: '83.5% positive',
+      connectRateText: '60% connect rate',
+      complianceBreachesCount: 1,
+    },
+    whatWentWell:
+      'Gaurav maintained a polite and professional tone and answered basic TDS and Form 15G submission queries accurately.',
+    themes: [
+      {
+        pattern: 'Missing Mandatory Senior Secured Risk Disclosures & Secondary Window Caveats',
+        associatedParameters: ['Pitch Clarity & Senior Secured Backing', 'Secondary Liquidity Window Framing'],
+        whyItMatters:
+          'Investors must explicitly hear risk parameters and understand that secondary windows depend on buyer availability.',
+        actionable:
+          'Mandatory adherence to the 3-step PCG disclosure protocol before proceeding with investment link generation.',
+        isBreach: true,
+        rankScore: 64,
+        backingCallIds: ['175440', '175210'],
+      },
+    ],
+    breaches: [
+      {
+        callId: '175440',
+        score: 65,
+        flaggedContent: 'You can withdraw anytime you like at 100% par value without buyer matching caveats.',
+        note: 'Coaching assigned: reinforce that secondary sales are matched trades.',
+      },
+    ],
+    evidence: [
+      {
+        callId: '175440',
+        score: 65,
+        topic: 'Early Exit Inquiry on 11.8% NBFC Bond',
+        summary: 'Promised unconditional early redemption without citing secondary liquidity market dependence.',
+      },
+      {
+        callId: '175210',
+        score: 68,
+        topic: 'Portfolio Reinvestment Call',
+        summary: 'Skipped asset allocation discovery questions and jumped straight into product pitch.',
+      },
+    ],
+  },
+  // ── SWATI SINGH (PCG RM) ─────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-swati-w1',
+    rmName: 'Swati Singh',
+    tlName: 'Vaishnavi',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 26,
+      averageScore: 69.5,
+      below85Count: 8,
+      csatText: '84.0% positive',
+      connectRateText: '61% connect rate',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Swati was responsive and patient when explaining monthly interest payout dates to retail bondholders.',
+    themes: [
+      {
+        pattern: 'Talking Over Investor Objections & Incomplete Demat Linking Clarifications',
+        associatedParameters: ['Active Listening & Objection Handling', 'Demat Linking & Account Verification'],
+        whyItMatters:
+          'Active listening builds trust with High Net Worth investors who require detailed reassurance on custody security.',
+        actionable:
+          'Pause 2 seconds when investor raises concerns; use reflective questioning before presenting solutions.',
+        isBreach: false,
+        rankScore: 67,
+        backingCallIds: ['175330', '174990'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '175330',
+        score: 67,
+        topic: 'Demat Custody Safety Inquiry',
+        summary: 'Interrupted customer twice during safety objection; omitted depository participant explanation.',
+      },
+      {
+        callId: '174990',
+        score: 70,
+        topic: 'Bond Transfer from External Broker',
+        summary: 'Gave vague timeline on CMR copy verification SLA.',
+      },
+    ],
+  },
+  // ── SUJAL DADWANI (PCG RM) ───────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-sujal-w1',
+    rmName: 'Sujal Dadwani',
+    tlName: 'Vaishnavi',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 28,
+      averageScore: 87.0,
+      below85Count: 3,
+      csatText: '86.5% positive',
+      connectRateText: '65% connect rate',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Sujal made remarkable improvements (+6.8% over two weeks), showing substantial mastery of Monthly Interest Payout timeline disclosures.',
+    themes: [
+      {
+        pattern: 'Occasional hesitation in framing credit rating upgrade implications',
+        associatedParameters: ['Pitch Clarity & Senior Secured Backing'],
+        whyItMatters:
+          'Accurately articulating rating rationale (e.g. CRISIL AA-) enhances investor confidence in yield spreads.',
+        actionable:
+          'Review issuer credit rating tear-sheets on Monday morning before investor calls.',
+        isBreach: false,
+        rankScore: 84,
+        backingCallIds: ['175120'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '175120',
+        score: 83,
+        topic: 'CRISIL AA- Rated Issuer Inquiry',
+        summary: 'Solid presentation; slight hesitation when explaining rating agency watch status.',
+      },
+    ],
+  },
+  // ── SAMSKRITI RAO (PCG RM) ───────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-samskriti-w1',
+    rmName: 'Samskriti Rao',
+    tlName: 'Gokul',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 26,
+      averageScore: 85.4,
+      below85Count: 4,
+      csatText: '85.0% positive',
+      connectRateText: '63% connect rate',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Samskriti significantly improved her Secondary Liquidity Window framing (+5.8% 2-wk rolling delta).',
+    themes: [
+      {
+        pattern: 'Pacing during complex tax calculation walk-throughs',
+        associatedParameters: ['TDS & Form 15G Compliance'],
+        whyItMatters:
+          'Explaining 10% TDS vs nil deduction with Form 15G requires measured pacing to prevent confusion.',
+        actionable:
+          'Slow down speech rate and verify comprehension after explaining net post-tax return comparisons.',
+        isBreach: false,
+        rankScore: 83,
+        backingCallIds: ['175050'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '175050',
+        score: 82,
+        topic: 'Form 15G and Senior Citizen Tax Exemption',
+        summary: 'Rushed through TDS threshold numbers; investor requested repetition.',
+      },
+    ],
+  },
+  // ── ARAVIND (PCG RM) ─────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-aravind-w1',
+    rmName: 'Aravind',
+    tlName: 'Vaishnavi',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 31,
+      averageScore: 89.8,
+      below85Count: 2,
+      csatText: '90.0% positive',
+      connectRateText: '68% connect rate',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Aravind demonstrated outstanding demat linking walk-throughs and clear account verification guidance.',
+    themes: [
+      {
+        pattern: 'Opportunities to expand portfolio allocation sizing for ultra-HNW callers',
+        associatedParameters: ['Asset Allocation Need Discovery'],
+        whyItMatters:
+          'Investors with >₹50L debt capital benefit from structured allocation across multiple credit tiers.',
+        actionable:
+          'Ask proactive questions regarding existing FD maturity calendar to recommend multi-asset laddering.',
+        isBreach: false,
+        rankScore: 86,
+        backingCallIds: ['175290'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '175290',
+        score: 85,
+        topic: '₹1Cr Allocation Consultation',
+        summary: 'Excellent demat explanation; missed discovery on cash reserve timing.',
+      },
+    ],
+  },
+  // ── ANTARA CHAKRABARTY (PCG RM) ──────────────────────────────────────────────
+  {
+    id: 'pcg-rep-antara-w1',
+    rmName: 'Antara Chakrabarty',
+    tlName: 'Vaishnavi',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 25,
+      averageScore: 84.2,
+      below85Count: 4,
+      csatText: '84.5% positive',
+      connectRateText: '62% connect rate',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Antara demonstrated consistent warm rapport and strong adherence to greeting and compliance standards.',
+    themes: [
+      {
+        pattern: 'Consistency in following up with written WhatsApp recap summaries',
+        associatedParameters: ['Post-Call Recap & Follow-Through'],
+        whyItMatters:
+          'High net worth investors prioritize documented confirmation of coupon payout frequency.',
+        actionable:
+          'Ensure immediate dispatch of standard summary sheet post call.',
+        isBreach: false,
+        rankScore: 82,
+        backingCallIds: ['174910'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '174910',
+        score: 81,
+        topic: 'Quarterly Coupon Payment Schedule',
+        summary: 'Good verbal explanation; delayed recap communication.',
+      },
+    ],
+  },
 ];
 
 interface Props {
@@ -514,16 +841,16 @@ export default function PcgScorecardView({
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Synchronize persona selection with active report
+  // Synchronize selection with active report
   React.useEffect(() => {
-    if (activePersona === 'agent' && selectedRm) {
+    if (selectedRm) {
       const match = reports.find((r) => r.rmName.toLowerCase() === selectedRm.toLowerCase());
       if (match) {
         setActiveReportId(match.id);
         setSelectedAgentFilter(match.rmName);
       }
     }
-  }, [activePersona, selectedRm]);
+  }, [activePersona, selectedRm, reports]);
 
   const activeReport = reports.find((r) => r.id === activeReportId) || reports[0];
 
