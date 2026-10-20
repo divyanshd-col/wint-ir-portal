@@ -1481,6 +1481,8 @@
 
       const tabCalls = document.getElementById('tab-calls');
       const tabTeam = document.getElementById('tab-team-analytics');
+      const tabMember = document.getElementById('tab-member-analytics');
+      const tabRmPerf = document.getElementById('tab-rm-performance');
       const protoName = document.getElementById('proto-user-name');
       const protoEmail = document.getElementById('proto-user-email');
       const protoBadge = document.getElementById('proto-user-role-badge');
@@ -1488,6 +1490,8 @@
       if (role === 'admin') {
         if (tabCalls) tabCalls.classList.add('hidden');
         if (tabTeam) tabTeam.classList.remove('hidden');
+        if (tabMember) tabMember.classList.remove('hidden');
+        if (tabRmPerf) tabRmPerf.classList.remove('hidden');
         setTab('team-analytics');
         thRm.classList.remove('hidden');
         agentFilterCont.classList.remove('hidden');
@@ -1500,6 +1504,8 @@
         if (tabCalls) tabCalls.classList.remove('hidden');
         if (tabTeam) tabTeam.classList.add('hidden');
         if (role === 'agent') {
+          if (tabMember) tabMember.classList.add('hidden');
+          if (tabRmPerf) tabRmPerf.classList.add('hidden');
           setTab('calls');
           thRm.classList.add('hidden');
           agentFilterCont.classList.add('hidden');
@@ -1508,24 +1514,28 @@
           if (protoName) protoName.innerText = "Aahan Thaker";
           if (protoEmail) protoEmail.innerText = "aahan.thaker@wintwealth.com";
           if (protoBadge) { protoBadge.innerText = "RM"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
-        } else if (role === 'tl_gokul') {
-          setTab('calls');
-          thRm.classList.remove('hidden');
-          agentFilterCont.classList.remove('hidden');
-          document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Gokul";
-          avatarText.innerText = "G";
-          if (protoName) protoName.innerText = "Gokul N";
-          if (protoEmail) protoEmail.innerText = "gokul@wintwealth.com";
-          if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
-        } else if (role === 'tl_vaishnavi') {
-          setTab('calls');
-          thRm.classList.remove('hidden');
-          agentFilterCont.classList.remove('hidden');
-          document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Vaishnavi";
-          avatarText.innerText = "V";
-          if (protoName) protoName.innerText = "Vaishnavi S";
-          if (protoEmail) protoEmail.innerText = "vaishnavi@wintwealth.com";
-          if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
+        } else {
+          if (tabMember) tabMember.classList.remove('hidden');
+          if (tabRmPerf) tabRmPerf.classList.remove('hidden');
+          if (role === 'tl_gokul') {
+            setTab('calls');
+            thRm.classList.remove('hidden');
+            agentFilterCont.classList.remove('hidden');
+            document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Gokul";
+            avatarText.innerText = "G";
+            if (protoName) protoName.innerText = "Gokul N";
+            if (protoEmail) protoEmail.innerText = "gokul@wintwealth.com";
+            if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
+          } else if (role === 'tl_vaishnavi') {
+            setTab('calls');
+            thRm.classList.remove('hidden');
+            agentFilterCont.classList.remove('hidden');
+            document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Vaishnavi";
+            avatarText.innerText = "V";
+            if (protoName) protoName.innerText = "Vaishnavi S";
+            if (protoEmail) protoEmail.innerText = "vaishnavi@wintwealth.com";
+            if (protoBadge) { protoBadge.innerText = "Team Lead"; protoBadge.className = "inline-block mt-2 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#eaf6ee] text-[#1f7436]"; }
+          }
         }
       }
       populateMaAgentDropdown();
