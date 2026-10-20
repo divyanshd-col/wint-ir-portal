@@ -708,91 +708,52 @@ export default function PcgCallsClient() {
   );
 
   return (
-    <div className="min-h-screen bg-[#FAFAFB] text-[#111111] pb-24 font-sans">
-      {/* ── TOP PERSONA SWITCHER HEADER ────────────────────────────────────── */}
-      <div className="bg-white border-b border-[#E4E4E7] px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+    <div className="min-h-screen bg-[#FAFAFB] text-[#111111] flex flex-col font-sans">
+      {/* ── TOP HEADER (GLOBAL) ─────────────────────────────────────────── */}
+      <header className="bg-white border-b border-[#E4E4E7] px-6 py-3.5 sticky top-0 z-30 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-[#111111] flex items-center justify-center text-white font-bold text-sm">
             W
           </div>
           <div>
-            <h1 className="text-base font-bold text-[#111111] leading-none">PCG Call Quality Analytics</h1>
+            <h1 className="text-base font-bold text-[#111111] leading-none">PCG Call Quality</h1>
             <p className="text-xs text-[#71717A] mt-0.5">PCG Team Voice Call Performance &amp; Quality Analytics</p>
           </div>
         </div>
 
-
-        {/* Option Bar Switcher: Calls & Analytics | Scorecard | Disputes */}
-        <div className="inline-flex items-center p-1 bg-[#F4F4F5] rounded-xl border border-[#E4E4E7]">
-          <button
-            onClick={() => handleTabChange('calls')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'calls'
-                ? 'bg-white text-[#111111] shadow-sm font-bold'
-                : 'text-[#71717A] hover:text-[#111111]'
-            }`}
-          >
-            <span>Calls &amp; Analytics</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('scorecard')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'scorecard'
-                ? 'bg-white text-[#111111] shadow-sm font-bold'
-                : 'text-[#71717A] hover:text-[#111111]'
-            }`}
-          >
-            <span>Scorecard</span>
-          </button>
-          <button
-            onClick={() => handleTabChange('disputes')}
-            className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center gap-1.5 ${
-              activeTab === 'disputes'
-                ? 'bg-white text-[#111111] shadow-sm font-bold'
-                : 'text-[#71717A] hover:text-[#111111]'
-            }`}
-          >
-            <span>Disputes</span>
-            {disputeRaisedCalls.length > 0 && (
-              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                activeTab === 'disputes' ? 'bg-zinc-200 text-zinc-900 border border-zinc-300' : 'bg-zinc-200 text-zinc-600'
-              }`}>
-                {disputeRaisedCalls.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Global Date Selector */}
+        {/* Global Date Selector, Workspace Switcher, User Profile */}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value as any)}
-            className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-[#111111] outline-none shadow-sm cursor-pointer"
-          >
-            <option value="7d">Last 7 Days</option>
-            <option value="30d">Last 30 Days</option>
-            <option value="custom">Custom Range (Calendar)</option>
-          </select>
+          {/* Global Date Selector */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-[#71717A] font-semibold">Date Range:</span>
+            <select
+              value={dateRange}
+              onChange={(e) => setDateRange(e.target.value as any)}
+              className="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-[#111111] outline-none shadow-sm cursor-pointer"
+            >
+              <option value="7d">Last 7 Days</option>
+              <option value="30d">Last 30 Days</option>
+              <option value="custom">Custom Range (Calendar)</option>
+            </select>
 
-          {dateRange === 'custom' && (
-            <div className="flex items-center gap-1.5 bg-white border border-[#E4E4E7] px-2 py-1 rounded-lg shadow-sm">
-              <input
-                type="date"
-                value={customStartDate}
-                onChange={(e) => setCustomStartDate(e.target.value)}
-                className="text-xs font-mono bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
-              />
-              <span className="text-xs text-[#71717A] font-medium">to</span>
-              <input
-                type="date"
-                value={customEndDate}
-                onChange={(e) => setCustomEndDate(e.target.value)}
-                className="text-xs font-mono bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
-              />
-            </div>
-          )}
+            {dateRange === 'custom' && (
+              <div className="flex items-center gap-1.5 bg-white border border-[#E4E4E7] px-2 py-1 rounded-lg shadow-sm">
+                <input
+                  type="date"
+                  value={customStartDate}
+                  onChange={(e) => setCustomStartDate(e.target.value)}
+                  className="text-xs font-mono bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
+                />
+                <span className="text-xs text-[#71717A] font-medium">to</span>
+                <input
+                  type="date"
+                  value={customEndDate}
+                  onChange={(e) => setCustomEndDate(e.target.value)}
+                  className="text-xs font-mono bg-zinc-50 border border-[#E4E4E7] rounded px-2 py-1 text-[#111111] outline-none cursor-pointer"
+                />
+              </div>
+            )}
+          </div>
 
           {/* Workspace Switcher for Super Admins */}
           {(isSuperAdmin || platformDomain === 'both') && (
@@ -881,44 +842,167 @@ export default function PcgCallsClient() {
             )}
           </div>
         </div>
-      </div>
+      </header>
 
-      {activeTab === 'scorecard' ? (
-        <div className="max-w-7xl mx-auto px-6 pt-6">
-          <PcgScorecardView
-            activePersona={activePersona}
-            selectedRm={selectedRm}
-            onSelectRm={(rm) => setSelectedRm(rm)}
-            selectedTl={selectedTl}
-            onSelectTl={(tl) => setSelectedTl(tl)}
-            onOpenCallView={(cid) => handleOpenCallById(cid)}
-            onSwitchToCallsTab={() => handleTabChange('calls')}
-          />
-        </div>
-      ) : activeTab === 'disputes' ? (
-        <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
-          {/* Persona Header for Disputes - Only for Admin */}
-          {activePersona === 'admin' && (
-            <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
-                    Executive Console
-                  </span>
-                  <h2 className="text-lg font-bold text-[#111111]">
-                    Organization Disputes Console
-                  </h2>
+      {/* ── BODY: SIDEBAR + MAIN CONTENT (CX TL STYLE) ───────────────────── */}
+      <div className="flex flex-1 min-h-[calc(100vh-65px)]">
+        {/* Left Sidebar Panel */}
+        <aside className="w-60 shrink-0 bg-white border-r border-[#E4E4E7] py-5 px-3 flex flex-col justify-between">
+          <div className="space-y-6">
+            <div>
+              <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                {activePersona === 'agent' ? 'IR Agent' : activePersona === 'tl' ? 'Team Lead' : 'Admin'}
+              </div>
+              <div className="space-y-1">
+                {/* 1. Call Quality */}
+                <button
+                  onClick={() => handleTabChange('calls')}
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === 'calls' || activeTab === 'disputes'
+                      ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                      : 'text-zinc-700 hover:text-black hover:bg-zinc-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3-8.63 2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                    </svg>
+                    <span>Call Quality</span>
+                  </div>
+                  {disputeRaisedCalls.length > 0 && (
+                    <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      activeTab === 'calls' || activeTab === 'disputes' ? 'bg-zinc-800 text-zinc-100' : 'bg-zinc-200 text-zinc-800'
+                    }`}>
+                      {disputeRaisedCalls.length}
+                    </span>
+                  )}
+                </button>
+
+                {/* Sub-items inside Call Quality: Evaluated Calls & Disputes */}
+                <div className="pl-6 pr-1 pt-1 pb-1 space-y-1">
+                  <button
+                    onClick={() => handleTabChange('calls')}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      activeTab === 'calls'
+                        ? 'bg-zinc-100 text-zinc-950 font-bold'
+                        : 'text-zinc-600 hover:text-black hover:bg-zinc-50'
+                    }`}
+                  >
+                    <span>Evaluated Calls</span>
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('disputes')}
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                      activeTab === 'disputes'
+                        ? 'bg-zinc-100 text-zinc-950 font-bold'
+                        : 'text-zinc-600 hover:text-black hover:bg-zinc-50'
+                    }`}
+                  >
+                    <span>Disputes</span>
+                    {disputeRaisedCalls.length > 0 && (
+                      <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-zinc-200 text-zinc-800 border border-zinc-300">
+                        {disputeRaisedCalls.length}
+                      </span>
+                    )}
+                  </button>
                 </div>
-                <p className="text-xs text-[#71717A] mt-1">
-                  Review agent disputes challenging AI scores, audit audio evidence and transcript turns, and submit binding override decisions.
-                </p>
+
+                {/* 2. RM Scorecard */}
+                <button
+                  onClick={() => handleTabChange('scorecard')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    activeTab === 'scorecard'
+                      ? 'bg-zinc-900 text-white font-bold shadow-sm'
+                      : 'text-zinc-700 hover:text-black hover:bg-zinc-100'
+                  }`}
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                  </svg>
+                  <span>RM Scorecard</span>
+                </button>
               </div>
             </div>
-          )}
-          {renderDisputesTable()}
-        </div>
-      ) : (
-        <div className="max-w-7xl mx-auto px-6 pt-6 space-y-6">
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="flex-1 p-6 overflow-y-auto min-w-0 max-w-7xl">
+          {activeTab === 'scorecard' ? (
+            <div>
+              <PcgScorecardView
+                activePersona={activePersona}
+                selectedRm={selectedRm}
+                onSelectRm={(rm) => setSelectedRm(rm)}
+                selectedTl={selectedTl}
+                onSelectTl={(tl) => setSelectedTl(tl)}
+                onOpenCallView={(cid) => handleOpenCallById(cid)}
+                onSwitchToCallsTab={() => handleTabChange('calls')}
+              />
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Call Quality View Header / Switcher: Evaluated Calls / Disputes */}
+              <div className="flex items-center justify-between pb-3 border-b border-[#E4E4E7]">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTabChange('calls')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      activeTab === 'calls'
+                        ? 'bg-zinc-900 text-white font-bold'
+                        : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                    }`}
+                  >
+                    Evaluated Calls
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('disputes')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
+                      activeTab === 'disputes'
+                        ? 'bg-zinc-900 text-white font-bold'
+                        : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
+                    }`}
+                  >
+                    <span>Disputes</span>
+                    {disputeRaisedCalls.length > 0 && (
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        activeTab === 'disputes' ? 'bg-zinc-700 text-white' : 'bg-zinc-200 text-zinc-800'
+                      }`}>
+                        {disputeRaisedCalls.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {activeTab === 'disputes' ? (
+                <div className="space-y-6">
+                  {/* Persona Header for Disputes - Only for Admin */}
+                  {activePersona === 'admin' && (
+                    <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
+                            Executive Console
+                          </span>
+                          <h2 className="text-lg font-bold text-[#111111]">
+                            Organization Disputes Console
+                          </h2>
+                        </div>
+                        <p className="text-xs text-[#71717A] mt-1">
+                          Review agent disputes challenging AI scores, audit audio evidence and transcript turns, and submit binding override decisions.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {renderDisputesTable()}
+                </div>
+              ) : (
+                <div className="space-y-6">
         {/* ── 1. PERSONA CONTEXT HEADER (Only for Admin) ──────────────── */}
         {activePersona === 'admin' && (
           <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-xl border border-[#E4E4E7]">
@@ -1782,6 +1866,10 @@ export default function PcgCallsClient() {
         )}
       </div>
       )}
+            </div>
+          )}
+        </main>
+      </div>
 
       {/* ── SLIDE-OVER CALL VIEW & EVALUATION DRAWER ───────────────────────── */}
       {activeCallAudit && (
