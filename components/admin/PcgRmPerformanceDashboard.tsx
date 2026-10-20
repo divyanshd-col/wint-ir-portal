@@ -382,9 +382,6 @@ export default function PcgRmPerformanceDashboard({
                       <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#b91c1c' }}>
                         {rm.currentIqs}%
                       </div>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626' }}>
-                        {(rm.currentIqs - 85.0).toFixed(1)}% vs tgt
-                      </span>
                     </div>
                   </div>
                 );
