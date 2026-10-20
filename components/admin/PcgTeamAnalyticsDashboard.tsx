@@ -87,74 +87,7 @@ function fmtDateDisplay(iso: string) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-// ── Default Mock Dataset Matching CX and PCG ───────────────────────────────────
-
-const HARSH_AGENTS: AgentData[] = [
-  {
-    name: 'Anjali',
-    ini: 'A',
-    tl: 'Harsh',
-    chats: { csat_pct: 94.9, iqs: 97, volume: 71, params: { issue_resolution: 98, accuracy: 96, expectation: 97, dissatisfaction: 92, personalization: 96, empathy: 98, escalation: 97, readability: 96, greeting: 95, recap: 88 } },
-    calls: { csat_pct: 92.0, iqs: 95, volume: 14, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 88, asset_allocation: 95, payout_timeline: 96, active_listening: 96, demat_linking: 95, tds_compliance: 98, tone_pacing: 95, call_recap: 85 } },
-    emails: null,
-  },
-  {
-    name: 'Bhavika',
-    ini: 'B',
-    tl: 'Harsh',
-    chats: { csat_pct: 100.0, iqs: 100, volume: 14, params: { issue_resolution: 100, accuracy: 100, expectation: 100, dissatisfaction: 100, personalization: 100, empathy: 100, escalation: 100, readability: 100, greeting: 100, recap: 95 } },
-    calls: { csat_pct: 96.0, iqs: 98, volume: 51, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 92, asset_allocation: 96, payout_timeline: 98, active_listening: 98, demat_linking: 98, tds_compliance: 100, tone_pacing: 97, call_recap: 90 } },
-    emails: null,
-  },
-  {
-    name: 'Charvi Wagh',
-    ini: 'CW',
-    tl: 'Harsh',
-    chats: { csat_pct: 74.3, iqs: 97, volume: 79, params: { issue_resolution: 95, accuracy: 96, expectation: 96, dissatisfaction: 88, personalization: 95, empathy: 96, escalation: 96, readability: 95, greeting: 94, recap: 80 } },
-    calls: { csat_pct: 82.0, iqs: 94, volume: 5, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 92, payout_timeline: 94, active_listening: 94, demat_linking: 94, tds_compliance: 96, tone_pacing: 94, call_recap: 78 } },
-    emails: null,
-  },
-  {
-    name: 'Dhanush',
-    ini: 'D',
-    tl: 'Harsh',
-    chats: { csat_pct: 80.3, iqs: 89, volume: 175, params: { issue_resolution: 90, accuracy: 92, expectation: 91, dissatisfaction: 85, personalization: 90, empathy: 92, escalation: 92, readability: 92, greeting: 90, recap: 75 } },
-    calls: { csat_pct: 85.0, iqs: 86, volume: 80, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 94, active_listening: 92, demat_linking: 94, tds_compliance: 96, tone_pacing: 92, call_recap: 80 } },
-    emails: null,
-  },
-  {
-    name: 'Pavithra Reddy',
-    ini: 'PR',
-    tl: 'Harsh',
-    chats: { csat_pct: 80.0, iqs: 95, volume: 70, params: { issue_resolution: 94, accuracy: 96, expectation: 96, dissatisfaction: 90, personalization: 95, empathy: 97, escalation: 96, readability: 96, greeting: 94, recap: 81 } },
-    calls: { csat_pct: 86.5, iqs: 93, volume: 162, params: { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 88, asset_allocation: 94, payout_timeline: 96, active_listening: 95, demat_linking: 96, tds_compliance: 98, tone_pacing: 95, call_recap: 82 } },
-    emails: null,
-  },
-  {
-    name: 'Priyank Surana',
-    ini: 'PS',
-    tl: 'Harsh',
-    chats: { csat_pct: 94.1, iqs: 95, volume: 46, params: { issue_resolution: 95, accuracy: 96, expectation: 96, dissatisfaction: 91, personalization: 95, empathy: 97, escalation: 96, readability: 96, greeting: 94, recap: 82 } },
-    calls: { csat_pct: 88.0, iqs: 92, volume: 8, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 86, asset_allocation: 93, payout_timeline: 95, active_listening: 94, demat_linking: 95, tds_compliance: 97, tone_pacing: 94, call_recap: 80 } },
-    emails: null,
-  },
-  {
-    name: 'Shubhangini',
-    ini: 'S',
-    tl: 'Harsh',
-    chats: { csat_pct: 92.6, iqs: 98, volume: 77, params: { issue_resolution: 97, accuracy: 98, expectation: 98, dissatisfaction: 94, personalization: 97, empathy: 98, escalation: 98, readability: 98, greeting: 96, recap: 86 } },
-    calls: { csat_pct: 91.0, iqs: 96, volume: 54, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 90, asset_allocation: 96, payout_timeline: 97, active_listening: 97, demat_linking: 97, tds_compliance: 99, tone_pacing: 96, call_recap: 86 } },
-    emails: null,
-  },
-  {
-    name: 'Vaibhavi',
-    ini: 'V',
-    tl: 'Harsh',
-    chats: { csat_pct: null, iqs: null, volume: 0, params: {} },
-    calls: { csat_pct: 84.0, iqs: 88, volume: 13, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 93, tds_compliance: 95, tone_pacing: 92, call_recap: 76 } },
-    emails: null,
-  },
-];
+// ── Default Mock Dataset Matching PCG Teams ───────────────────────────────────────
 
 const GOKUL_AGENTS: AgentData[] = [
   {
@@ -653,20 +586,20 @@ export default function PcgTeamAnalyticsDashboard({
   onSelectRm,
   onSwitchToMemberAnalytics,
 }: PcgTeamAnalyticsProps) {
-  const [channel, setChannel] = useState<Channel>('chats');
+  const [channel, setChannel] = useState<Channel>('calls');
   const [period, setPeriod] = useState<Period>('30');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'breakdown'>('summary');
-  const [breakdownCh, setBreakdownCh] = useState<Channel>('chats');
+  const [breakdownCh, setBreakdownCh] = useState<Channel>('calls');
 
-  // Viewing TL state: default to 'Harsh' (or passed selectedTl)
-  const [currentTL, setCurrentTL] = useState<string>(selectedTl || 'Harsh');
+  // Viewing TL state: default to 'Gokul' (or passed selectedTl)
+  const [currentTL, setCurrentTL] = useState<string>(selectedTl || 'Gokul');
   const [showTLDrop, setShowTLDrop] = useState<boolean>(false);
   const tlDropRef = useRef<HTMLDivElement>(null);
 
-  const availableTLs = ['Harsh', 'Gokul', 'Vaishnavi'];
+  const availableTLs = ['Gokul', 'Vaishnavi'];
 
   useEffect(() => {
     if (selectedTl && availableTLs.includes(selectedTl)) {
@@ -704,9 +637,8 @@ export default function PcgTeamAnalyticsDashboard({
 
   // Active agents based on selected TL
   const getActiveAgents = (): AgentData[] => {
-    if (currentTL === 'Gokul') return GOKUL_AGENTS;
     if (currentTL === 'Vaishnavi') return VAISHNAVI_AGENTS;
-    return HARSH_AGENTS;
+    return GOKUL_AGENTS;
   };
 
   const activeAgents = getActiveAgents();
@@ -717,16 +649,7 @@ export default function PcgTeamAnalyticsDashboard({
 
   // Stat Card Metrics dynamically tailored to team and channel
   const getStatMetrics = () => {
-    if (currentTL === 'Gokul') {
-      return {
-        csatTeam: '89.2%',
-        csatCx: '87.4%',
-        iqsTeam: '86.8%',
-        iqsCx: '85.0%',
-        volumeTeam: channel === 'calls' ? '296' : '230',
-        volumeCx: channel === 'calls' ? '520' : '420',
-      };
-    } else if (currentTL === 'Vaishnavi') {
+    if (currentTL === 'Vaishnavi') {
       return {
         csatTeam: '87.0%',
         csatCx: '87.4%',
@@ -736,26 +659,15 @@ export default function PcgTeamAnalyticsDashboard({
         volumeCx: channel === 'calls' ? '520' : '420',
       };
     } else {
-      // Harsh
-      if (channel === 'chats') {
-        return {
-          csatTeam: '84.9%',
-          csatCx: '81.1%',
-          iqsTeam: '94%',
-          iqsCx: '93%',
-          volumeTeam: '532',
-          volumeCx: '10,540',
-        };
-      } else {
-        return {
-          csatTeam: '89.2%',
-          csatCx: '85.4%',
-          iqsTeam: '94%',
-          iqsCx: '91%',
-          volumeTeam: '387',
-          volumeCx: '8,420',
-        };
-      }
+      // Gokul
+      return {
+        csatTeam: '89.2%',
+        csatCx: '87.4%',
+        iqsTeam: '86.8%',
+        iqsCx: '85.0%',
+        volumeTeam: channel === 'calls' ? '296' : '230',
+        volumeCx: channel === 'calls' ? '520' : '420',
+      };
     }
   };
 

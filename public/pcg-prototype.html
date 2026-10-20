@@ -218,7 +218,6 @@
           <div class="flex items-center gap-1.5 text-[13px] text-[#71717A]">
             <span>Viewing TL:</span>
             <select id="ta-tl-select" onchange="onTaTlChange(this.value)" class="h-8 px-3 bg-white border border-[#E4E4E7] rounded-lg text-[13px] font-medium text-[#18181B] outline-none shadow-2xs cursor-pointer hover:border-zinc-400">
-              <option value="Harsh">Harsh</option>
               <option value="Gokul">Gokul</option>
               <option value="Vaishnavi">Vaishnavi</option>
             </select>
@@ -1451,22 +1450,11 @@
       }
     }
 
-    let taCurrentChannel = 'chats';
-    let taCurrentTL = 'Harsh';
+    let taCurrentChannel = 'calls';
+    let taCurrentTL = 'Gokul';
     let taCurrentPeriod = '30';
     let taCurrentTab = 'summary';
-    let taBreakdownChannel = 'chats';
-
-    const TA_HARSH_AGENTS = [
-      { name: 'Anjali', ini: 'A', chats: { csat: '94.9%', iqs: '97%', vol: 71 }, calls: { csat: '92.0%', iqs: '95%', vol: 14 } },
-      { name: 'Bhavika', ini: 'B', chats: { csat: '100.0%', iqs: '100%', vol: 14 }, calls: { csat: '96.0%', iqs: '98%', vol: 51 } },
-      { name: 'Charvi Wagh', ini: 'CW', chats: { csat: '74.3%', iqs: '97%', vol: 79 }, calls: { csat: '82.0%', iqs: '94%', vol: 5 } },
-      { name: 'Dhanush', ini: 'D', chats: { csat: '80.3%', iqs: '89%', vol: 175 }, calls: { csat: '85.0%', iqs: '86%', vol: 80 } },
-      { name: 'Pavithra Reddy', ini: 'PR', chats: { csat: '80.0%', iqs: '95%', vol: 70 }, calls: { csat: '86.5%', iqs: '93%', vol: 162 } },
-      { name: 'Priyank Surana', ini: 'PS', chats: { csat: '94.1%', iqs: '95%', vol: 46 }, calls: { csat: '88.0%', iqs: '92%', vol: 8 } },
-      { name: 'Shubhangini', ini: 'S', chats: { csat: '92.6%', iqs: '98%', vol: 77 }, calls: { csat: '91.0%', iqs: '96%', vol: 54 } },
-      { name: 'Vaibhavi', ini: 'V', chats: { csat: '—', iqs: '—', vol: 0 }, calls: { csat: '84.0%', iqs: '88%', vol: 13 } }
-    ];
+    let taBreakdownChannel = 'calls';
 
     const TA_GOKUL_AGENTS = [
       { name: 'Yaashvi Arora', ini: 'YA', chats: { csat: '95.0%', iqs: '96%', vol: 45 }, calls: { csat: '94.0%', iqs: '91%', vol: 68 } },
@@ -1593,9 +1581,8 @@
     function renderTeamAnalytics() {
       // 1. Get Active Agents
       let agents = [];
-      if (taCurrentTL === 'Gokul') agents = TA_GOKUL_AGENTS;
-      else if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
-      else agents = TA_HARSH_AGENTS;
+      if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
+      else agents = TA_GOKUL_AGENTS;
 
       // 2. Update Top Stat Cards
       const csatTeamEl = document.getElementById('ta-stat-csat-team');
@@ -1614,14 +1601,6 @@
         if (volTitleEl) volTitleEl.innerText = 'EMAILS HANDLED';
         if (volTeamEl) volTeamEl.innerText = '—';
         if (volCxEl) volCxEl.innerText = '—';
-      } else if (taCurrentTL === 'Gokul') {
-        if (csatTeamEl) csatTeamEl.innerText = '89.2%';
-        if (csatCxEl) csatCxEl.innerText = '87.4%';
-        if (iqsTeamEl) iqsTeamEl.innerText = '86.8%';
-        if (iqsCxEl) iqsCxEl.innerText = '85.0%';
-        if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'calls' ? 'CALLS HANDLED' : 'CHATS HANDLED';
-        if (volTeamEl) volTeamEl.innerText = taCurrentChannel === 'calls' ? '296' : '230';
-        if (volCxEl) volCxEl.innerText = taCurrentChannel === 'calls' ? '520' : '420';
       } else if (taCurrentTL === 'Vaishnavi') {
         if (csatTeamEl) csatTeamEl.innerText = '87.0%';
         if (csatCxEl) csatCxEl.innerText = '87.4%';
@@ -1631,24 +1610,14 @@
         if (volTeamEl) volTeamEl.innerText = taCurrentChannel === 'calls' ? '224' : '190';
         if (volCxEl) volCxEl.innerText = taCurrentChannel === 'calls' ? '520' : '420';
       } else {
-        // Harsh
-        if (taCurrentChannel === 'chats') {
-          if (csatTeamEl) csatTeamEl.innerText = '84.9%';
-          if (csatCxEl) csatCxEl.innerText = '81.1%';
-          if (iqsTeamEl) iqsTeamEl.innerText = '94%';
-          if (iqsCxEl) iqsCxEl.innerText = '93%';
-          if (volTitleEl) volTitleEl.innerText = 'CHATS HANDLED';
-          if (volTeamEl) volTeamEl.innerText = '532';
-          if (volCxEl) volCxEl.innerText = '10,540';
-        } else {
-          if (csatTeamEl) csatTeamEl.innerText = '89.2%';
-          if (csatCxEl) csatCxEl.innerText = '85.4%';
-          if (iqsTeamEl) iqsTeamEl.innerText = '94%';
-          if (iqsCxEl) iqsCxEl.innerText = '91%';
-          if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
-          if (volTeamEl) volTeamEl.innerText = '387';
-          if (volCxEl) volCxEl.innerText = '8,420';
-        }
+        // Gokul
+        if (csatTeamEl) csatTeamEl.innerText = '89.2%';
+        if (csatCxEl) csatCxEl.innerText = '87.4%';
+        if (iqsTeamEl) iqsTeamEl.innerText = '86.8%';
+        if (iqsCxEl) iqsCxEl.innerText = '85.0%';
+        if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'calls' ? 'CALLS HANDLED' : 'CHATS HANDLED';
+        if (volTeamEl) volTeamEl.innerText = taCurrentChannel === 'calls' ? '296' : '230';
+        if (volCxEl) volCxEl.innerText = taCurrentChannel === 'calls' ? '520' : '420';
       }
 
       // 3. Update IQS by Parameter Rows
@@ -1727,9 +1696,8 @@
 
     function renderTaBreakdown() {
       let agents = [];
-      if (taCurrentTL === 'Gokul') agents = TA_GOKUL_AGENTS;
-      else if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
-      else agents = TA_HARSH_AGENTS;
+      if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
+      else agents = TA_GOKUL_AGENTS;
 
       const activeParams = taBreakdownChannel === 'calls' ? TA_CALL_PARAMS : TA_CHAT_PARAMS;
       const theadTr = document.getElementById('ta-breakdown-thead-tr');
