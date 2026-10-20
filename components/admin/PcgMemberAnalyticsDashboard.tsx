@@ -122,65 +122,65 @@ export default function PcgMemberAnalyticsDashboard({
   const rmAnswered = rmCalls.filter(c => c.isAnswered);
   const rmAvgIqs = rmAnswered.length > 0
     ? rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length
-    : 92.4;
-  const callsVol = rmCalls.length > 0 ? rmCalls.length : 16;
+    : 87.4;
+  const callsVol = rmCalls.length > 0 ? rmCalls.length : 7;
   const callsIqs = rmAvgIqs;
 
   // Real or deterministic mock category data matching screenshot format
   const categories = [
     {
       disposition: '13% Club Pitching',
-      chats_iqs: 100.0,
+      chats_iqs: null,
       calls_iqs: callsIqs >= 90 ? 98.5 : 88.0,
       emails_iqs: null,
       resolution: 35080, // ~584m
       subs: [
-        { sub_disposition: 'Pitch Clarity & Senior Secured Backing', chats_iqs: 100.0, calls_iqs: 99.0, emails_iqs: null, resolution: 18400 },
-        { sub_disposition: 'Secondary Liquidity Window Framing', chats_iqs: 100.0, calls_iqs: 86.5, emails_iqs: null, resolution: 16680 },
-        { sub_disposition: 'Investment Horizon & Due Diligence', chats_iqs: 100.0, calls_iqs: 92.0, emails_iqs: null, resolution: 12000 },
+        { sub_disposition: 'Pitch Clarity & Senior Secured Backing', chats_iqs: null, calls_iqs: 99.0, emails_iqs: null, resolution: 18400 },
+        { sub_disposition: 'Secondary Liquidity Window Framing', chats_iqs: null, calls_iqs: 86.5, emails_iqs: null, resolution: 16680 },
+        { sub_disposition: 'Investment Horizon & Due Diligence', chats_iqs: null, calls_iqs: 92.0, emails_iqs: null, resolution: 12000 },
       ],
     },
     {
       disposition: 'Portfolio Upselling',
-      chats_iqs: 100.0,
+      chats_iqs: null,
       calls_iqs: 94.2,
       emails_iqs: null,
       resolution: 47150, // ~785m
       subs: [
-        { sub_disposition: 'Asset Allocation Need Discovery', chats_iqs: 100.0, calls_iqs: 95.0, emails_iqs: null, resolution: 24000 },
-        { sub_disposition: 'Reinvestment & Compounding Pitch', chats_iqs: 100.0, calls_iqs: 93.4, emails_iqs: null, resolution: 23150 },
+        { sub_disposition: 'Asset Allocation Need Discovery', chats_iqs: null, calls_iqs: 95.0, emails_iqs: null, resolution: 24000 },
+        { sub_disposition: 'Reinvestment & Compounding Pitch', chats_iqs: null, calls_iqs: 93.4, emails_iqs: null, resolution: 23150 },
       ],
     },
     {
       disposition: 'Investor Support & Operations',
-      chats_iqs: 100.0,
+      chats_iqs: null,
       calls_iqs: 91.8,
       emails_iqs: null,
       resolution: 32650, // ~544m
       subs: [
-        { sub_disposition: 'Monthly Interest Payout Timeline', chats_iqs: 100.0, calls_iqs: 96.0, emails_iqs: null, resolution: 18000 },
-        { sub_disposition: 'Form 15G / Tax Deduction Queries', chats_iqs: 100.0, calls_iqs: 88.0, emails_iqs: null, resolution: 14650 },
+        { sub_disposition: 'Monthly Interest Payout Timeline', chats_iqs: null, calls_iqs: 96.0, emails_iqs: null, resolution: 18000 },
+        { sub_disposition: 'Form 15G / Tax Deduction Queries', chats_iqs: null, calls_iqs: 88.0, emails_iqs: null, resolution: 14650 },
       ],
     },
     {
       disposition: 'KYC & Verification',
-      chats_iqs: 100.0,
+      chats_iqs: null,
       calls_iqs: 98.0,
       emails_iqs: null,
       resolution: 41380, // ~689m
       subs: [
-        { sub_disposition: 'PAN Verification & Demat Linking', chats_iqs: 100.0, calls_iqs: 98.0, emails_iqs: null, resolution: 22000 },
-        { sub_disposition: 'Bank Account & Penny Drop Status', chats_iqs: 100.0, calls_iqs: 98.0, emails_iqs: null, resolution: 19380 },
+        { sub_disposition: 'PAN Verification & Demat Linking', chats_iqs: null, calls_iqs: 98.0, emails_iqs: null, resolution: 22000 },
+        { sub_disposition: 'Bank Account & Penny Drop Status', chats_iqs: null, calls_iqs: 98.0, emails_iqs: null, resolution: 19380 },
       ],
     },
     {
       disposition: 'Secondary Exit & Liquidity Queries',
-      chats_iqs: 100.0,
+      chats_iqs: null,
       calls_iqs: 87.5,
       emails_iqs: null,
       resolution: 5490, // ~91m
       subs: [
-        { sub_disposition: 'Emergency Secondary Sale Window', chats_iqs: 100.0, calls_iqs: 87.5, emails_iqs: null, resolution: 5490 },
+        { sub_disposition: 'Emergency Secondary Sale Window', chats_iqs: null, calls_iqs: 87.5, emails_iqs: null, resolution: 5490 },
       ],
     },
   ];
@@ -188,19 +188,30 @@ export default function PcgMemberAnalyticsDashboard({
   const wowWeeks = ['2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
   const wowWeekLabels = ['SEP 21 – 27', 'SEP 28 – OCT 4', 'OCT 5 – 11', 'OCT 12 – 18', 'OCT 19 – 25'];
 
-  const wowMetrics = [
-    { name: 'CSAT %', vals: [100.0, null, 73.3, 100.0, 100.0], isPct: true },
-    { name: 'IQS', vals: [95.7, 99.0, 96.8, 98.7, callsIqs], isPct: true },
-    { name: 'Volume', vals: [20, 7, 41, 31, callsVol], isPct: false },
+  const wowMetrics = wowChannel === 'calls' ? [
+    { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+    { name: 'IQS', vals: [85.7, 88.0, 84.8, 86.7, callsIqs] as (number | null)[], isPct: true },
+    { name: 'Volume', vals: [12, 9, 15, 11, callsVol] as (number | null)[], isPct: false },
+  ] : [
+    { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+    { name: 'IQS', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
+    { name: 'Volume', vals: [null, null, null, null, null] as (number | null)[], isPct: false },
   ];
 
-  const wowParameters = [
+  const wowParameters: Array<{ name: string; vals: (number | null)[] }> = wowChannel === 'calls' ? [
     { name: 'Pitch Clarity & Product Benefits', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
     { name: 'Return vs Risk Positioning', vals: [94.0, 97.0, 92.0, 96.0, 95.0] },
     { name: 'Secondary Liquidity Disclaimer', vals: [88.0, 90.0, 84.0, 86.0, 85.5] },
     { name: 'Active Listening & Objection Handling', vals: [95.0, 100.0, 94.0, 98.0, 96.0] },
     { name: 'Compliance & No Return Guarantees', vals: [100.0, 100.0, 100.0, 100.0, 100.0] },
     { name: 'Next Steps & Follow-up Timeline', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
+  ] : [
+    { name: 'Pitch Clarity & Product Benefits', vals: [null, null, null, null, null] },
+    { name: 'Return vs Risk Positioning', vals: [null, null, null, null, null] },
+    { name: 'Secondary Liquidity Disclaimer', vals: [null, null, null, null, null] },
+    { name: 'Active Listening & Objection Handling', vals: [null, null, null, null, null] },
+    { name: 'Compliance & No Return Guarantees', vals: [null, null, null, null, null] },
+    { name: 'Next Steps & Follow-up Timeline', vals: [null, null, null, null, null] },
   ];
 
   const periodLabel = period === 'custom' && customFrom && customTo
@@ -362,31 +373,8 @@ export default function PcgMemberAnalyticsDashboard({
         </div>
       </div>
 
-      {/* ── Section 1: Stat Cards (Chats / Calls / Emails) ── */}
+      {/* ── Section 1: Stat Cards (Calls / Chats / Emails) ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-        {/* Chats Card */}
-        <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 14, fontWeight: 600 }}>
-            CHATS
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 16, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text, #111111)' }}>100.0%</span>
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>CSAT</span>
-            </div>
-            <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '0 16px', lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text, #111111)' }}>99.2%</span>
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
-            </div>
-            <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 16, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text, #111111)' }}>28</span>
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
-            </div>
-          </div>
-        </div>
-
         {/* Calls Card (Live PCG Calls Data) */}
         <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 14, fontWeight: 600 }}>
@@ -410,7 +398,33 @@ export default function PcgMemberAnalyticsDashboard({
           </div>
         </div>
 
-        {/* Emails Card */}
+        {/* Chats Card (Blank - Not yet evaluated) */}
+        <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 14, fontWeight: 600 }}>
+            CHATS
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 16, lineHeight: 1.1 }}>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>CSAT</span>
+            </div>
+            <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '0 16px', lineHeight: 1.1 }}>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
+            </div>
+            <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 16, lineHeight: 1.1 }}>
+              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
+              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--qa-text-3, #A1A1AA)', marginTop: 8, fontStyle: 'italic' }}>
+            Not yet evaluated
+          </div>
+        </div>
+
+        {/* Emails Card (Blank - Not yet evaluated) */}
         <div style={{ background: 'var(--qa-card, #ffffff)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, padding: 20, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
           <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #A1A1AA)', marginBottom: 14, fontWeight: 600 }}>
             EMAILS
@@ -460,7 +474,7 @@ export default function PcgMemberAnalyticsDashboard({
                   <th style={{ height: 28, background: 'var(--qa-bg, #f5f3ee)', borderBottom: 0, padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2, #6B6B6B)', fontWeight: 500, textAlign: 'right' }} />
                 </tr>
                 <tr>
-                  {['Category', 'Chats', 'Calls', 'Emails', 'Chat Resolution'].map((h, i) => (
+                  {['Category', 'Calls', 'Chats', 'Emails', 'Call Duration'].map((h, i) => (
                     <th
                       key={h}
                       style={{
@@ -519,10 +533,10 @@ export default function PcgMemberAnalyticsDashboard({
                           {cat.disposition}
                         </td>
                         <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
-                          {fmtPct(cat.chats_iqs)}
-                        </td>
-                        <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
                           {fmtPct(cat.calls_iqs)}
+                        </td>
+                        <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
+                          —
                         </td>
                         <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
                           —
@@ -543,10 +557,10 @@ export default function PcgMemberAnalyticsDashboard({
                               {sub.sub_disposition}
                             </td>
                             <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
-                              {fmtPct(sub.chats_iqs)}
-                            </td>
-                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
                               {fmtPct(sub.calls_iqs)}
+                            </td>
+                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
+                              —
                             </td>
                             <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
                               —
@@ -610,7 +624,7 @@ export default function PcgMemberAnalyticsDashboard({
                 CHANNEL
               </span>
               <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
-                {(['chats', 'calls'] as const).map(ch => (
+                {(['calls', 'chats'] as const).map(ch => (
                   <button
                     key={ch}
                     type="button"
@@ -620,7 +634,7 @@ export default function PcgMemberAnalyticsDashboard({
                       padding: '0 13px',
                       background: wowChannel === ch ? 'var(--qa-text, #111111)' : 'transparent',
                       border: 0,
-                      borderRight: ch === 'chats' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
+                      borderRight: ch === 'calls' ? '1px solid var(--qa-border, #E4E4E7)' : 'none',
                       fontSize: 13,
                       fontFamily: 'inherit',
                       cursor: 'pointer',
@@ -628,7 +642,7 @@ export default function PcgMemberAnalyticsDashboard({
                       fontWeight: wowChannel === ch ? 500 : 400,
                     }}
                   >
-                    {ch === 'chats' ? 'Chats' : 'Calls'}
+                    {ch === 'calls' ? 'Calls' : 'Chats'}
                   </button>
                 ))}
               </div>
@@ -747,7 +761,7 @@ export default function PcgMemberAnalyticsDashboard({
                             background: i === p.vals.length - 1 ? 'var(--qa-fill-light, #F4F4F5)' : 'transparent',
                           }}
                         >
-                          {v.toFixed(1)}%
+                          {v == null ? '—' : `${v.toFixed(1)}%`}
                         </td>
                       ))}
                     </tr>
@@ -797,7 +811,7 @@ export default function PcgMemberAnalyticsDashboard({
 
           {/* Channel Tabs inside AI Analysis */}
           <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--qa-border, #E4E4E7)', marginBottom: 20 }}>
-            {(['chats', 'calls'] as const).map(ch => (
+            {(['calls', 'chats'] as const).map(ch => (
               <button
                 key={ch}
                 type="button"
@@ -816,7 +830,7 @@ export default function PcgMemberAnalyticsDashboard({
                   marginBottom: -1,
                 }}
               >
-                {ch === 'chats' ? 'Chats' : 'Calls'}
+                {ch === 'calls' ? 'Calls' : 'Chats'}
               </button>
             ))}
             <button
@@ -840,126 +854,134 @@ export default function PcgMemberAnalyticsDashboard({
             </button>
           </div>
 
-          {/* AI Narrative Analysis Paragraph */}
-          <p style={{ fontSize: 14, color: 'var(--qa-text, #111111)', lineHeight: 1.6, margin: '0 0 18px', maxWidth: 860 }}>
-            {effectiveRm} demonstrated strong performance over the last {periodLabel || '7 days'}, achieving a 100.0% CSAT and an IQS of{' '}
-            {callsIqs.toFixed(1)}% across {callsVol} evaluated {aiChannel}. He maintained consistent pitch structure across key investment categories
-            including 13% Club Pitching and Portfolio Upselling. While overall quality remains high, his lowest performing parameter was Secondary
-            Liquidity Disclaimer at 85.7%.
-          </p>
-
-          {/* Badges: STRENGTH, WATCH, TIP */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {/* Strength */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '14px 16px',
-                background: 'var(--qa-card, #ffffff)',
-                border: '1px solid var(--qa-border, #E4E4E7)',
-                borderRadius: 8,
-              }}
-            >
-              <span
-                style={{
-                  flexShrink: 0,
-                  height: 20,
-                  padding: '0 8px',
-                  borderRadius: 999,
-                  fontSize: 10,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  background: 'var(--qa-text, #111111)',
-                  color: '#ffffff',
-                }}
-              >
-                STRENGTH
-              </span>
-              <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                Achieved a perfect 100.0% score in Identity Verification, Call Opening, and Clear Return vs Risk Positioning without promising guaranteed returns.
-              </span>
+          {aiChannel === 'chats' ? (
+            <div style={{ padding: '36px 16px', textAlign: 'center', color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontStyle: 'italic' }}>
+              Chat quality evaluation is not yet implemented for PCG. AI insights will appear here once enabled.
             </div>
+          ) : (
+            <>
+              {/* AI Narrative Analysis Paragraph */}
+              <p style={{ fontSize: 14, color: 'var(--qa-text, #111111)', lineHeight: 1.6, margin: '0 0 18px', maxWidth: 860 }}>
+                {effectiveRm} demonstrated strong performance over the last {periodLabel || '7 days'}, achieving a 100.0% CSAT and an IQS of{' '}
+                {callsIqs.toFixed(1)}% across {callsVol} evaluated calls. He maintained consistent pitch structure across key investment categories
+                including 13% Club Pitching and Portfolio Upselling. While overall quality remains high, his lowest performing parameter was Secondary
+                Liquidity Disclaimer at 85.7%.
+              </p>
 
-            {/* Watch */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '14px 16px',
-                background: 'var(--qa-card, #ffffff)',
-                border: '1px solid var(--qa-border, #E4E4E7)',
-                borderRadius: 8,
-              }}
-            >
-              <span
-                style={{
-                  flexShrink: 0,
-                  height: 20,
-                  padding: '0 8px',
-                  borderRadius: 999,
-                  fontSize: 10,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  background: 'var(--qa-fill-med, #E4E4E7)',
-                  color: 'var(--qa-text, #111111)',
-                }}
-              >
-                WATCH
-              </span>
-              <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                Secondary Liquidity Disclaimer was the lowest-performing parameter at 85.7% compared to all other evaluated areas.
-              </span>
-            </div>
+              {/* Badges: STRENGTH, WATCH, TIP */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Strength */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 16px',
+                    background: 'var(--qa-card, #ffffff)',
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      height: 20,
+                      padding: '0 8px',
+                      borderRadius: 999,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      background: 'var(--qa-text, #111111)',
+                      color: '#ffffff',
+                    }}
+                  >
+                    STRENGTH
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
+                    Achieved a perfect 100.0% score in Identity Verification, Call Opening, and Clear Return vs Risk Positioning without promising guaranteed returns.
+                  </span>
+                </div>
 
-            {/* Tip */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '14px 16px',
-                background: 'var(--qa-card, #ffffff)',
-                border: '1px solid var(--qa-border, #E4E4E7)',
-                borderRadius: 8,
-              }}
-            >
-              <span
-                style={{
-                  flexShrink: 0,
-                  height: 20,
-                  padding: '0 8px',
-                  borderRadius: 999,
-                  fontSize: 10,
-                  fontWeight: 600,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  background: 'transparent',
-                  border: '1px solid var(--qa-border, #E4E4E7)',
-                  color: 'var(--qa-text, #111111)',
-                }}
-              >
-                TIP
-              </span>
-              <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
-                State the secondary market window upfront and establish a firm calendar callback slot before concluding the call.
-              </span>
-            </div>
-          </div>
+                {/* Watch */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 16px',
+                    background: 'var(--qa-card, #ffffff)',
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      height: 20,
+                      padding: '0 8px',
+                      borderRadius: 999,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      background: 'var(--qa-fill-med, #E4E4E7)',
+                      color: 'var(--qa-text, #111111)',
+                    }}
+                  >
+                    WATCH
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
+                    Secondary Liquidity Disclaimer was the lowest-performing parameter at 85.7% compared to all other evaluated areas.
+                  </span>
+                </div>
 
-          <p style={{ marginTop: 14, fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic', marginBottom: 0 }}>
-            Generated from RM {agentInitials(effectiveRm)} {effectiveRm}'s evaluated {aiChannel} · {periodLabel || '7 days'}
-          </p>
+                {/* Tip */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '14px 16px',
+                    background: 'var(--qa-card, #ffffff)',
+                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    borderRadius: 8,
+                  }}
+                >
+                  <span
+                    style={{
+                      flexShrink: 0,
+                      height: 20,
+                      padding: '0 8px',
+                      borderRadius: 999,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      background: 'transparent',
+                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      color: 'var(--qa-text, #111111)',
+                    }}
+                  >
+                    TIP
+                  </span>
+                  <span style={{ fontSize: 13, color: 'var(--qa-text, #111111)', lineHeight: 1.5 }}>
+                    State the secondary market window upfront and establish a firm calendar callback slot before concluding the call.
+                  </span>
+                </div>
+              </div>
+
+              <p style={{ marginTop: 14, fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic', marginBottom: 0 }}>
+                Generated from RM {agentInitials(effectiveRm)} {effectiveRm}'s evaluated calls · {periodLabel || '7 days'}
+              </p>
+            </>
+          )}
         </div>
       </section>
     </div>
