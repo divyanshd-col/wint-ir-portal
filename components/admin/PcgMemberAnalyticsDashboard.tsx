@@ -467,14 +467,13 @@ export default function PcgMemberAnalyticsDashboard({
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
-                  <th style={{ height: 28, background: 'var(--qa-bg, #f5f3ee)', borderBottom: 0, padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2, #6B6B6B)', fontWeight: 500, textAlign: 'left' }} />
+                  <th style={{ height: 28, background: 'var(--qa-bg, #f5f3ee)', borderBottom: 0, padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2, #6B6B6B)', fontWeight: 500, textAlign: 'left', width: '40%' }} />
                   <th colSpan={3} style={{ height: 28, background: 'var(--qa-bg, #f5f3ee)', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2, #6B6B6B)', fontWeight: 500, textAlign: 'center' }}>
                     IQS
                   </th>
-                  <th style={{ height: 28, background: 'var(--qa-bg, #f5f3ee)', borderBottom: 0, padding: '8px 16px 0', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2, #6B6B6B)', fontWeight: 500, textAlign: 'right' }} />
                 </tr>
                 <tr>
-                  {['Category', 'Calls', 'Chats', 'Emails', 'Call Duration'].map((h, i) => (
+                  {['Category', 'Calls', 'Chats', 'Emails'].map((h, i) => (
                     <th
                       key={h}
                       style={{
@@ -489,7 +488,7 @@ export default function PcgMemberAnalyticsDashboard({
                         whiteSpace: 'nowrap',
                         padding: '0 16px',
                         textAlign: i > 0 ? 'right' : 'left',
-                        width: i === 0 ? '34%' : undefined,
+                        width: i === 0 ? '40%' : '20%',
                       }}
                     >
                       {h}
@@ -541,9 +540,6 @@ export default function PcgMemberAnalyticsDashboard({
                         <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
                           —
                         </td>
-                        <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
-                          {fmtResolution(cat.resolution)}
-                        </td>
                       </tr>
                       {open &&
                         cat.subs.map(sub => (
@@ -564,9 +560,6 @@ export default function PcgMemberAnalyticsDashboard({
                             </td>
                             <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
                               —
-                            </td>
-                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
-                              {fmtResolution(sub.resolution)}
                             </td>
                           </tr>
                         ))}
