@@ -1667,7 +1667,7 @@ export default function PcgCallsClient() {
 
               <input
                 type="text"
-                placeholder={activePersona === 'agent' ? "Search Client Name..." : "Search Call ID or Phone..."}
+                placeholder={activePersona === 'agent' ? "Search Client Name..." : "Search Client or RM Name..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-52 outline-none focus:border-[#111111] shadow-2xs bg-white"
@@ -1684,14 +1684,11 @@ export default function PcgCallsClient() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
-                    {activePersona !== 'agent' && <th className="py-3 px-4">Call ID</th>}
                     {activePersona !== 'agent' && <th className="py-3 px-4">RM Name</th>}
-                    <th className="py-3 px-4">{activePersona === 'agent' ? 'Client Name' : 'Customer Phone'}</th>
+                    <th className="py-3 px-4">Client Name</th>
                     <th className="py-3 px-4">Call Category</th>
-                    {activePersona !== 'agent' && <th className="py-3 px-4">Duration</th>}
                     <th className="py-3 px-4">IQS Score</th>
-                    <th className="py-3 px-4">{activePersona === 'agent' ? 'Compliance Mistake' : 'Gates'}</th>
-                    {activePersona !== 'agent' && <th className="py-3 px-4">Status / Disconnect</th>}
+                    <th className="py-3 px-4">Compliance Mistake</th>
                     <th className="py-3 px-4 text-center">Action</th>
                   </tr>
                 </thead>
@@ -1704,35 +1701,13 @@ export default function PcgCallsClient() {
                       }`}
                     >
                       {activePersona !== 'agent' && (
-                        <td className="py-3 px-4">
-                          <a
-                            href={getRunoCallUrl(call.callId || call.id)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Open in Runo CRM"
-                            className="inline-flex items-center gap-1 font-mono font-bold text-zinc-900 hover:text-black hover:underline group cursor-pointer"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <span>#{formatCallId(call.callId, call.id)}</span>
-                            <svg className="w-3 h-3 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
-                        </td>
-                      )}
-
-                      {activePersona !== 'agent' && (
                         <td className="py-3 px-4 font-semibold text-zinc-800">
                           {call.rmName}
                         </td>
                       )}
 
                       <td className="py-3 px-4">
-                        {activePersona === 'agent' ? (
-                          <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
-                        ) : (
-                          <span className="font-mono text-zinc-600 font-normal">{call.phoneNumber}</span>
-                        )}
+                        <span className="font-semibold text-zinc-900">{call.clientName || 'Investor Client'}</span>
                       </td>
 
                       <td className="py-3 px-4">
@@ -1752,37 +1727,17 @@ export default function PcgCallsClient() {
                         </div>
                       </td>
 
-                      {activePersona !== 'agent' && (
-                        <td className="py-3 px-4 font-mono">
-                          {formatDuration(call.durationSeconds)}
-                        </td>
-                      )}
-
                       <td className="py-3 px-4">
                         {getScoreBadge(call.iqsScore)}
                       </td>
 
                       <td className="py-3 px-4 font-semibold">
-                        {activePersona === 'agent' ? (
-                          call.gates.status === 'PASS' ? (
-                            <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
-                          ) : (
-                            <span className="text-black font-extrabold" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
-                          )
+                        {call.gates.status === 'PASS' ? (
+                          <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
                         ) : (
-                          call.gates.status === 'PASS' ? (
-                            <span className="text-zinc-600 font-medium">PASS</span>
-                          ) : (
-                            <span className="text-black font-extrabold">FAIL</span>
-                          )
+                          <span className="text-black font-extrabold" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
                         )}
                       </td>
-
-                      {activePersona !== 'agent' && (
-                        <td className="py-3 px-4">
-                          <span className="text-zinc-700 font-medium">Connected</span>
-                        </td>
-                      )}
 
                       {/* Actions */}
                       <td className="py-3 px-4 text-center">
@@ -1881,9 +1836,7 @@ export default function PcgCallsClient() {
                     <span className={`text-xs font-bold px-2 py-0.5 rounded ${
                       activeCallAudit.gates.status === 'PASS' ? 'bg-zinc-100 text-zinc-700 border border-zinc-200' : 'bg-zinc-900 text-white font-bold'
                     }`}>
-                      {activePersona === 'agent'
-                        ? (activeCallAudit.gates.status === 'PASS' ? 'No Compliance Mistake' : 'Compliance Mistake (FAIL)')
-                        : activeCallAudit.gates.status}
+                      {activeCallAudit.gates.status === 'PASS' ? 'No Compliance Mistake' : 'Compliance Mistake (FAIL)'}
                     </span>
                   </div>
                 ) : (
