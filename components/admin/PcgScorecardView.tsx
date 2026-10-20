@@ -1006,13 +1006,13 @@ export default function PcgScorecardView({
             <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7]">
               <div>
                 <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-                  IR Weekly Scorecard
+                  {activePersona === 'agent' ? 'My Weekly Scorecard' : 'PCG Weekly RM Scorecard'}
                 </h1>
                 <p className="text-sm text-gray-500 font-medium mt-1">
                   Week of {formatDate(activeReport.weekStart)} to {formatDate(activeReport.weekEnd)}
                 </p>
                 <p className="text-sm font-semibold text-indigo-700 mt-0.5">
-                  Agent Name: {activeReport.rmName}
+                  RM Name: {activeReport.rmName}
                 </p>
               </div>
               <div className="mt-4 md:mt-0 flex items-center gap-3">

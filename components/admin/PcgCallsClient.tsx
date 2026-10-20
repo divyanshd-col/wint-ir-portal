@@ -1157,7 +1157,7 @@ export default function PcgCallsClient() {
                 <polyline points="10 9 9 9 8 9"/>
               </svg>
             </span>
-            <span className="flex-1">RM Scorecard</span>
+            <span className="flex-1">{activePersona === 'agent' ? 'My Scorecard' : 'RM Scorecard'}</span>
           </button>
 
           {/* 5. RM Performance Navigation Link */}

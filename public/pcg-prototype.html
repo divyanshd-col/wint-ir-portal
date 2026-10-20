@@ -51,7 +51,7 @@
           Member Analytics
         </button>
         <button id="tab-scorecard" onclick="setTab('scorecard')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
-          Weekly RM Scorecard
+          RM Scorecard
         </button>
         <button id="tab-rm-performance" onclick="setTab('rm-performance')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
           RM Performance
@@ -1482,10 +1482,15 @@
       const tabCalls = document.getElementById('tab-calls');
       const tabTeam = document.getElementById('tab-team-analytics');
       const tabMember = document.getElementById('tab-member-analytics');
+      const tabScorecard = document.getElementById('tab-scorecard');
       const tabRmPerf = document.getElementById('tab-rm-performance');
       const protoName = document.getElementById('proto-user-name');
       const protoEmail = document.getElementById('proto-user-email');
       const protoBadge = document.getElementById('proto-user-role-badge');
+
+      if (tabScorecard) {
+        tabScorecard.innerText = (role === 'agent') ? 'My Scorecard' : 'RM Scorecard';
+      }
 
       if (role === 'admin') {
         if (tabCalls) tabCalls.classList.add('hidden');
