@@ -151,7 +151,7 @@ export default function PcgCallsClient() {
   const [loading, setLoading] = useState(true);
 
   // Common filters
-  const [selectedCategory, setSelectedCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support' | 'coaching_available' | 'tl_analytics' | 'rm_performance' | 'ai_coaching_insights'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support' | 'tl_analytics' | 'rm_performance' | 'ai_coaching_insights'>('all');
   const [adminGridRmFilter, setAdminGridRmFilter] = useState<string>('all');
   const [adminBannerTlSelect, setAdminBannerTlSelect] = useState<'all' | 'Gokul' | 'Vaishnavi'>('all');
   const [dateRange, setDateRange] = useState<'7d' | '30d' | 'custom'>('7d');
@@ -279,7 +279,7 @@ export default function PcgCallsClient() {
 
   // Open coaching chat view for a given topic or RM
   const handleOpenCoachingChat = (opts: { rmName?: string; categoryKey?: '13_pitching' | 'upselling' | 'support' }) => {
-    setSelectedCategory('coaching_available');
+    setSelectedCategory('all');
     if (opts.rmName) {
       setAdminRmFilter(opts.rmName);
     }
@@ -1604,16 +1604,6 @@ export default function PcgCallsClient() {
             >
               General / Support
             </button>
-            <button
-              onClick={() => setSelectedCategory(selectedCategory === 'coaching_available' ? 'all' : 'coaching_available')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                selectedCategory === 'coaching_available'
-                  ? 'bg-[#111111] text-white shadow-sm'
-                  : 'bg-zinc-100 text-zinc-800 border border-zinc-200 hover:bg-zinc-200'
-              }`}
-            >
-              Coaching Insights Available
-            </button>
 
             {/* Admin Dedicated View Pills */}
             {activePersona === 'admin' && (
@@ -1656,22 +1646,7 @@ export default function PcgCallsClient() {
         {/* ── 6. CALLS AUDIT LIST ────────────────────────────────────────────── */}
         {selectedCategory !== 'ai_coaching_insights' && (
         <div id="pcg-calls-table" className="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden">
-          {/* Coaching Insights Active Banner */}
-          {selectedCategory === 'coaching_available' && (
-            <div className="p-3 bg-zinc-100 border-b border-zinc-200 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-zinc-900 font-semibold">
-                <span>
-                  Showing {calls.length} calls with active AI Coaching Insights. Click <strong>"View"</strong> on any call to inspect the full chat transcript turns and coaching guidance.
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedCategory('all')}
-                className="text-xs text-zinc-700 hover:text-black font-bold underline"
-              >
-                Clear Filter
-              </button>
-            </div>
-          )}
+
           <div className="p-4 border-b border-[#E4E4E7] flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-bold text-[#111111]">
@@ -2122,22 +2097,7 @@ export default function PcgCallsClient() {
                   </div>
                 )}
 
-                {/* AI Sales Coaching Tip (shown for calls needing attention) */}
-                {activeCallAudit.aiCoachingTip ? (
-                  <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-300 shadow-sm space-y-1.5">
-                    <div className="flex items-center gap-2 text-zinc-900 font-bold text-xs uppercase tracking-wider">
-                       AI Sales Coaching Tip
-                    </div>
-                    <p className="text-xs text-zinc-800 leading-relaxed font-medium">
-                      {activeCallAudit.aiCoachingTip}
-                    </p>
-                  </div>
-                ) : activeCallAudit.isAnswered ? (
-                  <div className="p-3 bg-zinc-100 rounded-xl border border-zinc-300 flex items-center justify-between text-xs text-zinc-800">
-                    <span>✓ Clean Call: No coaching intervention needed.</span>
-                    <span className="font-mono font-bold">{activeCallAudit.iqsScore}% IQS</span>
-                  </div>
-                ) : null}
+
 
                 {/* ── ACTION SECTION DIRECTLY BELOW PARAMETERS PANEL ───────────── */}
                 <div className="pt-3 border-t border-[#E4E4E7] space-y-3">
