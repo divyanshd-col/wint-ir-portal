@@ -573,6 +573,84 @@ export default function PcgCallsClient() {
   );
   const rmRankDisplay = rmRankIndex >= 0 ? `#${rmRankIndex + 1}` : '#2';
 
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  const getDateRangeLabel = () => {
+    const fmt = (d: Date) => {
+      const day = d.getDate();
+      const month = MONTH_NAMES[d.getMonth()] || 'Oct';
+      const year = d.getFullYear();
+      return { day, month, year, str: `${day} ${month} ${year}` };
+    };
+
+    const fmtRange = (start: Date, end: Date) => {
+      const s = fmt(start);
+      const e = fmt(end);
+      if (s.year === e.year && s.month === e.month) {
+        return `${s.day} – ${e.day} ${e.month} ${e.year}`;
+      }
+      if (s.year === e.year) {
+        return `${s.day} ${s.month} – ${e.day} ${e.month} ${e.year}`;
+      }
+      return `${s.str} – ${e.str}`;
+    };
+
+    if (dateRange === '7d') {
+      const end = new Date();
+      const start = new Date(Date.now() - 7 * 86400000);
+      const rangeStr = fmtRange(start, end);
+      return {
+        full: `${rangeStr} (Last 7 Days)`,
+        short: 'Last 7 Days',
+        datesOnly: rangeStr,
+      };
+    }
+    if (dateRange === '30d') {
+      const end = new Date();
+      const start = new Date(Date.now() - 30 * 86400000);
+      const rangeStr = fmtRange(start, end);
+      return {
+        full: `${rangeStr} (Last 30 Days)`,
+        short: 'Last 30 Days',
+        datesOnly: rangeStr,
+      };
+    }
+    if (dateRange === 'custom') {
+      if (customStartDate && customEndDate) {
+        const [sy, sm, sd] = customStartDate.split('-').map(Number);
+        const [ey, em, ed] = customEndDate.split('-').map(Number);
+        const start = new Date(sy, (sm || 1) - 1, sd || 1);
+        const end = new Date(ey, (em || 1) - 1, ed || 1);
+        const rangeStr = fmtRange(start, end);
+        return {
+          full: `${rangeStr} (Custom Range)`,
+          short: rangeStr,
+          datesOnly: rangeStr,
+        };
+      }
+      return {
+        full: 'Custom Range',
+        short: 'Custom',
+        datesOnly: 'Custom Range',
+      };
+    }
+    return {
+      full: 'Last 7 Days',
+      short: 'Last 7 Days',
+      datesOnly: 'Last 7 Days',
+    };
+  };
+
+  const activeDateInfo = getDateRangeLabel();
+
+  const dynamicTlAvgIqs = (() => {
+    const answeredCalls = calls.filter((c) => c.isAnswered);
+    if (answeredCalls.length > 0) {
+      return (answeredCalls.reduce((acc, c) => acc + c.iqsScore, 0) / answeredCalls.length).toFixed(1);
+    }
+    return '83.4';
+  })();
+
   const gokulRms = ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'];
   const vaishnaviRms = ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'];
   const allKnownRms = [...gokulRms, ...vaishnaviRms];
@@ -1271,46 +1349,91 @@ export default function PcgCallsClient() {
         )}
 
         {/* ── 2. TOP METRIC CARDS ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-              {activePersona === 'agent' ? 'My Quality Score' : activePersona === 'tl' ? 'Team Avg IQS' : 'Org Avg IQS'}
-            </p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                {activePersona === 'agent' ? `${rmQualityScore}%` : activePersona === 'tl' ? '83.4%' : '84.2%'}
-              </span>
-              <span className="text-xs font-semibold text-zinc-600">▲ +2.4%</span>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-0.5">
+            <span className="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">
+              {activePersona === 'agent'
+                ? 'My Call Quality Overview'
+                : activePersona === 'tl'
+                ? `Team ${selectedTl} Performance Overview`
+                : 'Organization Performance Overview'}
+            </span>
+            <div className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-700 bg-white border border-[#E4E4E7] px-2.5 py-1 rounded-lg shadow-2xs">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-zinc-500">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span className="text-zinc-500 font-normal">Period:</span>
+              <span className="font-semibold text-zinc-900">{activeDateInfo.full}</span>
             </div>
-            <p className="text-[11px] text-[#71717A] mt-1">100% AI Automated audits</p>
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-              {activePersona === 'agent' ? 'My Total Calls' : 'Total Calls Attempted'}
-            </p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls || 142)}
-              </span>
-              <span className="text-xs text-[#71717A]">calls</span>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+                  {activePersona === 'agent' ? 'My Quality Score' : activePersona === 'tl' ? 'Team Avg IQS' : 'Org Avg IQS'}
+                </p>
+                <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
+                  {activeDateInfo.short}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold tabular-nums text-[#111111]">
+                  {activePersona === 'agent'
+                    ? `${rmQualityScore}%`
+                    : summary?.avgIqs != null
+                    ? `${summary.avgIqs}%`
+                    : `${dynamicTlAvgIqs}%`}
+                </span>
+                <span className="text-xs font-semibold text-zinc-600">▲ +2.4%</span>
+              </div>
+              <p className="text-[11px] text-[#71717A] mt-1">
+                100% AI Automated audits · {activeDateInfo.datesOnly}
+              </p>
             </div>
-            <p className="text-[11px] text-[#71717A] mt-1">
-              {activePersona === 'agent' ? rmAnsweredCallsCount : (summary?.answeredCalls || 97)} connected
-            </p>
-          </div>
 
-          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">Connect Rate</p>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                {activePersona === 'agent' ? rmConnectRate : (summary?.totalCalls ? Math.round((summary.answeredCalls / summary.totalCalls) * 100) : 68)}%
-              </span>
-              <span className="text-xs text-[#71717A]">pickup</span>
+            <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+                  {activePersona === 'agent' ? 'My Total Calls' : 'Total Calls Attempted'}
+                </p>
+                <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
+                  {activeDateInfo.short}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold tabular-nums text-[#111111]">
+                  {activePersona === 'agent' ? rmTotalCallsCount : (summary?.totalCalls ?? calls.length)}
+                </span>
+                <span className="text-xs text-[#71717A]">calls</span>
+              </div>
+              <p className="text-[11px] text-[#71717A] mt-1">
+                {activePersona === 'agent' ? rmAnsweredCallsCount : (summary?.answeredCalls ?? calls.filter((c) => c.isAnswered).length)} connected · {activeDateInfo.datesOnly}
+              </p>
             </div>
-            <p className="text-[11px] text-[#71717A] mt-1">
-              {activePersona === 'agent' ? rmUnansweredCallsCount : (summary?.unansweredCalls || 45)} unanswered
-            </p>
+
+            <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">Connect Rate</p>
+                <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
+                  {activeDateInfo.short}
+                </span>
+              </div>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-2xl font-bold tabular-nums text-[#111111]">
+                  {activePersona === 'agent'
+                    ? rmConnectRate
+                    : (summary?.totalCalls ? Math.round((summary.answeredCalls / summary.totalCalls) * 100) : (calls.length ? Math.round((calls.filter((c) => c.isAnswered).length / calls.length) * 100) : 0))}%
+                </span>
+                <span className="text-xs text-[#71717A]">pickup</span>
+              </div>
+              <p className="text-[11px] text-[#71717A] mt-1">
+                {activePersona === 'agent' ? rmUnansweredCallsCount : (summary?.unansweredCalls ?? Math.max(0, (summary?.totalCalls ?? calls.length) - (summary?.answeredCalls ?? calls.filter((c) => c.isAnswered).length)))} unanswered · {activeDateInfo.datesOnly}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -1330,7 +1453,7 @@ export default function PcgCallsClient() {
                 <div>
                   <p className="text-sm font-bold text-gray-900">Agent Wise Analytics</p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    IQS, Connect Rate, and performance per agent · Team {selectedTl}
+                    IQS, Connect Rate, and performance per agent · Team {selectedTl} · {activeDateInfo.full}
                   </p>
                 </div>
               </div>

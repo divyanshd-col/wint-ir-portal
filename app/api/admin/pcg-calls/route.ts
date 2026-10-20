@@ -479,9 +479,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   // Summary calculation strictly scoped to filtered calls before evaluation table connected-only filter
   const scopedTotal = filtered.length;
-  const answeredCount = filtered.filter(c => c.isAnswered).length;
+  const answeredCallsList = filtered.filter(c => c.isAnswered);
+  const answeredCount = answeredCallsList.length;
   const unansweredCount = filtered.filter(c => !c.isAnswered).length;
   const totalDuration = filtered.reduce((acc, c) => acc + c.durationSeconds, 0);
+
+  // Dynamic avgIqs computation across all answered calls in this scoped filter
+  const avgIqs = answeredCount > 0
+    ? parseFloat((answeredCallsList.reduce((acc, c) => acc + c.iqsScore, 0) / answeredCount).toFixed(1))
+    : 83.4;
 
   // Evaluation table should NOT show calls which are not connected
   if (callStatusFilter === 'unanswered') {
@@ -499,15 +505,27 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   // Paginated calls
   const paginatedCalls = filtered.slice(offset, offset + limit);
 
+  // Date-filtered pool for scorecards and team analytics
+  let dateFilteredPool = ALL_DUMMY_CALLS;
+  if (dateFrom && dateTo) {
+    dateFilteredPool = dateFilteredPool.filter(c => c.startTime >= dateFrom && c.startTime <= `${dateTo}T23:59:59.999Z`);
+  } else if (dateRangeParam === '7d') {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    dateFilteredPool = dateFilteredPool.filter(c => c.startTime >= sevenDaysAgo);
+  } else if (dateRangeParam === '30d') {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
+    dateFilteredPool = dateFilteredPool.filter(c => c.startTime >= thirtyDaysAgo);
+  }
+
   // Distinct RMs list for dropdowns
   const rms = DUMMY_RMS.map(r => ({
     name: r.name,
-    count: ALL_DUMMY_CALLS.filter(c => c.rmName === r.name).length,
+    count: dateFilteredPool.filter(c => c.rmName === r.name).length,
   }));
 
-  // RM Leaderboard & Scorecards calculated across the dataset
+  // RM Leaderboard & Scorecards calculated across the date-filtered dataset
   const rmScores: Record<string, { total: number; answered: number; pitch: number[]; upsell: number[]; support: number[]; flags: number }> = {};
-  ALL_DUMMY_CALLS.forEach(c => {
+  dateFilteredPool.forEach(c => {
     if (!rmScores[c.rmName]) {
       rmScores[c.rmName] = { total: 0, answered: 0, pitch: [], upsell: [], support: [], flags: 0 };
     }
@@ -523,12 +541,13 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const avg = (arr: number[]) => arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : null;
 
-  const rmScorecards = Object.entries(rmScores).map(([name, data]) => {
+  const rmScorecards = DUMMY_RMS.map(r => {
+    const data = rmScores[r.name] || { total: 0, answered: 0, pitch: [], upsell: [], support: [], flags: 0 };
     const allScores = [...data.pitch, ...data.upsell, ...data.support];
-    const overall = avg(allScores) || 82;
+    const overall = avg(allScores) || (data.total > 0 ? 82 : 85);
     const trend = overall >= 85 ? 'improving' : overall < 78 ? 'declining' : 'stable';
     return {
-      rmName: name,
+      rmName: r.name,
       totalCalls: data.total,
       connectRate: data.total ? Math.round((data.answered / data.total) * 100) : 0,
       pitchScore: avg(data.pitch) || (overall + 2),
@@ -553,19 +572,33 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       {
         tlName: 'Gokul',
         teamSize: 5,
-        totalCalls: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Gokul.includes(c.rmName)).length,
-        connectRate: 67,
-        avgScore: 86.8,
-        callsUnder85: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Gokul.includes(c.rmName) && c.needsAttention).length,
+        totalCalls: dateFilteredPool.filter(c => TL_TEAMS.Gokul.includes(c.rmName)).length,
+        connectRate: (() => {
+          const tCalls = dateFilteredPool.filter(c => TL_TEAMS.Gokul.includes(c.rmName));
+          const ans = tCalls.filter(c => c.isAnswered).length;
+          return tCalls.length ? Math.round((ans / tCalls.length) * 100) : 67;
+        })(),
+        avgScore: (() => {
+          const ans = dateFilteredPool.filter(c => TL_TEAMS.Gokul.includes(c.rmName) && c.isAnswered);
+          return ans.length ? parseFloat((ans.reduce((a, c) => a + c.iqsScore, 0) / ans.length).toFixed(1)) : 86.8;
+        })(),
+        callsUnder85: dateFilteredPool.filter(c => TL_TEAMS.Gokul.includes(c.rmName) && c.needsAttention).length,
         rms: TL_TEAMS.Gokul,
       },
       {
         tlName: 'Vaishnavi',
         teamSize: 4,
-        totalCalls: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName)).length,
-        connectRate: 65,
-        avgScore: 85.1,
-        callsUnder85: ALL_DUMMY_CALLS.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName) && c.needsAttention).length,
+        totalCalls: dateFilteredPool.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName)).length,
+        connectRate: (() => {
+          const tCalls = dateFilteredPool.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName));
+          const ans = tCalls.filter(c => c.isAnswered).length;
+          return tCalls.length ? Math.round((ans / tCalls.length) * 100) : 65;
+        })(),
+        avgScore: (() => {
+          const ans = dateFilteredPool.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName) && c.isAnswered);
+          return ans.length ? parseFloat((ans.reduce((a, c) => a + c.iqsScore, 0) / ans.length).toFixed(1)) : 85.1;
+        })(),
+        callsUnder85: dateFilteredPool.filter(c => TL_TEAMS.Vaishnavi.includes(c.rmName) && c.needsAttention).length,
         rms: TL_TEAMS.Vaishnavi,
       },
     ],
@@ -573,6 +606,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       totalCalls: scopedTotal,
       answeredCalls: answeredCount,
       unansweredCalls: unansweredCount,
+      avgIqs,
       totalDurationSeconds: totalDuration,
       activeRmsCount: new Set(filtered.map(c => c.rmName)).size,
       categoryCounts: {
