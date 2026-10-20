@@ -221,7 +221,6 @@
               <option value="Harsh">Harsh</option>
               <option value="Gokul">Gokul</option>
               <option value="Vaishnavi">Vaishnavi</option>
-              <option value="All TLs">All TLs</option>
             </select>
           </div>
 
@@ -1594,10 +1593,9 @@
     function renderTeamAnalytics() {
       // 1. Get Active Agents
       let agents = [];
-      if (taCurrentTL === 'Harsh') agents = TA_HARSH_AGENTS;
-      else if (taCurrentTL === 'Gokul') agents = TA_GOKUL_AGENTS;
+      if (taCurrentTL === 'Gokul') agents = TA_GOKUL_AGENTS;
       else if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
-      else agents = [...TA_HARSH_AGENTS, ...TA_GOKUL_AGENTS, ...TA_VAISHNAVI_AGENTS];
+      else agents = TA_HARSH_AGENTS;
 
       // 2. Update Top Stat Cards
       const csatTeamEl = document.getElementById('ta-stat-csat-team');
@@ -1616,24 +1614,6 @@
         if (volTitleEl) volTitleEl.innerText = 'EMAILS HANDLED';
         if (volTeamEl) volTeamEl.innerText = '—';
         if (volCxEl) volCxEl.innerText = '—';
-      } else if (taCurrentTL === 'Harsh') {
-        if (taCurrentChannel === 'chats') {
-          if (csatTeamEl) csatTeamEl.innerText = '84.9%';
-          if (csatCxEl) csatCxEl.innerText = '81.1%';
-          if (iqsTeamEl) iqsTeamEl.innerText = '94%';
-          if (iqsCxEl) iqsCxEl.innerText = '93%';
-          if (volTitleEl) volTitleEl.innerText = 'CHATS HANDLED';
-          if (volTeamEl) volTeamEl.innerText = '532';
-          if (volCxEl) volCxEl.innerText = '10,540';
-        } else {
-          if (csatTeamEl) csatTeamEl.innerText = '89.2%';
-          if (csatCxEl) csatCxEl.innerText = '85.4%';
-          if (iqsTeamEl) iqsTeamEl.innerText = '94%';
-          if (iqsCxEl) iqsCxEl.innerText = '91%';
-          if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
-          if (volTeamEl) volTeamEl.innerText = '387';
-          if (volCxEl) volCxEl.innerText = '8,420';
-        }
       } else if (taCurrentTL === 'Gokul') {
         if (csatTeamEl) csatTeamEl.innerText = '89.2%';
         if (csatCxEl) csatCxEl.innerText = '87.4%';
@@ -1651,13 +1631,24 @@
         if (volTeamEl) volTeamEl.innerText = taCurrentChannel === 'calls' ? '224' : '190';
         if (volCxEl) volCxEl.innerText = taCurrentChannel === 'calls' ? '520' : '420';
       } else {
-        if (csatTeamEl) csatTeamEl.innerText = '86.4%';
-        if (csatCxEl) csatCxEl.innerText = '81.1%';
-        if (iqsTeamEl) iqsTeamEl.innerText = '90.2%';
-        if (iqsCxEl) iqsCxEl.innerText = '89.0%';
-        if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'calls' ? 'CALLS HANDLED' : 'CHATS HANDLED';
-        if (volTeamEl) volTeamEl.innerText = taCurrentChannel === 'calls' ? '907' : '952';
-        if (volCxEl) volCxEl.innerText = taCurrentChannel === 'calls' ? '8,420' : '10,540';
+        // Harsh
+        if (taCurrentChannel === 'chats') {
+          if (csatTeamEl) csatTeamEl.innerText = '84.9%';
+          if (csatCxEl) csatCxEl.innerText = '81.1%';
+          if (iqsTeamEl) iqsTeamEl.innerText = '94%';
+          if (iqsCxEl) iqsCxEl.innerText = '93%';
+          if (volTitleEl) volTitleEl.innerText = 'CHATS HANDLED';
+          if (volTeamEl) volTeamEl.innerText = '532';
+          if (volCxEl) volCxEl.innerText = '10,540';
+        } else {
+          if (csatTeamEl) csatTeamEl.innerText = '89.2%';
+          if (csatCxEl) csatCxEl.innerText = '85.4%';
+          if (iqsTeamEl) iqsTeamEl.innerText = '94%';
+          if (iqsCxEl) iqsCxEl.innerText = '91%';
+          if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
+          if (volTeamEl) volTeamEl.innerText = '387';
+          if (volCxEl) volCxEl.innerText = '8,420';
+        }
       }
 
       // 3. Update IQS by Parameter Rows
@@ -1736,10 +1727,9 @@
 
     function renderTaBreakdown() {
       let agents = [];
-      if (taCurrentTL === 'Harsh') agents = TA_HARSH_AGENTS;
-      else if (taCurrentTL === 'Gokul') agents = TA_GOKUL_AGENTS;
+      if (taCurrentTL === 'Gokul') agents = TA_GOKUL_AGENTS;
       else if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
-      else agents = [...TA_HARSH_AGENTS, ...TA_GOKUL_AGENTS, ...TA_VAISHNAVI_AGENTS];
+      else agents = TA_HARSH_AGENTS;
 
       const activeParams = taBreakdownChannel === 'calls' ? TA_CALL_PARAMS : TA_CHAT_PARAMS;
       const theadTr = document.getElementById('ta-breakdown-thead-tr');

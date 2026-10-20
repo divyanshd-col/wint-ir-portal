@@ -666,7 +666,7 @@ export default function PcgTeamAnalyticsDashboard({
   const [showTLDrop, setShowTLDrop] = useState<boolean>(false);
   const tlDropRef = useRef<HTMLDivElement>(null);
 
-  const availableTLs = ['Harsh', 'Gokul', 'Vaishnavi', 'All TLs'];
+  const availableTLs = ['Harsh', 'Gokul', 'Vaishnavi'];
 
   useEffect(() => {
     if (selectedTl && availableTLs.includes(selectedTl)) {
@@ -704,11 +704,9 @@ export default function PcgTeamAnalyticsDashboard({
 
   // Active agents based on selected TL
   const getActiveAgents = (): AgentData[] => {
-    if (currentTL === 'Harsh') return HARSH_AGENTS;
     if (currentTL === 'Gokul') return GOKUL_AGENTS;
     if (currentTL === 'Vaishnavi') return VAISHNAVI_AGENTS;
-    // All TLs
-    return [...HARSH_AGENTS, ...GOKUL_AGENTS, ...VAISHNAVI_AGENTS];
+    return HARSH_AGENTS;
   };
 
   const activeAgents = getActiveAgents();
@@ -719,7 +717,26 @@ export default function PcgTeamAnalyticsDashboard({
 
   // Stat Card Metrics dynamically tailored to team and channel
   const getStatMetrics = () => {
-    if (currentTL === 'Harsh') {
+    if (currentTL === 'Gokul') {
+      return {
+        csatTeam: '89.2%',
+        csatCx: '87.4%',
+        iqsTeam: '86.8%',
+        iqsCx: '85.0%',
+        volumeTeam: channel === 'calls' ? '296' : '230',
+        volumeCx: channel === 'calls' ? '520' : '420',
+      };
+    } else if (currentTL === 'Vaishnavi') {
+      return {
+        csatTeam: '87.0%',
+        csatCx: '87.4%',
+        iqsTeam: '85.1%',
+        iqsCx: '85.0%',
+        volumeTeam: channel === 'calls' ? '224' : '190',
+        volumeCx: channel === 'calls' ? '520' : '420',
+      };
+    } else {
+      // Harsh
       if (channel === 'chats') {
         return {
           csatTeam: '84.9%',
@@ -739,34 +756,6 @@ export default function PcgTeamAnalyticsDashboard({
           volumeCx: '8,420',
         };
       }
-    } else if (currentTL === 'Gokul') {
-      return {
-        csatTeam: '89.2%',
-        csatCx: '87.4%',
-        iqsTeam: '86.8%',
-        iqsCx: '85.0%',
-        volumeTeam: channel === 'calls' ? '296' : '230',
-        volumeCx: channel === 'calls' ? '520' : '420',
-      };
-    } else if (currentTL === 'Vaishnavi') {
-      return {
-        csatTeam: '87.0%',
-        csatCx: '87.4%',
-        iqsTeam: '85.1%',
-        iqsCx: '85.0%',
-        volumeTeam: channel === 'calls' ? '224' : '190',
-        volumeCx: channel === 'calls' ? '520' : '420',
-      };
-    } else {
-      // All TLs
-      return {
-        csatTeam: '86.4%',
-        csatCx: '81.1%',
-        iqsTeam: '90.2%',
-        iqsCx: '89.0%',
-        volumeTeam: channel === 'calls' ? '907' : '952',
-        volumeCx: channel === 'calls' ? '8,420' : '10,540',
-      };
     }
   };
 
