@@ -44,6 +44,9 @@
         <button id="tab-calls" onclick="setTab('calls')" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#111111] shadow-2xs transition-all">
           Call Audits
         </button>
+        <button id="tab-team-analytics" onclick="setTab('team-analytics')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
+          Team Analytics
+        </button>
         <button id="tab-member-analytics" onclick="setTab('member-analytics')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
           Member Analytics
         </button>
@@ -198,6 +201,251 @@
             </thead>
             <tbody id="calls-table-body" class="divide-y divide-[#E4E4E7]">
               <!-- Injected via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TEAM ANALYTICS TAB CONTENT -->
+    <div id="view-team-analytics" class="hidden space-y-6">
+      <!-- Team Analytics Header: Title + Team Selector + Date Range -->
+      <div class="flex items-center justify-between gap-4 flex-wrap pb-2 border-b border-[#E4E4E7]">
+        <div class="flex items-center gap-4 flex-wrap">
+          <div>
+            <h2 class="text-xl font-bold text-[#111111]">Team Analytics</h2>
+            <p class="text-xs text-[#71717A] mt-0.5">Aggregated team performance, benchmark comparisons, and coachable gaps across PCG</p>
+          </div>
+
+          <!-- Viewing Team Selector -->
+          <div class="flex items-center gap-1.5 text-xs pl-4 border-l border-[#E4E4E7]">
+            <span class="text-[#71717A] font-semibold text-[11px]">Viewing Team:</span>
+            <select id="ta-team-select" onchange="onTaTeamChange(this.value)" class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-zinc-900 outline-none shadow-2xs cursor-pointer hover:border-zinc-400">
+              <option value="all">All Teams (2 Teams, 9 RMs)</option>
+              <option value="Team Gokul">Team Gokul (5 RMs)</option>
+              <option value="Team Vaishnavi">Team Vaishnavi (4 RMs)</option>
+            </select>
+          </div>
+
+          <!-- Channel Pill Selector -->
+          <div class="inline-flex rounded-lg border border-[#E4E4E7] p-0.5 bg-[#F4F4F5] text-xs">
+            <button class="px-3 py-1 rounded-md font-semibold bg-white text-[#111111] shadow-2xs">Calls</button>
+            <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">Chats</button>
+            <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">Emails</button>
+          </div>
+        </div>
+
+        <!-- Time Range Selector -->
+        <div class="inline-flex rounded-lg border border-[#E4E4E7] p-0.5 bg-zinc-100 text-xs">
+          <button class="px-3 py-1 rounded-md font-semibold bg-[#111111] text-white shadow-2xs">7 days</button>
+          <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">30 days</button>
+          <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">Custom range</button>
+        </div>
+      </div>
+
+      <!-- Top Metric Cards -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-xl border border-[#E4E4E7] shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Average IQS Score</div>
+          <div class="text-2xl font-black text-[#111111] mt-1.5 flex items-baseline gap-2">
+            <span id="ta-avg-iqs">86.8%</span>
+            <span class="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+              Target 85.0%
+            </span>
+          </div>
+          <div class="text-xs text-[#71717A] mt-1.5 flex items-center gap-1 font-medium">
+            <span class="text-emerald-600 font-bold">↑ +1.8%</span> vs prev week
+          </div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-[#E4E4E7] shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Audited Calls Volume</div>
+          <div class="text-2xl font-black text-[#111111] mt-1.5" id="ta-total-calls">118</div>
+          <div class="text-xs text-[#71717A] mt-1.5" id="ta-roster-text">Across 2 Teams (9 Active RMs)</div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-[#E4E4E7] shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Connect Rate</div>
+          <div class="text-2xl font-black text-[#111111] mt-1.5 flex items-baseline gap-2">
+            <span id="ta-connect-rate">68.2%</span>
+            <span class="text-[10px] font-bold text-zinc-600 bg-zinc-100 px-1.5 py-0.5 rounded">
+              Target >65%
+            </span>
+          </div>
+          <div class="text-xs text-[#71717A] mt-1.5 font-medium" id="ta-connected-sub">81 Connected Calls</div>
+        </div>
+
+        <div class="bg-white p-5 rounded-xl border border-[#E4E4E7] shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Coachable Calls (&lt;85%)</div>
+          <div class="text-2xl font-black text-amber-600 mt-1.5" id="ta-coachable-calls">7</div>
+          <div class="text-xs text-[#71717A] mt-1.5">Requires TL 1-on-1 coaching review</div>
+        </div>
+      </div>
+
+      <!-- Team Overview Split (Gokul & Vaishnavi) -->
+      <div id="ta-teams-split" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Team Gokul -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs space-y-3">
+          <div class="flex items-center justify-between pb-3 border-b border-[#E4E4E7]">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-[#111111]">Team Gokul</h3>
+              <span class="text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded">
+                TL: Gokul
+              </span>
+            </div>
+            <span class="text-xs text-zinc-500 font-medium">5 RMs · 68 Calls</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 bg-zinc-50 p-2.5 rounded-lg text-center border border-[#E4E4E7]">
+            <div>
+              <div class="text-[10px] font-semibold text-[#71717A] uppercase">Avg IQS</div>
+              <div class="text-base font-bold text-emerald-700">86.8%</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold text-[#71717A] uppercase">Connect %</div>
+              <div class="text-base font-bold text-zinc-900">67%</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold text-[#71717A] uppercase">Attention</div>
+              <div class="text-base font-bold text-amber-600">4 Calls</div>
+            </div>
+          </div>
+          <div class="text-xs text-zinc-600 flex items-center justify-between">
+            <span>Top: <strong class="text-zinc-900">Yaashvi Arora (91.0%)</strong></span>
+            <span class="text-amber-800">Coachable: <strong>Gaurav Nautiyal (83.0%)</strong></span>
+          </div>
+        </div>
+
+        <!-- Team Vaishnavi -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs space-y-3">
+          <div class="flex items-center justify-between pb-3 border-b border-[#E4E4E7]">
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-[#111111]">Team Vaishnavi</h3>
+              <span class="text-[10px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700 px-2 py-0.5 rounded">
+                TL: Vaishnavi
+              </span>
+            </div>
+            <span class="text-xs text-zinc-500 font-medium">4 RMs · 50 Calls</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2 bg-zinc-50 p-2.5 rounded-lg text-center border border-[#E4E4E7]">
+            <div>
+              <div class="text-[10px] font-semibold text-[#71717A] uppercase">Avg IQS</div>
+              <div class="text-base font-bold text-emerald-700">85.1%</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold text-[#71717A] uppercase">Connect %</div>
+              <div class="text-base font-bold text-zinc-900">65%</div>
+            </div>
+            <div>
+              <div class="text-[10px] font-semibold text-[#71717A] uppercase">Attention</div>
+              <div class="text-base font-bold text-amber-600">3 Calls</div>
+            </div>
+          </div>
+          <div class="text-xs text-zinc-600 flex items-center justify-between">
+            <span>Top: <strong class="text-zinc-900">Aravind (87.5%)</strong></span>
+            <span class="text-amber-800">Coachable: <strong>Swati Singh (83.5%)</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Parameter Pass Rates Table -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-2xs">
+        <div class="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFB]">
+          <div>
+            <h3 class="text-sm font-bold text-[#111111]">Parameter Pass Rates & Compliance Gaps</h3>
+            <p class="text-xs text-[#71717A] mt-0.5">Aggregated audit rates across 12 quality parameters</p>
+          </div>
+          <span class="text-xs text-zinc-500 font-medium">12 Core Gates</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase">
+                <th class="py-3 px-4">Parameter Name</th>
+                <th class="py-3 px-4">Category</th>
+                <th class="py-3 px-4">Pass Rate</th>
+                <th class="py-3 px-4">Org Benchmark</th>
+                <th class="py-3 px-4">Gap</th>
+                <th class="py-3 px-4 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#E4E4E7]">
+              <tr class="hover:bg-zinc-50">
+                <td class="py-2.5 px-4 font-semibold text-zinc-900">Pitch Clarity & Senior Secured Debt Backing</td>
+                <td class="py-2.5 px-4 text-zinc-500">13% Pitching</td>
+                <td class="py-2.5 px-4 font-bold text-zinc-900">97.4%</td>
+                <td class="py-2.5 px-4 text-zinc-600">95.0%</td>
+                <td class="py-2.5 px-4 font-bold text-emerald-600">+2.4%</td>
+                <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">PASSING</span></td>
+              </tr>
+              <tr class="hover:bg-zinc-50">
+                <td class="py-2.5 px-4 font-semibold text-zinc-900">Indicative Yield Framing & No Return Guarantees</td>
+                <td class="py-2.5 px-4 text-zinc-500">13% Pitching</td>
+                <td class="py-2.5 px-4 font-bold text-zinc-900">100.0%</td>
+                <td class="py-2.5 px-4 text-zinc-600">98.0%</td>
+                <td class="py-2.5 px-4 font-bold text-emerald-600">+2.0%</td>
+                <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">PASSING</span></td>
+              </tr>
+              <tr class="hover:bg-zinc-50">
+                <td class="py-2.5 px-4 font-semibold text-zinc-900">Secondary Liquidity Window Framing</td>
+                <td class="py-2.5 px-4 text-zinc-500">13% Pitching</td>
+                <td class="py-2.5 px-4 font-bold text-zinc-900">86.5%</td>
+                <td class="py-2.5 px-4 text-zinc-600">88.0%</td>
+                <td class="py-2.5 px-4 font-bold text-red-600">-1.5%</td>
+                <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 uppercase">COACHABLE</span></td>
+              </tr>
+              <tr class="hover:bg-zinc-50">
+                <td class="py-2.5 px-4 font-semibold text-zinc-900">Asset Allocation Need Discovery</td>
+                <td class="py-2.5 px-4 text-zinc-500">Portfolio Upselling</td>
+                <td class="py-2.5 px-4 font-bold text-zinc-900">94.2%</td>
+                <td class="py-2.5 px-4 text-zinc-600">90.0%</td>
+                <td class="py-2.5 px-4 font-bold text-emerald-600">+4.2%</td>
+                <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">PASSING</span></td>
+              </tr>
+              <tr class="hover:bg-zinc-50">
+                <td class="py-2.5 px-4 font-semibold text-zinc-900">Monthly Interest Payout Timeline Clarity</td>
+                <td class="py-2.5 px-4 text-zinc-500">Support & Ops</td>
+                <td class="py-2.5 px-4 font-bold text-zinc-900">96.5%</td>
+                <td class="py-2.5 px-4 text-zinc-600">92.0%</td>
+                <td class="py-2.5 px-4 font-bold text-emerald-600">+4.5%</td>
+                <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">PASSING</span></td>
+              </tr>
+              <tr class="hover:bg-zinc-50">
+                <td class="py-2.5 px-4 font-semibold text-zinc-900">Active Listening & Objection Handling</td>
+                <td class="py-2.5 px-4 text-zinc-500">Soft Skills</td>
+                <td class="py-2.5 px-4 font-bold text-zinc-900">94.5%</td>
+                <td class="py-2.5 px-4 text-zinc-600">90.0%</td>
+                <td class="py-2.5 px-4 font-bold text-emerald-600">+4.5%</td>
+                <td class="py-2.5 px-4 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase">PASSING</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Team Members Leaderboard -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-2xs">
+        <div class="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFB]">
+          <h3 class="text-sm font-bold text-[#111111]" id="ta-leaderboard-title">Team Roster Leaderboard</h3>
+          <span class="text-xs text-zinc-500 font-medium" id="ta-roster-count">9 RMs</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase">
+                <th class="py-3 px-4">Rank</th>
+                <th class="py-3 px-4">RM Name</th>
+                <th class="py-3 px-4">Team</th>
+                <th class="py-3 px-4">Total Calls</th>
+                <th class="py-3 px-4">Connect %</th>
+                <th class="py-3 px-4">Pitching IQS</th>
+                <th class="py-3 px-4">Upsell IQS</th>
+                <th class="py-3 px-4">Overall IQS</th>
+                <th class="py-3 px-4">Trend</th>
+                <th class="py-3 px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="ta-roster-body" class="divide-y divide-[#E4E4E7]">
+              <!-- Injected via JS -->
             </tbody>
           </table>
         </div>
@@ -1153,26 +1401,32 @@
       const avatarText = document.getElementById('user-avatar-text');
 
       const tabCalls = document.getElementById('tab-calls');
+      const tabTeam = document.getElementById('tab-team-analytics');
       if (role === 'admin') {
         if (tabCalls) tabCalls.classList.add('hidden');
-        setTab('member-analytics');
+        if (tabTeam) tabTeam.classList.remove('hidden');
+        setTab('team-analytics');
         thRm.classList.remove('hidden');
         agentFilterCont.classList.remove('hidden');
         document.getElementById('table-title').innerText = "Evaluated Call Audits";
         avatarText.innerText = "AD";
       } else {
         if (tabCalls) tabCalls.classList.remove('hidden');
+        if (tabTeam) tabTeam.classList.add('hidden');
         if (role === 'agent') {
+          setTab('calls');
           thRm.classList.add('hidden');
           agentFilterCont.classList.add('hidden');
           document.getElementById('table-title').innerText = "My Evaluated Calls (Aahan Thaker)";
           avatarText.innerText = "AT";
         } else if (role === 'tl_gokul') {
+          setTab('calls');
           thRm.classList.remove('hidden');
           agentFilterCont.classList.remove('hidden');
           document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Gokul";
           avatarText.innerText = "GK";
         } else if (role === 'tl_vaishnavi') {
+          setTab('calls');
           thRm.classList.remove('hidden');
           agentFilterCont.classList.remove('hidden');
           document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Vaishnavi";
@@ -1208,7 +1462,7 @@
     }
 
     function setTab(tab) {
-      ['calls', 'member-analytics', 'scorecard', 'disputes'].forEach(t => {
+      ['calls', 'team-analytics', 'member-analytics', 'scorecard', 'disputes'].forEach(t => {
         const btn = document.getElementById(`tab-${t}`);
         const view = document.getElementById(`view-${t}`);
         if (!btn || !view) return;
@@ -1220,14 +1474,122 @@
           view.classList.add('hidden');
         }
       });
+      if (tab === 'team-analytics') {
+        renderTeamAnalytics();
+      }
       if (tab === 'member-analytics') {
         populateMaAgentDropdown();
       }
     }
 
+    let currentTaTeam = 'all';
+
+    function onTaTeamChange(val) {
+      currentTaTeam = val;
+      renderTeamAnalytics();
+    }
+
+    function jumpToMemberAnalytics(rmName) {
+      selectedMaAgent = rmName;
+      setTab('member-analytics');
+      const select = document.getElementById('ma-agent-select');
+      if (select) select.value = rmName;
+    }
+
+    function renderTeamAnalytics() {
+      const teamFilter = currentTaTeam;
+      const tbody = document.getElementById('ta-roster-body');
+      if (!tbody) return;
+
+      const teamGokul = ['Yaashvi Arora', 'Aahan Thaker', 'Dhanush', 'Samskriti Rao', 'Gaurav Nautiyal'];
+      const teamVaishnavi = ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'];
+
+      let members = [];
+      if (teamFilter === 'all' || teamFilter === 'Team Gokul') {
+        members = members.concat(teamGokul);
+      }
+      if (teamFilter === 'all' || teamFilter === 'Team Vaishnavi') {
+        members = members.concat(teamVaishnavi);
+      }
+
+      members.sort((a, b) => (AGENTS_METRICS[b]?.iqs || 0) - (AGENTS_METRICS[a]?.iqs || 0));
+
+      const titleEl = document.getElementById('ta-leaderboard-title');
+      const countEl = document.getElementById('ta-roster-count');
+      const avgIqsEl = document.getElementById('ta-avg-iqs');
+      const totalCallsEl = document.getElementById('ta-total-calls');
+      const rosterTextEl = document.getElementById('ta-roster-text');
+      const connectRateEl = document.getElementById('ta-connect-rate');
+      const connectedSubEl = document.getElementById('ta-connected-sub');
+      const coachableCallsEl = document.getElementById('ta-coachable-calls');
+      const splitCont = document.getElementById('ta-teams-split');
+
+      if (teamFilter === 'Team Gokul') {
+        if (titleEl) titleEl.innerText = "Team Gokul Roster Leaderboard";
+        if (countEl) countEl.innerText = "5 RMs";
+        if (avgIqsEl) avgIqsEl.innerText = "86.8%";
+        if (totalCallsEl) totalCallsEl.innerText = "68";
+        if (rosterTextEl) rosterTextEl.innerText = "Team Gokul (5 Active RMs)";
+        if (connectRateEl) connectRateEl.innerText = "67.0%";
+        if (connectedSubEl) connectedSubEl.innerText = "46 Connected Calls";
+        if (coachableCallsEl) coachableCallsEl.innerText = "4";
+        if (splitCont) splitCont.classList.add('hidden');
+      } else if (teamFilter === 'Team Vaishnavi') {
+        if (titleEl) titleEl.innerText = "Team Vaishnavi Roster Leaderboard";
+        if (countEl) countEl.innerText = "4 RMs";
+        if (avgIqsEl) avgIqsEl.innerText = "85.1%";
+        if (totalCallsEl) totalCallsEl.innerText = "50";
+        if (rosterTextEl) rosterTextEl.innerText = "Team Vaishnavi (4 Active RMs)";
+        if (connectRateEl) connectRateEl.innerText = "65.0%";
+        if (connectedSubEl) connectedSubEl.innerText = "33 Connected Calls";
+        if (coachableCallsEl) coachableCallsEl.innerText = "3";
+        if (splitCont) splitCont.classList.add('hidden');
+      } else {
+        if (titleEl) titleEl.innerText = "Team Roster Leaderboard";
+        if (countEl) countEl.innerText = "9 RMs";
+        if (avgIqsEl) avgIqsEl.innerText = "86.8%";
+        if (totalCallsEl) totalCallsEl.innerText = "118";
+        if (rosterTextEl) rosterTextEl.innerText = "Across 2 Teams (9 Active RMs)";
+        if (connectRateEl) connectRateEl.innerText = "68.2%";
+        if (connectedSubEl) connectedSubEl.innerText = "81 Connected Calls";
+        if (coachableCallsEl) coachableCallsEl.innerText = "7";
+        if (splitCont) splitCont.classList.remove('hidden');
+      }
+
+      tbody.innerHTML = members.map((name, idx) => {
+        const m = AGENTS_METRICS[name];
+        if (!m) return '';
+        const rankBadge = idx === 0 ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold' :
+                          idx === 1 ? 'bg-zinc-100 text-zinc-800 border-zinc-300 font-bold' :
+                          idx === 2 ? 'bg-amber-50 text-amber-900 border-amber-200 font-bold' : 'text-zinc-500';
+        const iqsColor = m.iqs >= 88 ? 'text-emerald-700 font-bold' :
+                         m.iqs >= 85 ? 'text-zinc-900 font-bold' : 'text-amber-600 font-bold';
+        const trend = m.iqs >= 86 ? '<span class="text-emerald-600 font-bold">↑ +1.5%</span>' : '<span class="text-zinc-500">→ Flat</span>';
+        const connectPct = m.team === 'Team Gokul' ? '67%' : '65%';
+
+        return `
+          <tr class="hover:bg-zinc-50">
+            <td class="py-2.5 px-4"><span class="inline-flex items-center justify-center w-5 h-5 rounded-full border text-[11px] ${rankBadge}">#${idx + 1}</span></td>
+            <td class="py-2.5 px-4 font-semibold text-zinc-900">${name}</td>
+            <td class="py-2.5 px-4"><span class="px-2 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-700">${m.team}</span></td>
+            <td class="py-2.5 px-4 text-zinc-700 font-mono">${m.vol}</td>
+            <td class="py-2.5 px-4 text-zinc-700 font-mono">${connectPct}</td>
+            <td class="py-2.5 px-4 text-zinc-900 font-semibold">${m.pitch}%</td>
+            <td class="py-2.5 px-4 text-zinc-900 font-semibold">${m.upsell}%</td>
+            <td class="py-2.5 px-4 ${iqsColor}">${m.iqs}%</td>
+            <td class="py-2.5 px-4 text-[11px]">${trend}</td>
+            <td class="py-2.5 px-4 text-center">
+              <button onclick="jumpToMemberAnalytics('${name}')" class="px-2.5 py-1 rounded text-[11px] font-semibold bg-zinc-100 hover:bg-zinc-900 hover:text-white text-zinc-700 transition-colors">
+                Deep Dive →
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     // Initialize
-    populateMaAgentDropdown();
-    renderTable();
+    changeRole('admin');
   </script>
 </body>
 </html>

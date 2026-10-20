@@ -6,6 +6,7 @@ import { IQSRing, IQSPill } from '@/components/quality/IQSRing';
 import { iqsTheme } from '@/lib/quality';
 import PcgScorecardView from './PcgScorecardView';
 import PcgMemberAnalyticsDashboard from './PcgMemberAnalyticsDashboard';
+import PcgTeamAnalyticsDashboard from './PcgTeamAnalyticsDashboard';
 import WorkspaceSwitcher from '@/components/WorkspaceSwitcher';
 import CallEvalPanel from '@/components/quality/CallEvalPanel';
 
@@ -81,7 +82,7 @@ interface TeamLeadSummary {
   rms: string[];
 }
 
-export type PcgTab = 'calls' | 'member_analytics' | 'scorecard' | 'disputes';
+export type PcgTab = 'calls' | 'team_analytics' | 'member_analytics' | 'scorecard' | 'disputes';
 
 export const getRunoCallUrl = (callId: string | null | undefined) => {
   if (!callId) return 'https://app-call.runo.in';
@@ -174,10 +175,10 @@ export default function PcgCallsClient() {
     }
   }, [userRole, loggedInUserName]);
 
-  // When activePersona is admin, remove Call Quality view and default to Member Analytics
+  // When activePersona is admin, remove Call Quality view and default to Team Analytics
   useEffect(() => {
     if (activePersona === 'admin' && (activeTab === 'calls' || activeTab === 'disputes')) {
-      handleTabChange('member_analytics');
+      handleTabChange('team_analytics');
     }
   }, [activePersona, activeTab]);
 
@@ -186,9 +187,9 @@ export default function PcgCallsClient() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics') {
+      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics' || tabParam === 'team_analytics') {
         if (activePersona === 'admin' && (tabParam === 'calls' || tabParam === 'disputes')) {
-          setActiveTab('member_analytics');
+          setActiveTab('team_analytics');
         } else {
           setActiveTab(tabParam as PcgTab);
         }
@@ -1167,7 +1168,33 @@ export default function PcgCallsClient() {
             </button>
           )}
 
-          {/* 2. Member Analytics Navigation Link */}
+          {/* 2. Team Analytics Navigation Link (For Admin) */}
+          {activePersona === 'admin' && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('team_analytics')}
+              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
+                activeTab === 'team_analytics'
+                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+              }`}
+            >
+              <span
+                className={`inline-flex items-center justify-center shrink-0 ${
+                  activeTab === 'team_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
+                }`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10" />
+                  <line x1="12" y1="20" x2="12" y2="4" />
+                  <line x1="6" y1="20" x2="6" y2="14" />
+                </svg>
+              </span>
+              <span className="flex-1">Team Analytics</span>
+            </button>
+          )}
+
+          {/* 3. Member Analytics Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('member_analytics')}
@@ -1190,7 +1217,7 @@ export default function PcgCallsClient() {
             <span className="flex-1">Member Analytics</span>
           </button>
 
-          {/* 3. RM Scorecard Navigation Link */}
+          {/* 4. RM Scorecard Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('scorecard')}
@@ -1229,6 +1256,18 @@ export default function PcgCallsClient() {
                 onSelectTl={(tl) => setSelectedTl(tl)}
                 onOpenCallView={(cid) => handleOpenCallById(cid)}
                 onSwitchToCallsTab={() => handleTabChange('calls')}
+              />
+            </div>
+          ) : activeTab === 'team_analytics' ? (
+            <div>
+              <PcgTeamAnalyticsDashboard
+                activePersona={activePersona}
+                selectedTl={selectedTl}
+                onSelectTl={(tl) => setSelectedTl(tl as any)}
+                onSelectRm={(rm) => setSelectedRm(rm)}
+                onSwitchToMemberAnalytics={() => handleTabChange('member_analytics')}
+                teamLeads={teamLeads}
+                rmScorecards={rmScorecards}
               />
             </div>
           ) : activeTab === 'member_analytics' ? (
