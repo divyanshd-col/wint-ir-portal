@@ -867,7 +867,7 @@ export default function PcgCallsClient() {
                             }}
                             className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1"
                           >
-                            <span>{activePersona === 'tl' ? (isExpanded ? 'Hide' : 'View') : 'View'}</span>
+                            <span>{isExpanded ? 'Hide' : 'View Details'}</span>
                             {activePersona === 'tl' && <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>}
                           </button>
                         </td>
@@ -2030,9 +2030,9 @@ export default function PcgCallsClient() {
                                   handleOpenCallView(call);
                                 }
                               }}
-                              className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1.5"
+                              className="px-3 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1.5"
                             >
-                              <span>{activePersona === 'tl' ? (isExpanded ? 'Hide' : 'Evaluate') : 'View'}</span>
+                              <span>{isExpanded ? 'Hide' : 'View Details'}</span>
                               {activePersona === 'tl' && (
                                 <span className="text-[10px] opacity-70">
                                   {isExpanded ? '▲' : '▼'}
