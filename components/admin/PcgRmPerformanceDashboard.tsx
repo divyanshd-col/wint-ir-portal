@@ -126,9 +126,9 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     name: 'Swati Singh',
     ini: 'SS',
     tl: 'Vaishnavi',
-    currentIqs: 83.8,
-    prev2WkIqs: 84.5,
-    delta2Wk: -0.7,
+    currentIqs: 69.5,
+    prev2WkIqs: 72.0,
+    delta2Wk: -2.5,
     callsVolume: 56,
     csatPct: 84.0,
     focusArea: 'Active Listening & Objection Handling',
@@ -139,9 +139,9 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     name: 'Gaurav Nautiyal',
     ini: 'GN',
     tl: 'Gokul',
-    currentIqs: 82.0,
-    prev2WkIqs: 83.2,
-    delta2Wk: -1.2,
+    currentIqs: 68.0,
+    prev2WkIqs: 71.5,
+    delta2Wk: -3.5,
     callsVolume: 44,
     csatPct: 83.5,
     focusArea: 'Post-Call Recap & Follow-Through',
@@ -171,8 +171,9 @@ export default function PcgRmPerformanceDashboard({
     .sort((a, b) => b.currentIqs - a.currentIqs)
     .slice(0, 5);
 
-  // 2. Bottom Performers (Bottom 5 by IQS score, ascending)
+  // 2. Bottom Performers (anyone with an IQS score of 70% or below, sorted ascending by score)
   const bottomPerformers = [...filteredRms]
+    .filter((rm) => rm.currentIqs <= 70.0)
     .sort((a, b) => a.currentIqs - b.currentIqs)
     .slice(0, 5);
 
@@ -202,7 +203,7 @@ export default function PcgRmPerformanceDashboard({
             </span>
           </div>
           <p style={{ fontSize: 13, color: '#71717a', margin: '4px 0 0 0' }}>
-            5 in each category along with IQS scores: Top performers, Bottom performers, and Most improved (two-week rolling difference).
+            Top performers (Top 5), Bottom performers (IQS ≤ 70%), and Most improved (Top 5 by two-week rolling difference).
           </p>
         </div>
 
@@ -320,62 +321,75 @@ export default function PcgRmPerformanceDashboard({
               </h2>
             </div>
             <span style={{ fontSize: 11, fontWeight: 600, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '2px 7px', borderRadius: 6 }}>
-              Coaching Focus (Lowest 5)
+              IQS ≤ 70%
             </span>
           </div>
 
           <div>
-            {bottomPerformers.map((rm, idx) => {
-              const isBelowTarget = rm.currentIqs < 85.0;
-              return (
-                <div
-                  key={rm.id}
-                  onClick={() => onSelectRm && onSelectRm(rm.name)}
-                  style={{
-                    padding: '14px 18px',
-                    borderBottom: idx < bottomPerformers.length - 1 ? '1px solid #f4f4f5' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 12,
-                    cursor: onSelectRm ? 'pointer' : 'default',
-                    transition: 'background 0.15s ease',
-                  }}
-                  className="hover:bg-zinc-50"
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
-                      #{idx + 1}
-                    </span>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: isBelowTarget ? '#fee2e2' : '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: isBelowTarget ? '#991b1b' : '#92400e', flexShrink: 0 }}>
-                      {rm.ini}
-                    </div>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {rm.name}
-                        </span>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
-                          Team {rm.tl}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 11, color: isBelowTarget ? '#b91c1c' : '#71717a', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        Focus: {rm.focusArea}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: isBelowTarget ? '#b91c1c' : '#d97706' }}>
-                      {rm.currentIqs}%
-                    </div>
-                    <span style={{ fontSize: 10, fontWeight: 600, color: isBelowTarget ? '#dc2626' : '#71717a' }}>
-                      {isBelowTarget ? `${(rm.currentIqs - 85.0).toFixed(1)}% vs tgt` : 'Target met'}
-                    </span>
-                  </div>
+            {bottomPerformers.length === 0 ? (
+              <div style={{ padding: '36px 18px', textAlign: 'center', color: '#71717a' }}>
+                <div style={{ width: 36, height: 36, borderRadius: '50%', background: '#ecfdf5', color: '#059669', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, marginBottom: 8 }}>
+                  ✓
                 </div>
-              );
-            })}
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#18181b', marginBottom: 2 }}>
+                  No RMs Scoring ≤ 70%
+                </div>
+                <div style={{ fontSize: 11, color: '#71717a' }}>
+                  All active team members meet or exceed the 70% quality benchmark.
+                </div>
+              </div>
+            ) : (
+              bottomPerformers.map((rm, idx) => {
+                return (
+                  <div
+                    key={rm.id}
+                    onClick={() => onSelectRm && onSelectRm(rm.name)}
+                    style={{
+                      padding: '14px 18px',
+                      borderBottom: idx < bottomPerformers.length - 1 ? '1px solid #f4f4f5' : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      cursor: onSelectRm ? 'pointer' : 'default',
+                      transition: 'background 0.15s ease',
+                    }}
+                    className="hover:bg-zinc-50"
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
+                        #{idx + 1}
+                      </span>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#991b1b', flexShrink: 0 }}>
+                        {rm.ini}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#18181b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {rm.name}
+                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: '#71717a', background: '#f4f4f5', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>
+                            Team {rm.tl}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          Focus: {rm.focusArea}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#b91c1c' }}>
+                        {rm.currentIqs}%
+                      </div>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: '#dc2626' }}>
+                        {(rm.currentIqs - 85.0).toFixed(1)}% vs tgt
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -455,7 +469,7 @@ export default function PcgRmPerformanceDashboard({
       {/* ── Footer Explanatory Note ────────────────────────────────────── */}
       <div style={{ marginTop: 28, padding: '14px 18px', background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <p style={{ margin: 0, fontSize: 12, color: '#71717a' }}>
-          <strong>Ranking Methodology:</strong> Top and Bottom categories evaluate active RMs by average call IQS across all 10 weighted quality parameters. Most Improved tracks the rolling net difference over a 14-day rolling evaluation window.
+          <strong>Ranking Methodology:</strong> Top category ranks the top 5 RMs by average call IQS. Bottom category highlights RMs scoring 70% or below for active coaching. Most Improved tracks the top 5 net score gainers over a 14-day rolling window.
         </p>
         <span style={{ fontSize: 11, color: '#a1a1aa' }}>
           Updated for Calls only
