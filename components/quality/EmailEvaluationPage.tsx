@@ -238,6 +238,7 @@ export default function EmailEvaluationPage() {
   // QA action state
   const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
   const [overrideParams, setOverrideParams] = useState<Record<string, Record<string, ParameterScoreValue>>>({});
+  const [overrideReasoning, setOverrideReasoning] = useState<Record<string, Record<string, string>>>({});
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
@@ -269,6 +270,41 @@ export default function EmailEvaluationPage() {
       initial[def.key] = normalizeParamScoreValue(raw);
     });
     return initial;
+  };
+
+  const getReasoningForItem = (item: EvaluationItem): Record<string, string> => {
+    if (overrideReasoning[item.message_id]) {
+      return overrideReasoning[item.message_id];
+    }
+    const current = (item.parameter_scores as any) || {};
+    const existingReasoning = (current.__reasoning && typeof current.__reasoning === 'object') ? current.__reasoning : {};
+    const initial: Record<string, string> = { ...existingReasoning };
+    DEFAULT_EMAIL_PARAMETERS.forEach(def => {
+      if (!initial[def.key] && def.aliases) {
+        for (const alias of def.aliases) {
+          if (existingReasoning[alias]) {
+            initial[def.key] = existingReasoning[alias];
+            break;
+          }
+        }
+      }
+      if (initial[def.key] === undefined) {
+        initial[def.key] = '';
+      }
+    });
+    return initial;
+  };
+
+  const handleReasoningChange = (messageId: string, paramKey: string, text: string) => {
+    const item = items.find(i => i.message_id === messageId);
+    const existing = overrideReasoning[messageId] || (item ? getReasoningForItem(item) : {});
+    setOverrideReasoning(prev => ({
+      ...prev,
+      [messageId]: {
+        ...existing,
+        [paramKey]: text,
+      },
+    }));
   };
 
   const handleParamChange = (messageId: string, paramKey: string, val: ParameterScoreValue) => {
@@ -343,6 +379,7 @@ export default function EmailEvaluationPage() {
 
   const handleSubmitReview = async (item: EvaluationItem) => {
     const currentParams = getParamsForItem(item);
+    const currentReasoning = getReasoningForItem(item);
     const scoreVal = overrideScores[item.message_id] !== undefined
       ? Number(overrideScores[item.message_id])
       : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
@@ -360,7 +397,7 @@ export default function EmailEvaluationPage() {
           qaNotes: notes,
           parameterScores: {
             ...currentParams,
-            ...((item.parameter_scores as any)?.__reasoning ? { __reasoning: (item.parameter_scores as any).__reasoning } : {}),
+            ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
           },
         }),
       });
@@ -381,6 +418,11 @@ export default function EmailEvaluationPage() {
           return next;
         });
         setOverrideParams(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideReasoning(prev => {
           const next = { ...prev };
           delete next[item.message_id];
           return next;
@@ -406,6 +448,7 @@ export default function EmailEvaluationPage() {
 
   const handleResolveDispute = async (item: EvaluationItem, decision: 'Resolved' | 'Rejected') => {
     const currentParams = getParamsForItem(item);
+    const currentReasoning = getReasoningForItem(item);
     const scoreVal = overrideScores[item.message_id] !== undefined
       ? Number(overrideScores[item.message_id])
       : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
@@ -424,11 +467,34 @@ export default function EmailEvaluationPage() {
           decision,
           notes: qaNoteVal,
           newScore: decision === 'Resolved' ? (scoreVal ? Number(scoreVal) : undefined) : undefined,
-          parameterScores: decision === 'Resolved' ? currentParams : undefined,
+          parameterScores: decision === 'Resolved' ? {
+            ...currentParams,
+            ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
+          } : undefined,
         }),
       });
       const data = await res.json();
       if (data.ok) {
+        setOverrideScores(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideParams(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideReasoning(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setReviewNotes(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
         fetchData();
       }
     } catch (err) {
@@ -866,6 +932,7 @@ export default function EmailEvaluationPage() {
                                   }}>
                                     {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
                                       const currentParams = getParamsForItem(item);
+                                      const currentReasoning = getReasoningForItem(item);
                                       const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
                                       return (
                                         <ParamScoreRow
@@ -876,8 +943,9 @@ export default function EmailEvaluationPage() {
                                           allowNA={def.allowNA}
                                           weight={def.defaultWeight}
                                           disputed={isDisputed}
-                                          reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
+                                          reason={currentReasoning[def.key] ?? ''}
                                           onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
+                                          onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
                                           last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
                                         />
                                       );
@@ -1009,6 +1077,7 @@ export default function EmailEvaluationPage() {
                                       threadSummary={item.thread_summary}
                                       customerMessage={item.customer_message}
                                       subjectLine={item.subject_line}
+                                      parameterScores={item.parameter_scores}
                                     />
                                   </div>
                                 </div>
