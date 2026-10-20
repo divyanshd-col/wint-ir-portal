@@ -1811,13 +1811,13 @@ export default function PcgCallsClient() {
                           call.gates.status === 'PASS' ? (
                             <span className="text-zinc-600 font-medium" title="No compliance mistake detected">No</span>
                           ) : (
-                            <span className="text-black font-extrabold underline" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
+                            <span className="text-black font-extrabold" title={call.gates.reason || 'Compliance violation detected'}>Yes</span>
                           )
                         ) : (
                           call.gates.status === 'PASS' ? (
                             <span className="text-zinc-600 font-medium">PASS</span>
                           ) : (
-                            <span className="text-black font-extrabold underline">FAIL</span>
+                            <span className="text-black font-extrabold">FAIL</span>
                           )
                         )}
                       </td>
