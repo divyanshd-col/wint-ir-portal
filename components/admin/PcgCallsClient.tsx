@@ -1059,31 +1059,7 @@ export default function PcgCallsClient() {
             {activePersona === 'admin' ? 'ADMIN' : activePersona === 'tl' ? 'TEAM LEAD' : 'AGENT'}
           </div>
 
-          {/* 1. Call Quality Navigation Link (Hidden for Admin) */}
-          {activePersona !== 'admin' && (
-            <button
-              type="button"
-              onClick={() => handleTabChange('calls')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
-                activeTab === 'calls' || activeTab === 'disputes'
-                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
-            >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${
-                  activeTab === 'calls' || activeTab === 'disputes' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3-8.63 2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-                </svg>
-              </span>
-              <span className="flex-1">Call Quality</span>
-            </button>
-          )}
-
-          {/* 2. Team Analytics Navigation Link (For Admin) */}
+          {/* 1. Team Analytics Navigation Link (For Admin) */}
           {activePersona === 'admin' && (
             <button
               type="button"
@@ -1109,7 +1085,7 @@ export default function PcgCallsClient() {
             </button>
           )}
 
-          {/* 3. Member Analytics / My Analytics Navigation Link */}
+          {/* 2. Member Analytics / My Analytics Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('member_analytics')}
@@ -1131,6 +1107,30 @@ export default function PcgCallsClient() {
             </span>
             <span className="flex-1">{activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}</span>
           </button>
+
+          {/* 3. Call Quality Navigation Link (Hidden for Admin) */}
+          {activePersona !== 'admin' && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('calls')}
+              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
+                activeTab === 'calls' || activeTab === 'disputes'
+                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+              }`}
+            >
+              <span
+                className={`inline-flex items-center justify-center shrink-0 ${
+                  activeTab === 'calls' || activeTab === 'disputes' ? 'text-[#18181b]' : 'text-[#71717a]'
+                }`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12a19.79 19.79 0 0 1-3-8.63 2 2 0 0 1 2-2.18h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+              </span>
+              <span className="flex-1">Call Quality</span>
+            </button>
+          )}
 
           {/* 4. RM Scorecard Navigation Link */}
           <button
