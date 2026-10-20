@@ -99,20 +99,30 @@ export const formatCallId = (callId: string | null | undefined, fallbackId: stri
 
 export const formatCallIqsScores = (call: PCGCall) => {
   const scores: Record<string, string> = {
-    P1: 'Yes', P2: 'Yes', P3: 'Yes', P5: 'Yes', P6: 'Yes',
-    P7: 'Yes', P8: 'Yes', P9: 'Yes', P10: 'Yes', P11: 'Yes'
+    CallOpening: 'Yes',
+    CallClosing: 'Yes',
+    TechnicalLegal: 'Yes',
+    AllQuestions: 'Yes',
+    Expectation: 'Yes',
+    Process: 'Yes',
+    Grammar: 'Yes',
+    Fillers: 'Yes',
+    EnergyTone: 'Yes',
+    ActiveListening: 'Yes',
+    Simplifying: 'Yes',
   };
   const evidence: Record<string, string> = {
-    P1: 'All factual, legal and investment criteria were accurately stated.',
-    P2: 'Addressed all questions raised during discussion.',
-    P3: 'Clear next steps, follow-up timeline and expectation setting established.',
-    P5: 'Warm, professional greeting identifying representative and Wint Wealth.',
-    P6: 'Structured closing confirming next steps.',
-    P7: 'Customer profile and pre-requisites checked before proceeding.',
-    P8: 'Financial terminology and bond mechanics explained simply without confusing jargon.',
-    P9: "There were zero IR interruptions, no repeat-forced moments, and the rep acknowledged the customer's audio/language preference.",
-    P10: 'Zero filler words recorded and no dead air events reported in structure_events.',
-    P11: 'Tone summary contains zero/default values and speaker ID confidence is low, indicating audio tone analysis was unavailable.'
+    CallOpening: 'Warm greeting using Sir/Ma\'am, identified RM and Wint Wealth, checked client availability.',
+    CallClosing: 'Thanked client, confirmed agreed follow-ups, warm sign-off using Sir/Ma\'am.',
+    TechnicalLegal: 'All product information consistent with Knowledge Base, PMS Disclosure Document, and AIF PPM.',
+    AllQuestions: 'Every client question was answered clearly or deferred with confirmed timeline.',
+    Expectation: 'Clear expectation setting with specific next steps and team coordination commitment.',
+    Process: 'Pre-checked portfolio and relationship context on PCG Finder before initiating call.',
+    Grammar: 'Professional vocabulary, clear sentence structure, correct pronunciation of fund names.',
+    Fillers: 'Clear, steady speech with minimal filler words; all pauses announced.',
+    EnergyTone: 'Attentive, calm, composed pacing suited to HNI wealth management.',
+    ActiveListening: 'Listened attentively without interrupting, acknowledged client concerns with genuine empathy.',
+    Simplifying: 'Explained financial terms (hurdle rate, asset cover, pass-through taxation) in plain, simple language.'
   };
 
   if (Array.isArray(call.parameters)) {
@@ -812,6 +822,7 @@ export default function PcgCallsClient() {
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
                           hideShowChat={true}
+                          isPcg={true}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -944,6 +955,7 @@ export default function PcgCallsClient() {
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
                           hideShowChat={true}
+                          isPcg={true}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -2162,6 +2174,7 @@ export default function PcgCallsClient() {
                           <CallEvalPanel
                             callId={formatCallId(call.callId, call.id)}
                             hideShowChat={true}
+                            isPcg={true}
                             mobileNumber={call.phoneNumber}
                             agentName={call.rmName}
                             iqsScore={call.iqsScore}
@@ -2241,6 +2254,7 @@ export default function PcgCallsClient() {
                 standalone={true}
                 callId={formatCallId(activeCallAudit.callId, activeCallAudit.id)}
                 hideShowChat={true}
+                isPcg={true}
                 mobileNumber={activeCallAudit.phoneNumber}
                 agentName={activeCallAudit.rmName}
                 iqsScore={activeCallAudit.iqsScore}

@@ -871,9 +871,9 @@
               <div class="flex items-center gap-2">
                 <label class="text-xs text-zinc-600 font-medium">New Status:</label>
                 <select id="override-score-select" class="text-xs font-semibold bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 outline-none">
-                  <option value="Yes">Yes (Full Score)</option>
-                  <option value="Half">Half (Partial Score)</option>
-                  <option value="No">No (0 Score)</option>
+                  <option value="Yes">Yes (Fully Met)</option>
+                  <option value="No">No (Did Not Meet)</option>
+                  <option value="NA">NA (Not Applicable)</option>
                 </select>
               </div>
 
@@ -903,6 +903,144 @@
   </div>
 
   <script>
+    // Canonical 11 PCG Call Quality Parameters across 3 Skill Groups
+    const PCG_CALL_PARAMS_SPEC = [
+      // Group 1: Process Skills — 50%
+      { id: 'CallOpening', num: 1, name: 'Call Opening', weight: 5, weightStr: '5%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'CallClosing', num: 2, name: 'Call Closing', weight: 5, weightStr: '5%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'TechnicalLegal', num: 3, name: 'Technically / Legally Correct', weight: 15, weightStr: '15%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'AllQuestions', num: 4, name: 'All Questions Addressed', weight: 10, weightStr: '10%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'Expectation', num: 5, name: 'Expectation Setting', weight: 10, weightStr: '10%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      { id: 'Process', num: 6, name: 'Process / Pre-check', weight: 5, weightStr: '5%', group: 'Group 1: Process Skills', groupWeight: '50%' },
+      
+      // Group 2: Communication Skills — 30%
+      { id: 'Grammar', num: 7, name: 'Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: 10, weightStr: '10%', group: 'Group 2: Communication Skills', groupWeight: '30%' },
+      { id: 'Fillers', num: 8, name: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: 10, weightStr: '10%', group: 'Group 2: Communication Skills', groupWeight: '30%' },
+      { id: 'EnergyTone', num: 9, name: 'Energy Level, Enthusiasm & Tone Modulation', weight: 10, weightStr: '10%', group: 'Group 2: Communication Skills', groupWeight: '30%' },
+      
+      // Group 3: Customer Service Skills — 20%
+      { id: 'ActiveListening', num: 10, name: 'Active Listening, Interruptions & Empathy', weight: 10, weightStr: '10%', group: 'Group 3: Customer Service Skills', groupWeight: '20%' },
+      { id: 'Simplifying', num: 11, name: 'Simplifying Answers', weight: 10, weightStr: '10%', group: 'Group 3: Customer Service Skills', groupWeight: '20%' }
+    ];
+
+    function createPcgParameters(scoresConfig = {}) {
+      return [
+        // Group 1: Process Skills — 50%
+        {
+          num: 1,
+          id: 'CallOpening',
+          name: 'Call Opening',
+          maxScore: 5,
+          weightStr: '5%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.CallOpening?.status || 'Yes',
+          quote: scoresConfig.CallOpening?.quote || 'Turn 1: Greeted client respectfully as Sir/Ma\'am, identified as Wint Wealth RM, and confirmed good time to speak.'
+        },
+        {
+          num: 2,
+          id: 'CallClosing',
+          name: 'Call Closing',
+          maxScore: 5,
+          weightStr: '5%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.CallClosing?.status || 'Yes',
+          quote: scoresConfig.CallClosing?.quote || 'Turn 8: Thanked client, summarized agreed WhatsApp follow-up, and closed with polite sign-off.'
+        },
+        {
+          num: 3,
+          id: 'TechnicalLegal',
+          name: 'Technically / Legally Correct',
+          maxScore: 15,
+          weightStr: '15%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.TechnicalLegal?.status || 'Yes',
+          quote: scoresConfig.TechnicalLegal?.quote || 'Turn 6: Accurately stated 1.25x asset cover, senior debt priority, and PMS/AIF disclosure terms without promising guaranteed returns.'
+        },
+        {
+          num: 4,
+          id: 'AllQuestions',
+          name: 'All Questions Addressed',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.AllQuestions?.status || 'Yes',
+          quote: scoresConfig.AllQuestions?.quote || 'Turn 4: Confirmed coupon credit turnaround time and addressed lock-in questions clearly.'
+        },
+        {
+          num: 5,
+          id: 'Expectation',
+          name: 'Expectation Setting',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.Expectation?.status || 'Yes',
+          quote: scoresConfig.Expectation?.quote || 'Turn 7: Established firm expectation for WhatsApp term sheet delivery and Thursday evening callback.'
+        },
+        {
+          num: 6,
+          id: 'Process',
+          name: 'Process / Pre-check',
+          maxScore: 5,
+          weightStr: '5%',
+          group: 'Group 1: Process Skills',
+          status: scoresConfig.Process?.status || 'Yes',
+          quote: scoresConfig.Process?.quote || 'Turn 2: Pre-checked Muthoot coupon log on PCG Finder before calling; client did not need to repeat details.'
+        },
+        // Group 2: Communication Skills — 30%
+        {
+          num: 7,
+          id: 'Grammar',
+          name: 'Vocabulary / Sentence Structure / Grammar / Pronunciations',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 2: Communication Skills',
+          status: scoresConfig.Grammar?.status || 'Yes',
+          quote: scoresConfig.Grammar?.quote || 'Turn 5: Articulate delivery, professional vocabulary, correct pronunciation of issuer names and financial terms.'
+        },
+        {
+          num: 8,
+          id: 'Fillers',
+          name: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 2: Communication Skills',
+          status: scoresConfig.Fillers?.status || 'Yes',
+          quote: scoresConfig.Fillers?.quote || 'Turn 3: Fluent delivery with zero dead air; verification pause was announced professionally.'
+        },
+        {
+          num: 9,
+          id: 'EnergyTone',
+          name: 'Energy Level, Enthusiasm & Tone Modulation',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 2: Communication Skills',
+          status: scoresConfig.EnergyTone?.status || 'Yes',
+          quote: scoresConfig.EnergyTone?.quote || 'Calm, composed, attentive pacing suited to wealth management; empathetic tone modulation.'
+        },
+        // Group 3: Customer Service Skills — 20%
+        {
+          num: 10,
+          id: 'ActiveListening',
+          name: 'Active Listening, Interruptions & Empathy',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 3: Customer Service Skills',
+          status: scoresConfig.ActiveListening?.status || 'Yes',
+          quote: scoresConfig.ActiveListening?.quote || 'Turn 3: Allowed investor to complete query without interruption and acknowledged cash flow requirement.'
+        },
+        {
+          num: 11,
+          id: 'Simplifying',
+          name: 'Simplifying Answers',
+          maxScore: 10,
+          weightStr: '10%',
+          group: 'Group 3: Customer Service Skills',
+          status: scoresConfig.Simplifying?.status || 'Yes',
+          quote: scoresConfig.Simplifying?.quote || 'Turn 6: Simplified senior secured asset cover and monthly interest payout mechanics in plain language.'
+        }
+      ];
+    }
+
     // Sample Real Calls Dataset
     const sampleCalls = [
       {
@@ -916,7 +1054,7 @@
         secondaryCategories: ["General / Support"],
         durationSeconds: 145,
         durationFormatted: "02:25",
-        iqsScore: 88,
+        iqsScore: 90,
         gateStatus: "PASS",
         isAnswered: true,
         turns: [
@@ -930,14 +1068,11 @@
           { speaker: "RM", text: "Sent directly to your WhatsApp! I will follow up this evening to help reserve your units.", time: "02:05", segment: "Upselling Pitch" },
           { speaker: "Customer", text: "Sounds good, thanks Aahan.", time: "02:18", segment: "Upselling Pitch" }
         ],
-        parameters: [
-          { name: "Portfolio Review & Need Discovery", maxScore: 20, earned: 18, status: "Yes", quote: "Turn 4: Acknowledged past bond maturity and verified liquidity availability." },
-          { name: "New Asset Relevance & Fitment", maxScore: 20, earned: 18, status: "Yes", quote: "Turn 6: Matched 11.25% AA-rated secured asset to investor profile." },
-          { name: "Liquidity vs Yield Comparison", maxScore: 15, earned: 13, status: "Yes", quote: "Turn 6: Explained 24-month horizon with monthly payout frequency." },
-          { name: "Handling Customer Hesitation", maxScore: 20, earned: 17, status: "Yes", quote: "Turn 7: Addressed cash flow requirements promptly." },
-          { name: "Next Steps & Follow-up Timeline", maxScore: 15, earned: 13, status: "Yes", quote: "Turn 8: Committed to sending WhatsApp term sheet and evening follow-up." },
-          { name: "SEBI Compliance & Disclosure Rules", maxScore: 10, earned: 9, status: "Yes", quote: "Turn 6: Full disclosure on 1.25x asset cover without guarantee." }
-        ]
+        parameters: createPcgParameters({
+          Expectation: { status: 'Yes', quote: 'Turn 8: Committed to sending WhatsApp term sheet and evening follow-up.' },
+          TechnicalLegal: { status: 'Yes', quote: 'Turn 6: Accurately explained 11.25% yield and 1.25x asset cover without promising guaranteed returns.' },
+          Fillers: { status: 'Yes', quote: 'Turn 2: Fast, fluent lookup of Muthoot coupon credit with zero dead air.' }
+        })
       },
       {
         id: "105",
@@ -964,11 +1099,11 @@
           { speaker: "Customer", text: "Is there a minimum ticket size to start?", time: "01:58", segment: "New Pitching" },
           { speaker: "RM", text: "You can start with ₹10,000, and interest is credited monthly right to your bank account.", time: "02:15", segment: "New Pitching" }
         ],
-        parameters: [
-          { name: "Pitch Clarity & Product Benefits", maxScore: 20, earned: 19, status: "Yes", quote: "Turn 7: Clear explanation of fixed monthly returns." },
-          { name: "Return vs Risk Positioning", maxScore: 15, earned: 14, status: "Yes", quote: "Turn 7: Positioned against standard bank FDs with asset cover." },
-          { name: "Active Listening & Objection Handling", maxScore: 25, earned: 23, status: "Yes", quote: "Turn 3: Guided through KYC DigiLocker reset smoothly." }
-        ]
+        parameters: createPcgParameters({
+          TechnicalLegal: { status: 'Yes', quote: 'Turn 7: Clear explanation of fixed monthly returns and senior asset backing vs standard FDs.' },
+          Process: { status: 'Yes', quote: 'Turn 3: Guided through KYC DigiLocker reset smoothly without requesting redundant documents.' },
+          Simplifying: { status: 'Yes', quote: 'Turn 7: Positioned senior debt asset cover vs bank FDs in plain language.' }
+        })
       },
       {
         id: "122",
@@ -981,7 +1116,7 @@
         secondaryCategories: ["General / Support"],
         durationSeconds: 138,
         durationFormatted: "02:18",
-        iqsScore: 85,
+        iqsScore: 80,
         gateStatus: "PASS",
         isAnswered: true,
         turns: [
@@ -991,9 +1126,11 @@
           { speaker: "Customer", text: "What is the coupon rate?", time: "01:05", segment: "Upselling Pitch" },
           { speaker: "RM", text: "It pays 11.20% annualized yield with quarterly payouts.", time: "01:25", segment: "Upselling Pitch" }
         ],
-        parameters: [
-          { name: "Portfolio Review & Need Discovery", maxScore: 20, earned: 17, status: "Yes", quote: "Turn 3: Identified idle redemption balance." }
-        ]
+        parameters: createPcgParameters({
+          Process: { status: 'Yes', quote: 'Turn 2: Verified Form 15G submission on CRM beforehand.' },
+          Fillers: { status: 'No', quote: 'Turn 4: Noticeable fumbling on quarterly payout dates causing ~4s silence.' },
+          Expectation: { status: 'No', quote: 'Turn 5: Ended without confirming next steps or follow-up for NCD investment.' }
+        })
       },
       {
         id: "164",
@@ -1006,7 +1143,7 @@
         secondaryCategories: ["General / Support"],
         durationSeconds: 152,
         durationFormatted: "02:32",
-        iqsScore: 86,
+        iqsScore: 80,
         gateStatus: "PASS",
         isAnswered: true,
         turns: [
@@ -1014,9 +1151,11 @@
           { speaker: "RM", text: "Hi Mr. Nair, Aravind here. You can upload your cancelled cheque in the Profile tab.", time: "00:25", segment: "Support Query" },
           { speaker: "RM", text: "Also, your wallet has ₹1.5L unallocated. We have an 11.60% XIRR secondary market bond available.", time: "00:48", segment: "Upselling Pitch", isPivotTurn: true }
         ],
-        parameters: [
-          { name: "Portfolio Review & Need Discovery", maxScore: 20, earned: 17, status: "Yes", quote: "Turn 3: Advised on idle wallet funds." }
-        ]
+        parameters: createPcgParameters({
+          Expectation: { status: 'No', quote: 'Turn 5: Did not commit to a specific callback window for demat allocation.' },
+          ActiveListening: { status: 'Yes', quote: 'Turn 3: Addressed bank account update request before introducing bond reinvestment.' },
+          Fillers: { status: 'No', quote: 'Turn 3: Repeated filler sounds (umm, aaa) while explaining cheque upload.' }
+        })
       },
       {
         id: "176",
@@ -1036,9 +1175,10 @@
           { speaker: "Customer", text: "Is my CDSL demat account linked?", time: "00:05", segment: "Support Query" },
           { speaker: "RM", text: "Yes, verified and active. Let me explain the 13% Club senior debt allocation.", time: "00:25", segment: "New Pitching", isPivotTurn: true }
         ],
-        parameters: [
-          { name: "Pitch Clarity", maxScore: 20, earned: 18, status: "Yes", quote: "Turn 2: Clear presentation of senior debt." }
-        ]
+        parameters: createPcgParameters({
+          Process: { status: 'Yes', quote: 'Turn 2: Checked CDSL demat linking status prior to call on PCG Finder.' },
+          Simplifying: { status: 'Yes', quote: 'Turn 3: Explained senior debt allocation in clear, simple terms.' }
+        })
       }
     ];
 
@@ -1210,30 +1350,61 @@
         }
       });
 
-      // Render Parameters matching CX Calls
+      // Render 11 PCG Parameters grouped by 3 Skill Groups
       const paramsContainer = document.getElementById('drawer-params-container');
       paramsContainer.innerHTML = '';
-      const weights = ['20%', '15%', '15%', '5%', '5%', '5%', '8%', '9%', '6%', '12%'];
-      c.parameters.forEach((p, idx) => {
-        const pdiv = document.createElement('div');
-        const isPassed = p.status === 'Yes';
-        pdiv.className = 'p-3 bg-[#FAFAFA] border border-[#F0F0F2] rounded-lg space-y-1';
-        pdiv.innerHTML = `
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-[#18181B]">${p.name} <span class="text-[10px] text-zinc-400">(${weights[idx % weights.length]})</span></span>
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isPassed ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEE2E2] text-[#B91C1C]'}">
-              ${p.status}
-            </span>
-          </div>
-          <p class="text-[11px] text-[#52525B] leading-relaxed m-0">${p.quote}</p>
+
+      const skillGroups = [
+        { name: 'Group 1: Process Skills', weight: '50%', startIndex: 0, endIndex: 6 },
+        { name: 'Group 2: Communication Skills', weight: '30%', startIndex: 6, endIndex: 9 },
+        { name: 'Group 3: Customer Service Skills', weight: '20%', startIndex: 9, endIndex: 11 }
+      ];
+
+      skillGroups.forEach(grp => {
+        const grpParams = (c.parameters || []).slice(grp.startIndex, grp.endIndex);
+        if (grpParams.length === 0) return;
+
+        const grpHeader = document.createElement('div');
+        grpHeader.className = 'pt-2.5 pb-1 border-b border-[#E4E4E7] flex items-center justify-between mt-3 first:mt-0';
+        grpHeader.innerHTML = `
+          <span class="text-[11px] font-bold uppercase tracking-wider text-[#71717A]">${grp.name}</span>
+          <span class="text-[11px] font-bold text-[#18181B] bg-[#F4F4F5] px-2 py-0.5 rounded border border-[#E4E4E7]">${grp.weight}</span>
         `;
-        paramsContainer.appendChild(pdiv);
+        paramsContainer.appendChild(grpHeader);
+
+        grpParams.forEach(p => {
+          const pdiv = document.createElement('div');
+          const status = p.status || 'Yes';
+          let badgeClass = 'bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]';
+          if (status === 'No') {
+            badgeClass = 'bg-[#FEE2E2] text-[#B91C1C] border border-[#FCA5A5]';
+          } else if (status === 'NA') {
+            badgeClass = 'bg-[#F1F5F9] text-[#475569] border border-[#CBD5E1]';
+          } else if (status === 'Half') {
+            badgeClass = 'bg-[#FEF3C7] text-[#92400E] border border-[#FCD34D]';
+          }
+
+          pdiv.className = 'p-3 bg-[#FAFAFA] border border-[#F0F0F2] rounded-lg space-y-1 hover:border-[#D4D4D8] transition-colors';
+          pdiv.innerHTML = `
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-[#18181B]">
+                ${p.num || ''}. ${p.name}
+                <span class="text-[10px] text-zinc-400 font-medium">(${p.weightStr || (p.maxScore + '%')})</span>
+              </span>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase ${badgeClass}">
+                ${status}
+              </span>
+            </div>
+            <p class="text-[11px] text-[#52525B] leading-relaxed m-0">${p.quote}</p>
+          `;
+          paramsContainer.appendChild(pdiv);
+        });
       });
 
       // Populate Override Dropdown
       const paramSelect = document.getElementById('override-param-select');
       if (paramSelect) {
-        paramSelect.innerHTML = c.parameters.map((p, idx) => `<option value="${idx}">${p.name} (Current: ${p.status})</option>`).join('');
+        paramSelect.innerHTML = c.parameters.map((p, idx) => `<option value="${idx}">${p.num || (idx + 1)}. ${p.name} (Current: ${p.status || 'Yes'})</option>`).join('');
       }
 
       // Reset feedback
@@ -1343,14 +1514,20 @@
       if (activeCall.parameters[pIdx]) {
         const p = activeCall.parameters[pIdx];
         p.status = newStatus;
-        p.earned = newStatus === 'Yes' ? p.maxScore : newStatus === 'Half' ? Math.round(p.maxScore / 2) : 0;
         p.quote = `TL Override Note: "${note}"`;
       }
 
-      // Recalculate IQS score
-      const totalEarned = activeCall.parameters.reduce((sum, p) => sum + p.earned, 0);
-      const totalMax = activeCall.parameters.reduce((sum, p) => sum + p.maxScore, 0) || 100;
-      activeCall.iqsScore = Math.min(100, Math.round((totalEarned / totalMax) * 100));
+      // Recalculate IQS score excluding NA parameters
+      let totalEarned = 0;
+      let totalApplicable = 0;
+      activeCall.parameters.forEach(p => {
+        if (p.status !== 'NA') {
+          totalApplicable += p.maxScore;
+          if (p.status === 'Yes') totalEarned += p.maxScore;
+          else if (p.status === 'Half') totalEarned += Math.round(p.maxScore / 2);
+        }
+      });
+      activeCall.iqsScore = totalApplicable > 0 ? Math.min(100, Math.round((totalEarned / totalApplicable) * 100)) : 100;
 
       document.getElementById('drawer-iqs-badge').innerText = `${activeCall.iqsScore}%`;
       openDrawer(activeCall);
@@ -1701,16 +1878,17 @@
     ];
 
     const TA_CALL_PARAMS = [
-      { label: 'Pitch Clarity & Senior Secured Debt Backing', weight: '25%', team: 97, dept: 95 },
-      { label: 'Indicative Yield Framing & Disclaimers', weight: '20%', team: 100, dept: 98 },
-      { label: 'Secondary Liquidity Window Framing', weight: '20%', team: 87, dept: 88 },
-      { label: 'Asset Allocation Need Discovery', weight: '10%', team: 94, dept: 90 },
-      { label: 'Monthly Interest Payout Timeline Clarity', weight: '10%', team: 96, dept: 92 },
-      { label: 'Active Listening & Objection Handling', weight: '5%', team: 95, dept: 90 },
-      { label: 'Demat Linking & Account Verification', weight: '5%', team: 96, dept: 94 },
-      { label: 'TDS & Form 15G Compliance', weight: '3%', team: 98, dept: 96 },
-      { label: 'Greeting, Pacing & Handover', weight: '2%', team: 94, dept: 93 },
-      { label: 'Post-Call Recap & Follow-Through', weight: '5%', team: 81, dept: 78 }
+      { label: '1. Call Opening', weight: '5%', team: 96, dept: 94 },
+      { label: '2. Call Closing', weight: '5%', team: 94, dept: 92 },
+      { label: '3. Technically / Legally Correct', weight: '15%', team: 98, dept: 96 },
+      { label: '4. All Questions Addressed', weight: '10%', team: 95, dept: 93 },
+      { label: '5. Expectation Setting', weight: '10%', team: 91, dept: 88 },
+      { label: '6. Process / Pre-check', weight: '5%', team: 97, dept: 95 },
+      { label: '7. Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: '10%', team: 92, dept: 90 },
+      { label: '8. Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: '10%', team: 89, dept: 86 },
+      { label: '9. Energy Level, Enthusiasm & Tone Modulation', weight: '10%', team: 93, dept: 91 },
+      { label: '10. Active Listening, Interruptions & Empathy', weight: '10%', team: 94, dept: 92 },
+      { label: '11. Simplifying Answers', weight: '10%', team: 96, dept: 94 }
     ];
 
     function setTaChannel(ch) {

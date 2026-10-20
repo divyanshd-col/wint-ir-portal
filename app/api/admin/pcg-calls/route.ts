@@ -14,33 +14,111 @@ function hashString(str: string): number {
   return Math.abs(hash);
 }
 
-// Category quality parameters definitions
-const PARAM_DEFINITIONS: Record<string, Array<{ name: string; maxWeight: number }>> = {
-  '13_pitching': [
-    { name: 'Pitch Clarity & Product Benefits', maxWeight: 20 },
-    { name: 'Return vs Risk Positioning', maxWeight: 15 },
-    { name: 'Active Listening & Objection Handling', maxWeight: 25 },
-    { name: 'Call-to-Action & Commitment Lock', maxWeight: 15 },
-    { name: 'Brand Introduction & Professionalism', maxWeight: 15 },
-    { name: 'Compliance & No Return Guarantees', maxWeight: 10 },
-  ],
-  'upselling': [
-    { name: 'Portfolio Review & Need Discovery', maxWeight: 20 },
-    { name: 'New Asset Relevance & Fitment', maxWeight: 20 },
-    { name: 'Liquidity vs Yield Comparison', maxWeight: 15 },
-    { name: 'Handling Customer Hesitation', maxWeight: 20 },
-    { name: 'Next Steps & Follow-up Timeline', maxWeight: 15 },
-    { name: 'SEBI Compliance & Disclosure Rules', maxWeight: 10 },
-  ],
-  'support': [
-    { name: 'Issue Diagnosis & Clarification', maxWeight: 20 },
-    { name: 'Technical / Tax Information Accuracy', maxWeight: 25 },
-    { name: 'Active Listening & Customer Empathy', maxWeight: 20 },
-    { name: 'Prompt Resolution & Ownership', maxWeight: 15 },
-    { name: 'Verification & Account Security', maxWeight: 10 },
-    { name: 'Call Wrap-up & Ticket Tracking', maxWeight: 10 },
-  ],
-};
+// Canonical 11 PCG Call Quality Parameters across 3 Skill Groups
+export const PCG_QUALITY_PARAMETERS = [
+  // Group 1: Process Skills — 50%
+  {
+    id: 'CallOpening',
+    num: 1,
+    name: 'Call Opening',
+    maxWeight: 5,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    defaultQuote: 'Greeted client respectfully with Sir/Ma\'am, identified self and Wint Wealth, and verified availability to speak.'
+  },
+  {
+    id: 'CallClosing',
+    num: 2,
+    name: 'Call Closing',
+    maxWeight: 5,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    defaultQuote: 'Thanked client, summarized agreed follow-up next steps, and closed with polite sign-off.'
+  },
+  {
+    id: 'TechnicalLegal',
+    num: 3,
+    name: 'Technically / Legally Correct',
+    maxWeight: 15,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    defaultQuote: 'All product information, yield terms, asset cover, and PMS/AIF disclosures match Wint Knowledge Base with zero return guarantees.'
+  },
+  {
+    id: 'AllQuestions',
+    num: 4,
+    name: 'All Questions Addressed',
+    maxWeight: 10,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    defaultQuote: 'Every client question was answered clearly or deferred with confirmed team follow-up timeline.'
+  },
+  {
+    id: 'Expectation',
+    num: 5,
+    name: 'Expectation Setting',
+    maxWeight: 10,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    defaultQuote: 'Clear next steps, WhatsApp document timeline, and backend coordination ownership established.'
+  },
+  {
+    id: 'Process',
+    num: 6,
+    name: 'Process / Pre-check',
+    maxWeight: 5,
+    group: 'Process Skills',
+    groupWeight: '50%',
+    defaultQuote: 'Pre-checked portfolio and relationship history on PCG Finder beforehand; client did not have to repeat context.'
+  },
+  // Group 2: Communication Skills — 30%
+  {
+    id: 'Grammar',
+    num: 7,
+    name: 'Vocabulary / Sentence Structure / Grammar / Pronunciations',
+    maxWeight: 10,
+    group: 'Communication Skills',
+    groupWeight: '30%',
+    defaultQuote: 'Articulate delivery, professional vocabulary, correct pronunciation of fund names and financial terminology.'
+  },
+  {
+    id: 'Fillers',
+    num: 8,
+    name: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air',
+    maxWeight: 10,
+    group: 'Communication Skills',
+    groupWeight: '30%',
+    defaultQuote: 'Fluent and confident delivery with minimal fillers; all brief lookup pauses were announced clearly.'
+  },
+  {
+    id: 'EnergyTone',
+    num: 9,
+    name: 'Energy Level, Enthusiasm & Tone Modulation',
+    maxWeight: 10,
+    group: 'Communication Skills',
+    groupWeight: '30%',
+    defaultQuote: 'Attentive, calm, and composed tone suited to HNI wealth management with reassuring modulation.'
+  },
+  // Group 3: Customer Service Skills — 20%
+  {
+    id: 'ActiveListening',
+    num: 10,
+    name: 'Active Listening, Interruptions & Empathy',
+    maxWeight: 10,
+    group: 'Customer Service Skills',
+    groupWeight: '20%',
+    defaultQuote: 'Listened attentively without speaking over client, acknowledged cash flow preferences with genuine empathy.'
+  },
+  {
+    id: 'Simplifying',
+    num: 11,
+    name: 'Simplifying Answers',
+    maxWeight: 10,
+    group: 'Customer Service Skills',
+    groupWeight: '20%',
+    defaultQuote: 'Explained complex financial concepts (hurdle rate, senior secured debt cover, pass-through taxation) in plain language.'
+  },
+];
 
 const COACHING_TIPS_POOL: Record<string, string[]> = {
   '13_pitching': [
@@ -315,30 +393,40 @@ function buildDummyCalls(): DummyPCGCall[] {
         }));
       }
 
-      // Parameters
-      const paramDefs = PARAM_DEFINITIONS[categoryKey] || PARAM_DEFINITIONS['13_pitching'];
-      const parameters = paramDefs.map((def, pIdx) => {
+      // 11 PCG Quality Parameters
+      const parameters = PCG_QUALITY_PARAMETERS.map((def, pIdx) => {
         const pHash = (globalId * 7 + pIdx * 19) % 100;
         let pStatus: 'Yes' | 'Half' | 'No' = 'Yes';
         let earned = def.maxWeight;
         if (iqsScore < 85) {
-          if (pHash < 40) {
+          if (pHash < 35) {
             pStatus = 'No';
             earned = 0;
-          } else if (pHash < 70) {
+          } else if (pHash < 55) {
             pStatus = 'Half';
             earned = Math.round(def.maxWeight / 2);
           }
         }
+
+        let quote = def.defaultQuote;
+        if (pStatus === 'No') {
+          if (def.id === 'TechnicalLegal') quote = `Turn ${8 + pIdx}: Failed to disclose secondary market liquidity risk during yield discussion.`;
+          else if (def.id === 'Expectation') quote = `Turn ${10 + pIdx}: Deferred client query without confirming callback time or ownership.`;
+          else if (def.id === 'Fillers') quote = `Turn ${5 + pIdx}: Repeated filler words and unannounced silence during document lookup.`;
+          else if (def.id === 'Process') quote = `Turn ${4 + pIdx}: Asked client to repeat holding information already on CRM record.`;
+          else if (def.id === 'ActiveListening') quote = `Turn ${6 + pIdx}: Spoke over client while they were detailing liquidity requirements.`;
+          else quote = `Turn ${7 + pIdx}: Did not fully satisfy parameter standard during conversation.`;
+        } else if (pStatus === 'Half') {
+          quote = `Turn ${5 + pIdx}: Partially met requirement; minor clarity slip noted.`;
+        }
+
         return {
-          id: `P${pIdx + 1}`,
-          name: def.name,
+          id: def.id,
+          name: `${def.num}. ${def.name}`,
           maxScore: def.maxWeight,
           earnedScore: earned,
           status: pStatus,
-          quote: pStatus !== 'Yes'
-            ? `Turn ${10 + pIdx}: Customer hesitated; agent gave brief response without citing policy.`
-            : `Turn ${4 + pIdx}: Clear verified statement adhering to protocol.`,
+          quote,
         };
       });
 

@@ -18,6 +18,81 @@ const CALL_IQS_WEIGHTS: Record<string, number> = {
   P11: 12 // Energy, warmth, pace (audio)
 };
 
+// Canonical 11 PCG Call Quality Parameters across 3 Skill Groups
+export const PCG_PARAM_GROUPS = [
+  {
+    group: 'Group 1: Process Skills',
+    weight: '50%',
+    params: [
+      { key: 'CallOpening', num: 1, name: 'Call Opening', weight: 5, weightStr: '5%' },
+      { key: 'CallClosing', num: 2, name: 'Call Closing', weight: 5, weightStr: '5%' },
+      { key: 'TechnicalLegal', num: 3, name: 'Technically / Legally Correct', weight: 15, weightStr: '15%' },
+      { key: 'AllQuestions', num: 4, name: 'All Questions Addressed', weight: 10, weightStr: '10%' },
+      { key: 'Expectation', num: 5, name: 'Expectation Setting', weight: 10, weightStr: '10%' },
+      { key: 'Process', num: 6, name: 'Process / Pre-check', weight: 5, weightStr: '5%' },
+    ]
+  },
+  {
+    group: 'Group 2: Communication Skills',
+    weight: '30%',
+    params: [
+      { key: 'Grammar', num: 7, name: 'Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: 10, weightStr: '10%' },
+      { key: 'Fillers', num: 8, name: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: 10, weightStr: '10%' },
+      { key: 'EnergyTone', num: 9, name: 'Energy Level, Enthusiasm & Tone Modulation', weight: 10, weightStr: '10%' },
+    ]
+  },
+  {
+    group: 'Group 3: Customer Service Skills',
+    weight: '20%',
+    params: [
+      { key: 'ActiveListening', num: 10, name: 'Active Listening, Interruptions & Empathy', weight: 10, weightStr: '10%' },
+      { key: 'Simplifying', num: 11, name: 'Simplifying Answers', weight: 10, weightStr: '10%' },
+    ]
+  }
+];
+
+export const PCG_CALL_IQS_WEIGHTS: Record<string, number> = {
+  CallOpening: 5,
+  CallClosing: 5,
+  TechnicalLegal: 15,
+  AllQuestions: 10,
+  Expectation: 10,
+  Process: 5,
+  Grammar: 10,
+  Fillers: 10,
+  EnergyTone: 10,
+  ActiveListening: 10,
+  Simplifying: 10,
+};
+
+export const PCG_PARAM_NAMES: Record<string, string> = {
+  CallOpening: 'Call Opening',
+  CallClosing: 'Call Closing',
+  TechnicalLegal: 'Technically / Legally Correct',
+  AllQuestions: 'All Questions Addressed',
+  Expectation: 'Expectation Setting',
+  Process: 'Process / Pre-check',
+  Grammar: 'Vocabulary / Sentence Structure / Grammar / Pronunciations',
+  Fillers: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air',
+  EnergyTone: 'Energy Level, Enthusiasm & Tone Modulation',
+  ActiveListening: 'Active Listening, Interruptions & Empathy',
+  Simplifying: 'Simplifying Answers',
+};
+
+export const PCG_PARAM_ALIASES: Record<string, string[]> = {
+  CallOpening: ['CallOpening', 'call_opening', 'P1', 'P5', 'opening', 'CallOpening_reasoning', 'P1_opening'],
+  CallClosing: ['CallClosing', 'call_closing', 'P2', 'P6', 'closing', 'CallClosing_reasoning', 'P2_closing'],
+  TechnicalLegal: ['TechnicalLegal', 'technically_legally_correct', 'Technical', 'P1', 'P3', 'factual', 'TechnicalLegal_reasoning', 'P3_technical'],
+  AllQuestions: ['AllQuestions', 'all_questions_addressed', 'questions', 'P2', 'P4', 'AllQuestions_reasoning', 'P4_questions'],
+  Expectation: ['Expectation', 'expectation_setting', 'ExpectationSetting', 'P3', 'P5', 'Expectation_reasoning', 'P5_expectation'],
+  Process: ['Process', 'process_precheck', 'PreCheck', 'P6', 'P7', 'Process_reasoning', 'P6_process'],
+  Grammar: ['Grammar', 'vocabulary_grammar', 'grammar_pronunciation', 'P7', 'Sentences', 'Grammar_reasoning', 'P7_grammar'],
+  Fillers: ['Fillers', 'fillers_dead_air', 'DeadAir', 'P8', 'P10', 'Fillers_reasoning', 'P8_fillers'],
+  EnergyTone: ['EnergyTone', 'energy_tone', 'WarmthEnergy', 'Energy', 'P9', 'P11', 'EnergyTone_reasoning', 'P9_energy'],
+  ActiveListening: ['ActiveListening', 'active_listening_empathy', 'ActiveListeningInterruptions', 'Empathy', 'P9', 'P10', 'ActiveListening_reasoning', 'P10_listening'],
+  Simplifying: ['Simplifying', 'simplifying_answers', 'Jargon', 'P8', 'P11', 'Simplifying_reasoning', 'P11_simplifying'],
+};
+
 export interface CallEvalPanelProps {
   callId:            string;
   chatId?:           string | null;
@@ -40,6 +115,7 @@ export interface CallEvalPanelProps {
   initialRecordingUrl?: string | null;
   standalone?:       boolean;
   hideShowChat?:     boolean;
+  isPcg?:            boolean;
   onOverrideSubmit?: (data: {
     callId: string;
     scores: Record<string, string>;
@@ -112,9 +188,9 @@ function extractReasoning(ev: any): string {
   return String(ev).trim();
 }
 
-function resolveParamData(raw: any, pKey: string): { score: string; reasoning: string } {
+function resolveParamData(raw: any, pKey: string, aliasMap: Record<string, string[]> = PARAM_ALIASES): { score: string; reasoning: string } {
   if (!raw || typeof raw !== 'object') return { score: 'NA', reasoning: '' };
-  const aliases = PARAM_ALIASES[pKey] || [pKey];
+  const aliases = aliasMap[pKey] || [pKey];
 
   const scoresObj = raw.scores || (raw.__scores ? null : raw);
   const evidenceObj = raw.evidence || raw.reasoning || raw.parameters || {};
@@ -154,10 +230,13 @@ function resolveParamData(raw: any, pKey: string): { score: string; reasoning: s
   return { score: 'NA', reasoning: '' };
 }
 
-export function calculateCallIqs(paramState: Record<string, { score: string; reasoning?: string }>): number | null {
+export function calculateCallIqs(
+  paramState: Record<string, { score: string; reasoning?: string }>,
+  weights: Record<string, number> = CALL_IQS_WEIGHTS
+): number | null {
   let earned = 0;
   let applicable = 0;
-  for (const [param, weight] of Object.entries(CALL_IQS_WEIGHTS)) {
+  for (const [param, weight] of Object.entries(weights)) {
     const item = paramState[param];
     if (!item) continue;
     const s: any = item.score;
@@ -306,9 +385,14 @@ export default function CallEvalPanel({
   initialRecordingUrl,
   standalone = false,
   hideShowChat = false,
+  isPcg = false,
   onOverrideSubmit,
   onReevaluate,
 }: CallEvalPanelProps) {
+  const activeWeights = isPcg ? PCG_CALL_IQS_WEIGHTS : CALL_IQS_WEIGHTS;
+  const activeNames = isPcg ? PCG_PARAM_NAMES : PARAM_NAMES;
+  const activeAliases = isPcg ? PCG_PARAM_ALIASES : PARAM_ALIASES;
+
   const [segments, setSegments] = useState<any[]>(initialSegments || []);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(initialRecordingUrl || null);
   const [loading, setLoading] = useState(!initialSegments || initialSegments.length === 0);
@@ -323,12 +407,12 @@ export default function CallEvalPanel({
 
   const displayedIqs = useMemo(() => {
     if (hasUserEditedParams) {
-      return calculateCallIqs(paramState);
+      return calculateCallIqs(paramState, activeWeights);
     }
     return currentIqs != null && !isNaN(currentIqs)
       ? currentIqs
       : (iqsScore != null && !isNaN(iqsScore) ? iqsScore : null);
-  }, [hasUserEditedParams, paramState, currentIqs, iqsScore]);
+  }, [hasUserEditedParams, paramState, currentIqs, iqsScore, activeWeights]);
 
   // Compliance Gates state
   const [gateState, setGateState] = useState<Record<string, GateParamState>>(() => {
@@ -401,12 +485,12 @@ export default function CallEvalPanel({
     }
     const state: Record<string, { score: string; reasoning: string }> = {};
 
-    Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
-      state[p] = resolveParamData(raw, p);
+    Object.keys(activeWeights).forEach(p => {
+      state[p] = resolveParamData(raw, p, activeAliases);
     });
 
     setParamState(state);
-  }, [currentIqsScores, dispute, iqsScores]);
+  }, [currentIqsScores, dispute, iqsScores, activeWeights, activeAliases]);
 
   const [hasReevaluated, setHasReevaluated] = useState(false);
   const [fetchedChatId, setFetchedChatId] = useState<string | null>(null);
@@ -566,8 +650,8 @@ export default function CallEvalPanel({
             setCurrentIqsScores(data.iqsScores);
             const raw = data.iqsScores;
             const state: Record<string, { score: string; reasoning: string }> = {};
-            Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
-              state[p] = resolveParamData(raw, p);
+            Object.keys(activeWeights).forEach(p => {
+              state[p] = resolveParamData(raw, p, activeAliases);
             });
             setParamState(state);
           }
@@ -648,8 +732,8 @@ export default function CallEvalPanel({
           setCurrentIqsScores(data.iqsScores);
           const raw = data.iqsScores;
           const state: Record<string, { score: string; reasoning: string }> = {};
-          Object.keys(CALL_IQS_WEIGHTS).forEach(p => {
-            state[p] = resolveParamData(raw, p);
+          Object.keys(activeWeights).forEach(p => {
+            state[p] = resolveParamData(raw, p, activeAliases);
           });
           setParamState(state);
         }
@@ -1420,83 +1504,176 @@ export default function CallEvalPanel({
 
             {/* Parameter List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-              {Object.keys(CALL_IQS_WEIGHTS).map(p => {
-                const item = paramState[p] || { score: 'NA', reasoning: '' };
-                const isChallenged = challengedMap.has(p);
-                const challengedNote = challengedMap.get(p);
-
-                return (
-                  <div
-                    key={p}
-                    style={{
-                      padding: 10,
-                      background: isChallenged ? '#fffbeb' : '#fafafa',
-                      border: `1px solid ${isChallenged ? '#fde047' : '#f0f0f2'}`,
-                      borderRadius: 8
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)' }}>
-                        {PARAM_NAMES[p]} <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>({CALL_IQS_WEIGHTS[p]}%)</span>
+              {isPcg ? (
+                PCG_PARAM_GROUPS.map(grp => (
+                  <div key={grp.group} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 4, borderBottom: '1px solid var(--qa-border, #E4E4E7)' }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2, #71717A)' }}>
+                        {grp.group}
                       </span>
-                      {isReadOnly ? (
-                        <ScoreBadge score={item.score} />
-                      ) : (
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {['Yes', 'Half', 'No', 'NA'].map(val => (
-                            <button
-                              key={val}
-                              onClick={() => handleScoreChange(p, val)}
+                      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--qa-text, #18181B)', background: '#F4F4F5', padding: '1px 6px', borderRadius: 4, border: '1px solid #E4E4E7' }}>
+                        {grp.weight}
+                      </span>
+                    </div>
+                    {grp.params.map(def => {
+                      const p = def.key;
+                      const item = paramState[p] || { score: 'NA', reasoning: '' };
+                      const isChallenged = challengedMap.has(p);
+                      const challengedNote = challengedMap.get(p);
+
+                      return (
+                        <div
+                          key={p}
+                          style={{
+                            padding: 10,
+                            background: isChallenged ? '#fffbeb' : '#fafafa',
+                            border: `1px solid ${isChallenged ? '#fde047' : '#f0f0f2'}`,
+                            borderRadius: 8
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)' }}>
+                              {def.num}. {def.name} <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>({def.weightStr})</span>
+                            </span>
+                            {isReadOnly ? (
+                              <ScoreBadge score={item.score} />
+                            ) : (
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                {['Yes', 'No', 'NA'].map(val => (
+                                  <button
+                                    key={val}
+                                    onClick={() => handleScoreChange(p, val)}
+                                    style={{
+                                      padding: '2px 8px',
+                                      borderRadius: 4,
+                                      fontSize: 11,
+                                      fontWeight: item.score === val ? 700 : 500,
+                                      border: '1px solid var(--qa-border)',
+                                      background: item.score === val ? 'var(--qa-gray-700)' : '#fff',
+                                      color: item.score === val ? '#fff' : 'var(--qa-text)',
+                                      cursor: 'pointer'
+                                    }}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {isChallenged && (
+                            <div style={{ margin: '4px 0', padding: '4px 6px', background: '#fefce8', border: '1px solid #fef08a', borderRadius: 4, fontSize: 11, color: '#854d0e' }}>
+                              <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
+                            </div>
+                          )}
+
+                          {isReadOnly ? (
+                            item.reasoning ? (
+                              <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4 }}>{item.reasoning}</div>
+                            ) : null
+                          ) : (
+                            <textarea
+                              value={item.reasoning}
+                              onChange={e => handleReasoningChange(p, e.target.value)}
+                              placeholder={`Reasoning or transcript quote for ${def.name}…`}
                               style={{
-                                padding: '2px 8px',
-                                borderRadius: 4,
+                                width: '100%',
+                                minHeight: 36,
                                 fontSize: 11,
-                                fontWeight: item.score === val ? 700 : 500,
                                 border: '1px solid var(--qa-border)',
-                                background: item.score === val ? 'var(--qa-gray-700)' : '#fff',
-                                color: item.score === val ? '#fff' : 'var(--qa-text)',
-                                cursor: 'pointer'
+                                borderRadius: 6,
+                                padding: '6px 8px',
+                                outline: 'none',
+                                resize: 'vertical',
+                                fontFamily: 'inherit',
+                                marginTop: 4,
                               }}
-                            >
-                              {val === 'Half' ? 'Partial' : val}
-                            </button>
-                          ))}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              ) : (
+                Object.keys(CALL_IQS_WEIGHTS).map(p => {
+                  const item = paramState[p] || { score: 'NA', reasoning: '' };
+                  const isChallenged = challengedMap.has(p);
+                  const challengedNote = challengedMap.get(p);
+
+                  return (
+                    <div
+                      key={p}
+                      style={{
+                        padding: 10,
+                        background: isChallenged ? '#fffbeb' : '#fafafa',
+                        border: `1px solid ${isChallenged ? '#fde047' : '#f0f0f2'}`,
+                        borderRadius: 8
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text)' }}>
+                          {PARAM_NAMES[p]} <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>({CALL_IQS_WEIGHTS[p]}%)</span>
+                        </span>
+                        {isReadOnly ? (
+                          <ScoreBadge score={item.score} />
+                        ) : (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            {['Yes', 'Half', 'No', 'NA'].map(val => (
+                              <button
+                                key={val}
+                                onClick={() => handleScoreChange(p, val)}
+                                style={{
+                                  padding: '2px 8px',
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  fontWeight: item.score === val ? 700 : 500,
+                                  border: '1px solid var(--qa-border)',
+                                  background: item.score === val ? 'var(--qa-gray-700)' : '#fff',
+                                  color: item.score === val ? '#fff' : 'var(--qa-text)',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                {val === 'Half' ? 'Partial' : val}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {isChallenged && (
+                        <div style={{ margin: '4px 0', padding: '4px 6px', background: '#fefce8', border: '1px solid #fef08a', borderRadius: 4, fontSize: 11, color: '#854d0e' }}>
+                          <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
                         </div>
                       )}
+
+                      {isReadOnly ? (
+                        item.reasoning ? (
+                          <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4 }}>{item.reasoning}</div>
+                        ) : null
+                      ) : (
+                        <textarea
+                          value={item.reasoning}
+                          onChange={e => handleReasoningChange(p, e.target.value)}
+                          placeholder="Reasoning for this parameter score…"
+                          style={{
+                            width: '100%',
+                            minHeight: 36,
+                            fontSize: 11,
+                            border: '1px solid var(--qa-border)',
+                            borderRadius: 6,
+                            padding: '6px 8px',
+                            outline: 'none',
+                            resize: 'vertical',
+                            fontFamily: 'inherit',
+                            marginTop: 4,
+                          }}
+                        />
+                      )}
                     </div>
-
-                    {isChallenged && (
-                      <div style={{ margin: '4px 0', padding: '4px 6px', background: '#fefce8', border: '1px solid #fef08a', borderRadius: 4, fontSize: 11, color: '#854d0e' }}>
-                        <strong>Challenged by Agent:</strong> {challengedNote || 'No specific note'}
-                      </div>
-                    )}
-
-                    {isReadOnly ? (
-                      item.reasoning ? (
-                        <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4 }}>{item.reasoning}</div>
-                      ) : null
-                    ) : (
-                      <textarea
-                        value={item.reasoning}
-                        onChange={e => handleReasoningChange(p, e.target.value)}
-                        placeholder="Reasoning for this parameter score…"
-                        style={{
-                          width: '100%',
-                          minHeight: 36,
-                          fontSize: 11,
-                          border: '1px solid var(--qa-border)',
-                          borderRadius: 6,
-                          padding: '6px 8px',
-                          outline: 'none',
-                          resize: 'vertical',
-                          fontFamily: 'inherit',
-                          marginTop: 4,
-                        }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
             {/* Overrides / Notes / QA Dispute Resolution Action */}
