@@ -1195,36 +1195,7 @@ export default function PcgCallsClient() {
             </button>
           )}
 
-          {/* 3. RM Performance Navigation Link */}
-          {(activePersona === 'admin' || activePersona === 'tl') && (
-            <button
-              type="button"
-              onClick={() => handleTabChange('rm_performance')}
-              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
-                activeTab === 'rm_performance'
-                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
-                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
-              }`}
-            >
-              <span
-                className={`inline-flex items-center justify-center shrink-0 ${
-                  activeTab === 'rm_performance' ? 'text-[#18181b]' : 'text-[#71717a]'
-                }`}
-              >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
-                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
-                  <path d="M4 22h16" />
-                  <path d="M10 14.66V17c0 .55-.45 1-1 1H7" />
-                  <path d="M14 14.66V17c0 .55.45 1 1 1h2" />
-                  <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
-                </svg>
-              </span>
-              <span className="flex-1">RM Performance</span>
-            </button>
-          )}
-
-          {/* 4. Member Analytics Navigation Link */}
+          {/* 3. Member Analytics Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('member_analytics')}
@@ -1272,6 +1243,35 @@ export default function PcgCallsClient() {
             </span>
             <span className="flex-1">RM Scorecard</span>
           </button>
+
+          {/* 5. RM Performance Navigation Link */}
+          {(activePersona === 'admin' || activePersona === 'tl') && (
+            <button
+              type="button"
+              onClick={() => handleTabChange('rm_performance')}
+              className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
+                activeTab === 'rm_performance'
+                  ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                  : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+              }`}
+            >
+              <span
+                className={`inline-flex items-center justify-center shrink-0 ${
+                  activeTab === 'rm_performance' ? 'text-[#18181b]' : 'text-[#71717a]'
+                }`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
+                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
+                  <path d="M4 22h16" />
+                  <path d="M10 14.66V17c0 .55-.45 1-1 1H7" />
+                  <path d="M14 14.66V17c0 .55.45 1 1 1h2" />
+                  <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z" />
+                </svg>
+              </span>
+              <span className="flex-1">RM Performance</span>
+            </button>
+          )}
         </aside>
 
         {/* Main Content Area */}
