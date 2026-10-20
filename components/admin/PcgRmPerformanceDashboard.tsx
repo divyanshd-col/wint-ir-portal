@@ -308,9 +308,9 @@ export default function PcgRmPerformanceDashboard({
                       style={{
                         fontSize: 11,
                         fontWeight: 600,
-                        color: '#2563eb',
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
+                        color: '#047857',
+                        background: '#ecfdf5',
+                        border: '1px solid #a7f3d0',
                         borderRadius: 6,
                         padding: '2px 8px',
                         display: 'inline-flex',
@@ -321,12 +321,12 @@ export default function PcgRmPerformanceDashboard({
                         whiteSpace: 'nowrap',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#dbeafe';
-                        e.currentTarget.style.color = '#1d4ed8';
+                        e.currentTarget.style.background = '#d1fae5';
+                        e.currentTarget.style.color = '#065f46';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#eff6ff';
-                        e.currentTarget.style.color = '#2563eb';
+                        e.currentTarget.style.background = '#ecfdf5';
+                        e.currentTarget.style.color = '#047857';
                       }}
                     >
                       Show Scorecard →
@@ -344,12 +344,12 @@ export default function PcgRmPerformanceDashboard({
         <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#d97706' }}></span>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
               <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Bottom Performers
               </h2>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '2px 7px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 6 }}>
               IQS ≤ 70%
             </span>
           </div>
@@ -389,7 +389,7 @@ export default function PcgRmPerformanceDashboard({
                       <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
                         #{idx + 1}
                       </span>
-                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#991b1b', flexShrink: 0 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#3f3f46', flexShrink: 0 }}>
                         {rm.ini}
                       </div>
                       <div style={{ minWidth: 0 }}>
@@ -401,14 +401,14 @@ export default function PcgRmPerformanceDashboard({
                             Team {rm.tl}
                           </span>
                         </div>
-                        <div style={{ fontSize: 11, color: '#b91c1c', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <div style={{ fontSize: 11, color: '#71717a', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           Focus: {rm.focusArea}
                         </div>
                       </div>
                     </div>
 
                     <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#b91c1c' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'monospace', color: '#059669' }}>
                         {rm.currentIqs}%
                       </div>
                       <button
@@ -420,9 +420,9 @@ export default function PcgRmPerformanceDashboard({
                         style={{
                           fontSize: 11,
                           fontWeight: 600,
-                          color: '#2563eb',
-                          background: '#eff6ff',
-                          border: '1px solid #bfdbfe',
+                          color: '#047857',
+                          background: '#ecfdf5',
+                          border: '1px solid #a7f3d0',
                           borderRadius: 6,
                           padding: '2px 8px',
                           display: 'inline-flex',
@@ -433,12 +433,12 @@ export default function PcgRmPerformanceDashboard({
                           whiteSpace: 'nowrap',
                         }}
                         onMouseEnter={(e) => {
-                          e.currentTarget.style.background = '#dbeafe';
-                          e.currentTarget.style.color = '#1d4ed8';
+                          e.currentTarget.style.background = '#d1fae5';
+                          e.currentTarget.style.color = '#065f46';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.background = '#eff6ff';
-                          e.currentTarget.style.color = '#2563eb';
+                          e.currentTarget.style.background = '#ecfdf5';
+                          e.currentTarget.style.color = '#047857';
                         }}
                       >
                         Show Scorecard →
@@ -457,12 +457,12 @@ export default function PcgRmPerformanceDashboard({
         <div style={{ background: '#ffffff', border: '1px solid #e4e4e7', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           <div style={{ padding: '14px 18px', borderBottom: '1px solid #e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafa' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#2563eb' }}></span>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#059669' }}></span>
               <h2 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: '#18181b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                 Most Improved
               </h2>
             </div>
-            <span style={{ fontSize: 11, fontWeight: 600, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', padding: '2px 7px', borderRadius: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', padding: '2px 7px', borderRadius: 6 }}>
               2-Wk Rolling Diff
             </span>
           </div>
@@ -490,7 +490,7 @@ export default function PcgRmPerformanceDashboard({
                     <span style={{ fontSize: 12, fontWeight: 700, color: '#71717a', width: 22, textAlign: 'center', flexShrink: 0 }}>
                       #{idx + 1}
                     </span>
-                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#1e40af', flexShrink: 0 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#e4e4e7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#3f3f46', flexShrink: 0 }}>
                       {rm.ini}
                     </div>
                     <div style={{ minWidth: 0 }}>
@@ -509,7 +509,7 @@ export default function PcgRmPerformanceDashboard({
                   </div>
 
                   <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: isPositive ? '#16a34a' : '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'monospace', color: '#059669', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
                       <span>{isPositive ? '↑' : '↓'}</span>
                       <span>{isPositive ? `+${rm.delta2Wk.toFixed(1)}%` : `${rm.delta2Wk.toFixed(1)}%`}</span>
                     </div>
@@ -522,9 +522,9 @@ export default function PcgRmPerformanceDashboard({
                       style={{
                         fontSize: 11,
                         fontWeight: 600,
-                        color: '#2563eb',
-                        background: '#eff6ff',
-                        border: '1px solid #bfdbfe',
+                        color: '#047857',
+                        background: '#ecfdf5',
+                        border: '1px solid #a7f3d0',
                         borderRadius: 6,
                         padding: '2px 8px',
                         display: 'inline-flex',
@@ -535,12 +535,12 @@ export default function PcgRmPerformanceDashboard({
                         whiteSpace: 'nowrap',
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#dbeafe';
-                        e.currentTarget.style.color = '#1d4ed8';
+                        e.currentTarget.style.background = '#d1fae5';
+                        e.currentTarget.style.color = '#065f46';
                       }}
                       onMouseLeave={(e) => {
-                        e.currentTarget.style.background = '#eff6ff';
-                        e.currentTarget.style.color = '#2563eb';
+                        e.currentTarget.style.background = '#ecfdf5';
+                        e.currentTarget.style.color = '#047857';
                       }}
                     >
                       Show Scorecard →
