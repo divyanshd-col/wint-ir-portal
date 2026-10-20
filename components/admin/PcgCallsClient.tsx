@@ -1061,9 +1061,6 @@ export default function PcgCallsClient() {
                     IQS, Connect Rate, and performance per agent · Team {selectedTl}
                   </p>
                 </div>
-                <span className="text-xs font-medium text-zinc-800 bg-zinc-100 px-2.5 py-1 rounded-md border border-zinc-300">
-                  ✓ Real-time Aggregation
-                </span>
               </div>
 
               <div className="overflow-x-auto">
@@ -1074,9 +1071,7 @@ export default function PcgCallsClient() {
                       <th className="py-3 px-4 text-right">Calls Handled</th>
                       <th className="py-3 px-4 text-right">Connect Rate</th>
                       <th className="py-3 px-4 text-right">Avg IQS</th>
-                      <th className="py-3 px-4 text-center">Trend</th>
                       <th className="py-3 px-4 text-center">Compliance</th>
-                      <th className="py-3 px-4 text-left">Top Coaching Focus</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -1093,13 +1088,6 @@ export default function PcgCallsClient() {
                         <td className="py-3 px-4 text-right">
                           {getScoreBadge(rm.overallScore)}
                         </td>
-                        <td className="py-3 px-4 text-center">
-                          {rm.trend === 'improving' ? (
-                            <span className="text-zinc-900 font-bold">▲ Improving</span>
-                          ) : (
-                            <span className="text-zinc-600 font-medium">▼ Coaching</span>
-                          )}
-                        </td>
                         <td className="py-3 px-4 text-center font-mono">
                           {rm.complianceFlags > 0 ? (
                             <span className="text-zinc-900 font-bold underline">{rm.complianceFlags} Flags</span>
@@ -1107,7 +1095,6 @@ export default function PcgCallsClient() {
                             <span className="text-zinc-500 font-normal">0 Flags</span>
                           )}
                         </td>
-                        <td className="py-3 px-4 text-gray-600 italic max-w-xs truncate">{rm.topWeakness}</td>
                       </tr>
                     ))}
                   </tbody>
