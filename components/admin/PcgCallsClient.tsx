@@ -33,6 +33,7 @@ interface TranscriptTurn {
 interface PCGCall {
   id: string;
   callId: string;
+  chatId?: string | null;
   clientName?: string;
   rmName: string;
   tlName: string;
@@ -797,24 +798,20 @@ export default function PcgCallsClient() {
                         <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => {
-                              if (activePersona === 'tl') {
-                                setExpandedDisputeId(isExpanded ? null : call.id);
-                              } else {
-                                handleOpenCallView(call);
-                              }
+                              setExpandedDisputeId(isExpanded ? null : call.id);
                             }}
                             className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1"
                           >
-                            <span>{activePersona === 'tl' ? (isExpanded ? 'Hide' : 'Review') : 'View'}</span>
-                            {activePersona === 'tl' && <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>}
+                            <span>{isExpanded ? 'Hide' : activePersona === 'tl' ? 'Review' : 'View'}</span>
+                            <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>
                           </button>
                         </td>
                       </tr>
 
-                      {isExpanded && activePersona === 'tl' && (
+                      {isExpanded && (
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
-                          hideShowChat={true}
+                          chatId={call.chatId || (call.id ? `1794${call.id}` : null)}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -824,8 +821,8 @@ export default function PcgCallsClient() {
                           iqsScores={formatCallIqsScores(call)}
                           initialSegments={formatCallSegments(call)}
                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                          mode="submit"
-                          allowReevaluate={true}
+                          mode={activePersona === 'tl' ? 'submit' : 'view'}
+                          allowReevaluate={activePersona === 'tl'}
                           dispute={{
                             flagId: call.id,
                             agentName: call.rmName,
@@ -933,24 +930,20 @@ export default function PcgCallsClient() {
                         <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => {
-                              if (activePersona === 'tl') {
-                                setExpandedDisputeId(isExpanded ? null : call.id);
-                              } else {
-                                handleOpenCallView(call);
-                              }
+                              setExpandedDisputeId(isExpanded ? null : call.id);
                             }}
                             className="px-3.5 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1"
                           >
                             <span>{isExpanded ? 'Hide' : 'View Details'}</span>
-                            {activePersona === 'tl' && <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>}
+                            <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>
                           </button>
                         </td>
                       </tr>
 
-                      {isExpanded && activePersona === 'tl' && (
+                      {isExpanded && (
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
-                          hideShowChat={true}
+                          chatId={call.chatId || (call.id ? `1794${call.id}` : null)}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -961,8 +954,8 @@ export default function PcgCallsClient() {
                           initialSegments={formatCallSegments(call)}
                           initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
                           mode="view"
-                          allowReevaluate={true}
-                          colSpan={8}
+                          allowReevaluate={activePersona === 'tl'}
+                          colSpan={activePersona !== 'agent' ? 8 : 7}
                           onDone={() => setExpandedDisputeId(null)}
                           onClose={() => setExpandedDisputeId(null)}
                         />
@@ -2104,11 +2097,7 @@ export default function PcgCallsClient() {
                       <React.Fragment key={call.id}>
                         <tr
                           onClick={() => {
-                            if (activePersona === 'tl') {
-                              setExpandedCallId(isExpanded ? null : call.id);
-                            } else {
-                              handleOpenCallView(call);
-                            }
+                            setExpandedCallId(isExpanded ? null : call.id);
                           }}
                           className={`hover:bg-zinc-50 transition-colors cursor-pointer ${
                             call.needsAttention ? 'bg-zinc-50' : ''
@@ -2157,28 +2146,22 @@ export default function PcgCallsClient() {
                           <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => {
-                                if (activePersona === 'tl') {
-                                  setExpandedCallId(isExpanded ? null : call.id);
-                                } else {
-                                  handleOpenCallView(call);
-                                }
+                                setExpandedCallId(isExpanded ? null : call.id);
                               }}
                               className="px-3 py-1 rounded-md bg-zinc-900 hover:bg-zinc-800 text-white font-semibold transition-colors text-xs shadow-sm inline-flex items-center gap-1.5"
                             >
-                              <span>{isExpanded ? 'Hide' : 'View Details'}</span>
-                              {activePersona === 'tl' && (
-                                <span className="text-[10px] opacity-70">
-                                  {isExpanded ? '▲' : '▼'}
-                                </span>
-                              )}
+                              <span>{isExpanded ? 'Hide' : activePersona === 'tl' ? 'Review' : 'View Details'}</span>
+                              <span className="text-[10px] opacity-70">
+                                {isExpanded ? '▲' : '▼'}
+                              </span>
                             </button>
                           </td>
                         </tr>
 
-                        {isExpanded && activePersona === 'tl' && (
+                        {isExpanded && (
                           <CallEvalPanel
                             callId={formatCallId(call.callId, call.id)}
-                            hideShowChat={true}
+                            chatId={call.chatId || (call.id ? `1794${call.id}` : null)}
                             mobileNumber={call.phoneNumber}
                             agentName={call.rmName}
                             iqsScore={call.iqsScore}
@@ -2188,9 +2171,10 @@ export default function PcgCallsClient() {
                             iqsScores={formatCallIqsScores(call)}
                             initialSegments={formatCallSegments(call)}
                             initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                            mode="submit"
-                            allowReevaluate={true}
-                            colSpan={6}
+                            mode={activePersona === 'tl' ? 'submit' : 'view'}
+                            allowRaiseDispute={activePersona === 'agent'}
+                            allowReevaluate={activePersona === 'tl'}
+                            colSpan={activePersona !== 'agent' ? 6 : 5}
                             onDone={() => setExpandedCallId(null)}
                             onClose={() => setExpandedCallId(null)}
                             onOverrideSubmit={async (overrideData) => {
@@ -2251,516 +2235,70 @@ export default function PcgCallsClient() {
       {/* ── SLIDE-OVER CALL VIEW & EVALUATION DRAWER ───────────────────────── */}
       {activeCallAudit && (
         <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-5xl xl:max-w-6xl bg-white h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
-            {/* Drawer Header */}
-            <div className="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-zinc-50">
-              <div className="flex flex-wrap items-center gap-3">
-                {activePersona === 'agent' ? (
-                  <span className="font-bold text-base text-[#111111]">
-                    Client: {activeCallAudit.clientName || 'Investor Client'}
-                  </span>
-                ) : (
-                  <a
-                    href={getRunoCallUrl(activeCallAudit.callId || activeCallAudit.id)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open in Runo CRM"
-                    className="inline-flex items-center gap-1.5 font-bold tabular-nums text-base text-[#111111] hover:text-black hover:underline group cursor-pointer"
-                  >
-                    <span>Call #{formatCallId(activeCallAudit.callId, activeCallAudit.id)}</span>
-                    <svg className="w-3.5 h-3.5 text-zinc-400 group-hover:text-black transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                )}
-                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
-                  {activeCallAudit.category}
-                </span>
-                {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
-                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-700 border border-zinc-200 flex items-center gap-1 shadow-2xs">
-                    <span className="font-bold text-zinc-500">+</span>
-                    <span>{activeCallAudit.secondaryCategories.join(', ')}</span>
-                  </span>
-                )}
-                <span className="text-xs text-[#71717A]">
-                  RM: <span className="font-semibold text-zinc-900">{activeCallAudit.rmName}</span> ({activeCallAudit.tlName})
-                </span>
-                {activePersona !== 'agent' && (
-                  <span className="text-xs tabular-nums text-zinc-500">• {activeCallAudit.phoneNumber}</span>
-                )}
-                {activePersona !== 'agent' && (
-                  <span className="text-xs tabular-nums text-zinc-500">• {activeCallAudit.isAnswered ? formatDuration(activeCallAudit.durationSeconds) : 'Unanswered (00:00)'}</span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-3">
-                {activeCallAudit.isAnswered ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-[#71717A]">IQS:</span>
-                    {getScoreBadge(activeCallAudit.iqsScore)}
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded ${
-                      activeCallAudit.gates.status === 'PASS' ? 'bg-zinc-100 text-zinc-700 border border-zinc-200' : 'bg-zinc-900 text-white font-bold'
-                    }`}>
-                      {activeCallAudit.gates.status === 'PASS' ? 'No Compliance Mistake' : 'Compliance Mistake (FAIL)'}
-                    </span>
-                  </div>
-                ) : (
-                  <span className="px-2 py-0.5 rounded text-xs font-semibold bg-zinc-200 text-zinc-700">
-                    Not Connected
-                  </span>
-                )}
-                <button
-                  onClick={() => setActiveCallAudit(null)}
-                  className="w-8 h-8 rounded-lg border border-[#E4E4E7] flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 text-sm font-bold ml-2"
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-
-            {/* Drawer Body: TL uses CallEvalPanel directly; Agent/Admin uses standard drawer */}
-            {activePersona === 'tl' && activeCallAudit.isAnswered ? (
-              <div className="flex-1 overflow-y-auto p-4 bg-[#FAFAFB]">
-                <CallEvalPanel
-                  standalone={true}
-                  callId={formatCallId(activeCallAudit.callId, activeCallAudit.id)}
-                  hideShowChat={true}
-                  mobileNumber={activeCallAudit.phoneNumber}
-                  agentName={activeCallAudit.rmName}
-                  iqsScore={activeCallAudit.iqsScore}
-                  calledAt={activeCallAudit.startTime || '2026-10-18T14:04:00.000Z'}
-                  disposition={activeCallAudit.category}
-                  gates={activeCallAudit.gates}
-                  iqsScores={formatCallIqsScores(activeCallAudit)}
-                  initialSegments={formatCallSegments(activeCallAudit)}
-                  initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
-                  mode="submit"
-                  allowReevaluate={true}
-                  onDone={() => setActiveCallAudit(null)}
-                  onClose={() => setActiveCallAudit(null)}
-                  onOverrideSubmit={async (overrideData) => {
-                    handleOverrideFromPanel(activeCallAudit.id, overrideData);
-                  }}
-                  onReevaluate={(cid, revisedIqs) => {
-                    setCalls((prev) =>
-                      prev.map((c) =>
-                        c.id === activeCallAudit.id || c.callId === activeCallAudit.id
-                          ? { ...c, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 }
-                          : c
-                      )
-                    );
-                    setActiveCallAudit((prev) =>
-                      prev ? { ...prev, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 } : null
-                    );
-                  }}
-                />
-              </div>
+          <div className="w-full max-w-5xl xl:max-w-6xl bg-[#f8fafc] h-full shadow-2xl flex flex-col overflow-y-auto p-4 animate-in slide-in-from-right duration-200">
+            {activeCallAudit.isAnswered ? (
+              <CallEvalPanel
+                standalone={true}
+                callId={formatCallId(activeCallAudit.callId, activeCallAudit.id)}
+                chatId={activeCallAudit.chatId || (activeCallAudit.id ? `1794${activeCallAudit.id}` : null)}
+                mobileNumber={activeCallAudit.phoneNumber}
+                agentName={activeCallAudit.rmName}
+                iqsScore={activeCallAudit.iqsScore}
+                calledAt={activeCallAudit.startTime || '2026-10-18T14:04:00.000Z'}
+                disposition={activeCallAudit.category}
+                gates={activeCallAudit.gates}
+                iqsScores={formatCallIqsScores(activeCallAudit)}
+                initialSegments={formatCallSegments(activeCallAudit)}
+                initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
+                mode={activePersona === 'tl' ? 'submit' : 'view'}
+                allowRaiseDispute={activePersona === 'agent'}
+                allowReevaluate={activePersona === 'tl'}
+                onDone={() => setActiveCallAudit(null)}
+                onClose={() => setActiveCallAudit(null)}
+                onOverrideSubmit={async (overrideData) => {
+                  handleOverrideFromPanel(activeCallAudit.id, overrideData);
+                }}
+                onReevaluate={(cid, revisedIqs) => {
+                  setCalls((prev) =>
+                    prev.map((c) =>
+                      c.id === activeCallAudit.id || c.callId === activeCallAudit.id
+                        ? { ...c, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 }
+                        : c
+                    )
+                  );
+                  setActiveCallAudit((prev) =>
+                    prev ? { ...prev, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 } : null
+                  );
+                }}
+              />
             ) : (
-              <div className="flex-1 flex flex-col lg:flex-row overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[#E4E4E7]">
-              
-              {/* ── LEFT COLUMN: Audio Player + Call Transcript Dialogue Turns ──── */}
-              <div className="flex-1 flex flex-col overflow-y-auto p-5 space-y-4 bg-white">
-                {/* Audio Player for Answered Calls */}
-                {activeCallAudit.isAnswered ? (
-                  <div className="p-3.5 bg-zinc-900 text-white rounded-xl flex items-center justify-between gap-4 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => {
-                          if (audioRef.current) {
-                            if (isPlaying) audioRef.current.pause();
-                            else audioRef.current.play();
-                            setIsPlaying(!isPlaying);
-                          }
-                        }}
-                        className="w-9 h-9 rounded-full bg-white text-zinc-900 flex items-center justify-center font-bold text-xs shadow hover:scale-105 transition-transform"
-                      >
-                        {isPlaying ? (
-                          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                          </svg>
-                        ) : (
-                          <svg className="w-3.5 h-3.5 fill-current ml-0.5" viewBox="0 0 24 24">
-                            <path d="M8 5v14l11-7z" />
-                          </svg>
-                        )}
-                      </button>
-                      <div>
-                        <p className="text-xs font-semibold">Exotel / Runo Voice Audio Recording</p>
-                        <p className="text-[11px] text-zinc-400">Streamed from AWS S3 • Synced to dialogue turns</p>
-                      </div>
-                    </div>
-                    <audio
-                      ref={audioRef}
-                      controls
-                      className="h-8 max-w-[260px]"
-                      src={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
-                      onEnded={() => setIsPlaying(false)}
-                    />
+              <div className="p-6 bg-white rounded-xl border border-zinc-200 space-y-4">
+                <div className="flex items-center justify-between border-b border-zinc-200 pb-3">
+                  <h3 className="font-bold text-base text-zinc-900">
+                    Call Evaluation Panel — ID: {formatCallId(activeCallAudit.callId, activeCallAudit.id)} ({activeCallAudit.rmName})
+                  </h3>
+                  <button
+                    onClick={() => setActiveCallAudit(null)}
+                    className="w-7 h-7 rounded border border-zinc-200 flex items-center justify-center text-zinc-500 hover:text-zinc-900 text-sm font-bold"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="p-4 bg-zinc-50 rounded-xl border border-zinc-200 space-y-2">
+                  <div className="flex items-center gap-2 text-zinc-900 font-bold text-xs uppercase tracking-wider">
+                    Dialer Disconnect Diagnostic
                   </div>
-                ) : (
-                  /* Diagnostic Card for Unanswered Calls */
-                  <div className="p-4 bg-zinc-100 rounded-xl border border-zinc-200 space-y-2">
-                    <div className="flex items-center gap-2 text-zinc-900 font-bold text-xs uppercase tracking-wider">
-                      Dialer Disconnect Diagnostic
-                    </div>
-                    <p className="text-xs font-semibold text-zinc-900">
-                      Party Disconnected: {activeCallAudit.unansweredBy === 'RM' ? 'RM Disconnected Early (<5s)' : 'Customer Rang Out / No Pickup'}
-                    </p>
-                    <p className="text-xs text-zinc-700">
-                      Reason: <span className="font-mono font-bold text-zinc-900">{activeCallAudit.unansweredReason}</span>
-                    </p>
-                    <p className="text-[11px] text-zinc-600">
-                      Dialer placed outbound call to {activeCallAudit.phoneNumber}. Customer handset did not bridge voice connection, hence no conversation audio or IQS scorecard was generated.
-                    </p>
-                  </div>
-                )}
-
-                {/* Transcript / Dialogue Turns */}
-                <div className="space-y-3 flex-1 flex flex-col">
-                  <div className="flex items-center justify-between border-b border-[#E4E4E7] pb-2">
-                    <h4 className="text-xs font-bold text-[#111111] uppercase tracking-wider flex items-center gap-2">
-                      {activeCallAudit.isAnswered ? 'Call Transcript & Dialogue Turns' : 'Dialer Event Sequence'}
-                    </h4>
-                    <span className="text-[11px] text-[#71717A]">
-                      {activeCallAudit.isAnswered ? `${activeCallAudit.transcriptTurns.length} dialogue turns` : '3 telephony events'}
-                    </span>
-                  </div>
-
-                  {activeCallAudit.isAnswered ? (
-                    <div className="space-y-2.5 flex-1 overflow-y-auto pr-1">
-                      {activeCallAudit.transcriptTurns.map((turn, idx) => (
-                        <div key={idx} className="space-y-1.5">
-                          {turn.isPivotTurn && (
-                            <div className="my-2.5 py-1.5 px-3 bg-zinc-50 border border-zinc-300 rounded-lg text-[11px] font-semibold text-zinc-800 flex items-center gap-2 justify-center shadow-2xs">
-                              <span className="text-xs text-zinc-500">⚡</span>
-                              <span>RM Topic Pivot: Transitioned from Support Resolution to Re-investment Pitch</span>
-                            </div>
-                          )}
-                          <div
-                            className={`p-3 rounded-xl text-xs transition-all ${
-                              turn.speaker === 'RM'
-                                ? 'bg-zinc-50 border border-zinc-300 ml-6'
-                                : 'bg-zinc-100/80 border border-zinc-200/70 mr-6'
-                            }`}
-                          >
-                            <div className="flex items-center justify-between font-bold text-[11px] text-zinc-700 mb-1">
-                              <div className="flex items-center gap-2">
-                                <span className={turn.speaker === 'RM' ? 'text-zinc-900 font-extrabold' : 'text-zinc-800'}>
-                                  {turn.speaker === 'RM' ? `RM (${activeCallAudit.rmName})` : 'Investor / Customer'}
-                                </span>
-                                {turn.segment && (
-                                  <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-zinc-100 text-zinc-700 border border-zinc-300">
-                                    {turn.segment}
-                                  </span>
-                                )}
-                              </div>
-                              <span className="tabular-nums text-[10px] text-zinc-400">{turn.time}</span>
-                            </div>
-                            <p className="text-zinc-900 leading-relaxed">{turn.text}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="space-y-2 text-xs">
-                      <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between tabular-nums">
-                        <span>[00:00] Runo / Exotel outbound dial initiated to {activeCallAudit.phoneNumber}</span>
-                        <span className="text-zinc-400">Initiated</span>
-                      </div>
-                      <div className="p-2.5 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between tabular-nums">
-                        <span>[00:04] Customer handset ringing</span>
-                        <span className="text-zinc-400">Ringing</span>
-                      </div>
-                      <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 flex items-center justify-between tabular-nums text-zinc-900 font-semibold">
-                        <span>[00:26] Call disconnected: {activeCallAudit.unansweredReason}</span>
-                        <span className="text-zinc-600">Timeout / Hangup</span>
-                      </div>
-                    </div>
-                  )}
+                  <p className="text-xs font-semibold text-zinc-900">
+                    Party Disconnected: {activeCallAudit.unansweredBy === 'RM' ? 'RM Disconnected Early (<5s)' : 'Customer Rang Out / No Pickup'}
+                  </p>
+                  <p className="text-xs text-zinc-700">
+                    Reason: <span className="font-mono font-bold text-zinc-900">{activeCallAudit.unansweredReason}</span>
+                  </p>
+                  <p className="text-[11px] text-zinc-600">
+                    Dialer placed outbound call to {activeCallAudit.phoneNumber}. Customer handset did not bridge voice connection, hence no conversation audio or IQS scorecard was generated.
+                  </p>
                 </div>
               </div>
-
-              {/* ── RIGHT COLUMN: Parameters Panel + Dispute / Override ─────────── */}
-              <div className="w-full lg:w-[460px] flex flex-col overflow-y-auto p-5 space-y-4 bg-[#FAFAFB]">
-                {/* Parameters Header */}
-                <div className="space-y-1 border-b border-[#E4E4E7] pb-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-[#111111] uppercase tracking-wider flex items-center gap-1.5">
-                      {activeCallAudit.category} Parameters
-                    </h4>
-                    {activeCallAudit.isAnswered && (
-                      <span className="text-xs font-bold tabular-nums">{getScoreBadge(activeCallAudit.iqsScore)}</span>
-                    )}
-                  </div>
-                  {activeCallAudit.secondaryCategories && activeCallAudit.secondaryCategories.length > 0 && (
-                    <p className="text-[10px] text-zinc-500 italic">
-                      Scored against primary intent ({activeCallAudit.parameters.length} parameters). Secondary topic ({activeCallAudit.secondaryCategories.join(', ')}) recorded for audit history.
-                    </p>
-                  )}
-                </div>
-
-                {/* Parameters List */}
-                {activeCallAudit.isAnswered ? (
-                  <div className="space-y-2.5">
-                    {activeCallAudit.parameters.map((param) => (
-                      <div
-                        key={param.id}
-                        className="p-3 rounded-xl border border-zinc-200 bg-white text-xs shadow-sm hover:border-zinc-300 transition-colors"
-                      >
-                        <div className="flex items-center justify-between font-semibold text-zinc-900">
-                          <span className="font-bold">{param.name}</span>
-                          <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                            param.status === 'Yes'
-                              ? 'bg-zinc-100 text-zinc-800 border border-zinc-300'
-                              : param.status === 'Half'
-                              ? 'bg-zinc-100 text-zinc-600 border border-zinc-200'
-                              : 'bg-zinc-900 text-white font-bold'
-                          }`}>
-                            {param.status} ({param.earnedScore}/{param.maxScore} pts)
-                          </span>
-                        </div>
-                        {param.quote && (
-                          <div className="mt-1.5 p-2 bg-zinc-50 rounded border border-zinc-100 text-[11px] text-zinc-600 italic">
-                            "{param.quote}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="p-4 bg-zinc-100 rounded-xl text-center text-xs text-zinc-500">
-                    Call was unanswered. Quality parameters evaluation skipped.
-                  </div>
-                )}
-
-
-
-                {/* ── ACTION SECTION DIRECTLY BELOW PARAMETERS PANEL ───────────── */}
-                <div className="pt-3 border-t border-[#E4E4E7] space-y-3">
-                  
-                  {/* Feedback Messages */}
-                  {disputeFeedback && (
-                    <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 text-xs font-semibold text-zinc-900 flex items-center gap-1.5">
-                      <span>✓</span> {disputeFeedback}
-                    </div>
-                  )}
-
-                  {overrideFeedback && (
-                    <div className="p-2.5 rounded-lg bg-zinc-100 border border-zinc-300 text-xs font-semibold text-zinc-900 flex items-center gap-1.5">
-                      <span>✓</span> {overrideFeedback}
-                    </div>
-                  )}
-
-                  {/* ─────────────────────────────────────────────────────────────
-                      1. AGENT VIEW: RAISE DISPUTE OPTION BELOW PARAMETERS
-                     ───────────────────────────────────────────────────────────── */}
-                  {(activePersona === 'agent' || activePersona === 'admin') && activeCallAudit.isAnswered && (
-                    <div className="space-y-3">
-                      {activeCallAudit.disputeStatus === 'pending' ? (
-                        <div className="p-3.5 bg-zinc-100 rounded-xl border border-zinc-300 text-xs space-y-1">
-                          <div className="flex items-center gap-1.5 font-bold text-zinc-900">
-                             Dispute Pending Team Lead Review
-                          </div>
-                          <p className="text-zinc-800">
-                            <span className="font-semibold">Reason:</span> "{activeCallAudit.disputeReason}"
-                          </p>
-                          <p className="text-[11px] text-zinc-600">
-                            Your Team Leader will review the transcript and update your scorecard.
-                          </p>
-                        </div>
-                      ) : activeCallAudit.disputeStatus === 'resolved' ? (
-                        <div className="p-3 bg-zinc-100 rounded-xl border border-zinc-300 text-xs text-zinc-800">
-                          <span className="font-bold">✓ Dispute Resolved by TL:</span> {activeCallAudit.tlOverrideNote || 'Score adjusted.'}
-                        </div>
-                      ) : !isRaisingDispute ? (
-                        <div className="p-3 bg-white rounded-xl border border-zinc-200 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-xs font-bold text-zinc-900">Disagree with grading?</p>
-                              <p className="text-[11px] text-zinc-500">Raise dispute for TL parameter re-evaluation</p>
-                            </div>
-                            <button
-                              onClick={() => setIsRaisingDispute(true)}
-                              className="px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-bold transition-colors shadow-sm"
-                            >
-                              Raise Dispute
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        /* Inline Dispute Form */
-                        <div className="p-3.5 bg-zinc-50 rounded-xl border border-zinc-300 text-xs space-y-3 shadow-sm">
-                          <div className="flex items-center justify-between font-bold text-zinc-900">
-                            <span>Raise Dispute on Parameters</span>
-                            <button
-                              onClick={() => setIsRaisingDispute(false)}
-                              className="text-zinc-500 hover:text-zinc-800 text-xs font-bold"
-                            >
-                              ✕
-                            </button>
-                          </div>
-
-                          <p className="text-[11px] text-zinc-600">
-                            Select the parameter(s) you believe should be re-evaluated:
-                          </p>
-
-                          <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                            {activeCallAudit.parameters.map((p) => (
-                              <label
-                                key={p.id}
-                                className="flex items-center gap-2 p-1.5 bg-white rounded border border-zinc-200 cursor-pointer text-xs"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={!!disputeSelectedParams[p.id]}
-                                  onChange={(e) =>
-                                    setDisputeSelectedParams((prev) => ({
-                                      ...prev,
-                                      [p.id]: e.target.checked,
-                                    }))
-                                  }
-                                  className="rounded text-zinc-900"
-                                />
-                                <span className="font-semibold text-zinc-800 flex-1 truncate">{p.name}</span>
-                                <span className="text-[10px] text-zinc-500 font-mono">({p.status})</span>
-                              </label>
-                            ))}
-                          </div>
-
-                          <textarea
-                            rows={2}
-                            value={agentDisputeNote}
-                            onChange={(e) => setAgentDisputeNote(e.target.value)}
-                            placeholder="Explain why you feel the parameter score should be reviewed…"
-                            className="w-full text-xs border border-zinc-300 rounded-lg p-2 bg-white outline-none focus:border-zinc-900"
-                          />
-
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => setIsRaisingDispute(false)}
-                              className="px-3 py-1 rounded-lg border border-zinc-300 bg-white text-zinc-700 text-xs font-semibold"
-                            >
-                              Cancel
-                            </button>
-                            <button
-                              disabled={submittingDispute}
-                              onClick={handleSubmitDispute}
-                              className="px-3.5 py-1 rounded-lg bg-zinc-900 hover:bg-black text-white text-xs font-bold disabled:opacity-50"
-                            >
-                              {submittingDispute ? 'Submitting…' : 'Submit Dispute'}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* ─────────────────────────────────────────────────────────────
-                      2. TL VIEW: OVERRIDE OPTION BELOW PARAMETERS PANEL (LIKE RM CALLS)
-                     ───────────────────────────────────────────────────────────── */}
-                  {(activePersona === 'tl' || activePersona === 'admin') && activeCallAudit.isAnswered && (
-                    <div className="p-3.5 bg-white rounded-xl border border-zinc-200 space-y-3 shadow-sm">
-                      {/* If call has dispute pending from agent, show quick resolve buttons */}
-                      {activeCallAudit.disputeStatus === 'pending' && (
-                        <div className="p-2.5 bg-zinc-100 rounded-lg border border-zinc-300 space-y-2">
-                          <p className="text-xs font-bold text-zinc-900 flex items-center gap-1.5">
-                            Agent Dispute Pending:
-                          </p>
-                          <p className="text-xs text-zinc-800 italic">
-                            "{activeCallAudit.disputeReason}"
-                          </p>
-                          <div className="flex gap-2 pt-1">
-                            <button
-                              onClick={() => handleResolveDispute(true)}
-                              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-black text-white text-xs font-bold"
-                            >
-                              ✓ Approve (+8 pts)
-                            </button>
-                            <button
-                              onClick={() => handleResolveDispute(false)}
-                              className="px-2.5 py-1 rounded border border-zinc-300 bg-white text-zinc-700 text-xs font-semibold hover:bg-zinc-50"
-                            >
-                              ✕ Reject Dispute
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex items-center justify-between border-b border-zinc-100 pb-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs font-bold text-zinc-900">Score &amp; Parameter Override</span>
-                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700 uppercase">
-                            TL Control
-                          </span>
-                        </div>
-                        {activeCallAudit.tlOverrideNote && (
-                          <span className="text-[10px] text-zinc-900 font-bold">Override Active</span>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <label className="text-[11px] font-semibold text-zinc-600 block mb-1">Parameter</label>
-                          <select
-                            value={overrideParamId}
-                            onChange={(e) => setOverrideParamId(e.target.value)}
-                            className="w-full text-xs border border-zinc-300 rounded-lg p-1.5 bg-white outline-none"
-                          >
-                            {activeCallAudit.parameters.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.id}: {p.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="text-[11px] font-semibold text-zinc-600 block mb-1">New Score</label>
-                          <select
-                            value={overrideNewScore}
-                            onChange={(e) => setOverrideNewScore(e.target.value as any)}
-                            className="w-full text-xs border border-zinc-300 rounded-lg p-1.5 bg-white outline-none"
-                          >
-                            <option value="Yes">Pass / Yes (Full Pts)</option>
-                            <option value="Half">Partial / Half (50%)</option>
-                            <option value="No">Fail / No (0 Pts)</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <textarea
-                        rows={2}
-                        value={overrideNoteInput}
-                        onChange={(e) => setOverrideNoteInput(e.target.value)}
-                        placeholder="Internal review note explaining why score was overridden…"
-                        className="w-full text-xs border border-zinc-300 rounded-lg p-2 outline-none focus:border-zinc-800"
-                      />
-
-                      <button
-                        disabled={savingOverride}
-                        onClick={handleSubmitOverride}
-                        className="w-full py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition-colors disabled:opacity-50"
-                      >
-                        {savingOverride
-                          ? 'Saving…'
-                          : activeCallAudit.disputeStatus === 'pending'
-                          ? 'Resolve Dispute & Submit Review'
-                          : 'Submit Evaluation Override'}
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="pt-2">
-                    <button
-                      onClick={() => setActiveCallAudit(null)}
-                      className="w-full py-2 rounded-lg border border-zinc-200 text-zinc-700 hover:bg-zinc-100 text-xs font-semibold transition-colors"
-                    >
-                      Close Call View
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
             )}
           </div>
         </div>

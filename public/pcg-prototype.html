@@ -717,123 +717,155 @@
   </main>
 
   <!-- SLIDE-OVER CALL AUDIT DRAWER -->
+  <!-- Call Evaluation Drawer Backdrop (Matching CX Calls) -->
   <div id="drawer-backdrop" class="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs hidden">
-    <div class="w-full max-w-5xl xl:max-w-6xl bg-white h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+    <div class="w-full max-w-5xl xl:max-w-6xl bg-[#F8FAFC] h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
       
-      <!-- Drawer Header -->
-      <div class="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-zinc-50">
-        <div class="flex flex-wrap items-center gap-3">
-          <span class="font-bold tabular-nums text-base text-[#111111]" id="drawer-call-id">Call #102</span>
-          
-          <span id="drawer-primary-cat" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-            Upselling Calls
+      <!-- Drawer Header (matching CX Calls) -->
+      <div class="px-6 py-4 border-b border-[#E4E4E7] flex items-center justify-between bg-white">
+        <h3 class="m-0 text-[15px] font-semibold text-[#18181B] flex items-center gap-2 flex-wrap">
+          <span>Call Evaluation Panel — ID: <span id="drawer-call-id">102</span> (<span id="drawer-rm-name">Aahan Thaker</span>)</span>
+          <span class="text-zinc-500">· <span id="drawer-call-date">19 Oct 2026, 02:57 pm</span></span>
+          <span class="font-mono text-[13px] font-medium text-[#475569] bg-[#F1F5F9] px-2 py-0.5 rounded-md border border-[#E2E8F0] flex items-center gap-1" id="drawer-phone-container">
+            <span>📱</span> <span id="drawer-phone">917016176911</span>
           </span>
-          <span id="drawer-secondary-cat" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-2xs">
-            <span class="font-bold text-amber-600">+</span>
-            <span>General / Support</span>
-          </span>
+        </h3>
 
-          <span class="text-xs text-[#71717A]">
-            RM: <span class="font-semibold text-zinc-900" id="drawer-rm-name">Aahan Thaker</span> (<span id="drawer-tl-name">Team Gokul</span>)
-          </span>
-          <span class="text-xs tabular-nums text-zinc-500" id="drawer-phone">• +91 98765 10102</span>
-          <span class="text-xs tabular-nums text-zinc-500" id="drawer-duration">• 02:25</span>
-        </div>
-
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-semibold text-[#71717A]">IQS:</span>
-            <span id="drawer-iqs-badge" class="px-2 py-0.5 rounded font-bold tabular-nums text-xs bg-emerald-100 text-emerald-800 border border-emerald-200">88%</span>
-            <span id="drawer-gate-badge" class="text-xs font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">PASS</span>
-          </div>
-          <button onclick="closeDrawer()" class="w-8 h-8 rounded-lg border border-[#E4E4E7] flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 font-bold ml-2">
+        <div class="flex items-center gap-2.5">
+          <button
+            id="drawer-show-chat-btn"
+            onclick="alert('Opening linked chat thread...')"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-[#E4E4E7] bg-white text-[#18181B] shadow-2xs hover:bg-zinc-50 transition-colors cursor-pointer"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <span>Show Chat</span>
+            <span class="text-[11px] opacity-60">↗</span>
+          </button>
+          <button
+            id="drawer-raise-dispute-btn"
+            onclick="handleProtoRaiseDispute()"
+            class="hidden px-3 py-1.5 text-xs font-semibold rounded-md border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer"
+          >
+            Raise Dispute
+          </button>
+          <button
+            onclick="closeDrawer()"
+            title="Close Panel"
+            class="w-7 h-7 rounded-md border border-[#E4E4E7] flex items-center justify-center text-[#71717A] hover:text-[#18181B] hover:bg-zinc-100 text-sm font-semibold transition-colors shadow-2xs cursor-pointer"
+          >
             ✕
           </button>
         </div>
       </div>
 
-      <!-- Drawer Body: 2-Column Split Layout -->
+      <!-- Drawer Body: 2-Column Split Layout matching CX calls -->
       <div class="flex-1 flex flex-col lg:flex-row overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[#E4E4E7]">
         
-        <!-- LEFT COLUMN: Audio Player + Transcript -->
-        <div class="flex-1 flex flex-col overflow-y-auto p-5 space-y-4 bg-white">
-          <!-- Audio Player Mockup -->
-          <div class="p-3.5 bg-zinc-900 text-white rounded-xl flex items-center justify-between gap-4 shadow-sm">
-            <div class="flex items-center gap-3">
-              <button class="w-9 h-9 rounded-full bg-white text-zinc-900 flex items-center justify-center font-bold text-xs shadow hover:scale-105 transition-transform">
-                ▶
-              </button>
-              <div>
-                <div class="text-xs font-bold text-zinc-100">Stereo Audio Recording (S3)</div>
-                <div class="text-[11px] text-zinc-400 tabular-nums">00:18 / 02:25 • AAC Audio</div>
-              </div>
+        <!-- LEFT COLUMN: Transcript & Audio (Matching CX calls) -->
+        <div class="flex-1 flex flex-col overflow-y-auto p-5 space-y-3.5 bg-white">
+          <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-2">
+            <div class="flex items-center gap-2.5">
+              <h4 class="m-0 text-xs font-bold uppercase tracking-wider text-[#71717A]">Transcript</h4>
+              <span class="text-[11px] font-mono text-[#475569] bg-[#F1F5F9] px-2 py-0.5 rounded border border-[#E2E8F0] inline-flex items-center gap-1 font-medium" id="drawer-chat-badge">
+                <span>💬</span> Chat #<span id="drawer-chat-id">179419</span>
+              </span>
             </div>
             <div class="flex items-center gap-2">
-              <span class="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Speed: 1.0x</span>
+              <button
+                id="btn-swap-speakers"
+                onclick="handleSwapSpeakersPrototype()"
+                class="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-zinc-300 bg-[#F8FAFC] hover:bg-zinc-100 text-[#334155] transition-colors shadow-2xs cursor-pointer"
+                title="Swap RM and Investor speaker labels"
+              >
+                ⇄ Swap All Speakers (IR ⇋ Investor)
+              </button>
+              <button
+                id="btn-reevaluate"
+                onclick="handleReevaluatePrototype()"
+                class="hidden px-2.5 py-1 text-[11px] font-bold rounded-md bg-[#CA8A04] hover:bg-[#A16207] text-white transition-colors shadow-2xs cursor-pointer"
+              >
+                Save &amp; Re-evaluate Call (1 of 1)
+              </button>
+              <span
+                id="badge-reevaluated"
+                class="hidden px-2 py-0.5 text-[11px] font-semibold rounded bg-zinc-100 text-zinc-600 border border-zinc-300"
+              >
+                ✓ Re-evaluation used
+              </span>
             </div>
           </div>
 
-          <!-- Transcript Dialogue Turns -->
-          <div class="space-y-3 flex-1 flex flex-col">
-            <div class="flex items-center justify-between border-b border-[#E4E4E7] pb-2 flex-wrap gap-2">
-              <div class="flex items-center gap-2">
-                <h4 class="text-xs font-bold text-[#111111] uppercase tracking-wider">
-                  Call Transcript &amp; Dialogue Turns
-                </h4>
-                <span class="text-[11px] text-[#71717A]" id="drawer-turns-count">9 dialogue turns</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  id="btn-swap-speakers"
-                  onclick="handleSwapSpeakersPrototype()"
-                  class="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-800 transition-colors shadow-2xs"
-                  title="Swap RM and Investor speaker labels"
-                >
-                  ⇄ Swap All Speakers (RM ⇋ Investor)
-                </button>
-                <button
-                  id="btn-reevaluate"
-                  onclick="handleReevaluatePrototype()"
-                  class="hidden px-2.5 py-1 text-[11px] font-bold rounded-md bg-amber-600 hover:bg-amber-700 text-white transition-colors shadow-2xs"
-                >
-                  Save &amp; Re-evaluate Call (1 of 1)
-                </button>
-                <span
-                  id="badge-reevaluated"
-                  class="hidden px-2 py-0.5 text-[11px] font-semibold rounded bg-zinc-100 text-zinc-600 border border-zinc-300"
-                >
-                  ✓ Re-evaluation used
-                </span>
-              </div>
-            </div>
+          <!-- Clean Audio Recording Box matching CX Calls -->
+          <div class="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-lg flex flex-col gap-1">
+            <span class="text-[10px] font-bold text-[#71717A] uppercase tracking-wider">Audio Recording</span>
+            <audio id="drawer-audio-player" controls class="w-full h-8" style="height: 32px;"></audio>
+          </div>
 
-            <!-- Dialogue Turns Container with Black & White Pivot Bubble -->
-            <div class="space-y-2.5 flex-1 overflow-y-auto pr-1" id="drawer-turns-container">
-              <!-- Injected via JS -->
-            </div>
+          <!-- Dialogue Turns Container with CX Bubbles -->
+          <div class="space-y-2.5 flex-1 overflow-y-auto pr-1 flex flex-col" id="drawer-turns-container">
+            <!-- Injected via JS -->
           </div>
         </div>
 
-        <!-- RIGHT COLUMN: Parameters Panel & Scoring -->
-        <div class="w-full lg:w-[460px] flex flex-col overflow-y-auto p-5 space-y-4 bg-[#FAFAFB]">
-          <div class="space-y-1 border-b border-[#E4E4E7] pb-2">
-            <div class="flex items-center justify-between">
-              <h4 class="text-xs font-bold text-[#111111] uppercase tracking-wider" id="drawer-param-header">
-                Upselling Parameters
-              </h4>
-              <span class="text-xs font-bold tabular-nums text-emerald-700">88% Score</span>
-            </div>
-            <p class="text-[10px] text-zinc-500 italic">
-              Scored against primary intent. Secondary topic recorded for audit trail.
-            </p>
+        <!-- RIGHT COLUMN: Evaluation Parameters & Compliance Gates (Matching CX calls) -->
+        <div class="w-full lg:w-[450px] flex flex-col overflow-y-auto p-5 space-y-4 bg-white border-l border-[#E4E4E7]">
+          <!-- Sticky Parameters Header -->
+          <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-2">
+            <h4 class="m-0 text-xs font-bold uppercase tracking-wider text-[#71717A]">Evaluation Parameters</h4>
+            <span class="text-sm font-bold text-[#18181B]">
+              IQS Score: <span class="text-[#15803D]" id="drawer-iqs-score">97%</span>
+            </span>
           </div>
 
-          <!-- Parameters List -->
-          <div class="space-y-2.5" id="drawer-params-container">
+          <!-- Compliance Gates Card -->
+          <div class="bg-[#F8FAFC] border border-[#E4E4E7] rounded-xl p-3.5 space-y-2.5 shadow-2xs">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <h5 class="m-0 text-xs font-bold text-[#18181B] uppercase tracking-wider">Compliance Gates:</h5>
+                <span id="drawer-gate-badge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]">PASS</span>
+              </div>
+            </div>
+
+            <!-- Gate Items -->
+            <div class="space-y-2" id="drawer-gates-container">
+              <!-- G1 -->
+              <div class="p-2.5 bg-white border border-[#E4E4E7] rounded-lg flex items-center justify-between gap-3 shadow-2xs">
+                <span class="text-xs font-semibold text-[#18181B]">G1: Advice (No Investment / Tax Advice)</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#15803D] text-white">Yes</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">No</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">NA</span>
+                </div>
+              </div>
+              <!-- G2 -->
+              <div class="p-2.5 bg-white border border-[#E4E4E7] rounded-lg flex items-center justify-between gap-3 shadow-2xs">
+                <span class="text-xs font-semibold text-[#18181B]">G2: Fabrication (No Fabricated Facts)</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#15803D] text-white">Yes</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">No</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">NA</span>
+                </div>
+              </div>
+              <!-- G3 -->
+              <div class="p-2.5 bg-white border border-[#E4E4E7] rounded-lg flex items-center justify-between gap-3 shadow-2xs">
+                <span class="text-xs font-semibold text-[#18181B]">G3: Identity (Identity Verified First)</span>
+                <div class="flex items-center gap-1.5 shrink-0">
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#15803D] text-white">Yes</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">No</span>
+                  <span class="px-2.5 py-0.5 rounded text-[11px] font-medium border border-zinc-200 text-zinc-500 bg-white">NA</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Parameter Cards List -->
+          <div class="space-y-2 flex-1" id="drawer-params-container">
             <!-- Injected via JS -->
           </div>
 
-          <!-- TL Evaluation Override Section -->
+          <!-- TL Score Override / Dispute Action Section -->
           <div id="drawer-override-section" class="pt-3 border-t border-[#E4E4E7] space-y-3">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-[#111111] uppercase tracking-wider">
@@ -869,7 +901,7 @@
               <button
                 id="btn-submit-override"
                 onclick="handleSubmitOverridePrototype()"
-                class="w-full py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm transition-colors"
+                class="w-full py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm transition-colors cursor-pointer"
               >
                 Submit Evaluation Override
               </button>
@@ -879,6 +911,7 @@
               </div>
             </div>
           </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1120,70 +1153,93 @@
       if (!c) return;
       activeCall = c;
 
-      document.getElementById('drawer-call-id').innerText = `Call #${c.id}`;
-      document.getElementById('drawer-rm-name').innerText = c.rmName;
-      document.getElementById('drawer-tl-name').innerText = c.tlName;
-      document.getElementById('drawer-phone').innerText = `• ${c.phoneNumber}`;
-      document.getElementById('drawer-duration').innerText = `• ${c.durationFormatted}`;
-      document.getElementById('drawer-primary-cat').innerText = c.category;
-      
-      const secEl = document.getElementById('drawer-secondary-cat');
-      if (c.secondaryCategories && c.secondaryCategories.length > 0) {
-        secEl.classList.remove('hidden');
-        secEl.innerHTML = `<span class="font-bold text-amber-600">+</span> ${c.secondaryCategories.join(', ')}`;
-      } else {
-        secEl.classList.add('hidden');
+      const callIdEl = document.getElementById('drawer-call-id');
+      if (callIdEl) callIdEl.innerText = c.id;
+      const rmNameEl = document.getElementById('drawer-rm-name');
+      if (rmNameEl) rmNameEl.innerText = c.rmName;
+      const phoneEl = document.getElementById('drawer-phone');
+      if (phoneEl) phoneEl.innerText = c.phoneNumber.replace('+91 ', '');
+      const chatIdEl = document.getElementById('drawer-chat-id');
+      if (chatIdEl) chatIdEl.innerText = `1794${c.id}`;
+      const iqsScoreEl = document.getElementById('drawer-iqs-score');
+      if (iqsScoreEl) iqsScoreEl.innerText = `${c.iqsScore}%`;
+
+      const gateBadge = document.getElementById('drawer-gate-badge');
+      if (gateBadge) {
+        if (c.gateStatus === 'FAIL') {
+          gateBadge.innerText = 'FAIL';
+          gateBadge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-[#FEE2E2] text-[#B91C1C] border border-[#FCA5A5]';
+        } else {
+          gateBadge.innerText = 'PASS';
+          gateBadge.className = 'text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-[#DCFCE7] text-[#15803D] border border-[#86EFAC]';
+        }
       }
 
-      document.getElementById('drawer-iqs-badge').innerText = `${c.iqsScore}%`;
-      document.getElementById('drawer-param-header').innerText = `${c.category} Parameters`;
+      // Raise dispute button visibility for agent
+      const raiseBtn = document.getElementById('drawer-raise-dispute-btn');
+      if (raiseBtn) {
+        if (currentRole === 'agent') raiseBtn.classList.remove('hidden');
+        else raiseBtn.classList.add('hidden');
+      }
 
-      // Render Dialogue Turns
+      // TL override section visibility
+      const overrideSec = document.getElementById('drawer-override-section');
+      if (overrideSec) {
+        if (currentRole === 'agent') overrideSec.classList.add('hidden');
+        else overrideSec.classList.remove('hidden');
+      }
+
+      // Render Dialogue Turns matching CX Calls
       const turnsContainer = document.getElementById('drawer-turns-container');
       turnsContainer.innerHTML = '';
-      c.turns.forEach(t => {
+      c.turns.forEach((t, idx) => {
+        const isRM = t.speaker === 'RM';
+
         if (t.isPivotTurn) {
-          const pivot = document.createElement('div');
-          pivot.className = 'my-2.5 py-1.5 px-3 bg-zinc-50 border border-zinc-300 rounded-lg text-[11px] font-semibold text-zinc-800 flex items-center gap-2 justify-center shadow-2xs';
-          pivot.innerHTML = `<span class="text-xs text-zinc-500">⚡</span><span>RM Topic Pivot: Transitioned from Support Resolution to Re-investment Pitch</span>`;
-          turnsContainer.appendChild(pivot);
+          const banner = document.createElement('div');
+          banner.className = 'p-2 px-3 bg-[#FEF2F2] text-[#991B1B] border border-[#FEE2E2] rounded-lg text-xs flex items-center gap-1.5 my-1';
+          banner.innerHTML = `<span>⚡</span> <span><b>INVESTOR</b> interrupted by <b>IR EXECUTIVE</b></span>`;
+          turnsContainer.appendChild(banner);
         }
 
-        const div = document.createElement('div');
-        div.className = `p-3 rounded-xl text-xs transition-all ${
-          t.speaker === 'RM' ? 'bg-blue-50/70 border border-blue-200/80 ml-6' : 'bg-zinc-100/80 border border-zinc-200/70 mr-6'
-        }`;
-        div.innerHTML = `
-          <div class="flex items-center justify-between font-bold text-[11px] text-zinc-700 mb-1">
-            <div class="flex items-center gap-2">
-              <span class="${t.speaker === 'RM' ? 'text-blue-800' : 'text-zinc-800'}">
-                ${t.speaker === 'RM' ? `RM (${c.rmName})` : 'Investor / Customer'}
-              </span>
-              ${t.segment ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-medium bg-zinc-100 text-zinc-700 border border-zinc-300">${t.segment}</span>` : ''}
-            </div>
-            <span class="tabular-nums text-[10px] text-zinc-400">${t.time}</span>
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `flex flex-col ${isRM ? 'items-end self-end' : 'items-start self-start'} max-w-[85%]`;
+        msgDiv.innerHTML = `
+          <div class="flex items-center gap-1.5 mb-1 text-[10px] text-[#71717A]">
+            <span>${isRM ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'}</span>
+            <span>·</span>
+            <span>${t.time}</span>
           </div>
-          <p class="text-zinc-900 leading-relaxed">${t.text}</p>
+          <div class="p-3 px-3.5 rounded-xl text-xs leading-relaxed ${isRM ? 'bg-[#18181B] text-white' : 'bg-[#F1F5F9] text-[#18181B]'}">
+            ${t.text}
+          </div>
         `;
-        turnsContainer.appendChild(div);
+        turnsContainer.appendChild(msgDiv);
+
+        if (idx < c.turns.length - 1 && !t.isPivotTurn) {
+          const deadAir = document.createElement('div');
+          deadAir.className = 'p-1.5 px-3 bg-[#F8FAFC] text-[#475569] border border-[#F1F5F9] rounded-lg text-xs self-start my-0.5 flex items-center gap-1.5';
+          deadAir.innerHTML = `<span>⏸</span> <span>Dead air: ~1 seconds</span>`;
+          turnsContainer.appendChild(deadAir);
+        }
       });
 
-      // Render Parameters
+      // Render Parameters matching CX Calls
       const paramsContainer = document.getElementById('drawer-params-container');
       paramsContainer.innerHTML = '';
-      c.parameters.forEach(p => {
+      const weights = ['20%', '15%', '15%', '5%', '5%', '5%', '8%', '9%', '6%', '12%'];
+      c.parameters.forEach((p, idx) => {
         const pdiv = document.createElement('div');
-        pdiv.className = 'p-3 rounded-xl border border-zinc-200 bg-white text-xs shadow-2xs space-y-1';
+        const isPassed = p.status === 'Yes';
+        pdiv.className = 'p-3 bg-[#FAFAFA] border border-[#F0F0F2] rounded-lg space-y-1';
         pdiv.innerHTML = `
-          <div class="flex items-center justify-between font-semibold text-zinc-900">
-            <span class="font-bold">${p.name}</span>
-            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-              ${p.status} (${p.earned}/${p.maxScore} pts)
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-semibold text-[#18181B]">${p.name} <span class="text-[10px] text-zinc-400">(${weights[idx % weights.length]})</span></span>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold ${isPassed ? 'bg-[#DCFCE7] text-[#15803D]' : 'bg-[#FEE2E2] text-[#B91C1C]'}">
+              ${p.status}
             </span>
           </div>
-          <div class="p-2 bg-zinc-50 rounded border border-zinc-100 text-[11px] text-zinc-600 italic">
-            "${p.quote}"
-          </div>
+          <p class="text-[11px] text-[#52525B] leading-relaxed m-0">${p.quote}</p>
         `;
         paramsContainer.appendChild(pdiv);
       });
@@ -1204,16 +1260,21 @@
       const badgeReeval = document.getElementById('badge-reevaluated');
 
       if (c.hasReevaluated) {
-        btnSwap.classList.add('hidden');
-        btnReeval.classList.add('hidden');
-        badgeReeval.classList.remove('hidden');
+        btnSwap?.classList.add('hidden');
+        btnReeval?.classList.add('hidden');
+        badgeReeval?.classList.remove('hidden');
       } else {
-        btnSwap.classList.remove('hidden');
-        btnReeval.classList.add('hidden');
-        badgeReeval.classList.add('hidden');
+        btnSwap?.classList.remove('hidden');
+        btnReeval?.classList.add('hidden');
+        badgeReeval?.classList.add('hidden');
       }
 
       document.getElementById('drawer-backdrop').classList.remove('hidden');
+    }
+
+    function handleProtoRaiseDispute() {
+      alert(`Dispute raised on Call #${activeCall?.id || ''}. Your Team Leader will review the transcript and update your scorecard.`);
+      closeDrawer();
     }
 
     let activeCall = null;

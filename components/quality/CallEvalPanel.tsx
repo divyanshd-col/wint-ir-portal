@@ -917,17 +917,17 @@ export default function CallEvalPanel({
             )}
             <button
               onClick={onClose}
-              title="Close / Collapse Panel"
+              title="Close Panel"
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 height: 28,
-                padding: '0 8px',
+                width: 28,
                 borderRadius: 6,
                 border: '1px solid var(--qa-border, #E4E4E7)',
                 background: '#fff',
-                fontSize: 13,
+                fontSize: 14,
                 fontWeight: 600,
                 color: 'var(--qa-text-2, #71717A)',
                 cursor: 'pointer',
@@ -935,7 +935,7 @@ export default function CallEvalPanel({
                 lineHeight: 1,
               }}
             >
-              ^
+              ✕
             </button>
           </div>
         </div>
@@ -1154,7 +1154,7 @@ export default function CallEvalPanel({
               }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Audio Recording</span>
                 <audio
-                  src={`/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
+                  src={recordingUrl.startsWith('/') ? recordingUrl : `/api/quality/audio-proxy?url=${encodeURIComponent(recordingUrl)}`}
                   controls
                   style={{ width: '100%', height: 32 }}
                 />
@@ -1186,7 +1186,7 @@ export default function CallEvalPanel({
                   const textContent = (seg.text || seg.message || seg.translation || seg.content || '').trim();
                   if (!textContent) return null;
 
-                  const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent' || seg.sender === 'agent';
+                  const isIR = seg.speaker === 'IR_EXECUTIVE' || seg.speaker === 'IR EXECUTIVE' || seg.speaker === 'RM' || (seg.speaker || '').toLowerCase().includes('rm') || (seg.speaker || '').toLowerCase().includes('agent') || (seg.role || '').toLowerCase() === 'agent' || seg.sender === 'agent';
                   return (
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
