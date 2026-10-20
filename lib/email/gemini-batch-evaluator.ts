@@ -261,11 +261,13 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
               }
             }
 
+            const coreQuery = String(parsedResult.core_query || parsedResult.customer_query_summary || '').trim();
             const rawParamScores = parsedResult.parameter_scores || {};
             const parameterReasoning = parsedResult.parameter_reasoning || {};
-            const parameterScores = {
+            const parameterScores: any = {
               ...rawParamScores,
               ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
+              ...(coreQuery ? { core_query: coreQuery } : {}),
             };
             const calculatedScore = calculateEmailIQS(rawParamScores);
             const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
@@ -298,6 +300,23 @@ export async function collectAndProcessEmailBatchResults(targetJobName?: string)
                 messageId,
               ]
             );
+
+            // Persist synthesized core_query to email_conversations.thread_summary
+            const ticketId = item.metadata?.ticket_id;
+            if (coreQuery && ticketId) {
+              await query(
+                `UPDATE email_conversations
+                 SET thread_summary = jsonb_build_object(
+                   'core_query', $1::text,
+                   'actions_taken', COALESCE(thread_summary->>'actions_taken', ''),
+                   'pending_action', COALESCE(thread_summary->>'pending_action', ''),
+                   'commitments_set', COALESCE(thread_summary->>'commitments_set', '')
+                 ),
+                 updated_at = NOW()
+                 WHERE id = $2 AND (thread_summary IS NULL OR thread_summary->>'core_query' IS NULL OR thread_summary->>'core_query' = '')`,
+                [coreQuery, ticketId]
+              ).catch(err => console.warn(`[gemini-batch] Failed to update thread_summary for ticket ${ticketId}:`, err.message));
+            }
 
             evaluatedRepliesCount++;
 
@@ -430,11 +449,13 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
     parsed = JSON.parse(cleaned);
   }
 
+  const coreQuery = String(parsed.core_query || parsed.customer_query_summary || '').trim();
   const rawParamScores = parsed.parameter_scores || {};
   const parameterReasoning = parsed.parameter_reasoning || {};
-  const parameterScores = {
+  const parameterScores: any = {
     ...rawParamScores,
     ...(Object.keys(parameterReasoning).length > 0 ? { __reasoning: parameterReasoning } : {}),
+    ...(coreQuery ? { core_query: coreQuery } : {}),
   };
   const calculatedScore = calculateEmailIQS(rawParamScores);
   const qualityScore = !isNaN(calculatedScore) && Object.keys(rawParamScores).length > 0
@@ -467,6 +488,22 @@ export async function evaluateSingleReplySync(messageId: string): Promise<any> {
       messageId,
     ]
   );
+
+  // Persist synthesized core_query to email_conversations.thread_summary
+  if (coreQuery && row.ticket_id) {
+    await query(
+      `UPDATE email_conversations
+       SET thread_summary = jsonb_build_object(
+         'core_query', $1::text,
+         'actions_taken', COALESCE(thread_summary->>'actions_taken', ''),
+         'pending_action', COALESCE(thread_summary->>'pending_action', ''),
+         'commitments_set', COALESCE(thread_summary->>'commitments_set', '')
+       ),
+       updated_at = NOW()
+       WHERE id = $2 AND (thread_summary IS NULL OR thread_summary->>'core_query' IS NULL OR thread_summary->>'core_query' = '')`,
+      [coreQuery, row.ticket_id]
+    ).catch(err => console.warn(`[gemini-batch] Failed to update thread_summary for ticket ${row.ticket_id}:`, err.message));
+  }
 
   if (!compliancePassed || complianceIssues.length > 0) {
     await sendEmailComplianceSlackAlert({

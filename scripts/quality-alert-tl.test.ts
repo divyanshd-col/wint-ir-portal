@@ -30,8 +30,11 @@ test('getTLSlackMention - falls back to agentName when tlName is missing or N/A'
 test('getTLSlackMention - does not conflate Nityaa with Nitya Sharma', () => {
   // If agent is Nityaa, fallback should not trigger Kriti
   assert.equal(getTLSlackMention('', 'Nityaa'), 'N/A');
-  // If tlName is Anusha for Nityaa, it tags Anusha
-  assert.equal(getTLSlackMention('Anusha', 'Nityaa'), '<@U08LEA04YUR>');
+  // Anusha and Rishitha are not tagged in Slack moving forward
+  assert.equal(getTLSlackMention('Anusha', 'Nityaa'), 'N/A');
+  assert.equal(getTLSlackMention('Rishitha'), 'N/A');
+  // Puja is mapped for Sai Devakar
+  assert.equal(getTLSlackMention('Puja', 'Sai Devakar'), '<@U06511Q6R46>');
 });
 
 test('getAgentTLByName - fallback mappings when DB query cannot find row', async () => {

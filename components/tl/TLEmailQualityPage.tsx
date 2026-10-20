@@ -418,7 +418,12 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
                             Customer Context / Query
                           </div>
                           <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '14px 16px' }}>
-                            <CustomerSummaryBlock threadSummary={item.thread_summary} customerMessage={item.customer_message} subjectLine={item.subject_line} />
+                            <CustomerSummaryBlock
+                              threadSummary={item.thread_summary}
+                              customerMessage={item.customer_message}
+                              subjectLine={item.subject_line}
+                              parameterScores={item.parameter_scores}
+                            />
                           </div>
                         </div>
                       </div>
@@ -902,6 +907,7 @@ export default function TLEmailQualityPage() {
                                       threadSummary={reply.thread_summary}
                                       customerMessage={reply.customer_message}
                                       subjectLine={reply.subject_line}
+                                      parameterScores={reply.parameter_scores}
                                     />
                                   </div>
                                 </div>

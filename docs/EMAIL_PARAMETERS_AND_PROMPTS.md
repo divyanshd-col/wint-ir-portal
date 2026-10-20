@@ -218,6 +218,7 @@ The prompt is constructed dynamically by [`lib/email/context-builder.ts`](file:/
 
 ```json
 {
+  "core_query": "Investor is requesting clarification on TDS deduction and instructions to download Form 16A.",
   "quality_score": 88,
   "compliance_passed": true,
   "compliance_issues": [],
