@@ -455,45 +455,6 @@
         </div>
       </div>
 
-      <!-- KPI Summary Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div class="bg-white border border-[#E4E4E7] rounded-xl p-4 shadow-2xs">
-          <div class="text-[11px] font-semibold uppercase tracking-wider text-[#71717A]">Top RM IQS</div>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-2xl font-bold text-emerald-600 leading-none" id="rmperf-kpi-top-score">94.2%</span>
-            <span class="text-xs font-semibold text-[#18181B] truncate" id="rmperf-kpi-top-name">Yaashvi Arora</span>
-          </div>
-          <div class="text-[11px] text-[#71717A] mt-1" id="rmperf-kpi-top-sub">Team Gokul · 68 calls</div>
-        </div>
-
-        <div class="bg-white border border-[#E4E4E7] rounded-xl p-4 shadow-2xs">
-          <div class="text-[11px] font-semibold uppercase tracking-wider text-[#71717A]">Overall Average IQS</div>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-2xl font-bold text-[#18181B] leading-none" id="rmperf-kpi-avg-score">87.4%</span>
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700">Target >85%</span>
-          </div>
-          <div class="text-[11px] text-[#71717A] mt-1" id="rmperf-kpi-avg-sub">Across 10 RMs</div>
-        </div>
-
-        <div class="bg-white border border-[#E4E4E7] rounded-xl p-4 shadow-2xs">
-          <div class="text-[11px] font-semibold uppercase tracking-wider text-[#71717A]">Biggest 2-Wk Improver</div>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-2xl font-bold text-blue-600 leading-none" id="rmperf-kpi-imp-diff">+6.8%</span>
-            <span class="text-xs font-semibold text-[#18181B] truncate" id="rmperf-kpi-imp-name">Sujal Dadwani</span>
-          </div>
-          <div class="text-[11px] text-[#71717A] mt-1" id="rmperf-kpi-imp-sub">80.2% → 87.0% IQS</div>
-        </div>
-
-        <div class="bg-white border border-[#E4E4E7] rounded-xl p-4 shadow-2xs">
-          <div class="text-[11px] font-semibold uppercase tracking-wider text-[#71717A]">Attention Queue (&lt;85%)</div>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span class="text-2xl font-bold text-amber-600 leading-none" id="rmperf-kpi-att-count">3 RMs</span>
-            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">Coaching Focus</span>
-          </div>
-          <div class="text-[11px] text-[#71717A] mt-1">Below target threshold</div>
-        </div>
-      </div>
-
       <!-- 3 Leaderboard Boards Grid -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <!-- 1. Top Performers -->
@@ -1913,30 +1874,6 @@
       const bottom5 = [...filtered].sort((a, b) => a.currentIqs - b.currentIqs).slice(0, 5);
       // Most Improved 5
       const improved5 = [...filtered].sort((a, b) => b.delta2Wk - a.delta2Wk).slice(0, 5);
-
-      // KPIs
-      const topElScore = document.getElementById('rmperf-kpi-top-score');
-      const topElName = document.getElementById('rmperf-kpi-top-name');
-      const topElSub = document.getElementById('rmperf-kpi-top-sub');
-      const avgElScore = document.getElementById('rmperf-kpi-avg-score');
-      const avgElSub = document.getElementById('rmperf-kpi-avg-sub');
-      const impElDiff = document.getElementById('rmperf-kpi-imp-diff');
-      const impElName = document.getElementById('rmperf-kpi-imp-name');
-      const impElSub = document.getElementById('rmperf-kpi-imp-sub');
-      const attElCount = document.getElementById('rmperf-kpi-att-count');
-
-      const avgIqs = (filtered.reduce((acc, r) => acc + r.currentIqs, 0) / (filtered.length || 1)).toFixed(1);
-      const underTarget = filtered.filter(r => r.currentIqs < 85.0).length;
-
-      if (topElScore && top5[0]) topElScore.innerText = `${top5[0].currentIqs}%`;
-      if (topElName && top5[0]) topElName.innerText = top5[0].name;
-      if (topElSub && top5[0]) topElSub.innerText = `Team ${top5[0].tl} · ${top5[0].calls} calls`;
-      if (avgElScore) avgElScore.innerText = `${avgIqs}%`;
-      if (avgElSub) avgElSub.innerText = `Across ${filtered.length} RMs`;
-      if (impElDiff && improved5[0]) impElDiff.innerText = `+${improved5[0].delta2Wk.toFixed(1)}%`;
-      if (impElName && improved5[0]) impElName.innerText = improved5[0].name;
-      if (impElSub && improved5[0]) impElSub.innerText = `${improved5[0].prev2WkIqs}% → ${improved5[0].currentIqs}% IQS`;
-      if (attElCount) attElCount.innerText = `${underTarget} RMs`;
 
       // 1. Render Top Performers
       const topContainer = document.getElementById('rmperf-top-container');
