@@ -255,7 +255,7 @@ function StatCard({
   label,
   teamValue,
   cxValue,
-  cxLabel = 'CX',
+  cxLabel = 'RM',
 }: {
   label: string;
   teamValue: string;
@@ -388,7 +388,7 @@ function ParamRow({ p }: { p: ParamData }) {
               borderLeft: '2px dashed var(--qa-text-2, #71717a)',
               transform: 'translateX(-1px)',
             }}
-            title={`Dept avg ${cx}%`}
+            title={`RM avg ${cx}%`}
           />
         )}
       </span>
@@ -568,11 +568,11 @@ function SummaryRow({
           <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #18181b)' }}>{agent.name}</span>
         </span>
       </td>
-      <td style={numTd(false)}>{chData ? fmtPct(chData.csat_pct) : '—'}</td>
-      <td style={numTd(false)}>{chData ? fmtIqs(chData.iqs) : '—'}</td>
-      <td style={numTd(activeChannel === 'chats')}>{fmtVol(agent.chats.volume)}</td>
+      <td style={numTd(false)}>{activeChannel === 'calls' && chData ? fmtPct(chData.csat_pct) : '—'}</td>
+      <td style={numTd(false)}>{activeChannel === 'calls' && chData ? fmtIqs(chData.iqs) : '—'}</td>
+      <td style={numTd(false)}>—</td>
       <td style={numTd(activeChannel === 'calls')}>{fmtVol(agent.calls.volume)}</td>
-      <td style={numTd(activeChannel === 'emails')}>—</td>
+      <td style={numTd(false)}>—</td>
     </tr>
   );
 }
@@ -649,14 +649,24 @@ export default function PcgTeamAnalyticsDashboard({
 
   // Stat Card Metrics dynamically tailored to team and channel
   const getStatMetrics = () => {
+    if (channel !== 'calls') {
+      return {
+        csatTeam: '—',
+        csatCx: '—',
+        iqsTeam: '—',
+        iqsCx: '—',
+        volumeTeam: '—',
+        volumeCx: '—',
+      };
+    }
     if (currentTL === 'Vaishnavi') {
       return {
         csatTeam: '87.0%',
         csatCx: '87.4%',
         iqsTeam: '85.1%',
         iqsCx: '85.0%',
-        volumeTeam: channel === 'calls' ? '224' : '190',
-        volumeCx: channel === 'calls' ? '520' : '420',
+        volumeTeam: '224',
+        volumeCx: '520',
       };
     } else {
       // Gokul
@@ -665,8 +675,8 @@ export default function PcgTeamAnalyticsDashboard({
         csatCx: '87.4%',
         iqsTeam: '86.8%',
         iqsCx: '85.0%',
-        volumeTeam: channel === 'calls' ? '296' : '230',
-        volumeCx: channel === 'calls' ? '520' : '420',
+        volumeTeam: '296',
+        volumeCx: '520',
       };
     }
   };
@@ -841,8 +851,12 @@ export default function PcgTeamAnalyticsDashboard({
 
       {/* ── Stat Cards ────────────────────────────────────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-        {channel === 'emails' ? (
-          [0, 1, 2].map((i) => (
+        {channel !== 'calls' ? (
+          [
+            'CSAT %',
+            'IQS',
+            channel === 'emails' ? 'EMAILS HANDLED' : 'CHATS HANDLED',
+          ].map((title, i) => (
             <div
               key={i}
               style={{
@@ -862,20 +876,20 @@ export default function PcgTeamAnalyticsDashboard({
                   fontWeight: 600,
                 }}
               >
-                {['CSAT %', 'IQS', 'Emails Handled'][i]}
+                {title}
               </div>
               <span style={{ fontSize: 20, color: 'var(--qa-text-4, #d4d4d8)' }}>—</span>
             </div>
           ))
         ) : (
           <>
-            <StatCard label="CSAT %" teamValue={metrics.csatTeam} cxValue={metrics.csatCx} cxLabel="CX" />
-            <StatCard label="IQS" teamValue={metrics.iqsTeam} cxValue={metrics.iqsCx} cxLabel="CX" />
+            <StatCard label="CSAT %" teamValue={metrics.csatTeam} cxValue={metrics.csatCx} cxLabel="RM" />
+            <StatCard label="IQS" teamValue={metrics.iqsTeam} cxValue={metrics.iqsCx} cxLabel="RM" />
             <StatCard
-              label={`${CHANNEL_LABELS[channel].toUpperCase()} HANDLED`}
+              label="CALLS HANDLED"
               teamValue={metrics.volumeTeam}
               cxValue={metrics.volumeCx}
-              cxLabel="CX"
+              cxLabel="RM"
             />
           </>
         )}
@@ -888,7 +902,9 @@ export default function PcgTeamAnalyticsDashboard({
             IQS by Parameter — Your Team
           </h2>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3, #a1a1aa)', fontStyle: 'italic' }}>
-            {periodLabel} · avg across all evaluated {CHANNEL_LABELS[channel].toLowerCase()}
+            {channel === 'calls'
+              ? `${periodLabel} · avg across all evaluated calls`
+              : `${periodLabel} · values available for Calls only`}
           </span>
         </div>
 
@@ -910,7 +926,7 @@ export default function PcgTeamAnalyticsDashboard({
             }}
           >
             <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #18181b)' }}>
-              {channel === 'emails' ? '0 parameters' : `${params.length} quality parameters · weighted`}
+              {channel === 'calls' ? `${params.length} quality parameters · weighted` : '0 parameters'}
             </span>
           </div>
 
@@ -938,13 +954,15 @@ export default function PcgTeamAnalyticsDashboard({
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 0, height: 14, borderLeft: '2px dashed var(--qa-text-2, #71717a)' }} />
-              Dept average
+              RM average
             </span>
           </div>
 
           <div style={{ padding: '12px 20px' }}>
-            {channel === 'emails' ? (
-              <EmptyChannelState channel="emails" />
+            {channel !== 'calls' ? (
+              <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 13, color: 'var(--qa-text-3, #a1a1aa)' }}>
+                Values are currently available for Calls only.
+              </div>
             ) : params.length === 0 ? (
               <EmptyChannelState channel={channel} />
             ) : (
@@ -1086,8 +1104,10 @@ export default function PcgTeamAnalyticsDashboard({
                 Scroll right to see all parameters →
               </div>
               <div style={{ overflowX: 'auto' }}>
-                {breakdownCh === 'emails' ? (
-                  <EmptyChannelState channel="emails" />
+                {breakdownCh !== 'calls' ? (
+                  <div style={{ padding: '48px 0', textAlign: 'center', fontSize: 13, color: 'var(--qa-text-3, #a1a1aa)' }}>
+                    Values are currently available for Calls only.
+                  </div>
                 ) : activeAgents.length === 0 ? (
                   <EmptyChannelState channel={breakdownCh} />
                 ) : (

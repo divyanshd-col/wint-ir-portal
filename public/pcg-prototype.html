@@ -225,12 +225,12 @@
 
           <!-- Channel Segment (Chats / Calls / Emails) -->
           <div class="inline-flex bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-0.5 gap-0.5">
-            <button id="ta-ch-chats" onclick="setTaChannel('chats')" class="h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all">
-              <span id="ta-dot-chats" class="w-1.5 h-1.5 rounded-full bg-[#18181B]"></span>
+            <button id="ta-ch-chats" onclick="setTaChannel('chats')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
+              <span id="ta-dot-chats" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
               Chats
             </button>
-            <button id="ta-ch-calls" onclick="setTaChannel('calls')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
-              <span id="ta-dot-calls" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
+            <button id="ta-ch-calls" onclick="setTaChannel('calls')" class="h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all">
+              <span id="ta-dot-calls" class="w-1.5 h-1.5 rounded-full bg-[#18181B]"></span>
               Calls
             </button>
             <button id="ta-ch-emails" onclick="setTaChannel('emails')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
@@ -248,7 +248,7 @@
         </div>
       </div>
 
-      <!-- Top Stat Cards (CSAT % | IQS | CHATS HANDLED) -->
+      <!-- Top Stat Cards (CSAT % | IQS | CALLS HANDLED) -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <!-- Card 1: CSAT % -->
         <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
@@ -256,12 +256,12 @@
           <div class="flex items-end gap-4">
             <div class="flex flex-col gap-1.5">
               <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
-              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-csat-team">84.9%</span>
+              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-csat-team">89.2%</span>
             </div>
             <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
             <div class="flex items-baseline gap-1.5 pb-0.5">
-              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">CX</span>
-              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-csat-cx">81.1%</span>
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">RM</span>
+              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-csat-cx">87.4%</span>
             </div>
           </div>
         </div>
@@ -272,28 +272,28 @@
           <div class="flex items-end gap-4">
             <div class="flex flex-col gap-1.5">
               <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
-              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-iqs-team">94%</span>
+              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-iqs-team">86.8%</span>
             </div>
             <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
             <div class="flex items-baseline gap-1.5 pb-0.5">
-              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">CX</span>
-              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-iqs-cx">93%</span>
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">RM</span>
+              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-iqs-cx">85.0%</span>
             </div>
           </div>
         </div>
 
-        <!-- Card 3: CHATS HANDLED -->
+        <!-- Card 3: CALLS HANDLED -->
         <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
-          <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3" id="ta-stat-vol-title">CHATS HANDLED</div>
+          <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3" id="ta-stat-vol-title">CALLS HANDLED</div>
           <div class="flex items-end gap-4">
             <div class="flex flex-col gap-1.5">
               <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
-              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-vol-team">532</span>
+              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-vol-team">296</span>
             </div>
             <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
             <div class="flex items-baseline gap-1.5 pb-0.5">
-              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">CX</span>
-              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-vol-cx">10,540</span>
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">RM</span>
+              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-vol-cx">520</span>
             </div>
           </div>
         </div>
@@ -324,7 +324,7 @@
             </span>
             <span class="inline-flex items-center gap-2">
               <span class="w-0 h-3.5 border-l-2 border-dashed border-[#71717A]"></span>
-              Dept average
+              RM average
             </span>
           </div>
 
@@ -365,8 +365,8 @@
                   <th class="px-4 font-semibold text-left">Agent</th>
                   <th class="px-4 font-semibold text-right">CSAT %</th>
                   <th class="px-4 font-semibold text-right">IQS</th>
-                  <th id="th-col-chats" class="px-4 font-bold text-right bg-[#F4F4F5] text-[#18181B]">Chats</th>
-                  <th id="th-col-calls" class="px-4 font-semibold text-right">Calls</th>
+                  <th id="th-col-chats" class="px-4 font-semibold text-right">Chats</th>
+                  <th id="th-col-calls" class="px-4 font-bold text-right bg-[#F4F4F5] text-[#18181B]">Calls</th>
                   <th id="th-col-emails" class="px-4 font-semibold text-right">Emails</th>
                 </tr>
               </thead>
@@ -381,12 +381,12 @@
             <div class="flex items-center gap-3 px-5 py-3 border-b border-[#F4F4F5]">
               <span class="text-[11px] uppercase tracking-wider font-semibold text-[#A1A1AA]">Channel</span>
               <div class="inline-flex bg-[#F4F4F5] border border-[#E4E4E7] rounded-lg p-0.5 gap-0.5">
-                <button id="ta-bk-chats" onclick="setTaBreakdownChannel('chats')" class="h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all">
-                  <span id="ta-bkdot-chats" class="w-1.5 h-1.5 rounded-full bg-[#18181B]"></span>
+                <button id="ta-bk-chats" onclick="setTaBreakdownChannel('chats')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
+                  <span id="ta-bkdot-chats" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
                   Chats
                 </button>
-                <button id="ta-bk-calls" onclick="setTaBreakdownChannel('calls')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
-                  <span id="ta-bkdot-calls" class="w-1.5 h-1.5 rounded-full bg-[#D4D4D8]"></span>
+                <button id="ta-bk-calls" onclick="setTaBreakdownChannel('calls')" class="h-7 px-3.5 rounded-md text-[13px] font-semibold bg-white text-[#18181B] shadow-xs inline-flex items-center gap-1.5 transition-all">
+                  <span id="ta-bkdot-calls" class="w-1.5 h-1.5 rounded-full bg-[#18181B]"></span>
                   Calls
                 </button>
                 <button id="ta-bk-emails" onclick="setTaBreakdownChannel('emails')" class="h-7 px-3.5 rounded-md text-[13px] font-normal text-[#71717A] hover:text-[#18181B] inline-flex items-center gap-1.5 transition-all">
@@ -1593,12 +1593,12 @@
       const volTeamEl = document.getElementById('ta-stat-vol-team');
       const volCxEl = document.getElementById('ta-stat-vol-cx');
 
-      if (taCurrentChannel === 'emails') {
+      if (taCurrentChannel !== 'calls') {
         if (csatTeamEl) csatTeamEl.innerText = '—';
         if (csatCxEl) csatCxEl.innerText = '—';
         if (iqsTeamEl) iqsTeamEl.innerText = '—';
         if (iqsCxEl) iqsCxEl.innerText = '—';
-        if (volTitleEl) volTitleEl.innerText = 'EMAILS HANDLED';
+        if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'emails' ? 'EMAILS HANDLED' : 'CHATS HANDLED';
         if (volTeamEl) volTeamEl.innerText = '—';
         if (volCxEl) volCxEl.innerText = '—';
       } else if (taCurrentTL === 'Vaishnavi') {
@@ -1606,18 +1606,18 @@
         if (csatCxEl) csatCxEl.innerText = '87.4%';
         if (iqsTeamEl) iqsTeamEl.innerText = '85.1%';
         if (iqsCxEl) iqsCxEl.innerText = '85.0%';
-        if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'calls' ? 'CALLS HANDLED' : 'CHATS HANDLED';
-        if (volTeamEl) volTeamEl.innerText = taCurrentChannel === 'calls' ? '224' : '190';
-        if (volCxEl) volCxEl.innerText = taCurrentChannel === 'calls' ? '520' : '420';
+        if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
+        if (volTeamEl) volTeamEl.innerText = '224';
+        if (volCxEl) volCxEl.innerText = '520';
       } else {
         // Gokul
         if (csatTeamEl) csatTeamEl.innerText = '89.2%';
         if (csatCxEl) csatCxEl.innerText = '87.4%';
         if (iqsTeamEl) iqsTeamEl.innerText = '86.8%';
         if (iqsCxEl) iqsCxEl.innerText = '85.0%';
-        if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'calls' ? 'CALLS HANDLED' : 'CHATS HANDLED';
-        if (volTeamEl) volTeamEl.innerText = taCurrentChannel === 'calls' ? '296' : '230';
-        if (volCxEl) volCxEl.innerText = taCurrentChannel === 'calls' ? '520' : '420';
+        if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
+        if (volTeamEl) volTeamEl.innerText = '296';
+        if (volCxEl) volCxEl.innerText = '520';
       }
 
       // 3. Update IQS by Parameter Rows
@@ -1626,14 +1626,22 @@
       const paramsContainer = document.getElementById('ta-param-rows-container');
 
       const periodText = taCurrentPeriod === '7' ? '7 days' : taCurrentPeriod === '30' ? '30 days' : 'Custom range';
-      if (paramsSubtitle) paramsSubtitle.innerText = `${periodText} · avg across all evaluated ${taCurrentChannel}`;
+      if (paramsSubtitle) {
+        paramsSubtitle.innerText = taCurrentChannel === 'calls'
+          ? `${periodText} · avg across all evaluated calls`
+          : `${periodText} · values available for Calls only`;
+      }
 
-      const activeParams = taCurrentChannel === 'calls' ? TA_CALL_PARAMS : TA_CHAT_PARAMS;
-      if (paramsCount) paramsCount.innerText = taCurrentChannel === 'emails' ? '0 quality parameters' : `${activeParams.length} quality parameters · weighted`;
+      const activeParams = TA_CALL_PARAMS;
+      if (paramsCount) {
+        paramsCount.innerText = taCurrentChannel === 'calls'
+          ? `${activeParams.length} quality parameters · weighted`
+          : '0 quality parameters';
+      }
 
       if (paramsContainer) {
-        if (taCurrentChannel === 'emails') {
-          paramsContainer.innerHTML = '<div class="py-12 text-center text-xs text-[#A1A1AA]">Email data is coming soon.</div>';
+        if (taCurrentChannel !== 'calls') {
+          paramsContainer.innerHTML = '<div class="py-12 text-center text-xs text-[#A1A1AA]">Values are currently available for Calls only.</div>';
         } else {
           paramsContainer.innerHTML = activeParams.map(p => `
             <div class="flex items-center gap-4 py-2 border-b border-[#F4F4F5] last:border-b-0">
@@ -1641,7 +1649,7 @@
               <span class="w-11 shrink-0 text-xs font-mono text-[#A1A1AA] text-right">${p.weight}</span>
               <div class="flex-1 h-2.5 bg-[#E4E4E7] rounded-full relative">
                 <div class="h-full bg-[#27272A] rounded-full" style="width: ${p.team}%;"></div>
-                <div class="absolute -top-1 w-0 h-[18px] border-l-2 border-dashed border-[#71717A] -translate-x-px" style="left: ${p.dept}%;" title="Dept avg ${p.dept}%"></div>
+                <div class="absolute -top-1 w-0 h-[18px] border-l-2 border-dashed border-[#71717A] -translate-x-px" style="left: ${p.dept}%;" title="RM avg ${p.dept}%"></div>
               </div>
               <span class="w-11 shrink-0 text-sm font-semibold font-mono text-[#18181B] text-right">${p.team}%</span>
             </div>
@@ -1664,7 +1672,7 @@
       const summaryTbody = document.getElementById('ta-summary-tbody');
       if (summaryTbody) {
         summaryTbody.innerHTML = agents.map(agent => {
-          const chData = taCurrentChannel === 'calls' ? agent.calls : agent.chats;
+          const chData = taCurrentChannel === 'calls' ? agent.calls : null;
           const chatsBg = taCurrentChannel === 'chats' ? 'bg-[#F4F4F5] font-semibold text-[#18181B]' : 'text-[#71717A]';
           const callsBg = taCurrentChannel === 'calls' ? 'bg-[#F4F4F5] font-semibold text-[#18181B]' : 'text-[#71717A]';
           const emailsBg = taCurrentChannel === 'emails' ? 'bg-[#F4F4F5] font-semibold text-[#18181B]' : 'text-[#71717A]';
@@ -1679,9 +1687,9 @@
                   <span class="text-sm font-medium text-[#18181B]">${agent.name}</span>
                 </span>
               </td>
-              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${taCurrentChannel === 'emails' ? '—' : chData.csat}</td>
-              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${taCurrentChannel === 'emails' ? '—' : chData.iqs}</td>
-              <td class="px-4 text-right font-mono text-sm ${chatsBg}">${agent.chats.vol}</td>
+              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${chData ? chData.csat : '—'}</td>
+              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${chData ? chData.iqs : '—'}</td>
+              <td class="px-4 text-right font-mono text-sm ${chatsBg}">—</td>
               <td class="px-4 text-right font-mono text-sm ${callsBg}">${agent.calls.vol}</td>
               <td class="px-4 text-right font-mono text-sm ${emailsBg}">—</td>
             </tr>
@@ -1699,7 +1707,7 @@
       if (taCurrentTL === 'Vaishnavi') agents = TA_VAISHNAVI_AGENTS;
       else agents = TA_GOKUL_AGENTS;
 
-      const activeParams = taBreakdownChannel === 'calls' ? TA_CALL_PARAMS : TA_CHAT_PARAMS;
+      const activeParams = TA_CALL_PARAMS;
       const theadTr = document.getElementById('ta-breakdown-thead-tr');
       const tbody = document.getElementById('ta-breakdown-tbody');
 
@@ -1717,8 +1725,8 @@
       }
 
       if (tbody) {
-        if (taBreakdownChannel === 'emails') {
-          tbody.innerHTML = `<tr><td colspan="${activeParams.length + 1}" class="py-12 text-center text-xs text-[#A1A1AA]">Email data is coming soon.</td></tr>`;
+        if (taBreakdownChannel !== 'calls') {
+          tbody.innerHTML = `<tr><td colspan="${activeParams.length + 1}" class="py-12 text-center text-xs text-[#A1A1AA]">Values are currently available for Calls only.</td></tr>`;
         } else {
           tbody.innerHTML = agents.map(agent => `
             <tr class="h-11 border-b border-[#F4F4F5] hover:bg-zinc-50 transition-colors">
@@ -1726,11 +1734,11 @@
                 ${agent.name}
               </td>
               ${activeParams.map((p, idx) => {
-                const baseScore = parseInt(agent[taBreakdownChannel].iqs) || 94;
+                const baseScore = parseInt(agent.calls.iqs) || 94;
                 const score = Math.min(100, Math.max(75, baseScore + ((idx % 3) - 1) * 2));
                 return `
                   <td class="w-[100px] min-w-[100px] text-center font-mono text-[13px] text-[#18181B] border-b border-[#F4F4F5]">
-                    ${agent[taBreakdownChannel].vol === 0 ? '—' : score}
+                    ${agent.calls.vol === 0 ? '—' : score}
                   </td>
                 `;
               }).join('')}
