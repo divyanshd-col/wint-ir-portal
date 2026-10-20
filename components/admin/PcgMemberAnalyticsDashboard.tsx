@@ -95,7 +95,6 @@ export default function PcgMemberAnalyticsDashboard({
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [showAgentDrop, setShowAgentDrop] = useState(false);
-  const [adminTeamFilter, setAdminTeamFilter] = useState<'all' | 'Team Gokul' | 'Team Vaishnavi'>('all');
   const [agentSearch, setAgentSearch] = useState('');
   const agentDropRef = useRef<HTMLDivElement>(null);
 
@@ -322,37 +321,6 @@ export default function PcgMemberAnalyticsDashboard({
             {activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}
           </h1>
 
-          {/* Team Filter for Admin */}
-          {activePersona === 'admin' && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)' }}>
-              <span>Team:</span>
-              <select
-                value={adminTeamFilter}
-                onChange={(e) => {
-                  setAdminTeamFilter(e.target.value as any);
-                }}
-                style={{
-                  height: 32,
-                  padding: '0 10px',
-                  background: 'var(--qa-card, #ffffff)',
-                  border: '1px solid var(--qa-border, #E4E4E7)',
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 500,
-                  color: 'var(--qa-text, #111111)',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                  outline: 'none',
-                }}
-              >
-                <option value="all">All Teams (9 Agents)</option>
-                <option value="Team Gokul">Team Gokul (5 Agents)</option>
-                <option value="Team Vaishnavi">Team Vaishnavi (4 Agents)</option>
-              </select>
-            </div>
-          )}
-
           {/* Viewing Dropdown */}
           <div ref={agentDropRef} style={{ position: 'relative' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)' }}>
@@ -433,12 +401,8 @@ export default function PcgMemberAnalyticsDashboard({
                   const groups: { teamName: string; agents: string[] }[] = [];
 
                   if (activePersona === 'admin') {
-                    if (adminTeamFilter === 'all' || adminTeamFilter === 'Team Gokul') {
-                      groups.push({ teamName: 'Team Gokul', agents: TL_TEAMS['Team Gokul'] });
-                    }
-                    if (adminTeamFilter === 'all' || adminTeamFilter === 'Team Vaishnavi') {
-                      groups.push({ teamName: 'Team Vaishnavi', agents: TL_TEAMS['Team Vaishnavi'] });
-                    }
+                    groups.push({ teamName: 'Team Gokul', agents: TL_TEAMS['Team Gokul'] });
+                    groups.push({ teamName: 'Team Vaishnavi', agents: TL_TEAMS['Team Vaishnavi'] });
                   } else {
                     // For TL, determine their team from effectiveRm or availableRms
                     const isVaishnavi = availableRms.some(a => TL_TEAMS['Team Vaishnavi'].includes(a));

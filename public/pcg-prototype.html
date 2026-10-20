@@ -211,16 +211,6 @@
         <div class="flex items-center gap-4 flex-wrap">
           <h2 id="ma-title" class="text-xl font-bold text-[#111111]">Member Analytics</h2>
 
-          <!-- Admin Team Filter Dropdown -->
-          <div id="ma-team-filter-cont" class="flex items-center gap-1.5 text-xs">
-            <span class="text-[#71717A] font-semibold text-[11px]">Team:</span>
-            <select id="ma-team-select" onchange="onMaTeamChange(this.value)" class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 outline-none shadow-2xs cursor-pointer hover:border-zinc-400">
-              <option value="all">All Teams (9 Agents)</option>
-              <option value="Team Gokul">Team Gokul (5 Agents)</option>
-              <option value="Team Vaishnavi">Team Vaishnavi (4 Agents)</option>
-            </select>
-          </div>
-
           <!-- Viewing Agent Selector Dropdown (All agents across the team for Admin) -->
           <div class="flex items-center gap-1.5 text-xs">
             <span class="text-[#71717A] font-semibold text-[11px]">Viewing:</span>
@@ -1021,18 +1011,15 @@
     };
 
     let selectedMaAgent = 'Aahan Thaker';
-    let selectedMaTeam = 'all';
 
     function populateMaAgentDropdown() {
       const select = document.getElementById('ma-agent-select');
-      const teamCont = document.getElementById('ma-team-filter-cont');
       const maTitle = document.getElementById('ma-title');
       if (!select) return;
 
       select.innerHTML = '';
 
       if (currentRole === 'agent') {
-        if (teamCont) teamCont.classList.add('hidden');
         if (maTitle) maTitle.innerText = 'My Analytics';
         const opt = document.createElement('option');
         opt.value = 'Aahan Thaker';
@@ -1046,13 +1033,10 @@
 
         let teams = [];
         if (currentRole === 'admin') {
-          if (teamCont) teamCont.classList.remove('hidden');
-          teams = selectedMaTeam === 'all' ? ['Team Gokul', 'Team Vaishnavi'] : [selectedMaTeam];
+          teams = ['Team Gokul', 'Team Vaishnavi'];
         } else if (currentRole === 'tl_gokul') {
-          if (teamCont) teamCont.classList.add('hidden');
           teams = ['Team Gokul'];
         } else if (currentRole === 'tl_vaishnavi') {
-          if (teamCont) teamCont.classList.add('hidden');
           teams = ['Team Vaishnavi'];
         }
 
@@ -1078,11 +1062,6 @@
       }
 
       renderMemberAnalytics();
-    }
-
-    function onMaTeamChange(team) {
-      selectedMaTeam = team;
-      populateMaAgentDropdown();
     }
 
     function onMaAgentChange(agent) {
