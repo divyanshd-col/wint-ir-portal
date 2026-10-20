@@ -877,11 +877,6 @@ export default function PcgCallsClient() {
               </svg>
             </span>
             <span className="flex-1">Call Quality</span>
-            {disputeRaisedCalls.length > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-[#e4e4e7] text-[#18181b] shrink-0">
-                {disputeRaisedCalls.length}
-              </span>
-            )}
           </button>
 
           {/* RM Scorecard Navigation Link */}
