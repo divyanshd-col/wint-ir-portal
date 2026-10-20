@@ -1236,9 +1236,10 @@ export default function PcgCallsClient() {
               <PcgMemberAnalyticsDashboard
                 selectedRm={selectedRm}
                 onSelectRm={(rm) => setSelectedRm(rm)}
-                availableRms={rms.length > 0 ? rms.map((r) => r.name) : allKnownRms}
+                availableRms={activePersona === 'admin' ? allKnownRms : activePersona === 'tl' ? teamRms : [selectedRm]}
                 calls={calls}
                 activePersona={activePersona}
+                rmScorecards={rmScorecards}
               />
             </div>
           ) : (

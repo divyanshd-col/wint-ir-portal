@@ -5,6 +5,16 @@ import DateRangePicker from '@/components/quality/DateRangePicker';
 
 export type Period = '7' | '30' | 'custom';
 
+export const TL_TEAMS: Record<string, string[]> = {
+  'Team Gokul': ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'],
+  'Team Vaishnavi': ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'],
+};
+
+export const ALL_PCG_AGENTS = [
+  ...TL_TEAMS['Team Gokul'],
+  ...TL_TEAMS['Team Vaishnavi'],
+];
+
 export interface PcgMemberAnalyticsProps {
   selectedRm: string;
   onSelectRm: (rm: string) => void;
@@ -18,6 +28,18 @@ export interface PcgMemberAnalyticsProps {
     category: string;
   }>;
   activePersona?: 'agent' | 'tl' | 'admin';
+  rmScorecards?: Array<{
+    rmName: string;
+    totalCalls: number;
+    connectRate: number;
+    pitchScore: number;
+    upsellScore: number;
+    supportScore: number;
+    overallScore: number;
+    trend: string;
+    complianceFlags: number;
+    topWeakness: string;
+  }>;
 }
 
 const PERIOD_LABELS: Record<Period, string> = { '7': '7 days', '30': '30 days', custom: '' };
@@ -66,12 +88,15 @@ export default function PcgMemberAnalyticsDashboard({
   availableRms,
   calls = [],
   activePersona = 'tl',
+  rmScorecards = [],
 }: PcgMemberAnalyticsProps) {
   const [period, setPeriod] = useState<Period>('7');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [showPicker, setShowPicker] = useState(false);
   const [showAgentDrop, setShowAgentDrop] = useState(false);
+  const [adminTeamFilter, setAdminTeamFilter] = useState<'all' | 'Team Gokul' | 'Team Vaishnavi'>('all');
+  const [agentSearch, setAgentSearch] = useState('');
   const agentDropRef = useRef<HTMLDivElement>(null);
 
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
@@ -119,12 +144,13 @@ export default function PcgMemberAnalyticsDashboard({
   };
 
   // Derive call analytics for this RM
+  const rmScorecard = rmScorecards.find(s => s.rmName.toLowerCase() === effectiveRm.toLowerCase());
   const rmCalls = calls.filter(c => c.rmName.toLowerCase() === effectiveRm.toLowerCase());
   const rmAnswered = rmCalls.filter(c => c.isAnswered);
-  const rmAvgIqs = rmAnswered.length > 0
+  const rmAvgIqs = rmScorecard?.overallScore ?? (rmAnswered.length > 0
     ? rmAnswered.reduce((acc, c) => acc + c.iqsScore, 0) / rmAnswered.length
-    : 87.4;
-  const callsVol = rmCalls.length > 0 ? rmCalls.length : 7;
+    : 87.4);
+  const callsVol = rmScorecard?.totalCalls ?? (rmCalls.length > 0 ? rmCalls.length : 7);
   const callsIqs = rmAvgIqs;
 
   // Real or deterministic mock category data matching screenshot format
@@ -296,13 +322,47 @@ export default function PcgMemberAnalyticsDashboard({
             {activePersona === 'agent' ? 'My Analytics' : 'Member Analytics'}
           </h1>
 
+          {/* Team Filter for Admin */}
+          {activePersona === 'admin' && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)' }}>
+              <span>Team:</span>
+              <select
+                value={adminTeamFilter}
+                onChange={(e) => {
+                  setAdminTeamFilter(e.target.value as any);
+                }}
+                style={{
+                  height: 32,
+                  padding: '0 10px',
+                  background: 'var(--qa-card, #ffffff)',
+                  border: '1px solid var(--qa-border, #E4E4E7)',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: 'var(--qa-text, #111111)',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  outline: 'none',
+                }}
+              >
+                <option value="all">All Teams (9 Agents)</option>
+                <option value="Team Gokul">Team Gokul (5 Agents)</option>
+                <option value="Team Vaishnavi">Team Vaishnavi (4 Agents)</option>
+              </select>
+            </div>
+          )}
+
           {/* Viewing Dropdown */}
           <div ref={agentDropRef} style={{ position: 'relative' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)' }}>
               <span>Viewing:</span>
               <button
                 type="button"
-                onClick={() => setShowAgentDrop(p => !p)}
+                onClick={() => {
+                  if (activePersona !== 'agent') setShowAgentDrop(p => !p);
+                }}
+                disabled={activePersona === 'agent'}
                 style={{
                   height: 32,
                   padding: '0 12px',
@@ -315,80 +375,170 @@ export default function PcgMemberAnalyticsDashboard({
                   fontSize: 13,
                   fontWeight: 500,
                   color: 'var(--qa-text, #111111)',
-                  cursor: 'pointer',
+                  cursor: activePersona === 'agent' ? 'default' : 'pointer',
                   fontFamily: 'inherit',
                   boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                 }}
               >
                 <span>{effectiveRm}</span>
-                <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 10 }}>▾</span>
+                {activePersona !== 'agent' && (
+                  <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 10 }}>▾</span>
+                )}
               </button>
             </div>
 
             {/* Dropdown Menu */}
-            {showAgentDrop && (
+            {showAgentDrop && activePersona !== 'agent' && (
               <div
                 style={{
                   position: 'absolute',
                   top: 'calc(100% + 6px)',
                   left: 0,
-                  zIndex: 40,
+                  zIndex: 50,
                   background: 'var(--qa-card, #ffffff)',
                   border: '1px solid var(--qa-border, #E4E4E7)',
-                  borderRadius: 8,
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.1)',
-                  minWidth: 220,
-                  maxHeight: 'min(360px, calc(100vh - 220px))',
+                  borderRadius: 10,
+                  boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+                  minWidth: 280,
+                  maxHeight: 'min(420px, calc(100vh - 220px))',
                   overflowY: 'auto',
                   overflowX: 'hidden',
                   overscrollBehavior: 'contain',
                 }}
               >
-                {availableRms.map(a => (
-                  <button
-                    key={a}
-                    type="button"
-                    onClick={() => {
-                      onSelectRm(a);
-                      setShowAgentDrop(false);
-                    }}
+                {/* Search Agent in Dropdown */}
+                <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', background: '#FAFAFB', position: 'sticky', top: 0, zIndex: 10 }}>
+                  <input
+                    type="text"
+                    value={agentSearch}
+                    onChange={(e) => setAgentSearch(e.target.value)}
+                    placeholder="Search agent across teams..."
                     style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 10,
                       width: '100%',
-                      padding: '10px 14px',
-                      background: a === effectiveRm ? 'var(--qa-fill-light, #F4F4F5)' : 'transparent',
-                      border: 0,
-                      borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
-                      cursor: 'pointer',
-                      fontSize: 13,
-                      color: 'var(--qa-text, #111111)',
-                      fontFamily: 'inherit',
-                      textAlign: 'left',
-                      fontWeight: a === effectiveRm ? 600 : 400,
+                      height: 28,
+                      padding: '0 8px',
+                      fontSize: 12,
+                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      borderRadius: 6,
+                      outline: 'none',
+                      background: '#ffffff',
+                      boxSizing: 'border-box',
                     }}
-                  >
-                    <span
-                      style={{
-                        width: 28,
-                        height: 28,
-                        borderRadius: '50%',
-                        background: 'var(--qa-fill-med, #E4E4E7)',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: 'var(--qa-text-2, #6B6B6B)',
-                        flexShrink: 0,
-                      }}
-                    >
-                      {agentInitials(a)}
-                    </span>
-                    <span>{a}</span>
-                  </button>
-                ))}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+
+                {/* Team Groups */}
+                {(() => {
+                  const groups: { teamName: string; agents: string[] }[] = [];
+
+                  if (activePersona === 'admin') {
+                    if (adminTeamFilter === 'all' || adminTeamFilter === 'Team Gokul') {
+                      groups.push({ teamName: 'Team Gokul', agents: TL_TEAMS['Team Gokul'] });
+                    }
+                    if (adminTeamFilter === 'all' || adminTeamFilter === 'Team Vaishnavi') {
+                      groups.push({ teamName: 'Team Vaishnavi', agents: TL_TEAMS['Team Vaishnavi'] });
+                    }
+                  } else {
+                    // For TL, determine their team from effectiveRm or availableRms
+                    const isVaishnavi = availableRms.some(a => TL_TEAMS['Team Vaishnavi'].includes(a));
+                    const teamName = isVaishnavi ? 'Team Vaishnavi' : 'Team Gokul';
+                    const list = availableRms.length > 0 ? availableRms : TL_TEAMS[teamName];
+                    groups.push({ teamName, agents: list });
+                  }
+
+                  const s = agentSearch.trim().toLowerCase();
+
+                  return groups.map((g) => {
+                    const filteredAgents = g.agents.filter(a => !s || a.toLowerCase().includes(s));
+                    if (filteredAgents.length === 0) return null;
+
+                    return (
+                      <div key={g.teamName}>
+                        <div
+                          style={{
+                            padding: '6px 12px',
+                            fontSize: 10,
+                            fontWeight: 700,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            color: '#71717A',
+                            background: '#F4F4F5',
+                            borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                          }}
+                        >
+                          <span>{g.teamName}</span>
+                          <span style={{ fontSize: 9, fontWeight: 600, color: '#A1A1AA' }}>
+                            {filteredAgents.length} Agents
+                          </span>
+                        </div>
+                        {filteredAgents.map(a => (
+                          <button
+                            key={a}
+                            type="button"
+                            onClick={() => {
+                              onSelectRm(a);
+                              setShowAgentDrop(false);
+                              setAgentSearch('');
+                            }}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              width: '100%',
+                              padding: '8px 12px',
+                              background: a === effectiveRm ? 'var(--qa-fill-light, #F4F4F5)' : 'transparent',
+                              border: 0,
+                              borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+                              cursor: 'pointer',
+                              fontSize: 13,
+                              color: 'var(--qa-text, #111111)',
+                              fontFamily: 'inherit',
+                              textAlign: 'left',
+                              fontWeight: a === effectiveRm ? 600 : 400,
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span
+                                style={{
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: '50%',
+                                  background: a === effectiveRm ? '#18181b' : 'var(--qa-fill-med, #E4E4E7)',
+                                  color: a === effectiveRm ? '#ffffff' : 'var(--qa-text-2, #6B6B6B)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 10,
+                                  fontWeight: 700,
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {agentInitials(a)}
+                              </span>
+                              <span>{a}</span>
+                            </div>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                background: '#E4E4E7',
+                                color: '#52525B',
+                                fontWeight: 500,
+                              }}
+                            >
+                              {g.teamName.replace('Team ', '')}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             )}
           </div>

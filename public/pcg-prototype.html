@@ -44,6 +44,9 @@
         <button id="tab-calls" onclick="setTab('calls')" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#111111] shadow-2xs transition-all">
           Call Audits
         </button>
+        <button id="tab-member-analytics" onclick="setTab('member-analytics')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
+          Member Analytics
+        </button>
         <button id="tab-scorecard" onclick="setTab('scorecard')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
           Weekly RM Scorecard
         </button>
@@ -197,6 +200,154 @@
               <!-- Injected via JavaScript -->
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- MEMBER ANALYTICS TAB CONTENT -->
+    <div id="view-member-analytics" class="hidden space-y-6">
+      <!-- Member Analytics Header: Title + Team & Agent Dropdowns + Date Range -->
+      <div class="flex items-center justify-between gap-4 flex-wrap pb-2 border-b border-[#E4E4E7]">
+        <div class="flex items-center gap-4 flex-wrap">
+          <h2 id="ma-title" class="text-xl font-bold text-[#111111]">Member Analytics</h2>
+
+          <!-- Admin Team Filter Dropdown -->
+          <div id="ma-team-filter-cont" class="flex items-center gap-1.5 text-xs">
+            <span class="text-[#71717A] font-semibold text-[11px]">Team:</span>
+            <select id="ma-team-select" onchange="onMaTeamChange(this.value)" class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 outline-none shadow-2xs cursor-pointer hover:border-zinc-400">
+              <option value="all">All Teams (9 Agents)</option>
+              <option value="Team Gokul">Team Gokul (5 Agents)</option>
+              <option value="Team Vaishnavi">Team Vaishnavi (4 Agents)</option>
+            </select>
+          </div>
+
+          <!-- Viewing Agent Selector Dropdown (All agents across the team for Admin) -->
+          <div class="flex items-center gap-1.5 text-xs">
+            <span class="text-[#71717A] font-semibold text-[11px]">Viewing:</span>
+            <select id="ma-agent-select" onchange="onMaAgentChange(this.value)" class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-3 py-1.5 bg-white text-zinc-900 outline-none shadow-2xs cursor-pointer hover:border-zinc-400 min-w-[210px]">
+              <!-- Dynamically populated via JS with team groupings -->
+            </select>
+          </div>
+        </div>
+
+        <!-- Time Range Selector -->
+        <div class="inline-flex rounded-lg border border-[#E4E4E7] p-0.5 bg-zinc-100 text-xs">
+          <button class="px-3 py-1 rounded-md font-semibold bg-[#111111] text-white shadow-2xs">7 days</button>
+          <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">30 days</button>
+          <button class="px-3 py-1 rounded-md text-[#71717A] hover:text-[#111111]">Custom range</button>
+        </div>
+      </div>
+
+      <!-- Stat Cards (Calls, Chats, Emails) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Calls Card -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">CALLS</div>
+          <div class="flex items-end gap-4">
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">CSAT</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-extrabold text-[#111111] leading-none" id="ma-stat-iqs">88.5%</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-extrabold text-[#111111] leading-none" id="ma-stat-vol">20</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">VOLUME</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chats Card -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">CHATS</div>
+          <div class="flex items-end gap-4">
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">CSAT</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">VOLUME</div>
+            </div>
+          </div>
+          <div class="text-xs text-zinc-400 italic mt-2">Not yet evaluated</div>
+        </div>
+
+        <!-- Emails Card -->
+        <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+          <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">EMAILS</div>
+          <div class="flex items-end gap-4">
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">CSAT</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
+            </div>
+            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+            <div>
+              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
+              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">VOLUME</div>
+            </div>
+          </div>
+          <div class="text-xs text-zinc-400 italic mt-2">Not yet evaluated</div>
+        </div>
+      </div>
+
+      <!-- Performance by Category -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-2xs">
+        <div class="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFB]">
+          <h3 class="text-sm font-bold text-[#111111]">Performance by Category</h3>
+          <span class="text-xs text-[#71717A] italic">Click a category row to expand sub-parameters</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase">
+                <th class="py-3 px-4">Disposition</th>
+                <th class="py-3 px-4">Chats IQS</th>
+                <th class="py-3 px-4">Calls IQS</th>
+                <th class="py-3 px-4">Emails IQS</th>
+                <th class="py-3 px-4 text-right">Duration (TAT)</th>
+              </tr>
+            </thead>
+            <tbody id="ma-category-table-body" class="divide-y divide-[#E4E4E7]">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- AI Coaching Brief & Focus Areas -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h3 class="text-sm font-bold text-[#111111]">AI Coaching & Performance Brief</h3>
+          </div>
+          <span class="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+            Automated Audit
+          </span>
+        </div>
+        <div class="p-4 bg-zinc-50 rounded-lg border border-[#E4E4E7] text-xs text-zinc-700 space-y-2">
+          <p id="ma-coaching-text">
+            <strong>Key Strength:</strong> Outstanding clarity when explaining the 13% Club senior secured debt structure and monthly payouts. Effectively counters customer yield hesitation.
+          </p>
+          <p id="ma-coaching-focus" class="text-amber-800">
+            <strong>Coaching Focus:</strong> Reinforce standard disclaimers regarding secondary liquidity windows during premature exit discussions.
+          </p>
         </div>
       </div>
     </div>
@@ -852,6 +1003,170 @@
       document.getElementById('drawer-backdrop').classList.add('hidden');
     }
 
+    const TEAMS_DATA = {
+      'Team Gokul': ['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'],
+      'Team Vaishnavi': ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'],
+    };
+
+    const AGENTS_METRICS = {
+      'Aahan Thaker': { team: 'Team Gokul', iqs: 88.5, vol: 20, pitch: 90.0, upsell: 87.5, support: 89.0, strength: 'Outstanding clarity when explaining the 13% Club senior secured debt structure and monthly payouts.', focus: 'Reinforce standard disclaimers regarding secondary liquidity windows during premature exit discussions.' },
+      'Dhanush': { team: 'Team Gokul', iqs: 86.2, vol: 16, pitch: 87.0, upsell: 85.0, support: 86.5, strength: 'High energy and strong rapport building in early call stages.', focus: 'Ensure thorough KYC verification walkthrough before closing the call.' },
+      'Yaashvi Arora': { team: 'Team Gokul', iqs: 91.0, vol: 14, pitch: 93.0, upsell: 90.0, support: 90.0, strength: 'Flawless compliance positioning and zero return-guarantee claims.', focus: 'Improve secondary window explanation turnaround time.' },
+      'Samskriti Rao': { team: 'Team Gokul', iqs: 84.8, vol: 12, pitch: 85.0, upsell: 83.5, support: 86.0, strength: 'Clear simplification of fixed return calculation.', focus: 'Address lock-in period objections more proactively.' },
+      'Gaurav Nautiyal': { team: 'Team Gokul', iqs: 83.0, vol: 10, pitch: 84.0, upsell: 81.0, support: 84.0, strength: 'Accurate explanations of TDS and Form 15G submission.', focus: 'Enhance transition from support resolution to portfolio upselling.' },
+      'Aravind': { team: 'Team Vaishnavi', iqs: 87.5, vol: 14, pitch: 89.0, upsell: 86.0, support: 87.5, strength: 'Excellent active listening and patient clarification of Demat linking.', focus: 'Commit to specific callback slots rather than open-ended followups.' },
+      'Sujal Dadwani': { team: 'Team Vaishnavi', iqs: 85.5, vol: 12, pitch: 86.5, upsell: 84.0, support: 86.0, strength: 'Structured closing with precise recap of next steps.', focus: 'Maintain consistent speech cadence during yield comparisons.' },
+      'Antara Chakrabarty': { team: 'Team Vaishnavi', iqs: 84.0, vol: 10, pitch: 85.0, upsell: 82.5, support: 84.5, strength: 'Polite and reassuring tone when addressing payout delays.', focus: 'Reinforce asset cover ratios during 13% Club pitching.' },
+      'Swati Singh': { team: 'Team Vaishnavi', iqs: 83.5, vol: 8, pitch: 84.0, upsell: 82.0, support: 84.5, strength: 'Strong empathy and quick resolution of bank account verification.', focus: 'Avoid technical jargon when explaining senior secured backing.' },
+    };
+
+    let selectedMaAgent = 'Aahan Thaker';
+    let selectedMaTeam = 'all';
+
+    function populateMaAgentDropdown() {
+      const select = document.getElementById('ma-agent-select');
+      const teamCont = document.getElementById('ma-team-filter-cont');
+      const maTitle = document.getElementById('ma-title');
+      if (!select) return;
+
+      select.innerHTML = '';
+
+      if (currentRole === 'agent') {
+        if (teamCont) teamCont.classList.add('hidden');
+        if (maTitle) maTitle.innerText = 'My Analytics';
+        const opt = document.createElement('option');
+        opt.value = 'Aahan Thaker';
+        opt.innerText = 'Aahan Thaker (My Profile)';
+        select.appendChild(opt);
+        select.disabled = true;
+        selectedMaAgent = 'Aahan Thaker';
+      } else {
+        if (maTitle) maTitle.innerText = 'Member Analytics';
+        select.disabled = false;
+
+        let teams = [];
+        if (currentRole === 'admin') {
+          if (teamCont) teamCont.classList.remove('hidden');
+          teams = selectedMaTeam === 'all' ? ['Team Gokul', 'Team Vaishnavi'] : [selectedMaTeam];
+        } else if (currentRole === 'tl_gokul') {
+          if (teamCont) teamCont.classList.add('hidden');
+          teams = ['Team Gokul'];
+        } else if (currentRole === 'tl_vaishnavi') {
+          if (teamCont) teamCont.classList.add('hidden');
+          teams = ['Team Vaishnavi'];
+        }
+
+        teams.forEach(teamName => {
+          const optGroup = document.createElement('optgroup');
+          optGroup.label = `${teamName} (${TEAMS_DATA[teamName].length} Agents)`;
+          TEAMS_DATA[teamName].forEach(rm => {
+            const opt = document.createElement('option');
+            opt.value = rm;
+            opt.innerText = `${rm} (${teamName})`;
+            if (rm === selectedMaAgent) opt.selected = true;
+            optGroup.appendChild(opt);
+          });
+          select.appendChild(optGroup);
+        });
+
+        // Ensure selectedMaAgent is valid in the available list
+        const validAgents = teams.flatMap(t => TEAMS_DATA[t]);
+        if (!validAgents.includes(selectedMaAgent)) {
+          selectedMaAgent = validAgents[0];
+          select.value = selectedMaAgent;
+        }
+      }
+
+      renderMemberAnalytics();
+    }
+
+    function onMaTeamChange(team) {
+      selectedMaTeam = team;
+      populateMaAgentDropdown();
+    }
+
+    function onMaAgentChange(agent) {
+      selectedMaAgent = agent;
+      renderMemberAnalytics();
+    }
+
+    function renderMemberAnalytics() {
+      const data = AGENTS_METRICS[selectedMaAgent] || AGENTS_METRICS['Aahan Thaker'];
+      const statIqs = document.getElementById('ma-stat-iqs');
+      const statVol = document.getElementById('ma-stat-vol');
+      const coachingText = document.getElementById('ma-coaching-text');
+      const coachingFocus = document.getElementById('ma-coaching-focus');
+
+      if (statIqs) statIqs.innerText = `${data.iqs}%`;
+      if (statVol) statVol.innerText = `${data.vol}`;
+      if (coachingText) {
+        coachingText.innerHTML = `<strong>Key Strength:</strong> ${data.strength}`;
+      }
+      if (coachingFocus) {
+        coachingFocus.innerHTML = `<strong>Coaching Focus:</strong> ${data.focus}`;
+      }
+
+      // Render category breakdown rows
+      const tbody = document.getElementById('ma-category-table-body');
+      if (tbody) {
+        tbody.innerHTML = `
+          <tr class="hover:bg-zinc-50 font-medium">
+            <td class="py-3 px-4 font-bold text-zinc-900">13% Club Pitching</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 font-bold text-zinc-900">${data.pitch}%</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 text-right text-zinc-600 font-mono">584m</td>
+          </tr>
+          <tr class="bg-zinc-50/60 text-zinc-600 text-[11px]">
+            <td class="py-2 px-6 pl-8 flex items-center gap-1.5 text-zinc-700">
+              <span class="text-zinc-400">↳</span> Pitch Clarity & Senior Secured Backing
+            </td>
+            <td class="py-2 px-4 text-zinc-400">—</td>
+            <td class="py-2 px-4 font-semibold text-emerald-700">${(data.pitch + 1.5).toFixed(1)}%</td>
+            <td class="py-2 px-4 text-zinc-400">—</td>
+            <td class="py-2 px-4 text-right text-zinc-500 font-mono">306m</td>
+          </tr>
+          <tr class="bg-zinc-50/60 text-zinc-600 text-[11px]">
+            <td class="py-2 px-6 pl-8 flex items-center gap-1.5 text-zinc-700">
+              <span class="text-zinc-400">↳</span> Secondary Liquidity Window Framing
+            </td>
+            <td class="py-2 px-4 text-zinc-400">—</td>
+            <td class="py-2 px-4 font-semibold text-zinc-800">${(data.pitch - 3.5).toFixed(1)}%</td>
+            <td class="py-2 px-4 text-zinc-400">—</td>
+            <td class="py-2 px-4 text-right text-zinc-500 font-mono">278m</td>
+          </tr>
+          <tr class="hover:bg-zinc-50 font-medium">
+            <td class="py-3 px-4 font-bold text-zinc-900">Portfolio Upselling</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 font-bold text-zinc-900">${data.upsell}%</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 text-right text-zinc-600 font-mono">785m</td>
+          </tr>
+          <tr class="hover:bg-zinc-50 font-medium">
+            <td class="py-3 px-4 font-bold text-zinc-900">Investor Support & Operations</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 font-bold text-zinc-900">${data.support}%</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 text-right text-zinc-600 font-mono">544m</td>
+          </tr>
+          <tr class="hover:bg-zinc-50 font-medium">
+            <td class="py-3 px-4 font-bold text-zinc-900">KYC & Verification</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 font-bold text-emerald-700">98.0%</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 text-right text-zinc-600 font-mono">689m</td>
+          </tr>
+          <tr class="hover:bg-zinc-50 font-medium">
+            <td class="py-3 px-4 font-bold text-zinc-900">Secondary Exit & Liquidity Queries</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 font-bold text-zinc-900">87.5%</td>
+            <td class="py-3 px-4 text-zinc-400">—</td>
+            <td class="py-3 px-4 text-right text-zinc-600 font-mono">91m</td>
+          </tr>
+        `;
+      }
+    }
+
     function changeRole(role) {
       currentRole = role;
       const thRm = document.getElementById('th-rm-name');
@@ -861,7 +1176,7 @@
       const tabCalls = document.getElementById('tab-calls');
       if (role === 'admin') {
         if (tabCalls) tabCalls.classList.add('hidden');
-        setTab('scorecard');
+        setTab('member-analytics');
         thRm.classList.remove('hidden');
         agentFilterCont.classList.remove('hidden');
         document.getElementById('table-title').innerText = "Evaluated Call Audits";
@@ -885,6 +1200,7 @@
           avatarText.innerText = "VN";
         }
       }
+      populateMaAgentDropdown();
       renderTable();
     }
 
@@ -913,9 +1229,10 @@
     }
 
     function setTab(tab) {
-      ['calls', 'scorecard', 'disputes'].forEach(t => {
+      ['calls', 'member-analytics', 'scorecard', 'disputes'].forEach(t => {
         const btn = document.getElementById(`tab-${t}`);
         const view = document.getElementById(`view-${t}`);
+        if (!btn || !view) return;
         if (t === tab) {
           btn.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#111111] shadow-2xs transition-all';
           view.classList.remove('hidden');
@@ -924,9 +1241,13 @@
           view.classList.add('hidden');
         }
       });
+      if (tab === 'member-analytics') {
+        populateMaAgentDropdown();
+      }
     }
 
     // Initialize
+    populateMaAgentDropdown();
     renderTable();
   </script>
 </body>
