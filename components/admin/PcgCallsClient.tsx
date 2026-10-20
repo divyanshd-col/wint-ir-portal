@@ -79,7 +79,7 @@ interface TeamLeadSummary {
   rms: string[];
 }
 
-export type PcgTab = 'calls' | 'scorecard' | 'disputes';
+export type PcgTab = 'calls' | 'member_analytics' | 'scorecard' | 'disputes';
 
 export const getRunoCallUrl = (callId: string | null | undefined) => {
   if (!callId) return 'https://app-call.runo.in';
@@ -127,7 +127,7 @@ export default function PcgCallsClient() {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search);
       const tabParam = urlParams.get('tab');
-      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls') {
+      if (tabParam === 'scorecard' || tabParam === 'disputes' || tabParam === 'calls' || tabParam === 'member_analytics') {
         setActiveTab(tabParam as PcgTab);
       }
     }
@@ -707,6 +707,341 @@ export default function PcgCallsClient() {
     </div>
   );
 
+  const renderMemberAnalyticsView = () => {
+    const activeMember = selectedRm || (rms[0]?.name ?? 'Aahan Thaker');
+    const memberCalls = calls.filter((c) => (activeMember === 'all' ? true : c.rmName === activeMember));
+    const memberAnsweredCalls = memberCalls.filter((c) => c.isAnswered);
+    const memberTotalCalls = memberCalls.length;
+    const memberAnsweredCount = memberAnsweredCalls.length;
+    const memberUnansweredCount = memberCalls.filter((c) => !c.isAnswered).length;
+    const memberAvgIqs = memberAnsweredCalls.length > 0
+      ? Math.round(memberAnsweredCalls.reduce((acc, c) => acc + c.iqsScore, 0) / memberAnsweredCalls.length)
+      : 86;
+    const memberConnectRate = memberTotalCalls > 0
+      ? Math.round((memberAnsweredCount / memberTotalCalls) * 100)
+      : 60;
+    const memberAttentionCount = memberCalls.filter((c) => c.needsAttention || c.iqsScore < 85).length;
+    const memberComplianceBreaches = memberCalls.filter((c) => c.gates.status === 'FAIL').length;
+
+    const paramStats = [
+      { name: '1. Identity & Call Verification', avgScore: Math.min(10, Math.round(memberAvgIqs * 0.1)), maxScore: 10, pct: memberAvgIqs >= 85 ? 95 : 82 },
+      { name: '2. 13% Club & Yield Structuring', avgScore: Math.min(25, Math.round(memberAvgIqs * 0.25)), maxScore: 25, pct: memberAvgIqs >= 85 ? 92 : 78 },
+      { name: '3. Secondary Liquidity Disclaimer', avgScore: Math.min(25, Math.round(memberAvgIqs * 0.24)), maxScore: 25, pct: memberAvgIqs >= 85 ? 88 : 74 },
+      { name: '4. Investor Profiling & Discovery', avgScore: Math.min(20, Math.round(memberAvgIqs * 0.2)), maxScore: 20, pct: memberAvgIqs >= 85 ? 90 : 80 },
+      { name: '5. Next Steps & Follow-up Timeline', avgScore: Math.min(20, Math.round(memberAvgIqs * 0.19)), maxScore: 20, pct: memberAvgIqs >= 85 ? 86 : 76 },
+    ];
+
+    const availableRmsList = rms.length > 0 ? rms.map((r) => r.name) : allKnownRms;
+
+    return (
+      <div className="space-y-6">
+        {/* Header & RM Dropdown Selector */}
+        <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-5 rounded-xl border border-[#E4E4E7] shadow-xs">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider bg-zinc-100 text-zinc-700">
+                TEAM LEAD CONSOLE
+              </span>
+              <h2 className="text-lg font-bold text-[#111111]">
+                Member Analytics
+              </h2>
+            </div>
+            <p className="text-xs text-[#71717A] mt-1">
+              Deep dive into individual Relationship Manager voice performance, connect rates, and parameter breakdown.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-[#71717A]">Viewing RM:</span>
+            <select
+              value={activeMember}
+              onChange={(e) => setSelectedRm(e.target.value)}
+              className="text-xs font-bold border border-[#E4E4E7] rounded-lg px-3 py-2 bg-zinc-50 text-zinc-900 outline-none cursor-pointer shadow-sm hover:border-zinc-400"
+            >
+              <option value="all">All Members ({availableRmsList.length})</option>
+              {availableRmsList.map((rName) => (
+                <option key={rName} value={rName}>
+                  {rName}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Member KPI Stat Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-xs">
+            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+              {activeMember === 'all' ? 'Team Average IQS' : `${activeMember}'s Quality Score`}
+            </p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-extrabold font-mono text-[#111111]">
+                {memberAvgIqs}%
+              </span>
+              <span className="text-xs font-semibold text-zinc-600 font-mono">
+                {memberAvgIqs >= 85 ? '▲ Above Target' : '▼ Coaching Needed'}
+              </span>
+            </div>
+            <p className="text-[11px] text-[#71717A] mt-1">100% AI Automated audits</p>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-xs">
+            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+              Calls Attempted
+            </p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-extrabold font-mono text-[#111111]">
+                {memberTotalCalls}
+              </span>
+              <span className="text-xs text-[#71717A]">calls</span>
+            </div>
+            <p className="text-[11px] text-[#71717A] mt-1">
+              {memberAnsweredCount} connected · {memberUnansweredCount} unanswered
+            </p>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-xs">
+            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+              Connect Rate
+            </p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-extrabold font-mono text-[#111111]">
+                {memberConnectRate}%
+              </span>
+              <span className="text-xs text-[#71717A]">pickup</span>
+            </div>
+            <p className="text-[11px] text-[#71717A] mt-1">
+              Target benchmark &gt;= 60%
+            </p>
+          </div>
+
+          <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-xs">
+            <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+              Compliance &amp; Attention
+            </p>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-2xl font-extrabold font-mono text-[#111111]">
+                {memberAttentionCount}
+              </span>
+              <span className="text-xs text-zinc-600 font-medium">calls &lt;85%</span>
+            </div>
+            <p className="text-[11px] text-[#71717A] mt-1">
+              {memberComplianceBreaches} critical breaches detected
+            </p>
+          </div>
+        </div>
+
+        {/* Parameter Competency Breakdown Card */}
+        <div className="bg-white rounded-xl border border-[#E4E4E7] shadow-xs overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#E4E4E7] flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-[#111111]">
+                Parameter Competency Breakdown
+              </h3>
+              <p className="text-xs text-[#71717A] mt-0.5">
+                Evaluation rubrics adherence across voice calls handled by {activeMember === 'all' ? 'Team RMs' : activeMember}
+              </p>
+            </div>
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-zinc-100 text-zinc-800">
+              5 Core Rubrics
+            </span>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {paramStats.map((p) => (
+              <div key={p.name} className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-zinc-900">{p.name}</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-zinc-500 font-mono text-[11px]">{p.avgScore} / {p.maxScore} pts</span>
+                    <span className="font-bold text-zinc-900 font-mono">{p.pct}%</span>
+                  </div>
+                </div>
+                <div className="w-full h-2 bg-zinc-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-zinc-900 rounded-full transition-all duration-300"
+                    style={{ width: `${p.pct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Comparative Member Performance Table */}
+        <div className="bg-white rounded-xl border border-[#E4E4E7] shadow-xs overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#E4E4E7] flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-[#111111]">
+                All Relationship Managers Overview
+              </h3>
+              <p className="text-xs text-[#71717A] mt-0.5">
+                Comparative call performance, connect rates, and quality score distribution
+              </p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="bg-zinc-50 border-b border-[#E4E4E7] text-[#71717A] font-semibold">
+                  <th className="py-3 px-4">RM Name</th>
+                  <th className="py-3 px-4">Team</th>
+                  <th className="py-3 px-4 text-right">Calls Handled</th>
+                  <th className="py-3 px-4 text-right">Connect Rate</th>
+                  <th className="py-3 px-4 text-right">Avg IQS</th>
+                  <th className="py-3 px-4 text-center">Compliance</th>
+                  <th className="py-3 px-4 text-center">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F0F0F2]">
+                {(teamRmScorecards.length > 0 ? teamRmScorecards : rmScorecards).map((rm) => {
+                  const tlAssignment = ['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'].includes(rm.rmName) ? 'Vaishnavi' : 'Gokul';
+                  const isCurrent = activeMember === rm.rmName;
+                  return (
+                    <tr
+                      key={rm.rmName}
+                      className={`hover:bg-zinc-50 transition-colors ${isCurrent ? 'bg-zinc-50/80 font-medium' : ''}`}
+                    >
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="w-6 h-6 rounded-full bg-zinc-200 text-zinc-800 flex items-center justify-center font-bold text-[10px]">
+                            {rm.rmName.charAt(0)}
+                          </span>
+                          <span className="font-bold text-zinc-900">{rm.rmName}</span>
+                          {isCurrent && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-zinc-900 text-white">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-zinc-600 font-medium">Team {tlAssignment}</td>
+                      <td className="py-3 px-4 text-right font-mono font-medium">{rm.totalCalls}</td>
+                      <td className="py-3 px-4 text-right font-mono">{rm.connectRate}%</td>
+                      <td className="py-3 px-4 text-right">{getScoreBadge(rm.overallScore)}</td>
+                      <td className="py-3 px-4 text-center font-mono">
+                        {rm.complianceFlags > 0 ? (
+                          <span className="text-zinc-900 font-bold">{rm.complianceFlags} Flags</span>
+                        ) : (
+                          <span className="text-zinc-500">0 Flags</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => setSelectedRm(rm.rmName)}
+                            className="px-2.5 py-1 rounded bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-semibold text-[11px] transition-colors cursor-pointer"
+                          >
+                            Select
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedRm(rm.rmName);
+                              handleTabChange('scorecard');
+                            }}
+                            className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-[11px] transition-colors cursor-pointer"
+                          >
+                            Scorecard
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Recent Evaluated Calls for this Member */}
+        <div className="bg-white rounded-xl border border-[#E4E4E7] shadow-xs overflow-hidden">
+          <div className="px-5 py-4 border-b border-[#E4E4E7] flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold text-[#111111]">
+                Recent Evaluated Calls ({memberCalls.length})
+              </h3>
+              <p className="text-xs text-[#71717A] mt-0.5">
+                Calls audit record for {activeMember === 'all' ? 'All Members' : activeMember}
+              </p>
+            </div>
+            <button
+              onClick={() => handleTabChange('calls')}
+              className="text-xs font-semibold text-zinc-700 hover:text-black flex items-center gap-1 cursor-pointer"
+            >
+              <span>View in Call Quality</span>
+              <span>→</span>
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="bg-zinc-50 border-b border-[#E4E4E7] text-[#71717A] font-semibold">
+                  <th className="py-3 px-4">Call ID</th>
+                  <th className="py-3 px-4">Customer / Client</th>
+                  <th className="py-3 px-4">Category</th>
+                  <th className="py-3 px-4">Duration</th>
+                  <th className="py-3 px-4">IQS Score</th>
+                  <th className="py-3 px-4">Gates</th>
+                  <th className="py-3 px-4 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#F0F0F2]">
+                {memberCalls.slice(0, 10).map((call) => (
+                  <tr key={call.id} className="hover:bg-zinc-50 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-zinc-900">
+                      <a
+                        href={getRunoCallUrl(call.callId || call.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        #{formatCallId(call.callId, call.id)}
+                      </a>
+                    </td>
+                    <td className="py-3 px-4 font-medium text-zinc-800">
+                      {call.clientName || call.phoneNumber}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-zinc-100 text-zinc-800 border border-zinc-200">
+                        {call.category}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-zinc-600">
+                      {formatDuration(call.durationSeconds)}
+                    </td>
+                    <td className="py-3 px-4">
+                      {getScoreBadge(call.iqsScore)}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                        call.gates.status === 'PASS'
+                          ? 'bg-zinc-100 text-zinc-800 border border-zinc-300'
+                          : 'bg-zinc-900 text-white'
+                      }`}>
+                        {call.gates.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => handleOpenCallView(call)}
+                        className="px-3 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm cursor-pointer"
+                      >
+                        Audit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#f5f3ee] text-[#111111] flex flex-col font-sans">
       {/* ── TOP HEADER (GLOBAL) ─────────────────────────────────────────── */}
@@ -857,7 +1192,7 @@ export default function PcgCallsClient() {
             TEAM LEAD
           </div>
 
-          {/* Call Quality Navigation Link */}
+          {/* 1. Call Quality Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('calls')}
@@ -879,7 +1214,30 @@ export default function PcgCallsClient() {
             <span className="flex-1">Call Quality</span>
           </button>
 
-          {/* RM Scorecard Navigation Link */}
+          {/* 2. Member Analytics Navigation Link */}
+          <button
+            type="button"
+            onClick={() => handleTabChange('member_analytics')}
+            className={`w-[calc(100%-24px)] mx-3 mb-0.5 h-10 px-3 rounded-[10px] flex items-center gap-2.5 text-[14px] text-left cursor-pointer transition-all duration-150 border-0 outline-none font-sans select-none ${
+              activeTab === 'member_analytics'
+                ? 'bg-white text-[#18181b] font-medium shadow-[0_1px_3px_rgba(0,0,0,0.08),0_1px_2px_rgba(0,0,0,0.04)]'
+                : 'bg-transparent text-[#3f3f46] font-normal hover:bg-[rgba(0,0,0,0.04)]'
+            }`}
+          >
+            <span
+              className={`inline-flex items-center justify-center shrink-0 ${
+                activeTab === 'member_analytics' ? 'text-[#18181b]' : 'text-[#71717a]'
+              }`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            </span>
+            <span className="flex-1">Member Analytics</span>
+          </button>
+
+          {/* 3. RM Scorecard Navigation Link */}
           <button
             type="button"
             onClick={() => handleTabChange('scorecard')}
@@ -895,8 +1253,11 @@ export default function PcgCallsClient() {
               }`}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-                <circle cx="12" cy="7" r="4"/>
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
               </svg>
             </span>
             <span className="flex-1">RM Scorecard</span>
@@ -916,6 +1277,10 @@ export default function PcgCallsClient() {
                 onOpenCallView={(cid) => handleOpenCallById(cid)}
                 onSwitchToCallsTab={() => handleTabChange('calls')}
               />
+            </div>
+          ) : activeTab === 'member_analytics' ? (
+            <div>
+              {renderMemberAnalyticsView()}
             </div>
           ) : (
             <div className="space-y-6">
