@@ -50,50 +50,85 @@ export async function GET(req: NextRequest) {
 
     const s3Url = rows[0].recording_url;
 
-    // 2. Parse S3 bucket and key from recording_url
-    const urlObj = new URL(s3Url);
-    const bucket = urlObj.hostname.split('.')[0];
-    const key = urlObj.pathname.substring(1);
-
-    const s3 = getS3Client();
-    if (!s3) {
-      return NextResponse.json({ error: 'AWS S3 credentials not configured in server environment' }, { status: 500 });
-    }
-
-    // 3. Fetch object stream from S3
-    const getCommand = new GetObjectCommand({
-      Bucket: bucket,
-      Key: key,
-    });
-
-    const s3Response = await s3.send(getCommand);
-    if (!s3Response.Body) {
-      return NextResponse.json({ error: 'Empty response body from S3' }, { status: 502 });
+    // 2. Parse S3 bucket and key from recording_url if possible
+    let bucket = '';
+    let key = '';
+    try {
+      const urlObj = new URL(s3Url);
+      if (urlObj.hostname.includes('.s3.') || urlObj.hostname.endsWith('.s3.amazonaws.com')) {
+        const parts = urlObj.hostname.split('.');
+        bucket = parts[0];
+        key = urlObj.pathname.replace(/^\/+/, '');
+      } else {
+        const pathParts = urlObj.pathname.replace(/^\/+/, '').split('/');
+        bucket = pathParts[0] || '';
+        key = pathParts.slice(1).join('/');
+      }
+    } catch {
+      // Non-standard URL format
     }
 
     // Determine correct content type
     let contentType = 'audio/aac';
-    if (key.endsWith('.wav')) contentType = 'audio/wav';
-    if (key.endsWith('.mp3')) contentType = 'audio/mpeg';
-    if (key.endsWith('.m4a')) contentType = 'audio/mp4';
+    const lowerKeyOrUrl = (key || s3Url).toLowerCase();
+    if (lowerKeyOrUrl.includes('.wav')) contentType = 'audio/wav';
+    else if (lowerKeyOrUrl.includes('.mp3')) contentType = 'audio/mpeg';
+    else if (lowerKeyOrUrl.includes('.m4a')) contentType = 'audio/mp4';
+    else if (lowerKeyOrUrl.includes('.ogg')) contentType = 'audio/ogg';
 
-    // Stream the web ReadableStream directly
-    const stream = s3Response.Body.transformToWebStream();
+    // 3. Attempt S3 SDK fetch if credentials are configured
+    const s3 = getS3Client();
+    if (s3 && bucket && key) {
+      try {
+        const getCommand = new GetObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        });
 
-    const headers = new Headers();
-    headers.set('Content-Type', contentType);
-    headers.set('Accept-Ranges', 'bytes');
-    headers.set('Cache-Control', 'private, max-age=3600');
-    if (s3Response.ContentLength) {
-      headers.set('Content-Length', s3Response.ContentLength.toString());
+        const s3Response = await s3.send(getCommand);
+        if (s3Response.Body) {
+          const stream = s3Response.Body.transformToWebStream();
+          const headers = new Headers();
+          headers.set('Content-Type', contentType);
+          headers.set('Accept-Ranges', 'bytes');
+          headers.set('Cache-Control', 'private, max-age=3600');
+          if (s3Response.ContentLength) {
+            headers.set('Content-Length', s3Response.ContentLength.toString());
+          }
+
+          return new NextResponse(stream, {
+            status: 200,
+            headers,
+          });
+        }
+      } catch (s3Err) {
+        console.warn('[admin/pcg-calls/audio] S3 SDK fetch failed, falling back to direct fetch:', s3Err);
+      }
     }
 
-    return new NextResponse(stream, {
-      status: 200,
-      headers,
-    });
+    // 4. Fallback: Direct HTTP fetch (works for public S3 URLs, pre-signed URLs, or third-party audio CDNs)
+    try {
+      const directResponse = await fetch(s3Url);
+      if (directResponse.ok && directResponse.body) {
+        const headers = new Headers();
+        headers.set('Content-Type', directResponse.headers.get('content-type') || contentType);
+        headers.set('Accept-Ranges', 'bytes');
+        headers.set('Cache-Control', 'private, max-age=3600');
+        const len = directResponse.headers.get('content-length');
+        if (len) headers.set('Content-Length', len);
+
+        return new NextResponse(directResponse.body, {
+          status: 200,
+          headers,
+        });
+      }
+    } catch (fetchErr) {
+      console.warn('[admin/pcg-calls/audio] Direct fetch fallback failed:', fetchErr);
+    }
+
+    return NextResponse.json({ error: 'Failed to stream call recording audio' }, { status: 502 });
   } catch (error: any) {
-    console.error('[admin/pcg-calls/audio] Error streaming S3 audio:', error);
+    console.error('[admin/pcg-calls/audio] Error streaming audio:', error);
     return NextResponse.json({ error: 'Failed to stream call recording audio' }, { status: 500 });
   }
 }
