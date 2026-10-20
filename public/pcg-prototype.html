@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wint Wealth | PCG Call Analytics & Quality Portal - Design Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #F4F4F5; }
+    ::-webkit-scrollbar-thumb { background: #D4D4D8; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #A1A1AA; }
+  </style>
+</head>
+<body class="bg-[#F8F9FA] text-[#111111] min-h-screen antialiased flex flex-col">
+
+  <!-- TOP NAV BAR -->
+  <header class="bg-white border-b border-[#E4E4E7] sticky top-0 z-30 shadow-2xs">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between gap-4">
+      <!-- Brand & Title -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-[#111111] text-white flex items-center justify-center font-bold text-sm tracking-tighter shadow-sm">
+          W
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm font-extrabold text-[#111111] tracking-tight">Wint Wealth</h1>
+            <span class="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+              PCG Portal
+            </span>
+          </div>
+          <p class="text-[11px] text-[#71717A]">Quality Audits, AI Coaching & Telephony Analytics</p>
+        </div>
+      </div>
+
+      <!-- Center Tabs -->
+      <div class="flex items-center gap-1 bg-[#F4F4F5] p-1 rounded-xl border border-[#E4E4E7]">
+        <button id="tab-calls" onclick="setTab('calls')" class="px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#111111] shadow-2xs transition-all">
+          Call Audits
+        </button>
+        <button id="tab-scorecard" onclick="setTab('scorecard')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all">
+          Weekly RM Scorecard
+        </button>
+        <button id="tab-disputes" onclick="setTab('disputes')" class="px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all flex items-center gap-1.5">
+          <span>Disputes</span>
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+        </button>
+      </div>
+
+      <!-- Right Controls: Persona Switcher -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-1.5 text-xs">
+          <span class="text-[#71717A] font-semibold text-[11px]">Role:</span>
+          <select id="role-switcher" onchange="changeRole(this.value)" class="text-xs font-bold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 outline-none cursor-pointer hover:border-zinc-400">
+            <option value="admin">Admin (All Teams & RMs)</option>
+            <option value="tl_gokul">Team Leader (Team Gokul)</option>
+            <option value="tl_vaishnavi">Team Leader (Team Vaishnavi)</option>
+            <option value="agent">Agent / RM (Aahan Thaker)</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2 pl-3 border-l border-[#E4E4E7]">
+          <div class="w-8 h-8 rounded-full bg-zinc-200 text-zinc-700 flex items-center justify-center font-bold text-xs">
+            <span id="user-avatar-text">AD</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-6 py-6 flex-1 space-y-6 w-full">
+
+    <!-- METRICS SUMMARY CARDS -->
+    <section class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Total Audited Calls</div>
+        <div class="text-2xl font-black text-[#111111] mt-1" id="metric-total-calls">118</div>
+        <div class="text-[11px] text-emerald-600 font-semibold mt-1 flex items-center gap-1">
+          <span>↑ 14%</span> <span class="text-zinc-400 font-normal">vs last 7 days</span>
+        </div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Overall Average IQS</div>
+        <div class="text-2xl font-black text-[#111111] mt-1 flex items-baseline gap-2">
+          <span>87.4%</span>
+          <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">Target >85%</span>
+        </div>
+        <div class="text-[11px] text-zinc-500 font-normal mt-1">Across 9 Active RMs</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Connect Rate</div>
+        <div class="text-2xl font-black text-[#111111] mt-1">68.2%</div>
+        <div class="text-[11px] text-zinc-500 font-normal mt-1">81 Connected • 37 Unanswered</div>
+      </div>
+      <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Compliance Pass Rate</div>
+        <div class="text-2xl font-black text-emerald-700 mt-1">96.8%</div>
+        <div class="text-[11px] text-zinc-500 font-normal mt-1">Gates G1 (No Advice), G2, G3</div>
+      </div>
+    </section>
+
+    <!-- CALLS TAB CONTENT -->
+    <div id="view-calls" class="space-y-4">
+
+      <!-- CATEGORY PILLS BAR -->
+      <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#E4E4E7] shadow-2xs">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-[#71717A] font-semibold mr-1">Call Category:</span>
+          <button onclick="filterCategory('all')" id="cat-all" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#111111] text-white shadow-sm transition-all">
+            All Categories (<span id="cat-count">118</span>)
+          </button>
+          <button onclick="filterCategory('13_pitching')" id="cat-13_pitching" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all">
+            13% Club / Pitching
+          </button>
+          <button onclick="filterCategory('upselling')" id="cat-upselling" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all">
+            Upselling Calls
+          </button>
+          <button onclick="filterCategory('support')" id="cat-support" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all">
+            General / Support
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-[#71717A]">Date:</span>
+          <select class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 outline-none">
+            <option>Last 7 Days</option>
+            <option>Last 30 Days</option>
+            <option>Custom Range</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- EVALUATED CALL AUDITS TABLE CONTAINER -->
+      <div class="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-2xs">
+        
+        <!-- Table Header & Controls -->
+        <div class="p-4 border-b border-[#E4E4E7] flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-bold text-[#111111]" id="table-title">Evaluated Call Audits</h3>
+            <p class="text-xs text-[#71717A] mt-0.5" id="table-subtitle">
+              Showing calls auto-categorised with separate quality parameters
+            </p>
+          </div>
+
+          <!-- Controls: Agent Filter + Search Input -->
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <div id="agent-filter-container" class="flex items-center gap-1.5">
+              <span class="text-xs text-[#71717A] font-semibold">Agent:</span>
+              <select id="agent-filter" onchange="filterAgent(this.value)" class="text-xs font-semibold border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 bg-zinc-50 text-gray-800 outline-none shadow-2xs cursor-pointer">
+                <option value="all">All Agents (9)</option>
+                <option value="Aahan Thaker">Aahan Thaker</option>
+                <option value="Dhanush">Dhanush</option>
+                <option value="Yaashvi Arora">Yaashvi Arora</option>
+                <option value="Samskriti Rao">Samskriti Rao</option>
+                <option value="Gaurav Nautiyal">Gaurav Nautiyal</option>
+                <option value="Aravind">Aravind</option>
+                <option value="Sujal Dadwani">Sujal Dadwani</option>
+                <option value="Antara Chakrabarty">Antara Chakrabarty</option>
+                <option value="Swati Singh">Swati Singh</option>
+              </select>
+            </div>
+
+            <input
+              type="text"
+              id="search-input"
+              oninput="handleSearch(this.value)"
+              placeholder="Search Call ID or Phone..."
+              class="text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 w-52 outline-none focus:border-[#111111] shadow-2xs bg-white"
+            />
+          </div>
+        </div>
+
+        <!-- Calls Table -->
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase tracking-wider">
+                <th class="py-3 px-4">Call ID</th>
+                <th class="py-3 px-4" id="th-rm-name">RM Name</th>
+                <th class="py-3 px-4">Customer Phone</th>
+                <th class="py-3 px-4">Call Category</th>
+                <th class="py-3 px-4">Duration</th>
+                <th class="py-3 px-4">IQS Score</th>
+                <th class="py-3 px-4">Gates</th>
+                <th class="py-3 px-4">Telephony Status</th>
+                <th class="py-3 px-4 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="calls-table-body" class="divide-y divide-[#E4E4E7]">
+              <!-- Injected via JavaScript -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCORECARD TAB CONTENT -->
+    <div id="view-scorecard" class="hidden space-y-4">
+      <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+        <div class="flex items-center justify-between pb-4 border-b border-[#E4E4E7]">
+          <div>
+            <h3 class="text-sm font-bold text-[#111111]">Weekly RM Scorecard Leaderboard</h3>
+            <p class="text-xs text-[#71717A] mt-0.5">Aggregated performance across 13-parameter pitching, upselling, and support</p>
+          </div>
+          <span class="text-xs font-bold px-2.5 py-1 bg-zinc-100 rounded-lg text-zinc-700">Week 42 · 2026</span>
+        </div>
+
+        <div class="mt-4 overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase">
+                <th class="py-3 px-4">Rank</th>
+                <th class="py-3 px-4">RM Name</th>
+                <th class="py-3 px-4">Team</th>
+                <th class="py-3 px-4">Total Calls</th>
+                <th class="py-3 px-4">Connect %</th>
+                <th class="py-3 px-4">Pitching IQS</th>
+                <th class="py-3 px-4">Upsell IQS</th>
+                <th class="py-3 px-4">Overall IQS</th>
+                <th class="py-3 px-4">Trend</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[#E4E4E7]" id="scorecard-table-body">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DISPUTES TAB CONTENT -->
+    <div id="view-disputes" class="hidden space-y-4">
+      <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
+        <h3 class="text-sm font-bold text-[#111111]">Team Quality Disputes & Overrides</h3>
+        <p class="text-xs text-[#71717A] mt-0.5">Review agent challenges against AI parameter scores and record TL decisions</p>
+        <div class="mt-4 p-8 text-center text-zinc-400 text-xs bg-zinc-50 rounded-xl border border-dashed border-zinc-300">
+          Click on any call marked with a dispute to view challenged quotes and trigger TL score adjustments.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- SLIDE-OVER CALL AUDIT DRAWER -->
+  <div id="drawer-backdrop" class="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs hidden">
+    <div class="w-full max-w-5xl xl:max-w-6xl bg-white h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-200">
+      
+      <!-- Drawer Header -->
+      <div class="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-zinc-50">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="font-bold tabular-nums text-base text-[#111111]" id="drawer-call-id">Call #102</span>
+          
+          <span id="drawer-primary-cat" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+            Upselling Calls
+          </span>
+          <span id="drawer-secondary-cat" class="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1 shadow-2xs">
+            <span class="font-bold text-amber-600">+</span>
+            <span>General / Support</span>
+          </span>
+
+          <span class="text-xs text-[#71717A]">
+            RM: <span class="font-semibold text-zinc-900" id="drawer-rm-name">Aahan Thaker</span> (<span id="drawer-tl-name">Team Gokul</span>)
+          </span>
+          <span class="text-xs tabular-nums text-zinc-500" id="drawer-phone">• +91 98765 10102</span>
+          <span class="text-xs tabular-nums text-zinc-500" id="drawer-duration">• 02:25</span>
+        </div>
+
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-[#71717A]">IQS:</span>
+            <span id="drawer-iqs-badge" class="px-2 py-0.5 rounded font-bold tabular-nums text-xs bg-emerald-100 text-emerald-800 border border-emerald-200">88%</span>
+            <span id="drawer-gate-badge" class="text-xs font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">PASS</span>
+          </div>
+          <button onclick="closeDrawer()" class="w-8 h-8 rounded-lg border border-[#E4E4E7] flex items-center justify-center text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 font-bold ml-2">
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <!-- Drawer Body: 2-Column Split Layout -->
+      <div class="flex-1 flex flex-col lg:flex-row overflow-hidden divide-y lg:divide-y-0 lg:divide-x divide-[#E4E4E7]">
+        
+        <!-- LEFT COLUMN: Audio Player + Transcript -->
+        <div class="flex-1 flex flex-col overflow-y-auto p-5 space-y-4 bg-white">
+          <!-- Audio Player Mockup -->
+          <div class="p-3.5 bg-zinc-900 text-white rounded-xl flex items-center justify-between gap-4 shadow-sm">
+            <div class="flex items-center gap-3">
+              <button class="w-9 h-9 rounded-full bg-white text-zinc-900 flex items-center justify-center font-bold text-xs shadow hover:scale-105 transition-transform">
+                ▶
+              </button>
+              <div>
+                <div class="text-xs font-bold text-zinc-100">Stereo Audio Recording (S3)</div>
+                <div class="text-[11px] text-zinc-400 tabular-nums">00:18 / 02:25 • AAC Audio</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Speed: 1.0x</span>
+            </div>
+          </div>
+
+          <!-- Transcript Dialogue Turns -->
+          <div class="space-y-3 flex-1 flex flex-col">
+            <div class="flex items-center justify-between border-b border-[#E4E4E7] pb-2 flex-wrap gap-2">
+              <div class="flex items-center gap-2">
+                <h4 class="text-xs font-bold text-[#111111] uppercase tracking-wider">
+                  Call Transcript &amp; Dialogue Turns
+                </h4>
+                <span class="text-[11px] text-[#71717A]" id="drawer-turns-count">9 dialogue turns</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button
+                  id="btn-swap-speakers"
+                  onclick="handleSwapSpeakersPrototype()"
+                  class="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-zinc-300 bg-white hover:bg-zinc-50 text-zinc-800 transition-colors shadow-2xs"
+                  title="Swap RM and Investor speaker labels"
+                >
+                  ⇄ Swap All Speakers (RM ⇋ Investor)
+                </button>
+                <button
+                  id="btn-reevaluate"
+                  onclick="handleReevaluatePrototype()"
+                  class="hidden px-2.5 py-1 text-[11px] font-bold rounded-md bg-amber-600 hover:bg-amber-700 text-white transition-colors shadow-2xs"
+                >
+                  Save &amp; Re-evaluate Call (1 of 1)
+                </button>
+                <span
+                  id="badge-reevaluated"
+                  class="hidden px-2 py-0.5 text-[11px] font-semibold rounded bg-zinc-100 text-zinc-600 border border-zinc-300"
+                >
+                  ✓ Re-evaluation used
+                </span>
+              </div>
+            </div>
+
+            <!-- Dialogue Turns Container with Black & White Pivot Bubble -->
+            <div class="space-y-2.5 flex-1 overflow-y-auto pr-1" id="drawer-turns-container">
+              <!-- Injected via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COLUMN: Parameters Panel & Scoring -->
+        <div class="w-full lg:w-[460px] flex flex-col overflow-y-auto p-5 space-y-4 bg-[#FAFAFB]">
+          <div class="space-y-1 border-b border-[#E4E4E7] pb-2">
+            <div class="flex items-center justify-between">
+              <h4 class="text-xs font-bold text-[#111111] uppercase tracking-wider" id="drawer-param-header">
+                Upselling Parameters
+              </h4>
+              <span class="text-xs font-bold tabular-nums text-emerald-700">88% Score</span>
+            </div>
+            <p class="text-[10px] text-zinc-500 italic">
+              Scored against primary intent. Secondary topic recorded for audit trail.
+            </p>
+          </div>
+
+          <!-- Parameters List -->
+          <div class="space-y-2.5" id="drawer-params-container">
+            <!-- Injected via JS -->
+          </div>
+
+          <!-- TL Evaluation Override Section -->
+          <div id="drawer-override-section" class="pt-3 border-t border-[#E4E4E7] space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-[#111111] uppercase tracking-wider">
+                TL Score Override
+              </span>
+              <span class="text-[10px] font-semibold text-zinc-500">Edit parameter or adjust score</span>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-zinc-600 font-medium">Parameter:</label>
+                <select id="override-param-select" class="flex-1 text-xs font-semibold bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 outline-none">
+                  <!-- Dynamically populated -->
+                </select>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-zinc-600 font-medium">New Status:</label>
+                <select id="override-score-select" class="text-xs font-semibold bg-white border border-[#E4E4E7] rounded-lg px-2.5 py-1.5 outline-none">
+                  <option value="Yes">Yes (Full Score)</option>
+                  <option value="Half">Half (Partial Score)</option>
+                  <option value="No">No (0 Score)</option>
+                </select>
+              </div>
+
+              <textarea
+                id="override-note-input"
+                rows="2"
+                placeholder="Internal review note explaining why score was overridden…"
+                class="w-full text-xs p-2.5 rounded-lg border border-[#E4E4E7] bg-white outline-none focus:border-zinc-900 resize-none font-sans"
+              ></textarea>
+
+              <button
+                id="btn-submit-override"
+                onclick="handleSubmitOverridePrototype()"
+                class="w-full py-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white font-semibold text-xs shadow-sm transition-colors"
+              >
+                Submit Evaluation Override
+              </button>
+
+              <div id="override-feedback" class="hidden text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 p-2 rounded-lg font-medium text-center">
+                ✓ Evaluation override submitted successfully.
+              </div>
+            </div>
+          </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Sample Real Calls Dataset
+    const sampleCalls = [
+      {
+        id: "102",
+        callId: "runo-102",
+        rmName: "Aahan Thaker",
+        tlName: "Team Gokul",
+        phoneNumber: "+91 98765 10102",
+        category: "Upselling Calls",
+        categoryKey: "upselling",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 145,
+        durationFormatted: "02:25",
+        iqsScore: 88,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Hi Aahan, I noticed my quarterly coupon interest from Muthoot Capital didn't show up in my HDFC account yesterday. Can you check?", time: "00:04", segment: "Support Query" },
+          { speaker: "RM", text: "Hello Mr. Kapoor! Let me check your transaction log right away. I see the payout was processed at 6 PM yesterday and will reflect in your HDFC account by 2 PM today.", time: "00:18", segment: "Support Query" },
+          { speaker: "Customer", text: "Okay perfect, that's a relief. Was worried there was an account mismatch.", time: "00:34", segment: "Support Query" },
+          { speaker: "RM", text: "No issue at all, your bank details are 100% verified. Also Mr. Kapoor, while I have you on the line, your CreditAccess bonds matured last week. We have a fresh AA-rated senior secured issuance yielding 11.25% open today.", time: "00:46", segment: "Upselling Pitch", isPivotTurn: true },
+          { speaker: "Customer", text: "What is the tenure and payout frequency on that new issuance?", time: "01:05", segment: "Upselling Pitch" },
+          { speaker: "RM", text: "It is a 24-month tenure with monthly interest payouts credited directly to your verified HDFC bank account, backed by 1.25x asset cover.", time: "01:22", segment: "Upselling Pitch" },
+          { speaker: "Customer", text: "That fits my cash flow needs. Can you WhatsApp the term sheet and IM?", time: "01:45", segment: "Upselling Pitch" },
+          { speaker: "RM", text: "Sent directly to your WhatsApp! I will follow up this evening to help reserve your units.", time: "02:05", segment: "Upselling Pitch" },
+          { speaker: "Customer", text: "Sounds good, thanks Aahan.", time: "02:18", segment: "Upselling Pitch" }
+        ],
+        parameters: [
+          { name: "Portfolio Review & Need Discovery", maxScore: 20, earned: 18, status: "Yes", quote: "Turn 4: Acknowledged past bond maturity and verified liquidity availability." },
+          { name: "New Asset Relevance & Fitment", maxScore: 20, earned: 18, status: "Yes", quote: "Turn 6: Matched 11.25% AA-rated secured asset to investor profile." },
+          { name: "Liquidity vs Yield Comparison", maxScore: 15, earned: 13, status: "Yes", quote: "Turn 6: Explained 24-month horizon with monthly payout frequency." },
+          { name: "Handling Customer Hesitation", maxScore: 20, earned: 17, status: "Yes", quote: "Turn 7: Addressed cash flow requirements promptly." },
+          { name: "Next Steps & Follow-up Timeline", maxScore: 15, earned: 13, status: "Yes", quote: "Turn 8: Committed to sending WhatsApp term sheet and evening follow-up." },
+          { name: "SEBI Compliance & Disclosure Rules", maxScore: 10, earned: 9, status: "Yes", quote: "Turn 6: Full disclosure on 1.25x asset cover without guarantee." }
+        ]
+      },
+      {
+        id: "105",
+        callId: "runo-105",
+        rmName: "Aahan Thaker",
+        tlName: "Team Gokul",
+        phoneNumber: "+91 98765 10105",
+        category: "13% Club / Pitching",
+        categoryKey: "13_pitching",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 178,
+        durationFormatted: "02:58",
+        iqsScore: 92,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "RM", text: "Good morning Mr. Mehta, Aahan here from Wint Wealth. You had registered on our platform to explore fixed-income senior secured bonds.", time: "00:05", segment: "Support Query" },
+          { speaker: "Customer", text: "Yes Aahan, but while completing my profile, my KYC got stuck on DigiLocker Aadhaar verification.", time: "00:16", segment: "Support Query" },
+          { speaker: "RM", text: "I can help you unlock that right away. Did it show an address mismatch or OTP timeout?", time: "00:30", segment: "Support Query" },
+          { speaker: "Customer", text: "It showed an OTP timeout. Can we re-trigger it?", time: "00:42", segment: "Support Query" },
+          { speaker: "RM", text: "I have reset the verification session from our end. Please refresh the Wint app and re-enter the OTP now.", time: "00:58", segment: "Support Query" },
+          { speaker: "Customer", text: "Done, it says KYC verified! Now tell me, how does the 13% Club fixed return product compare to standard bank FDs?", time: "01:14", segment: "New Pitching", isPivotTurn: true },
+          { speaker: "RM", text: "Unlike bank FDs which offer 6.5-7%, the 13% Club is backed by senior secured assets with 1.25x asset cover, giving fixed monthly returns.", time: "01:35", segment: "New Pitching" },
+          { speaker: "Customer", text: "Is there a minimum ticket size to start?", time: "01:58", segment: "New Pitching" },
+          { speaker: "RM", text: "You can start with ₹10,000, and interest is credited monthly right to your bank account.", time: "02:15", segment: "New Pitching" }
+        ],
+        parameters: [
+          { name: "Pitch Clarity & Product Benefits", maxScore: 20, earned: 19, status: "Yes", quote: "Turn 7: Clear explanation of fixed monthly returns." },
+          { name: "Return vs Risk Positioning", maxScore: 15, earned: 14, status: "Yes", quote: "Turn 7: Positioned against standard bank FDs with asset cover." },
+          { name: "Active Listening & Objection Handling", maxScore: 25, earned: 23, status: "Yes", quote: "Turn 3: Guided through KYC DigiLocker reset smoothly." }
+        ]
+      },
+      {
+        id: "122",
+        callId: "runo-122",
+        rmName: "Dhanush",
+        tlName: "Team Gokul",
+        phoneNumber: "+91 98765 10122",
+        category: "Upselling Calls",
+        categoryKey: "upselling",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 138,
+        durationFormatted: "02:18",
+        iqsScore: 85,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Hi Dhanush, I submitted Form 15G last week. Has it been processed?", time: "00:06", segment: "Support Query" },
+          { speaker: "RM", text: "Yes Mr. Rao, I checked your account and Form 15G has been verified and registered.", time: "00:20", segment: "Support Query" },
+          { speaker: "RM", text: "Also, since you have ₹1,00,000 available from your recent redemption, we have a fresh NBFC NCD open today.", time: "00:40", segment: "Upselling Pitch", isPivotTurn: true },
+          { speaker: "Customer", text: "What is the coupon rate?", time: "01:05", segment: "Upselling Pitch" },
+          { speaker: "RM", text: "It pays 11.20% annualized yield with quarterly payouts.", time: "01:25", segment: "Upselling Pitch" }
+        ],
+        parameters: [
+          { name: "Portfolio Review & Need Discovery", maxScore: 20, earned: 17, status: "Yes", quote: "Turn 3: Identified idle redemption balance." }
+        ]
+      },
+      {
+        id: "164",
+        callId: "runo-164",
+        rmName: "Aravind",
+        tlName: "Team Vaishnavi",
+        phoneNumber: "+91 98765 10164",
+        category: "Upselling Calls",
+        categoryKey: "upselling",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 152,
+        durationFormatted: "02:32",
+        iqsScore: 86,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Hello, I wanted to change my linked bank account IFSC code.", time: "00:08", segment: "Support Query" },
+          { speaker: "RM", text: "Hi Mr. Nair, Aravind here. You can upload your cancelled cheque in the Profile tab.", time: "00:25", segment: "Support Query" },
+          { speaker: "RM", text: "Also, your wallet has ₹1.5L unallocated. We have an 11.60% XIRR secondary market bond available.", time: "00:48", segment: "Upselling Pitch", isPivotTurn: true }
+        ],
+        parameters: [
+          { name: "Portfolio Review & Need Discovery", maxScore: 20, earned: 17, status: "Yes", quote: "Turn 3: Advised on idle wallet funds." }
+        ]
+      },
+      {
+        id: "176",
+        callId: "runo-176",
+        rmName: "Sujal Dadwani",
+        tlName: "Team Vaishnavi",
+        phoneNumber: "+91 98765 10176",
+        category: "13% Club / Pitching",
+        categoryKey: "13_pitching",
+        secondaryCategories: ["General / Support"],
+        durationSeconds: 165,
+        durationFormatted: "02:45",
+        iqsScore: 89,
+        gateStatus: "PASS",
+        isAnswered: true,
+        turns: [
+          { speaker: "Customer", text: "Is my CDSL demat account linked?", time: "00:05", segment: "Support Query" },
+          { speaker: "RM", text: "Yes, verified and active. Let me explain the 13% Club senior debt allocation.", time: "00:25", segment: "New Pitching", isPivotTurn: true }
+        ],
+        parameters: [
+          { name: "Pitch Clarity", maxScore: 20, earned: 18, status: "Yes", quote: "Turn 2: Clear presentation of senior debt." }
+        ]
+      }
+    ];
+
+    let currentRole = 'admin';
+    let currentCategory = 'all';
+    let currentAgent = 'all';
+    let currentSearch = '';
+
+    function renderTable() {
+      const tbody = document.getElementById('calls-table-body');
+      tbody.innerHTML = '';
+
+      let filtered = sampleCalls.filter(c => {
+        // Role filter
+        if (currentRole === 'agent' && c.rmName !== 'Aahan Thaker') return false;
+        if (currentRole === 'tl_gokul' && !['Aahan Thaker', 'Dhanush', 'Yaashvi Arora', 'Samskriti Rao', 'Gaurav Nautiyal'].includes(c.rmName)) return false;
+        if (currentRole === 'tl_vaishnavi' && !['Aravind', 'Sujal Dadwani', 'Antara Chakrabarty', 'Swati Singh'].includes(c.rmName)) return false;
+
+        // Category filter
+        if (currentCategory !== 'all') {
+          if (c.categoryKey !== currentCategory && !(c.secondaryCategories && c.secondaryCategories.some(s => s.toLowerCase().includes(currentCategory)))) {
+            return false;
+          }
+        }
+
+        // Agent filter
+        if (currentAgent !== 'all' && c.rmName !== currentAgent) return false;
+
+        // Search filter
+        if (currentSearch.trim()) {
+          const q = currentSearch.toLowerCase();
+          if (!c.callId.toLowerCase().includes(q) && !c.phoneNumber.includes(q) && !c.rmName.toLowerCase().includes(q)) return false;
+        }
+
+        return true;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" class="p-8 text-center text-zinc-400">No calls match the selected filters.</td></tr>';
+        return;
+      }
+
+      filtered.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-[#FAFAFB] transition-colors cursor-pointer';
+        tr.onclick = () => openDrawer(c.id);
+
+        const rmCell = currentRole === 'agent' ? '' : `<td class="py-3 px-4 font-semibold text-zinc-800">${c.rmName}</td>`;
+
+        const categoryBadge = c.categoryKey === '13_pitching'
+          ? 'bg-blue-50 text-blue-700 border-blue-200'
+          : 'bg-purple-50 text-purple-700 border-purple-200';
+
+        const secondaryBadge = c.secondaryCategories && c.secondaryCategories.length > 0
+          ? `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs mt-1">
+              <span class="font-bold text-amber-600">+</span> ${c.secondaryCategories.join(', ')}
+            </span>`
+          : '';
+
+        tr.innerHTML = `
+          <td class="py-3 px-4 font-bold tabular-nums text-zinc-900">
+            #${c.id}
+          </td>
+          ${rmCell}
+          <td class="py-3 px-4 tabular-nums text-zinc-600">${c.phoneNumber}</td>
+          <td class="py-3 px-4">
+            <div class="flex flex-col items-start">
+              <span class="inline-flex px-2 py-0.5 rounded text-[11px] font-semibold border ${categoryBadge}">
+                ${c.category}
+              </span>
+              ${secondaryBadge}
+            </div>
+          </td>
+          <td class="py-3 px-4 tabular-nums">${c.durationFormatted}</td>
+          <td class="py-3 px-4">
+            <span class="px-2 py-0.5 rounded font-bold tabular-nums text-xs bg-emerald-100 text-emerald-800 border border-emerald-200">
+              ${c.iqsScore}%
+            </span>
+          </td>
+          <td class="py-3 px-4">
+            <span class="text-emerald-700 font-bold">PASS</span>
+          </td>
+          <td class="py-3 px-4">
+            <span class="text-emerald-700 font-medium">Connected</span>
+          </td>
+          <td class="py-3 px-4 text-center">
+            <button class="px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-800 transition-colors">
+              View
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openDrawer(callId) {
+      const c = typeof callId === 'object' ? callId : sampleCalls.find(item => item.id === callId);
+      if (!c) return;
+      activeCall = c;
+
+      document.getElementById('drawer-call-id').innerText = `Call #${c.id}`;
+      document.getElementById('drawer-rm-name').innerText = c.rmName;
+      document.getElementById('drawer-tl-name').innerText = c.tlName;
+      document.getElementById('drawer-phone').innerText = `• ${c.phoneNumber}`;
+      document.getElementById('drawer-duration').innerText = `• ${c.durationFormatted}`;
+      document.getElementById('drawer-primary-cat').innerText = c.category;
+      
+      const secEl = document.getElementById('drawer-secondary-cat');
+      if (c.secondaryCategories && c.secondaryCategories.length > 0) {
+        secEl.classList.remove('hidden');
+        secEl.innerHTML = `<span class="font-bold text-amber-600">+</span> ${c.secondaryCategories.join(', ')}`;
+      } else {
+        secEl.classList.add('hidden');
+      }
+
+      document.getElementById('drawer-iqs-badge').innerText = `${c.iqsScore}%`;
+      document.getElementById('drawer-param-header').innerText = `${c.category} Parameters`;
+
+      // Render Dialogue Turns
+      const turnsContainer = document.getElementById('drawer-turns-container');
+      turnsContainer.innerHTML = '';
+      c.turns.forEach(t => {
+        if (t.isPivotTurn) {
+          const pivot = document.createElement('div');
+          pivot.className = 'my-2.5 py-1.5 px-3 bg-zinc-50 border border-zinc-300 rounded-lg text-[11px] font-semibold text-zinc-800 flex items-center gap-2 justify-center shadow-2xs';
+          pivot.innerHTML = `<span class="text-xs text-zinc-500">⚡</span><span>RM Topic Pivot: Transitioned from Support Resolution to Re-investment Pitch</span>`;
+          turnsContainer.appendChild(pivot);
+        }
+
+        const div = document.createElement('div');
+        div.className = `p-3 rounded-xl text-xs transition-all ${
+          t.speaker === 'RM' ? 'bg-blue-50/70 border border-blue-200/80 ml-6' : 'bg-zinc-100/80 border border-zinc-200/70 mr-6'
+        }`;
+        div.innerHTML = `
+          <div class="flex items-center justify-between font-bold text-[11px] text-zinc-700 mb-1">
+            <div class="flex items-center gap-2">
+              <span class="${t.speaker === 'RM' ? 'text-blue-800' : 'text-zinc-800'}">
+                ${t.speaker === 'RM' ? `RM (${c.rmName})` : 'Investor / Customer'}
+              </span>
+              ${t.segment ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-medium bg-zinc-100 text-zinc-700 border border-zinc-300">${t.segment}</span>` : ''}
+            </div>
+            <span class="tabular-nums text-[10px] text-zinc-400">${t.time}</span>
+          </div>
+          <p class="text-zinc-900 leading-relaxed">${t.text}</p>
+        `;
+        turnsContainer.appendChild(div);
+      });
+
+      // Render Parameters
+      const paramsContainer = document.getElementById('drawer-params-container');
+      paramsContainer.innerHTML = '';
+      c.parameters.forEach(p => {
+        const pdiv = document.createElement('div');
+        pdiv.className = 'p-3 rounded-xl border border-zinc-200 bg-white text-xs shadow-2xs space-y-1';
+        pdiv.innerHTML = `
+          <div class="flex items-center justify-between font-semibold text-zinc-900">
+            <span class="font-bold">${p.name}</span>
+            <span class="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+              ${p.status} (${p.earned}/${p.maxScore} pts)
+            </span>
+          </div>
+          <div class="p-2 bg-zinc-50 rounded border border-zinc-100 text-[11px] text-zinc-600 italic">
+            "${p.quote}"
+          </div>
+        `;
+        paramsContainer.appendChild(pdiv);
+      });
+
+      // Populate Override Dropdown
+      const paramSelect = document.getElementById('override-param-select');
+      if (paramSelect) {
+        paramSelect.innerHTML = c.parameters.map((p, idx) => `<option value="${idx}">${p.name} (Current: ${p.status})</option>`).join('');
+      }
+
+      // Reset feedback
+      const fb = document.getElementById('override-feedback');
+      if (fb) fb.classList.add('hidden');
+
+      // Update swap / reevaluate button states
+      const btnSwap = document.getElementById('btn-swap-speakers');
+      const btnReeval = document.getElementById('btn-reevaluate');
+      const badgeReeval = document.getElementById('badge-reevaluated');
+
+      if (c.hasReevaluated) {
+        btnSwap.classList.add('hidden');
+        btnReeval.classList.add('hidden');
+        badgeReeval.classList.remove('hidden');
+      } else {
+        btnSwap.classList.remove('hidden');
+        btnReeval.classList.add('hidden');
+        badgeReeval.classList.add('hidden');
+      }
+
+      document.getElementById('drawer-backdrop').classList.remove('hidden');
+    }
+
+    let activeCall = null;
+    function openCallDrawer(cid) {
+      const c = sampleCalls.find(x => x.id === cid);
+      if (c) {
+        activeCall = c;
+        openDrawer(c);
+      }
+    }
+
+    function handleSwapSpeakersPrototype() {
+      if (!activeCall) return;
+      if (activeCall.hasReevaluated) return;
+
+      activeCall.turns = activeCall.turns.map(t => ({
+        ...t,
+        speaker: t.speaker === 'RM' ? 'Customer' : 'RM'
+      }));
+
+      // Re-render turns
+      const turnsContainer = document.getElementById('drawer-turns-container');
+      turnsContainer.innerHTML = '';
+      activeCall.turns.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'p-3 rounded-xl border border-zinc-200 bg-zinc-50/50 text-xs space-y-1.5';
+        div.innerHTML = `
+          <div class="flex items-center justify-between font-semibold">
+            <div class="flex items-center gap-2">
+              <span class="${t.speaker === 'RM' ? 'text-blue-800' : 'text-zinc-800'}">
+                ${t.speaker === 'RM' ? `RM (${activeCall.rmName})` : 'Investor / Customer'}
+              </span>
+              ${t.segment ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-medium bg-zinc-100 text-zinc-700 border border-zinc-300">${t.segment}</span>` : ''}
+            </div>
+            <span class="tabular-nums text-[10px] text-zinc-400">${t.time}</span>
+          </div>
+          <p class="text-zinc-900 leading-relaxed">${t.text}</p>
+        `;
+        turnsContainer.appendChild(div);
+      });
+
+      // Show re-evaluate button
+      document.getElementById('btn-reevaluate').classList.remove('hidden');
+    }
+
+    function handleReevaluatePrototype() {
+      if (!activeCall) return;
+      if (activeCall.hasReevaluated) {
+        alert('Re-evaluation has already been performed once for this call.');
+        return;
+      }
+
+      activeCall.hasReevaluated = true;
+      activeCall.iqsScore = Math.min(100, Math.max(88, Math.round(activeCall.iqsScore * 1.1)));
+      activeCall.parameters.forEach(p => {
+        if (p.status !== 'Yes') {
+          p.status = 'Yes';
+          p.earned = p.maxScore;
+          p.quote = "Re-evaluated after speaker swap: verified query resolution and compliant disclosure.";
+        }
+      });
+
+      // Re-render drawer score & parameters
+      document.getElementById('drawer-iqs-badge').innerText = `${activeCall.iqsScore}%`;
+      openDrawer(activeCall);
+      renderTable();
+      alert('Transcript saved and call quality re-evaluated successfully! (Re-evaluation limit: 1 of 1 used)');
+    }
+
+    function handleSubmitOverridePrototype() {
+      if (!activeCall) return;
+      const paramSelect = document.getElementById('override-param-select');
+      const scoreSelect = document.getElementById('override-score-select');
+      const noteInput = document.getElementById('override-note-input');
+
+      const pIdx = parseInt(paramSelect.value, 10);
+      const newStatus = scoreSelect.value;
+      const note = noteInput.value.trim() || 'TL manual score override.';
+
+      if (activeCall.parameters[pIdx]) {
+        const p = activeCall.parameters[pIdx];
+        p.status = newStatus;
+        p.earned = newStatus === 'Yes' ? p.maxScore : newStatus === 'Half' ? Math.round(p.maxScore / 2) : 0;
+        p.quote = `TL Override Note: "${note}"`;
+      }
+
+      // Recalculate IQS score
+      const totalEarned = activeCall.parameters.reduce((sum, p) => sum + p.earned, 0);
+      const totalMax = activeCall.parameters.reduce((sum, p) => sum + p.maxScore, 0) || 100;
+      activeCall.iqsScore = Math.min(100, Math.round((totalEarned / totalMax) * 100));
+
+      document.getElementById('drawer-iqs-badge').innerText = `${activeCall.iqsScore}%`;
+      openDrawer(activeCall);
+      renderTable();
+
+      const fb = document.getElementById('override-feedback');
+      if (fb) {
+        fb.classList.remove('hidden');
+        setTimeout(() => fb.classList.add('hidden'), 4000);
+      }
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer-backdrop').classList.add('hidden');
+    }
+
+    function changeRole(role) {
+      currentRole = role;
+      const thRm = document.getElementById('th-rm-name');
+      const agentFilterCont = document.getElementById('agent-filter-container');
+      const avatarText = document.getElementById('user-avatar-text');
+
+      const tabCalls = document.getElementById('tab-calls');
+      if (role === 'admin') {
+        if (tabCalls) tabCalls.classList.add('hidden');
+        setTab('scorecard');
+        thRm.classList.remove('hidden');
+        agentFilterCont.classList.remove('hidden');
+        document.getElementById('table-title').innerText = "Evaluated Call Audits";
+        avatarText.innerText = "AD";
+      } else {
+        if (tabCalls) tabCalls.classList.remove('hidden');
+        if (role === 'agent') {
+          thRm.classList.add('hidden');
+          agentFilterCont.classList.add('hidden');
+          document.getElementById('table-title').innerText = "My Evaluated Calls (Aahan Thaker)";
+          avatarText.innerText = "AT";
+        } else if (role === 'tl_gokul') {
+          thRm.classList.remove('hidden');
+          agentFilterCont.classList.remove('hidden');
+          document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Gokul";
+          avatarText.innerText = "GK";
+        } else if (role === 'tl_vaishnavi') {
+          thRm.classList.remove('hidden');
+          agentFilterCont.classList.remove('hidden');
+          document.getElementById('table-title').innerText = "Evaluated Call Audits · Team Vaishnavi";
+          avatarText.innerText = "VN";
+        }
+      }
+      renderTable();
+    }
+
+    function filterCategory(cat) {
+      currentCategory = cat;
+      ['all', '13_pitching', 'upselling', 'support'].forEach(k => {
+        const el = document.getElementById(`cat-${k}`);
+        if (!el) return;
+        if (k === cat) {
+          el.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#111111] text-white shadow-sm transition-all';
+        } else {
+          el.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#F4F4F5] text-[#71717A] hover:text-[#111111] transition-all';
+        }
+      });
+      renderTable();
+    }
+
+    function filterAgent(agent) {
+      currentAgent = agent;
+      renderTable();
+    }
+
+    function handleSearch(val) {
+      currentSearch = val;
+      renderTable();
+    }
+
+    function setTab(tab) {
+      ['calls', 'scorecard', 'disputes'].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        const view = document.getElementById(`view-${t}`);
+        if (t === tab) {
+          btn.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold bg-white text-[#111111] shadow-2xs transition-all';
+          view.classList.remove('hidden');
+        } else {
+          btn.className = 'px-4 py-1.5 rounded-lg text-xs font-semibold text-[#71717A] hover:text-[#111111] transition-all';
+          view.classList.add('hidden');
+        }
+      });
+    }
+
+    // Initialize
+    renderTable();
+  </script>
+</body>
+</html>
