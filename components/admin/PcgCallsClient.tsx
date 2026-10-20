@@ -1075,7 +1075,7 @@ export default function PcgCallsClient() {
         )}
 
         {/* ── 2. TOP METRIC CARDS ────────────────────────────────────────────── */}
-        <div className={`grid gap-4 ${activePersona === 'agent' ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2 md:grid-cols-4'}`}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
             <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
               {activePersona === 'agent' ? 'My Quality Score' : activePersona === 'tl' ? 'Team Avg IQS' : 'Org Avg IQS'}
@@ -1116,25 +1116,6 @@ export default function PcgCallsClient() {
               {activePersona === 'agent' ? rmUnansweredCallsCount : (summary?.unansweredCalls || 45)} unanswered
             </p>
           </div>
-
-          {activePersona !== 'agent' && (
-            <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
-              <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
-                Needs Attention (&lt;85%)
-              </p>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-2xl font-bold tabular-nums text-[#111111]">
-                  {summary?.needsAttentionCount || 28}
-                </span>
-                <span className="text-xs font-semibold text-zinc-700">
-                  calls flagged
-                </span>
-              </div>
-              <p className="text-[11px] text-[#71717A] mt-1">
-                Immediate coaching queue
-              </p>
-            </div>
-          )}
         </div>
 
 
