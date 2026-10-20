@@ -2177,11 +2177,24 @@ export default function PcgCallsClient() {
                             iqsScores={formatCallIqsScores(call)}
                             initialSegments={formatCallSegments(call)}
                             initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(call.id)}`}
-                            mode="view"
+                            mode="submit"
                             allowReevaluate={true}
                             colSpan={6}
                             onDone={() => setExpandedCallId(null)}
                             onClose={() => setExpandedCallId(null)}
+                            onOverrideSubmit={async (overrideData) => {
+                              handleOverrideFromPanel(call.id, overrideData);
+                              setExpandedCallId(null);
+                            }}
+                            onReevaluate={(cid, revisedIqs) => {
+                              setCalls((prev) =>
+                                prev.map((c) =>
+                                  c.id === call.id || c.callId === call.id
+                                    ? { ...c, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 }
+                                    : c
+                                )
+                              );
+                            }}
                           />
                         )}
                       </React.Fragment>
@@ -2310,12 +2323,24 @@ export default function PcgCallsClient() {
                   iqsScores={formatCallIqsScores(activeCallAudit)}
                   initialSegments={formatCallSegments(activeCallAudit)}
                   initialRecordingUrl={`/api/admin/pcg-calls/audio?id=${encodeURIComponent(activeCallAudit.id)}`}
-                  mode={activeCallAudit.disputeStatus === 'pending' ? 'submit' : 'view'}
+                  mode="submit"
                   allowReevaluate={true}
                   onDone={() => setActiveCallAudit(null)}
                   onClose={() => setActiveCallAudit(null)}
                   onOverrideSubmit={async (overrideData) => {
                     handleOverrideFromPanel(activeCallAudit.id, overrideData);
+                  }}
+                  onReevaluate={(cid, revisedIqs) => {
+                    setCalls((prev) =>
+                      prev.map((c) =>
+                        c.id === activeCallAudit.id || c.callId === activeCallAudit.id
+                          ? { ...c, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 }
+                          : c
+                      )
+                    );
+                    setActiveCallAudit((prev) =>
+                      prev ? { ...prev, iqsScore: revisedIqs, needsAttention: revisedIqs < 85 } : null
+                    );
                   }}
                 />
               </div>
