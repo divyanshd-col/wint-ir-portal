@@ -486,51 +486,50 @@ export default function PcgCallsClient() {
     const found = calls.find(
       (c) => c.id === cleanId || c.callId === cleanId || c.id.includes(cleanId) || c.callId.includes(cleanId)
     );
-    if (found) {
-      handleOpenCallView(found);
-    } else {
-      const syntheticCall: PCGCall = {
-        id: cleanId,
-        callId: cleanId,
-        clientName: 'Rajesh Sharma',
-        rmName: selectedRm,
-        tlName: selectedTl,
-        phoneNumber: '+91 98765 43210',
-        callType: 'Outbound',
-        tag: '13% Pitch',
-        durationSeconds: 245,
-        startTime: '2026-10-10 14:30',
-        isAnswered: true,
-        hasRecording: true,
-        category: '13% Club / Pitching',
-        categoryKey: '13_pitching',
-        iqsScore: 68,
-        gates: { status: 'FAIL', reason: 'Mandatory risk disclosures omitted' },
-        needsAttention: true,
-        unansweredBy: null,
-        unansweredReason: null,
-        disputeStatus: 'none',
-        aiCoachingTip: 'Ensure SEBI capital risk disclosure is provided immediately after stating 13% indicative yields.',
-        transcriptTurns: [
-          { speaker: 'RM', time: '00:05', text: `Good afternoon, this is ${selectedRm} from Wint Wealth PCG team. Am I speaking with Mr. Sharma?` },
-          { speaker: 'Customer', time: '00:10', text: 'Yes, speaking. What is this regarding?' },
-          { speaker: 'RM', time: '00:15', text: 'I am calling regarding our new 13% Club senior secured debenture tranche opening today.' },
-          { speaker: 'Customer', time: '00:22', text: 'Is this return guaranteed? I had bad experience with peer-to-peer debt.' },
-          { speaker: 'RM', time: '00:28', text: 'You are guaranteed 13% with zero chance of capital loss because the issuer has asset backing.' },
-          { speaker: 'Customer', time: '00:35', text: 'Okay, send me the details on WhatsApp.' },
-          { speaker: 'RM', time: '00:40', text: 'Sure, thank you.' },
-        ],
-        parameters: [
-          { id: 'P1', name: 'Greeting & Consent', maxScore: 10, earnedScore: 10, status: 'Yes', quote: 'Professional greeting confirmed.' },
-          { id: 'P2', name: 'Investor Profiling', maxScore: 20, earnedScore: 5, status: 'No', quote: 'No debt allocation horizon profiling asked.' },
-          { id: 'P3', name: '13% Yield & Tranche Pitch', maxScore: 25, earnedScore: 20, status: 'Yes', quote: 'Explained coupon structure.' },
-          { id: 'P4', name: 'SEBI Risk & Disclaimers', maxScore: 20, earnedScore: 0, status: 'No', quote: 'Stated guaranteed with zero chance of capital loss.' },
-          { id: 'P5', name: 'Objection Handling', maxScore: 15, earnedScore: 8, status: 'Half', quote: 'Addressed p2p concern partially.' },
-          { id: 'P6', name: 'Post-Call Recap & CRM', maxScore: 10, earnedScore: 5, status: 'Half', quote: 'Abrupt closing.' },
-        ],
-      };
-      handleOpenCallView(syntheticCall);
-    }
+    const targetCall: PCGCall = found || {
+      id: cleanId,
+      callId: cleanId,
+      clientName: 'Rajesh Sharma',
+      rmName: selectedRm || 'Aditya R',
+      tlName: selectedTl === 'all' ? 'Gokul' : selectedTl,
+      phoneNumber: '+91 98765 43210',
+      callType: 'Outbound',
+      tag: '13% Pitch',
+      durationSeconds: 245,
+      startTime: '2026-10-18 14:30',
+      isAnswered: true,
+      hasRecording: true,
+      category: '13% Club / Pitching',
+      categoryKey: '13_pitching',
+      iqsScore: 78,
+      gates: { status: 'PASS' },
+      needsAttention: true,
+      unansweredBy: null,
+      unansweredReason: null,
+      disputeStatus: 'none',
+      aiCoachingTip: 'Ensure date fields and allotment timelines are verified against CRM before quoting to investor.',
+      transcriptTurns: [
+        { speaker: 'RM', time: '00:05', text: `Good afternoon, this is ${selectedRm || 'Aditya'} from Wint Wealth PCG team. Am I speaking with Mr. Sharma?` },
+        { speaker: 'Customer', time: '00:10', text: 'Yes, speaking. What is this regarding?' },
+        { speaker: 'RM', time: '00:15', text: 'I am calling regarding your recent coupon payout on 13% Club debentures.' },
+        { speaker: 'Customer', time: '00:22', text: 'Yes, when will the interest credit reflect in my bank account?' },
+        { speaker: 'RM', time: '00:28', text: 'It will reflect by Friday, and you can also download your tax deduction certificate on the portal.' },
+        { speaker: 'Customer', time: '00:35', text: 'Okay, please email me the consolidated statement.' },
+        { speaker: 'RM', time: '00:40', text: 'Sure, I will email that right away. Thank you!' },
+      ],
+      parameters: [
+        { id: 'P1', name: 'Greeting & Consent', maxScore: 10, earnedScore: 10, status: 'Yes', quote: 'Professional greeting confirmed.' },
+        { id: 'P2', name: 'Information Accuracy', maxScore: 25, earnedScore: 18, status: 'Half', quote: 'Inaccurate date disclosure on allotment cycle.' },
+        { id: 'P3', name: 'Issue Resolution', maxScore: 25, earnedScore: 18, status: 'Half', quote: 'Missed secondary customer request on tax certificate.' },
+        { id: 'P4', name: 'Professionalism & Tone', maxScore: 20, earnedScore: 20, status: 'Yes', quote: 'Warm, readable tone maintained.' },
+        { id: 'P5', name: 'Compliance & Verification', maxScore: 10, earnedScore: 10, status: 'Yes', quote: 'Mandatory verification passed.' },
+        { id: 'P6', name: 'Call Closing & Follow-up', maxScore: 10, earnedScore: 7, status: 'Half', quote: 'Did not confirm preferred follow-up callback slot.' },
+      ],
+    };
+
+    handleTabChange('calls');
+    setExpandedCallId(targetCall.id);
+    handleOpenCallView(targetCall);
   };
 
   // Helper formatting

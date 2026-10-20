@@ -30,9 +30,9 @@ export interface PcgWeeklyReport {
     callsHandled: number;
     averageScore: number;
     below85Count: number;
-    connectRateText: string;
+    csatText?: string;
+    connectRateText?: string;
     complianceBreachesCount: number;
-    scoresAdjustedCount: number;
   };
   whatWentWell: string;
   themes: Array<{
@@ -55,586 +55,444 @@ export interface PcgWeeklyReport {
     score: number;
     topic: string;
     summary: string;
-    isReviewed?: boolean;
-    reviewNote?: string;
   }>;
 }
 
-// Sample PCG Weekly Scorecards matching the exact schema and richness of RM reports
+// Sample PCG / IR Weekly Scorecards matching the exact schema and layout of CX scorecards
 const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
-  // ── AAHAN THAKER (RM) ────────────────────────────────────────────────────────
+  // ── ADITYA R (Week of Oct 12 - Oct 18, 2026) ──────────────────────────────────
   {
-    id: 'pcg-rep-aahan-w1',
-    rmName: 'Aahan Thaker',
+    id: 'pcg-rep-aditya-w1',
+    rmName: 'Aditya R',
     tlName: 'Gokul',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
     status: 'active',
     viewedAt: null,
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [
-      {
-        id: 'c-aahan-1',
-        targetKey: 'general',
-        text: 'Discussed during 1-on-1: Solid product explanations on 13% Club; maintain steady pacing during secondary liquidity disclaimer.',
-        highlighted: true,
-        createdAt: '2026-10-12T19:15:00Z',
-      },
-    ],
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
     numbers: {
-      callsHandled: 15,
-      averageScore: 87,
+      callsHandled: 30,
+      averageScore: 98.6,
       below85Count: 2,
-      connectRateText: '60.0% connected (9 of 15)',
+      csatText: '100% positive (13 of 13 rated good)',
+      connectRateText: '100% positive (13 of 13 rated good)',
       complianceBreachesCount: 0,
-      scoresAdjustedCount: 1,
     },
     whatWentWell:
-      'Aahan demonstrated great professionalism and structured product explanations. Key coupon payout timelines and senior secured backing aspects were articulated clearly. Customer verification and call protocol were adhered to with high consistency.',
+      'Aditya R demonstrated great strength in maintaining a warm, readable tone while personalizing interactions and setting clear expectations with customers.',
     themes: [
       {
-        pattern: 'Crisp Yield & Secondary Market Window Framing',
-        associatedParameters: ['Product Benefits', 'Liquidity Positioning'],
+        pattern: 'Providing inaccurate information regarding dates and KB policy visibility, while missing secondary customer requests.',
+        associatedParameters: ['Accuracy', 'IssueResolution'],
         whyItMatters:
-          'Explaining the secondary liquidity window upfront reassures investors on emergency access while maintaining the 3-year investment horizon expectation.',
+          'Delivering complete and accurate information directly impacts Accuracy and IssueResolution, preventing customer confusion and repeated inquiries regarding policy limitations or account details.',
         actionable:
-          'Proactively cite the secondary sale window when investors query early redemption options.',
+          'Verify date fields against account records before sending, check KB articles regarding system visibility rules before confirming status updates, and re-read messages to ensure all customer requests are answered.',
         isBreach: false,
-        rankScore: 88,
-        backingCallIds: ['runo-101', 'runo-102'],
-      },
-      {
-        pattern: 'Firm Allotment & Follow-up Commitment',
-        associatedParameters: ['Follow-up Timeline', 'Next Steps'],
-        whyItMatters:
-          'HNW prospects appreciate firm callback slots rather than vague future check-ins.',
-        actionable:
-          'Lock down the next check-in with an exact date and time on WhatsApp/Calendar before disconnecting.',
-        isBreach: false,
-        rankScore: 85,
-        backingCallIds: ['runo-102'],
+        rankScore: 82,
+        backingCallIds: ['175772', '174362'],
       },
     ],
     breaches: [],
     evidence: [
       {
-        callId: 'runo-101',
-        score: 88,
+        callId: '175772',
+        score: 78,
         topic: '13% Club High-Yield Pitch',
-        summary: 'Clear positioning of indicative yield, monthly cash flows, and regulated NBFC partner structure.',
+        summary: 'Inaccurate date disclosure on allotment cycle; missed secondary query on tax deduction certificates.',
       },
       {
-        callId: 'runo-102',
-        score: 86,
-        topic: 'Upselling Senior Secured Debentures',
-        summary: 'Addressed investor questions on quarterly interest crediting directly to bank account.',
+        callId: '174362',
+        score: 82,
+        topic: 'Bond Maturity Roll-over',
+        summary: 'Did not verify account visibility rules before quoting turnaround time to investor.',
       },
     ],
   },
-  // ── DHANUSH (RM) ─────────────────────────────────────────────────────────────
+  // ── AKSA JACOB ────────────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-aksa-w1',
+    rmName: 'Aksa Jacob',
+    tlName: 'Gokul',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 28,
+      averageScore: 99.2,
+      below85Count: 1,
+      csatText: '100% positive (11 of 11 rated good)',
+      connectRateText: '100% positive (11 of 11 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Aksa showed outstanding empathy and thorough explanation of bond maturity options. Client feedback was universally positive across all interactions.',
+    themes: [
+      {
+        pattern: 'Proactive Confirmation of Investor Tax Status',
+        associatedParameters: ['Compliance', 'Active Listening'],
+        whyItMatters:
+          'Confirming TDS and Form 15G submission upfront prevents avoidable follow-up tickets post-allotment.',
+        actionable:
+          'Prompt clients about Form 15G submission requirements before finalizing tranche orders.',
+        isBreach: false,
+        rankScore: 88,
+        backingCallIds: ['176110'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '176110',
+        score: 84,
+        topic: 'TDS & Form 15G Inquiry',
+        summary: 'Addressed interest credit timelines clearly but did not verify email address for certificate delivery.',
+      },
+    ],
+  },
+  // ── ANISTO ───────────────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-anisto-w1',
+    rmName: 'Anisto',
+    tlName: 'Vaishnavi',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 32,
+      averageScore: 98.6,
+      below85Count: 2,
+      csatText: '100% positive (14 of 14 rated good)',
+      connectRateText: '100% positive (14 of 14 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Anisto demonstrated masterclass product knowledge on senior secured debentures and clear communication of monthly payout mechanics.',
+    themes: [
+      {
+        pattern: 'Firm Callback Scheduling on Multi-Day Objections',
+        associatedParameters: ['Follow-up Pacing', 'Commitment Lock'],
+        whyItMatters:
+          'Investors reviewing large allocations need designated callback windows rather than general check-ins.',
+        actionable:
+          'Always secure a specific date and time slot on the investor calendar before concluding consultation calls.',
+        isBreach: false,
+        rankScore: 85,
+        backingCallIds: ['175890'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '175890',
+        score: 81,
+        topic: 'Tranche Allocation Discussion',
+        summary: 'Excellent breakdown of asset cover, but ended consultation without locking a specific callback time.',
+      },
+    ],
+  },
+  // ── BHAVNA SHARMA ────────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-bhavna-w1',
+    rmName: 'Bhavna Sharma',
+    tlName: 'Gokul',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 35,
+      averageScore: 99.7,
+      below85Count: 0,
+      csatText: '100% positive (18 of 18 rated good)',
+      connectRateText: '100% positive (18 of 18 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Bhavna maintained near-perfect quality adherence across all 35 calls with zero calls below 85%. Pristine compliance and rapid resolution.',
+    themes: [],
+    breaches: [],
+    evidence: [],
+  },
+  // ── NITYAA ───────────────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-nityaa-w1',
+    rmName: 'Nityaa',
+    tlName: 'Vaishnavi',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 29,
+      averageScore: 98.9,
+      below85Count: 1,
+      csatText: '100% positive (12 of 12 rated good)',
+      connectRateText: '100% positive (12 of 12 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Nityaa was commended by several investors for swift issue ownership and transparent explanations regarding demat credit timelines.',
+    themes: [
+      {
+        pattern: 'Consistent Recap of Regulatory Risk Disclosures',
+        associatedParameters: ['Compliance', 'Disclaimer'],
+        whyItMatters:
+          'Reciting standard capital risk disclosures reinforces Wint Wealth institutional credibility.',
+        actionable:
+          'Ensure the mandatory risk disclosure statement is articulated clearly before taking order reservations.',
+        isBreach: false,
+        rankScore: 86,
+        backingCallIds: ['176044'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '176044',
+        score: 83,
+        topic: '13% Club Secondary Window',
+        summary: 'Good pacing; secondary window process explained well, but risk disclosure was slightly rushed.',
+      },
+    ],
+  },
+  // ── PRIYAM ───────────────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-priyam-w1',
+    rmName: 'Priyam',
+    tlName: 'Gokul',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 34,
+      averageScore: 99.8,
+      below85Count: 0,
+      csatText: '100% positive (15 of 15 rated good)',
+      connectRateText: '100% positive (15 of 15 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Priyam delivered top-tier consultations with 99.8% average IQS. Impeccable tone, active listening, and precision across all customer touchpoints.',
+    themes: [],
+    breaches: [],
+    evidence: [],
+  },
+  // ── SAHANA ───────────────────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-sahana-w1',
+    rmName: 'Sahana',
+    tlName: 'Vaishnavi',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 27,
+      averageScore: 98.6,
+      below85Count: 1,
+      csatText: '100% positive (10 of 10 rated good)',
+      connectRateText: '100% positive (10 of 10 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Sahana showed high responsiveness and structured guidance during investor KYC onboarding inquiries.',
+    themes: [
+      {
+        pattern: 'Confirming Bank Demat Name Match on Fresh Registrations',
+        associatedParameters: ['Verification', 'Account Security'],
+        whyItMatters:
+          'Name mismatches between DigiLocker PAN and bank records cause transaction delays.',
+        actionable:
+          'Remind clients to ensure bank account registered name matches PAN records verbatim before placing orders.',
+        isBreach: false,
+        rankScore: 84,
+        backingCallIds: ['175920'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '175920',
+        score: 82,
+        topic: 'KYC & DigiLocker Troubleshooting',
+        summary: 'Resolved OTP issue quickly but forgot to recap bank name verification step.',
+      },
+    ],
+  },
+  // ── ADITYA R (Week of Oct 5 - Oct 11, 2026) ──────────────────────────────────
+  {
+    id: 'pcg-rep-aditya-w2',
+    rmName: 'Aditya R',
+    tlName: 'Gokul',
+    weekStart: '2026-10-05T00:00:00Z',
+    weekEnd: '2026-10-11T23:59:59Z',
+    status: 'active',
+    viewedAt: '2026-10-12T10:00:00Z',
+    generatedAt: '2026-10-12T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 26,
+      averageScore: 95.4,
+      below85Count: 3,
+      csatText: '96% positive (12 of 13 rated good)',
+      connectRateText: '96% positive (12 of 13 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Aditya handled a surge of quarterly coupon payout calls with calmness and patience, resolving 92% on first contact.',
+    themes: [
+      {
+        pattern: 'Clear Framing of Corporate Bond Maturity Dates',
+        associatedParameters: ['Accuracy', 'Pacing'],
+        whyItMatters: 'Investors need exact calendar dates for redemption proceeds.',
+        actionable: 'Reference the verified depositories calendar before citing repayment dates.',
+        isBreach: false,
+        rankScore: 80,
+        backingCallIds: ['174201', '174150'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '174201',
+        score: 79,
+        topic: 'Redemption Timeline',
+        summary: 'Quoted 3 working days instead of T+2 depository timeline.',
+      },
+      {
+        callId: '174150',
+        score: 81,
+        topic: 'Coupon Payout Query',
+        summary: 'Answered query correctly but tone was slightly rushed.',
+      },
+    ],
+  },
+  // ── AAHAN THAKER (PCG RM) ────────────────────────────────────────────────────
+  {
+    id: 'pcg-rep-aahan-w1',
+    rmName: 'Aahan Thaker',
+    tlName: 'Gokul',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
+    status: 'active',
+    viewedAt: null,
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
+    numbers: {
+      callsHandled: 30,
+      averageScore: 98.6,
+      below85Count: 2,
+      csatText: '100% positive (13 of 13 rated good)',
+      connectRateText: '100% positive (13 of 13 rated good)',
+      complianceBreachesCount: 0,
+    },
+    whatWentWell:
+      'Aahan demonstrated great strength in maintaining a warm, readable tone while personalizing interactions and setting clear expectations with customers.',
+    themes: [
+      {
+        pattern: 'Providing inaccurate information regarding dates and KB policy visibility, while missing secondary customer requests.',
+        associatedParameters: ['Accuracy', 'IssueResolution'],
+        whyItMatters:
+          'Delivering complete and accurate information directly impacts Accuracy and IssueResolution, preventing customer confusion and repeated inquiries regarding policy limitations or account details.',
+        actionable:
+          'Verify date fields against account records before sending, check KB articles regarding system visibility rules before confirming status updates, and re-read messages to ensure all customer requests are answered.',
+        isBreach: false,
+        rankScore: 82,
+        backingCallIds: ['175772', '174362'],
+      },
+    ],
+    breaches: [],
+    evidence: [
+      {
+        callId: '175772',
+        score: 78,
+        topic: '13% Club High-Yield Pitch',
+        summary: 'Inaccurate date disclosure on allotment cycle; missed secondary query on tax deduction certificates.',
+      },
+      {
+        callId: '174362',
+        score: 82,
+        topic: 'Bond Maturity Roll-over',
+        summary: 'Did not verify account visibility rules before quoting turnaround time to investor.',
+      },
+    ],
+  },
+  // ── DHANUSH (PCG RM) ─────────────────────────────────────────────────────────
   {
     id: 'pcg-rep-dhanush-w1',
     rmName: 'Dhanush',
     tlName: 'Gokul',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
+    weekStart: '2026-10-12T00:00:00Z',
+    weekEnd: '2026-10-18T23:59:59Z',
     status: 'active',
     viewedAt: null,
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [
-      {
-        id: 'c1',
-        targetKey: 'general',
-        text: 'Discussed during Monday catchup: focus on asking suitability profiling questions prior to giving yield quotes.',
-        highlighted: true,
-        createdAt: '2026-10-12T19:15:00Z',
-      },
-    ],
+    generatedAt: '2026-10-19T08:59:35Z',
+    comments: [],
     numbers: {
-      callsHandled: 142,
-      averageScore: 88,
-      below85Count: 14,
-      connectRateText: '68.4% connected (97 of 142)',
-      complianceBreachesCount: 1,
-      scoresAdjustedCount: 2,
+      callsHandled: 28,
+      averageScore: 98.2,
+      below85Count: 2,
+      csatText: '100% positive (12 of 12 rated good)',
+      connectRateText: '100% positive (12 of 12 rated good)',
+      complianceBreachesCount: 0,
     },
     whatWentWell:
-      'Dhanush demonstrated exceptional clarity when explaining the 13% Club coupon payout structure and senior secured backing. Objection handling on tenure liquidity was executed smoothly without pushy sales pressure. Call consent and greeting protocols were adhered to across 100% of connected calls.',
+      'Dhanush demonstrated strong objection handling on secondary liquidity and senior secured asset backing across calls.',
     themes: [
       {
         pattern: 'Premature Yield Commitment Before Investor Suitability Profiling',
         associatedParameters: ['Investor Profiling', 'Risk Disclosure'],
         whyItMatters:
-          'PCG compliance rules mandate suitability verification before pitching high-yield debentures. Quoting 13% yield upfront without knowing risk tolerance triggers investor drop-offs.',
+          'PCG compliance rules mandate suitability verification before pitching high-yield debentures.',
         actionable:
           'Confirm the investor debt portfolio horizon and risk profile in the first 90 seconds before introducing specific 13% tranche allocations.',
-        isBreach: true,
-        rankScore: 82,
-        backingCallIds: ['PCG-9942', 'PCG-9883'],
-      },
-      {
-        pattern: 'Incomplete Post-Call Recap & Next Allotment Timeline',
-        associatedParameters: ['Post-Call Recap', 'Action Items'],
-        whyItMatters:
-          'HNW prospects require exact written dates for debenture allotment, interest credit schedules, and demat transfer steps.',
-        actionable:
-          'Summarize next steps clearly at the end of the call and offer to trigger the automated WhatsApp/Email tranche datasheet immediately.',
         isBreach: false,
-        rankScore: 86,
-        backingCallIds: ['PCG-9712', 'PCG-9620'],
+        rankScore: 82,
+        backingCallIds: ['175101', '174820'],
       },
     ],
-    breaches: [
-      {
-        callId: 'PCG-9942',
-        score: 68,
-        flaggedContent: "RM stated: 'You are guaranteed 13% with zero chance of capital loss' without reciting mandatory SEBI risk disclosures.",
-        note: 'AI Compliance Flag: Absolute guarantee claim without mandatory credit rating disclosure',
-      },
-    ],
+    breaches: [],
     evidence: [
       {
-        callId: 'PCG-9942',
-        score: 68,
+        callId: '175101',
+        score: 79,
         topic: '13% Club High-Yield Pitch',
         summary: 'Rushed pitch, omitted capital risk disclosures, and did not confirm KYC readiness before quoting allocation.',
-        isReviewed: false,
       },
       {
-        callId: 'PCG-9883',
-        score: 74,
-        topic: 'Upselling Tranche B (Senior Secured)',
-        summary: 'Incomplete explanation of lock-in period and payout calendar during objection handling.',
-        isReviewed: true,
-        reviewNote: 'TL adjusted +6 pts after reviewing objection handling context.',
-      },
-      {
-        callId: 'PCG-9620',
-        score: 79,
-        topic: 'Bond Maturity Roll-over',
-        summary: 'Skipped post-call recap of next tranche allotment steps; did not confirm preferred contact time.',
-        isReviewed: false,
-      },
-      {
-        callId: 'PCG-9712',
+        callId: '174820',
         score: 83,
-        topic: 'General Fixed Income Inquiry',
-        summary: 'Good product knowledge but interrupted the client twice while discussing secondary exit options.',
-        isReviewed: true,
-        reviewNote: 'TL approved dispute: client connection was lagging.',
-      },
-    ],
-  },
-  {
-    id: 'pcg-rep-dhanush-w2',
-    rmName: 'Dhanush',
-    tlName: 'Gokul',
-    weekStart: '2026-09-29T00:00:00Z',
-    weekEnd: '2026-10-05T23:59:59Z',
-    status: 'active',
-    viewedAt: '2026-10-06T10:00:00Z',
-    generatedAt: '2026-10-05T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 138,
-      averageScore: 85,
-      below85Count: 18,
-      connectRateText: '66.7% connected (92 of 138)',
-      complianceBreachesCount: 2,
-      scoresAdjustedCount: 1,
-    },
-    whatWentWell:
-      'Strong call engagement rate with prospective high-net-worth investors. Clear presentation of CRISIL / ICRA rating grades and escrow mechanics.',
-    themes: [
-      {
-        pattern: 'Uncertainty Addressing Secondary Market Exit Liquidity',
-        associatedParameters: ['Secondary Liquidity', 'Transparency'],
-        whyItMatters: 'Investors need confidence that their funds are not locked indefinitely if emergency redemption is needed.',
-        actionable: 'Walk prospects through the 3-day secondary liquidation process on the Wint platform clearly.',
-        isBreach: false,
-        rankScore: 81,
-        backingCallIds: ['PCG-9540', 'PCG-9480'],
-      },
-    ],
-    breaches: [
-      {
-        callId: 'PCG-9540',
-        score: 64,
-        flaggedContent: "RM stated: 'There is zero credit risk on this issuer because Wint vets all bonds.'",
-        note: 'AI Compliance Flag: Misleading representation of credit vetting vs zero default guarantee',
-      },
-    ],
-    evidence: [
-      {
-        callId: 'PCG-9540',
-        score: 64,
-        topic: 'High Yield Alternative Debt',
-        summary: 'Misrepresented risk parameters and rushed client into instant commitment.',
-        isReviewed: false,
-      },
-      {
-        callId: 'PCG-9480',
-        score: 72,
-        topic: '13% Club Follow-up',
-        summary: 'Did not send follow-up material requested by client.',
-        isReviewed: false,
-      },
-    ],
-  },
-
-  // ── VIKRAM (Senior RM) ───────────────────────────────────────────────────────
-  {
-    id: 'pcg-rep-vikram-w1',
-    rmName: 'Vikram',
-    tlName: 'Vaishnavi',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
-    status: 'active',
-    viewedAt: '2026-10-12T14:00:00Z',
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 156,
-      averageScore: 92,
-      below85Count: 7,
-      connectRateText: '70.5% connected (110 of 156)',
-      complianceBreachesCount: 0,
-      scoresAdjustedCount: 1,
-    },
-    whatWentWell:
-      'Vikram consistently delivered masterclass consultations on senior secured debentures. His pacing, professional demeanor, and structured breakdown of security cover (1.25x) established immediate rapport with high-ticket prospects.',
-    themes: [
-      {
-        pattern: 'Optimizing Follow-up Speed on Client Voicemail Drops',
-        associatedParameters: ['Follow-up Pacing', 'CRM Hygiene'],
-        whyItMatters: 'Unanswered high-ticket leads lose warmth if not requeued within 45 minutes.',
-        actionable: 'Leverage the automated dialer callback schedule to re-engage dropped dials promptly.',
-        isBreach: false,
-        rankScore: 90,
-        backingCallIds: ['PCG-9810'],
-      },
-    ],
-    breaches: [],
-    evidence: [
-      {
-        callId: 'PCG-9810',
-        score: 82,
-        topic: 'Upsell to 25L Ticket Size',
-        summary: 'Strong rapport, but follow-up tranche datasheet was delayed by 4 hours.',
-        isReviewed: true,
-        reviewNote: 'TL adjusted: call quality was flawless.',
-      },
-    ],
-  },
-
-  // ── PRIYA (RM) ──────────────────────────────────────────────────────────────
-  {
-    id: 'pcg-rep-priya-w1',
-    rmName: 'Priya',
-    tlName: 'Gokul',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
-    status: 'active',
-    viewedAt: null,
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 136,
-      averageScore: 86,
-      below85Count: 16,
-      connectRateText: '66.9% connected (91 of 136)',
-      complianceBreachesCount: 1,
-      scoresAdjustedCount: 1,
-    },
-    whatWentWell:
-      'Priya demonstrated great patience and active listening when addressing first-time alternative debt investors. Excellent explanation of credit ratings (CRISIL / ICRA A+) and tax deductibility.',
-    themes: [
-      {
-        pattern: 'Clarifying TDS Deductions on Coupon Crediting',
-        associatedParameters: ['Taxation & Returns', 'Clarity'],
-        whyItMatters: 'HNW clients frequently ask if 13% yield is pre-tax or post-tax.',
-        actionable: 'State clearly upfront that 13% XIRR is pre-tax with 10% TDS deduction at source.',
-        isBreach: false,
-        rankScore: 84,
-        backingCallIds: ['PCG-9788'],
-      },
-    ],
-    breaches: [
-      {
-        callId: 'PCG-9788',
-        score: 72,
-        flaggedContent: "RM stated: 'No taxes will be deducted on this bond tranche.'",
-        note: 'AI Compliance Flag: Inaccurate tax claim on debenture coupon interest',
-      },
-    ],
-    evidence: [
-      {
-        callId: 'PCG-9788',
-        score: 72,
-        topic: 'Taxation & 13% Club Inquiry',
-        summary: 'Gave incorrect TDS guidance; corrected later on WhatsApp but call score penalized.',
-        isReviewed: false,
-      },
-    ],
-  },
-
-  // ── RAHUL (RM) ──────────────────────────────────────────────────────────────
-  {
-    id: 'pcg-rep-rahul-w1',
-    rmName: 'Rahul',
-    tlName: 'Gokul',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
-    status: 'active',
-    viewedAt: null,
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 128,
-      averageScore: 82,
-      below85Count: 22,
-      connectRateText: '64.1% connected (82 of 128)',
-      complianceBreachesCount: 2,
-      scoresAdjustedCount: 1,
-    },
-    whatWentWell:
-      'Consistent call volume and high connect attempts. High energy during introductory pitches.',
-    themes: [
-      {
-        pattern: 'Allowing Client Speaking Time & Avoiding Interruptions',
-        associatedParameters: ['Active Listening', 'Empathy'],
-        whyItMatters: 'Prospects will not commit capital if they feel pressured or spoken over.',
-        actionable: 'Practice the 3-second pause rule before responding to investor objections.',
-        isBreach: false,
-        rankScore: 78,
-        backingCallIds: ['PCG-9730', 'PCG-9690'],
-      },
-    ],
-    breaches: [
-      {
-        callId: 'PCG-9730',
-        score: 70,
-        flaggedContent: 'RM dismissed investor query regarding credit rating downgrade history abruptly.',
-        note: 'AI Compliance Flag: Tone & non-transparent risk dismissal',
-      },
-    ],
-    evidence: [
-      {
-        callId: 'PCG-9730',
-        score: 70,
-        topic: '13% Club Risk Analysis',
-        summary: 'Dismissed client query about default risk; interrupted client 4 times.',
-        isReviewed: false,
-      },
-      {
-        callId: 'PCG-9690',
-        score: 76,
-        topic: 'Upsell to Senior Secured Tranche',
-        summary: 'Did not explain debenture trustee role; skipped compliance disclosure.',
-        isReviewed: true,
-        reviewNote: 'TL coached on active listening.',
-      },
-    ],
-  },
-
-  // ── SNEHA (RM) ──────────────────────────────────────────────────────────────
-  {
-    id: 'pcg-rep-sneha-w1',
-    rmName: 'Sneha',
-    tlName: 'Vaishnavi',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
-    status: 'active',
-    viewedAt: '2026-10-12T12:00:00Z',
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 134,
-      averageScore: 87,
-      below85Count: 15,
-      connectRateText: '66.4% connected (89 of 134)',
-      complianceBreachesCount: 1,
-      scoresAdjustedCount: 1,
-    },
-    whatWentWell:
-      'Excellent objection handling on lock-in periods. Smooth transition from general debt inquiries to 13% Club senior secured bonds.',
-    themes: [
-      {
-        pattern: 'Reinforcing Demat Credit Assurance',
-        associatedParameters: ['Post-Call Assurance'],
-        whyItMatters: 'Investors need peace of mind that bonds reflect in their Zerodha/Groww demat account.',
-        actionable: 'Always explain the T+2 demat crediting workflow before closing the call.',
-        isBreach: false,
-        rankScore: 85,
-        backingCallIds: ['PCG-9655'],
-      },
-    ],
-    breaches: [
-      {
-        callId: 'PCG-9655',
-        score: 75,
-        flaggedContent: 'Incomplete explanation of collateral hypothecation.',
-        note: 'AI Review Flag: Parameter partial credit on security cover',
-      },
-    ],
-    evidence: [
-      {
-        callId: 'PCG-9655',
-        score: 75,
-        topic: '13% Club Tranche Introduction',
-        summary: 'Missed detailed collateral backing explanation; client asked for follow-up.',
-        isReviewed: false,
-      },
-    ],
-  },
-
-  // ── KARAN (RM) ──────────────────────────────────────────────────────────────
-  {
-    id: 'pcg-rep-karan-w1',
-    rmName: 'Karan',
-    tlName: 'Vaishnavi',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
-    status: 'active',
-    viewedAt: null,
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 119,
-      averageScore: 78,
-      below85Count: 28,
-      connectRateText: '63.9% connected (76 of 119)',
-      complianceBreachesCount: 3,
-      scoresAdjustedCount: 2,
-    },
-    whatWentWell:
-      'High persistence on outbound dialer queues. Willingness to ask for feedback.',
-    themes: [
-      {
-        pattern: 'Persistent Omission of Mandatory SEBI Disclaimers',
-        associatedParameters: ['Compliance Disclaimer', 'Yield Pitch'],
-        whyItMatters: 'SEBI regulations require risk statements on all high-yield fixed income calls.',
-        actionable: 'Keep the mandatory disclaimer script pinned next to the dialer screen.',
-        isBreach: true,
-        rankScore: 72,
-        backingCallIds: ['PCG-9610', 'PCG-9590'],
-      },
-    ],
-    breaches: [
-      {
-        callId: 'PCG-9610',
-        score: 65,
-        flaggedContent: "RM stated: 'This is 100% risk free like a bank fixed deposit.'",
-        note: 'AI Compliance Flag: Prohibited bank FD comparison claim',
-      },
-    ],
-    evidence: [
-      {
-        callId: 'PCG-9610',
-        score: 65,
-        topic: '13% Club Fixed Income Pitch',
-        summary: 'Compared high-yield debenture directly to a bank FD; failed compliance gate.',
-        isReviewed: false,
-      },
-    ],
-  },
-
-  // ── MEERA (RM) ──────────────────────────────────────────────────────────────
-  {
-    id: 'pcg-rep-meera-w1',
-    rmName: 'Meera',
-    tlName: 'Vaishnavi',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
-    status: 'active',
-    viewedAt: '2026-10-12T16:00:00Z',
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 126,
-      averageScore: 84,
-      below85Count: 19,
-      connectRateText: '65.9% connected (83 of 126)',
-      complianceBreachesCount: 2,
-      scoresAdjustedCount: 1,
-    },
-    whatWentWell:
-      'Professional tone and deep familiarity with fixed-income bond mathematics.',
-    themes: [
-      {
-        pattern: 'Balancing Technical Jargon with Investor Comprehension',
-        associatedParameters: ['Call Clarity', 'Personalization'],
-        whyItMatters: 'Using complex bond terms like modified duration and convexities confuses retail HNWIs.',
-        actionable: 'Simplify explanations to focus on monthly cash flows and security cover.',
-        isBreach: false,
-        rankScore: 82,
-        backingCallIds: ['PCG-9570'],
-      },
-    ],
-    breaches: [],
-    evidence: [
-      {
-        callId: 'PCG-9570',
-        score: 78,
-        topic: 'Bond Yield Calculation',
-        summary: 'Over-complicated XIRR vs simple interest calculation; client was left confused.',
-        isReviewed: false,
-      },
-    ],
-  },
-
-  // ── ANANYA (RM) ─────────────────────────────────────────────────────────────
-  {
-    id: 'pcg-rep-ananya-w1',
-    rmName: 'Ananya',
-    tlName: 'Gokul',
-    weekStart: '2026-10-06T00:00:00Z',
-    weekEnd: '2026-10-12T23:59:59Z',
-    status: 'active',
-    viewedAt: '2026-10-12T17:00:00Z',
-    generatedAt: '2026-10-12T18:30:00Z',
-    comments: [],
-    numbers: {
-      callsHandled: 145,
-      averageScore: 90,
-      below85Count: 10,
-      connectRateText: '69.7% connected (101 of 145)',
-      complianceBreachesCount: 0,
-      scoresAdjustedCount: 0,
-    },
-    whatWentWell:
-      'Exceptional performance across greeting, expectation setting, and objection handling. Consistently high call quality scores across 100+ dials.',
-    themes: [
-      {
-        pattern: 'Sharing Best Practices with Peer RMs',
-        associatedParameters: ['Team Leadership', 'Mentorship'],
-        whyItMatters: 'Ananya objection handling script on secondary liquidity can be standardized for the team.',
-        actionable: 'Conduct a 15-minute mock pitch session during the team huddle.',
-        isBreach: false,
-        rankScore: 92,
-        backingCallIds: ['PCG-9530'],
-      },
-    ],
-    breaches: [],
-    evidence: [
-      {
-        callId: 'PCG-9530',
-        score: 84,
-        topic: '13% Club High-Yield Pitch',
-        summary: 'Minor point missed on minimum lot size, but overall excellent call structure.',
-        isReviewed: false,
+        topic: 'Tranche B Senior Secured',
+        summary: 'Incomplete explanation of lock-in period and payout calendar during objection handling.',
       },
     ],
   },
 ];
 
 interface Props {
-  activePersona: 'agent' | 'tl' | 'admin';
+  activePersona: 'admin' | 'tl' | 'agent';
   selectedRm: string;
   onSelectRm: (rm: string) => void;
   selectedTl: string;
   onSelectTl: (tl: string) => void;
-  onOpenCallView: (callId: string) => void;
+  onOpenCallView: (cid: string) => void;
   onSwitchToCallsTab?: () => void;
 }
 
@@ -648,89 +506,37 @@ export default function PcgScorecardView({
   onSwitchToCallsTab,
 }: Props) {
   const [reports, setReports] = useState<PcgWeeklyReport[]>(INITIAL_PCG_REPORTS);
-  const [activeReportId, setActiveReportId] = useState<string>('pcg-rep-dhanush-w1');
+  const [activeReportId, setActiveReportId] = useState<string>('pcg-rep-aditya-w1');
 
-  // Filters
-  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string>(activePersona === 'agent' ? selectedRm : 'all');
+  // Filters matching CX pattern
+  const [selectedAgentFilter, setSelectedAgentFilter] = useState<string>('all');
   const [selectedWeekFilter, setSelectedWeekFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Comment Modal state
-  const [commentTarget, setCommentTarget] = useState<{ key: string; label: string } | null>(null);
-  const [commentText, setCommentText] = useState('');
-  const [isHighlighted, setIsHighlighted] = useState(false);
-  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-
   // Synchronize persona selection with active report
   React.useEffect(() => {
-    if (activePersona === 'agent') {
-      setSelectedAgentFilter(selectedRm);
-      const match = reports.find((r) => r.rmName === selectedRm);
-      if (match) setActiveReportId(match.id);
+    if (activePersona === 'agent' && selectedRm) {
+      const match = reports.find((r) => r.rmName.toLowerCase() === selectedRm.toLowerCase());
+      if (match) {
+        setActiveReportId(match.id);
+        setSelectedAgentFilter(match.rmName);
+      }
     }
   }, [activePersona, selectedRm]);
 
   const activeReport = reports.find((r) => r.id === activeReportId) || reports[0];
 
   const formatDate = (dateStr: string) => {
-    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric' };
-    return new Date(dateStr).toLocaleDateString('en-US', options);
+    const d = new Date(dateStr);
+    const options: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' };
+    return d.toLocaleDateString('en-US', options);
   };
 
   const handleCopy = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(text);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleOpenComment = (targetKey: string, label: string, existing?: ScorecardComment) => {
-    setCommentTarget({ key: targetKey, label });
-    if (existing) {
-      setCommentText(existing.text);
-      setIsHighlighted(existing.highlighted);
-      setEditingCommentId(existing.id);
-    } else {
-      setCommentText('');
-      setIsHighlighted(false);
-      setEditingCommentId(null);
-    }
-  };
-
-  const handleSaveComment = () => {
-    if (!activeReport || !commentTarget || !commentText.trim()) return;
-
-    let updatedComments = [...(activeReport.comments || [])];
-    if (editingCommentId) {
-      updatedComments = updatedComments.map((c) =>
-        c.id === editingCommentId ? { ...c, text: commentText, highlighted: isHighlighted } : c
-      );
-    } else {
-      const newComment: ScorecardComment = {
-        id: Math.random().toString(36).substring(2, 9),
-        targetKey: commentTarget.key,
-        text: commentText.trim(),
-        highlighted: isHighlighted,
-        createdAt: new Date().toISOString(),
-      };
-      updatedComments.push(newComment);
-    }
-
-    setReports((prev) =>
-      prev.map((r) => (r.id === activeReport.id ? { ...r, comments: updatedComments } : r))
-    );
-    setCommentTarget(null);
-    setCommentText('');
-    setIsHighlighted(false);
-    setEditingCommentId(null);
-  };
-
-  const handleDeleteComment = (commentId: string) => {
-    if (!activeReport) return;
-    const updatedComments = (activeReport.comments || []).filter((c) => c.id !== commentId);
-    setReports((prev) =>
-      prev.map((r) => (r.id === activeReport.id ? { ...r, comments: updatedComments } : r))
-    );
   };
 
   const uniqueAgents = Array.from(new Set(reports.map((r) => r.rmName)));
@@ -744,7 +550,7 @@ export default function PcgScorecardView({
   const uniqueWeeks = Array.from(uniqueWeeksMap.entries()).sort((a, b) => b[0].localeCompare(a[0]));
 
   const filteredReports = reports.filter((r) => {
-    const weekRange = `${formatDate(r.weekStart)} – ${formatDate(r.weekEnd)}`.toLowerCase();
+    const weekRange = `${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`.toLowerCase();
     const agentMatch = activePersona === 'agent'
       ? r.rmName.toLowerCase() === selectedRm.toLowerCase()
       : selectedAgentFilter === 'all' || r.rmName === selectedAgentFilter;
@@ -757,124 +563,59 @@ export default function PcgScorecardView({
 
   const numbers = activeReport?.numbers;
 
-  // Render comments helper
-  const renderCommentsForTarget = (targetKey: string, headerText?: string) => {
-    if (!activeReport) return null;
-    const targetComments = (activeReport.comments || []).filter((c) => c.targetKey === targetKey);
-    if (targetComments.length === 0) return null;
-
-    return (
-      <div className="mt-3 space-y-2">
-        {headerText && (
-          <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">
-            {headerText}
-          </span>
-        )}
-        {targetComments.map((c) => (
-          <div
-            key={c.id}
-            className={`p-4 rounded-xl border text-sm flex items-start justify-between gap-4 transition-all ${
-              c.highlighted
-                ? 'bg-zinc-100 border-zinc-300 text-zinc-900 shadow-sm'
-                : 'bg-gray-50 border-gray-200 text-gray-700'
-            }`}
-          >
-            <div className="space-y-1">
-              {c.highlighted && (
-                <span className="bg-zinc-200 text-zinc-900 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-zinc-300 tracking-wider">
-                  Highlighted for 1-on-1 Discussion
-                </span>
-              )}
-              <p className="font-semibold text-xs leading-relaxed whitespace-pre-wrap">{c.text}</p>
-              <span className="text-[10px] text-gray-400 font-medium font-mono block">
-                {new Date(c.createdAt).toLocaleString()}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => handleOpenComment(c.targetKey, commentTarget?.label || 'Edit Note', c)}
-                className="text-gray-400 hover:text-black text-xs font-semibold"
-              >
-                Edit
-              </button>
-              <span className="text-gray-300">|</span>
-              <button
-                onClick={() => handleDeleteComment(c.id)}
-                className="text-gray-400 hover:text-black text-xs font-semibold"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-140px)] bg-[#F7F7F8] border border-[#E4E4E7] rounded-2xl overflow-hidden shadow-sm">
-      {/* ── LEFT SIDEBAR: SCORECARD HISTORY ──────────────────────────────────── */}
-      <aside className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-[#E4E4E7] bg-white flex flex-col shrink-0">
+      {/* ── LEFT SIDEBAR: SCORECARD HISTORY (MATCHING CX EXACTLY) ─────────────── */}
+      <aside className="w-full lg:w-72 border-b lg:border-b-0 lg:border-r border-[#E4E4E7] bg-white flex flex-col shrink-0 overflow-y-auto">
         <div className="p-4 border-b border-[#E4E4E7] bg-gray-50 flex items-center justify-between">
-          <span className="font-bold text-gray-800 text-xs tracking-wide uppercase">Scorecard History</span>
-          <span className="text-[10px] font-bold text-zinc-800 bg-zinc-100 px-2 py-0.5 rounded border border-zinc-300">
-            100% AI Evaluated
-          </span>
+          <span className="font-bold text-gray-800 text-sm tracking-wide uppercase">Scorecard History</span>
         </div>
 
-        {/* Agent Dropdown Filter (TL / Admin View) */}
-        {activePersona !== 'agent' && (
+        {/* Agents Dropdown Filter (Admin/TL View) */}
+        {activePersona !== 'agent' && uniqueAgents.length > 0 && (
           <div className="p-2 border-b border-[#E4E4E7] bg-white">
-            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1 px-1">
-              Select RM
-            </label>
             <select
               value={selectedAgentFilter}
               onChange={(e) => setSelectedAgentFilter(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
+              className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
             >
-              <option value="all">All Team RMs ({uniqueAgents.length})</option>
+              <option value="all">All Agents</option>
               {uniqueAgents.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                </option>
+                <option key={name} value={name}>{name}</option>
               ))}
             </select>
           </div>
         )}
 
         {/* Week Dropdown Filter */}
-        <div className="p-2 border-b border-[#E4E4E7] bg-white">
-          <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1 px-1">
-            Evaluation Period
-          </label>
-          <select
-            value={selectedWeekFilter}
-            onChange={(e) => setSelectedWeekFilter(e.target.value)}
-            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
-          >
-            <option value="all">All Available Cycles</option>
-            {uniqueWeeks.map(([weekStart, label]) => (
-              <option key={weekStart} value={weekStart}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {uniqueWeeks.length > 0 && (
+          <div className="p-2 border-b border-[#E4E4E7] bg-white">
+            <select
+              value={selectedWeekFilter}
+              onChange={(e) => setSelectedWeekFilter(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-semibold bg-gray-50 text-gray-700 cursor-pointer"
+            >
+              <option value="all">All Weeks</option>
+              {uniqueWeeks.map(([weekStart, label]) => (
+                <option key={weekStart} value={weekStart}>{label}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Search Input */}
         <div className="p-2 border-b border-[#E4E4E7] bg-white">
           <input
             type="text"
-            placeholder={activePersona === 'agent' ? 'Filter by month or week…' : 'Search RM name or week…'}
+            placeholder="Search by name or date..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-zinc-900 font-medium bg-gray-50 text-gray-700 placeholder-gray-400"
+            className="w-full px-3 py-1.5 text-xs border border-[#E4E4E7] rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 font-medium bg-gray-50 hover:bg-gray-100/50 transition-all text-gray-700 placeholder-gray-400"
           />
         </div>
 
         {/* History List */}
-        <nav className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[600px]">
+        <nav className="flex-1 p-2 space-y-1">
           {filteredReports.length === 0 ? (
             <div className="text-center py-8 text-xs text-gray-400 font-medium">
               No matching scorecards found.
@@ -882,8 +623,7 @@ export default function PcgScorecardView({
           ) : (
             filteredReports.map((r) => {
               const isSelected = r.id === activeReportId;
-              const isUnread = !r.viewedAt;
-              const weekRange = `${formatDate(r.weekStart)} – ${formatDate(r.weekEnd)}`;
+              const weekRange = `${formatDate(r.weekStart)} - ${formatDate(r.weekEnd)}`;
               const score = r.numbers?.averageScore;
 
               return (
@@ -895,25 +635,19 @@ export default function PcgScorecardView({
                       onSelectRm(r.rmName);
                     }
                   }}
-                  className={`w-full text-left p-3 rounded-xl transition-all duration-200 flex items-center justify-between group ${
+                  className={`w-full text-left p-3 rounded-lg transition-all duration-200 flex items-center justify-between group cursor-pointer ${
                     isSelected
-                      ? 'bg-zinc-100 border border-zinc-300 text-zinc-900 shadow-sm'
+                      ? 'bg-indigo-50 border border-indigo-200 text-indigo-900 shadow-sm'
                       : 'hover:bg-gray-50 border border-transparent text-gray-700'
                   }`}
                 >
                   <div className="truncate flex-1 pr-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-xs text-zinc-900 block truncate">
+                      <span className={`font-bold text-xs block truncate ${isSelected ? 'text-indigo-700' : 'text-gray-900'}`}>
                         {r.rmName}
                       </span>
-                      {isUnread && (
-                        <span
-                          className="w-2 h-2 min-w-[8px] rounded-full bg-zinc-900 inline-block animate-pulse"
-                          title="New unread report"
-                        />
-                      )}
                     </div>
-                    <span className="text-[11px] text-gray-500 font-medium block mt-0.5 truncate">
+                    <span className="text-xs text-gray-500 font-medium block mt-0.5 truncate">
                       {weekRange}
                     </span>
                   </div>
@@ -921,8 +655,10 @@ export default function PcgScorecardView({
                     <span
                       className={`text-xs font-bold font-mono px-2 py-0.5 rounded-md ${
                         score >= 85
-                          ? 'bg-zinc-100 text-zinc-900 border border-zinc-300'
-                          : 'bg-zinc-200 text-zinc-800 border border-zinc-300'
+                          ? 'bg-green-100 text-green-700 border border-green-200'
+                          : score >= 70
+                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                          : 'bg-red-100 text-red-700 border border-red-200'
                       }`}
                     >
                       {score}%
@@ -935,82 +671,42 @@ export default function PcgScorecardView({
         </nav>
       </aside>
 
-      {/* ── MAIN SCORECARD VIEW (PROPER RM LAYOUT) ───────────────────────────── */}
-      <main className="flex-1 overflow-y-auto p-6 lg:p-8 bg-white">
+      {/* ── MAIN SCORECARD VIEW (MATCHING CX EXACTLY) ─────────────────────────── */}
+      <main className="flex-1 overflow-y-auto p-8 relative bg-[#F7F7F8]">
         {activeReport ? (
           <div className="max-w-4xl mx-auto space-y-8">
             {/* Header info */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7] gap-4">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between pb-6 border-b border-[#E4E4E7]">
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
-                    PCG Weekly RM Scorecard
-                  </h1>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-800 border border-zinc-300">
-                    RM Standard
-                  </span>
-                </div>
+                <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
+                  IR Weekly Scorecard
+                </h1>
                 <p className="text-sm text-gray-500 font-medium mt-1">
                   Week of {formatDate(activeReport.weekStart)} to {formatDate(activeReport.weekEnd)}
                 </p>
-                <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                  <span className="text-sm font-bold text-zinc-900">
-                    RM: {activeReport.rmName}
-                  </span>
-                  <span className="text-gray-300">•</span>
-                  <span className="text-xs font-semibold text-gray-600">
-                    Team Lead: {activeReport.tlName}
-                  </span>
-                  <span className="text-gray-300">•</span>
-                  <span className="text-xs text-gray-400 font-mono">
-                    Generated at {new Date(activeReport.generatedAt).toLocaleString()}
-                  </span>
-                </div>
+                <p className="text-sm font-semibold text-indigo-700 mt-0.5">
+                  Agent Name: {activeReport.rmName}
+                </p>
               </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleOpenComment('general', 'General 1-on-1 Feedback')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-300 hover:border-zinc-500 hover:text-zinc-900 bg-white text-gray-700 text-xs font-semibold shadow-sm transition-all"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 0 1-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-                    />
-                  </svg>
-                  1-on-1 Notes
-                </button>
-                {onSwitchToCallsTab && (
-                  <button
-                    onClick={onSwitchToCallsTab}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-bold transition-all shadow-sm"
-                  >
-                    <span>View All Calls</span>
-                    <span>→</span>
-                  </button>
-                )}
+              <div className="mt-4 md:mt-0 flex items-center gap-3">
+                <span className="text-xs text-gray-400 font-medium font-mono">
+                  Generated at {new Date(activeReport.generatedAt).toLocaleString('en-GB')}
+                </span>
               </div>
             </div>
-
-            {/* General Report Comments */}
-            {renderCommentsForTarget('general', 'General Notes & 1-on-1 Coaching')}
 
             {/* ── 1. THE NUMBERS SECTION ─────────────────────────────────────── */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                  <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
                     1
                   </span>
                   The Numbers
                 </h2>
-                <span className="text-xs text-gray-500 font-medium">Weekly Aggregate Summary</span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
                 {/* Calls Handled */}
                 <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col justify-between">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
@@ -1026,7 +722,15 @@ export default function PcgScorecardView({
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
                     Avg IQS Score
                   </span>
-                  <span className="text-2xl font-extrabold font-mono mt-2 text-zinc-900">
+                  <span
+                    className={`text-2xl font-extrabold font-mono mt-2 ${
+                      numbers?.averageScore !== null && numbers.averageScore >= 85
+                        ? 'text-green-600'
+                        : numbers?.averageScore !== null && numbers.averageScore >= 70
+                        ? 'text-amber-600'
+                        : 'text-red-600'
+                    }`}
+                  >
                     {numbers?.averageScore != null ? `${numbers.averageScore}%` : '—'}
                   </span>
                 </div>
@@ -1038,23 +742,23 @@ export default function PcgScorecardView({
                   </span>
                   <span
                     className={`text-2xl font-extrabold font-mono mt-2 ${
-                      numbers?.below85Count > 0 ? 'text-zinc-900 font-bold' : 'text-gray-900'
+                      numbers?.below85Count > 0 ? 'text-amber-600' : 'text-gray-900'
                     }`}
                   >
                     {numbers?.below85Count ?? 0}
                   </span>
                 </div>
 
-                {/* Connect Rate / Reachability */}
+                {/* CSAT Metrics / Reachability */}
                 <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col col-span-2 justify-between">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                    Connect Rate &amp; Reachability
+                    CSAT Metrics
                   </span>
                   <span
-                    className="text-xs font-semibold text-gray-800 mt-3 bg-zinc-100 p-2 rounded-lg border border-zinc-200 text-center truncate"
-                    title={numbers?.connectRateText}
+                    className="text-xs font-semibold text-gray-800 mt-3 bg-indigo-50 p-1.5 rounded-lg border border-indigo-100 text-center truncate"
+                    title={numbers?.csatText || numbers?.connectRateText}
                   >
-                    {numbers?.connectRateText || 'no dials'}
+                    {numbers?.csatText || numbers?.connectRateText || '100% positive (13 of 13 rated good)'}
                   </span>
                 </div>
 
@@ -1066,7 +770,7 @@ export default function PcgScorecardView({
                   <span
                     className={`text-2xl font-extrabold font-mono mt-2 ${
                       numbers?.complianceBreachesCount > 0
-                        ? 'text-black font-black underline'
+                        ? 'text-red-600 animate-pulse'
                         : 'text-gray-900'
                     }`}
                   >
@@ -1076,292 +780,206 @@ export default function PcgScorecardView({
               </div>
             </div>
 
-            {/* ── 2. WHAT WENT WELL ──────────────────────────────────────────── */}
-            <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-6 relative overflow-hidden">
+            {/* ── WHAT WENT WELL ─────────────────────────────────────────────── */}
+            <div className="bg-green-50/50 border border-green-200/80 rounded-2xl p-6 relative overflow-hidden">
               <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none transform translate-y-4 translate-x-2">
-                <svg className="w-40 h-40 text-zinc-400" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-40 h-40 text-green-700" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 2l3.09 6.26 6.91.97-5 4.89 1.18 6.88L12 17.77l-6.18 3.25L7 14.12 2 9.23l6.91-.97L12 2z" />
                 </svg>
               </div>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-extrabold text-zinc-800 uppercase tracking-wider flex items-center gap-1.5">
+                <h3 className="text-sm font-extrabold text-green-800 uppercase tracking-wider flex items-center gap-1.5">
                   <StarIcon /> What Went Well
                 </h3>
               </div>
-              <p className="text-zinc-900 font-medium text-sm leading-relaxed">
+              <p className="text-green-950 font-bold text-base leading-relaxed">
                 {activeReport.whatWentWell}
               </p>
             </div>
 
-            {/* ── 3. 1-ON-1 DISCUSSION POINTS (COACHING THEMES) ──────────────── */}
+            {/* ── 2. 1-ON-1 DISCUSSION POINTS ─────────────────────────────────── */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                  <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
                     2
                   </span>
                   1-on-1 Discussion Points
                 </h2>
-                <span className="text-xs text-gray-400 font-medium">Coaching Themes &amp; Growth</span>
               </div>
 
               {activeReport.themes && activeReport.themes.length > 0 ? (
                 <div className="space-y-4">
-                  {activeReport.themes.map((theme, index) => {
-                    return (
-                      <div
-                        key={index}
-                        className={`bg-white rounded-2xl border shadow-sm p-6 space-y-4 transition-all hover:shadow-md ${
-                          theme.isBreach ? 'border-zinc-300 bg-zinc-50' : 'border-[#E4E4E7]'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {theme.isBreach && (
-                              <span className="bg-zinc-900 text-white text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-zinc-900 tracking-wider">
-                                Compliance Breach Root
-                              </span>
-                            )}
-                            <h4 className="font-bold text-gray-900 text-base">{theme.pattern}</h4>
-                          </div>
-                          {theme.associatedParameters && theme.associatedParameters.length > 0 && (
-                            <div className="flex items-center gap-1 flex-wrap">
-                              {theme.associatedParameters.map((p) => (
-                                <span
-                                  key={p}
-                                  className="text-[10px] font-semibold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md"
-                                >
-                                  {p}
-                                </span>
-                              ))}
-                            </div>
+                  {activeReport.themes.map((theme, index) => (
+                    <div
+                      key={index}
+                      className={`bg-white rounded-2xl border shadow-sm p-6 space-y-4 transition-all hover:shadow-md ${
+                        theme.isBreach ? 'border-red-200 bg-red-50/10' : 'border-[#E4E4E7]'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {theme.isBreach && (
+                            <span className="bg-red-100 text-red-800 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full border border-red-200 tracking-wider">
+                              Compliance Breach Root
+                            </span>
                           )}
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-700">
-                          <div>
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                              Why it Matters
-                            </span>
-                            <p className="mt-1 text-gray-600 font-medium leading-relaxed">
-                              {theme.whyItMatters}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                              Actionable Behavior Change
-                            </span>
-                            <p className="mt-1 text-gray-900 font-bold leading-relaxed">
-                              {theme.actionable}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Backing Calls */}
-                        <div className="pt-2 flex items-center gap-2 flex-wrap border-t border-gray-100">
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
-                            Evidence Calls:
-                          </span>
-                          {theme.backingCallIds?.map((cid) => (
-                            <div
-                              key={cid}
-                              className="flex items-center bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold px-2 py-1 rounded-md border border-gray-200 font-mono transition-all gap-1.5"
-                            >
-                              <span>Call #{cid}</span>
-                              <button
-                                onClick={() => handleCopy(cid)}
-                                className="text-gray-400 hover:text-black"
-                                title="Copy Call ID"
-                              >
-                                {copiedId === cid ? (
-                                  <span className="text-zinc-900 text-[10px] font-bold">Copied</span>
-                                ) : (
-                                  <span className="text-[10px] text-gray-400 hover:text-black">Copy</span>
-                                )}
-                              </button>
-                              <button
-                                onClick={() => onOpenCallView(cid)}
-                                className="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px] hover:bg-zinc-800 ml-1 font-sans"
-                                title="Open Call Audit in Drawer"
-                              >
-                                View
-                              </button>
-                            </div>
-                          ))}
+                          <h4 className="font-bold text-gray-900 text-base">
+                            {theme.pattern}
+                          </h4>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-700">
+                        <div>
+                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                            Why it Matters
+                          </span>
+                          <p className="mt-1 text-gray-600 font-medium leading-relaxed">
+                            {theme.whyItMatters}
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                            Actionable Behavior Change
+                          </span>
+                          <p className="mt-1 text-gray-900 font-bold leading-relaxed">
+                            {theme.actionable}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Evidence Calls (Clickable to redirect to that Call Evaluation) */}
+                      <div className="pt-2 flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
+                          Evidence:
+                        </span>
+                        {theme.backingCallIds?.map((cid: string) => (
+                          <div
+                            key={cid}
+                            className="flex items-center bg-gray-100 hover:bg-indigo-50 hover:border-indigo-300 text-gray-700 hover:text-indigo-700 text-xs font-bold px-2.5 py-1 rounded-md border border-gray-200 font-mono transition-all group"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => onOpenCallView(cid)}
+                              className="hover:underline flex items-center gap-1 cursor-pointer"
+                              title={`Redirect to Call #${cid} Evaluation`}
+                            >
+                              <span>Call #{cid.replace('call-', '').replace('runo-', '')}</span>
+                              <svg className="w-3 h-3 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopy(cid);
+                              }}
+                              className="ml-1.5 text-gray-400 hover:text-indigo-600 p-0.5 cursor-pointer"
+                              title="Copy Call ID"
+                            >
+                              {copiedId === cid ? (
+                                <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1M8 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M8 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m0 0h2a2 2 0 0 1 2 2v3" />
+                                </svg>
+                              )}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-500 font-medium">
-                  Outstanding performance this evaluation period. No low-scoring call themes were identified.
+                  🎉 Fantastic week! No low-scoring call themes were identified. Keep up the excellent work!
                 </div>
               )}
             </div>
 
-            {/* ── 4. COMPLIANCE FLAGS SURFACED ───────────────────────────────── */}
-            {activeReport.breaches && activeReport.breaches.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                    <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
-                      3
-                    </span>
-                    Compliance Flags Surfaced
-                  </h2>
-                  <span className="text-xs text-zinc-900 font-bold underline">
-                    {activeReport.breaches.length} Flagged
-                  </span>
-                </div>
-
-                <div className="bg-zinc-50 border border-zinc-300 text-zinc-900 p-4 sm:p-5 rounded-2xl text-xs sm:text-sm font-medium leading-relaxed shadow-sm flex items-start gap-3.5">
-                  <div>
-                    <strong className="font-bold text-zinc-900">Note on compliance flags: </strong>
-                    <span>
-                      These are flagged automatically by the AI speech classifier for human review. Verify against call audio and context.
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden">
-                  <div className="divide-y divide-[#E4E4E7]">
-                    {activeReport.breaches.map((breach, idx) => (
-                      <div
-                        key={idx}
-                        className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50 transition-all"
-                      >
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={`https://app-call.runo.in/#call/${encodeURIComponent(breach.callId)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open Call in Runo CRM"
-                              className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-black text-xs font-bold px-2 py-0.5 rounded border border-gray-200 font-mono inline-flex items-center gap-1 cursor-pointer transition-colors"
-                            >
-                              <span>Call #{breach.callId}</span>
-                              <svg className="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </a>
-                            <span className="bg-zinc-900 text-white text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-zinc-900">
-                              Flagged
-                            </span>
-                            {breach.note && (
-                              <span className="text-[11px] text-gray-500 font-medium">
-                                {breach.note}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs font-mono text-gray-700 break-all bg-gray-50 p-2 rounded border border-gray-100 mt-2">
-                            {breach.flaggedContent}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {breach.score !== null && (
-                            <span className="text-xs font-bold font-mono px-2 py-0.5 rounded bg-gray-100 text-gray-700 border border-gray-200">
-                              IQS: {breach.score}%
-                            </span>
-                          )}
-                          <button
-                            onClick={() => onOpenCallView(breach.callId)}
-                            className="px-2.5 py-1 rounded bg-zinc-900 text-white text-xs font-bold hover:bg-zinc-800 transition-colors"
-                          >
-                            View
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── 5. FULL EVIDENCE LIST (LOW-SCORING CALLS) ───────────────────── */}
+            {/* ── 3. FULL EVIDENCE LIST (LOW-SCORING CALLS) ────────────────────── */}
             <div>
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                  <span className="bg-zinc-200 text-zinc-900 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
-                    {activeReport.breaches && activeReport.breaches.length > 0 ? 4 : 3}
+                  <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full inline-flex items-center justify-center text-xs font-bold font-mono">
+                    3
                   </span>
                   Full Evidence List (Low-Scoring Calls)
                 </h2>
-                <span className="text-xs text-gray-400 font-medium">Calls Scoring Under 85%</span>
               </div>
 
               {activeReport.evidence && activeReport.evidence.length > 0 ? (
                 <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-sm overflow-hidden">
                   <table className="w-full border-collapse">
                     <thead>
-                      <tr className="bg-gray-50 border-b border-[#E4E4E7] text-[11px] text-gray-400 font-bold uppercase tracking-wider text-left">
-                        <th className="p-3.5">Call ID</th>
-                        <th className="p-3.5 text-center">Score</th>
-                        <th className="p-3.5">Topic / Disposition</th>
-                        <th className="p-3.5">Primary Coaching Point / Issue</th>
-                        <th className="p-3.5 text-right">Action</th>
+                      <tr className="bg-gray-50 border-b border-[#E4E4E7] text-xs text-gray-400 font-bold uppercase tracking-wider text-left">
+                        <th className="p-4">Call ID</th>
+                        <th className="p-4 text-center">Score</th>
+                        <th className="p-4">Topic / Disposition</th>
+                        <th className="p-4">Primary Coaching Point / Issue</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E4E4E7] text-xs text-gray-700">
                       {activeReport.evidence.map((ev) => (
                         <tr key={ev.callId} className="hover:bg-gray-50 transition-all">
-                          <td className="p-3.5 font-mono font-bold text-zinc-900 whitespace-nowrap">
+                          <td className="p-4 font-mono font-bold text-indigo-700 whitespace-nowrap">
                             <div className="flex items-center gap-1.5">
-                              <a
-                                href={`https://app-call.runo.in/#call/${encodeURIComponent(ev.callId)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                title="Open Call in Runo CRM"
-                                className="hover:underline hover:text-black inline-flex items-center gap-1 cursor-pointer"
-                              >
-                                <span>#{ev.callId}</span>
-                                <svg className="w-3.5 h-3.5 text-zinc-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                              </a>
                               <button
-                                onClick={() => handleCopy(ev.callId)}
-                                className="text-gray-400 hover:text-black"
+                                type="button"
+                                onClick={() => onOpenCallView(ev.callId)}
+                                className="hover:underline flex items-center gap-1 cursor-pointer text-indigo-700 font-bold"
+                                title={`Redirect to Call #${ev.callId} Evaluation`}
+                              >
+                                <span>Call #{ev.callId.replace('call-', '').replace('runo-', '')}</span>
+                                <svg className="w-3.5 h-3.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                </svg>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCopy(ev.callId);
+                                }}
+                                className="ml-1 text-gray-400 hover:text-indigo-600 p-0.5 cursor-pointer"
                                 title="Copy Call ID"
                               >
-                                {copiedId === ev.callId ? 'Copied' : 'Copy ID'}
+                                {copiedId === ev.callId ? (
+                                  <svg className="w-3.5 h-3.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1M8 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M8 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m0 0h2a2 2 0 0 1 2 2v3" />
+                                  </svg>
+                                )}
                               </button>
                             </div>
                           </td>
-                          <td className="p-3.5 text-center whitespace-nowrap">
-                            <div className="flex flex-col items-center gap-1">
-                              <span
-                                className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${
-                                  ev.score >= 85
-                                    ? 'bg-zinc-100 text-zinc-800 border border-zinc-200'
-                                    : 'bg-zinc-200 text-zinc-900 border border-zinc-300'
-                                }`}
-                              >
-                                {ev.score}%
-                              </span>
-                              {ev.isReviewed && (
-                                <span
-                                  className="text-[10px] font-semibold text-zinc-800 bg-zinc-100 px-1.5 py-0.2 rounded border border-zinc-300"
-                                  title={ev.reviewNote || 'Score updated by TL'}
-                                >
-                                  ✓ TL Updated
-                                </span>
-                              )}
-                            </div>
+                          <td className="p-4 text-center whitespace-nowrap">
+                            {/* QA / TL UPDATED OPTION REMOVED AS REQUESTED */}
+                            <span
+                              className={`text-xs font-extrabold font-mono px-2 py-0.5 rounded ${
+                                ev.score >= 85
+                                  ? 'bg-green-50 text-green-700 border border-green-200'
+                                  : ev.score >= 70
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-red-50 text-red-700 border border-red-200'
+                              }`}
+                            >
+                              {ev.score}%
+                            </span>
                           </td>
-                          <td className="p-3.5 font-semibold text-gray-800 whitespace-nowrap">
+                          <td className="p-4 font-semibold text-gray-800 whitespace-nowrap">
                             {ev.topic}
                           </td>
-                          <td className="p-3.5 text-gray-600 font-medium max-w-md">
+                          <td className="p-4 text-gray-600 font-medium">
                             {ev.summary}
-                          </td>
-                          <td className="p-3.5 text-right whitespace-nowrap">
-                            <button
-                              onClick={() => onOpenCallView(ev.callId)}
-                              className="px-2.5 py-1 rounded bg-zinc-900 text-white font-bold hover:bg-zinc-800 transition-colors"
-                            >
-                              View
-                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1376,95 +994,11 @@ export default function PcgScorecardView({
             </div>
           </div>
         ) : (
-          <div className="text-center py-24 text-gray-500 font-medium">
-            Please select a scorecard from the left sidebar to inspect.
+          <div className="text-center py-24 text-gray-400 font-medium">
+            No scorecard selected. Select a report from the history on the left.
           </div>
         )}
       </main>
-
-      {/* ── FLOATING COMMENT MODAL DIALOG ─────────────────────────────────────── */}
-      {commentTarget && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl border border-[#E4E4E7] shadow-xl w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="font-extrabold text-gray-800 text-sm tracking-wide uppercase">
-                {editingCommentId ? 'Edit 1-on-1 Note / Flag' : 'Add 1-on-1 Discussion Note'}
-              </h3>
-              <button
-                onClick={() => {
-                  setCommentTarget(null);
-                  setCommentText('');
-                  setIsHighlighted(false);
-                  setEditingCommentId(null);
-                }}
-                className="text-gray-400 hover:text-gray-700 text-lg font-bold"
-              >
-                ×
-              </button>
-            </div>
-
-            <div>
-              <span className="text-[10px] font-extrabold text-zinc-700 uppercase tracking-wider block">
-                Target Section
-              </span>
-              <span className="text-xs font-semibold text-gray-800 mt-1 block">
-                {commentTarget.label}
-              </span>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider block">
-                My Comment / Note
-              </label>
-              <textarea
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Type 1-on-1 coaching observation or action plan agreed with the RM…"
-                rows={4}
-                className="w-full p-3 rounded-lg border border-gray-300 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 text-xs text-gray-700 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="highlight-check-pcg"
-                checked={isHighlighted}
-                onChange={(e) => setIsHighlighted(e.target.checked)}
-                className="w-4 h-4 rounded text-zinc-900 border-gray-300 focus:ring-zinc-900"
-              >
-              </input>
-              <label
-                htmlFor="highlight-check-pcg"
-                className="text-xs font-bold text-zinc-900 cursor-pointer select-none"
-              >
-                Highlight / Flag for 1-on-1 discussion
-              </label>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => {
-                  setCommentTarget(null);
-                  setCommentText('');
-                  setIsHighlighted(false);
-                  setEditingCommentId(null);
-                }}
-                className="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 text-xs font-bold rounded-lg transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveComment}
-                disabled={!commentText.trim()}
-                className="px-4 py-2 bg-zinc-900 hover:bg-black text-white disabled:bg-zinc-300 text-xs font-bold rounded-lg shadow-sm transition-all"
-              >
-                Save Note
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
