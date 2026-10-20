@@ -1090,7 +1090,7 @@ export default function PcgCallsClient() {
                         </td>
                         <td className="py-3 px-4 text-center font-mono">
                           {rm.complianceFlags > 0 ? (
-                            <span className="text-zinc-900 font-bold underline">{rm.complianceFlags} Flags</span>
+                            <span className="text-zinc-900 font-bold">{rm.complianceFlags} Flags</span>
                           ) : (
                             <span className="text-zinc-500 font-normal">0 Flags</span>
                           )}
