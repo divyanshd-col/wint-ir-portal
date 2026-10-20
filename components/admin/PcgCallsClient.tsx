@@ -811,7 +811,7 @@ export default function PcgCallsClient() {
                       {isExpanded && (
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
-                          chatId={call.chatId || (call.id ? `1794${call.id}` : null)}
+                          hideShowChat={true}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -943,7 +943,7 @@ export default function PcgCallsClient() {
                       {isExpanded && (
                         <CallEvalPanel
                           callId={formatCallId(call.callId, call.id)}
-                          chatId={call.chatId || (call.id ? `1794${call.id}` : null)}
+                          hideShowChat={true}
                           mobileNumber={call.phoneNumber}
                           agentName={call.rmName}
                           iqsScore={call.iqsScore}
@@ -2161,7 +2161,7 @@ export default function PcgCallsClient() {
                         {isExpanded && (
                           <CallEvalPanel
                             callId={formatCallId(call.callId, call.id)}
-                            chatId={call.chatId || (call.id ? `1794${call.id}` : null)}
+                            hideShowChat={true}
                             mobileNumber={call.phoneNumber}
                             agentName={call.rmName}
                             iqsScore={call.iqsScore}
@@ -2240,7 +2240,7 @@ export default function PcgCallsClient() {
               <CallEvalPanel
                 standalone={true}
                 callId={formatCallId(activeCallAudit.callId, activeCallAudit.id)}
-                chatId={activeCallAudit.chatId || (activeCallAudit.id ? `1794${activeCallAudit.id}` : null)}
+                hideShowChat={true}
                 mobileNumber={activeCallAudit.phoneNumber}
                 agentName={activeCallAudit.rmName}
                 iqsScore={activeCallAudit.iqsScore}

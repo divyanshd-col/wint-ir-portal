@@ -733,17 +733,6 @@
 
         <div class="flex items-center gap-2.5">
           <button
-            id="drawer-show-chat-btn"
-            onclick="alert('Opening linked chat thread...')"
-            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-[#E4E4E7] bg-white text-[#18181B] shadow-2xs hover:bg-zinc-50 transition-colors cursor-pointer"
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-            <span>Show Chat</span>
-            <span class="text-[11px] opacity-60">↗</span>
-          </button>
-          <button
             id="drawer-raise-dispute-btn"
             onclick="handleProtoRaiseDispute()"
             class="hidden px-3 py-1.5 text-xs font-semibold rounded-md border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer"
@@ -768,9 +757,6 @@
           <div class="flex items-center justify-between border-b border-[#F1F5F9] pb-2">
             <div class="flex items-center gap-2.5">
               <h4 class="m-0 text-xs font-bold uppercase tracking-wider text-[#71717A]">Transcript</h4>
-              <span class="text-[11px] font-mono text-[#475569] bg-[#F1F5F9] px-2 py-0.5 rounded border border-[#E2E8F0] inline-flex items-center gap-1 font-medium" id="drawer-chat-badge">
-                <span>💬</span> Chat #<span id="drawer-chat-id">179419</span>
-              </span>
             </div>
             <div class="flex items-center gap-2">
               <button
