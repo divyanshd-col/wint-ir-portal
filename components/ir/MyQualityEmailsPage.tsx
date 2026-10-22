@@ -862,6 +862,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                         threadSummary={item.thread_summary}
                                         customerMessage={item.customer_message}
                                         subjectLine={item.subject_line}
+                                        parameterScores={item.parameter_scores}
                                       />
                                     </div>
                                   </div>

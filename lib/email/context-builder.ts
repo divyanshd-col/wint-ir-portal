@@ -281,6 +281,10 @@ export function buildEmailEvaluationPrompt(input: ReplyEvaluationContextInput): 
 
   return `You are an expert Quality Assurance & Compliance Auditor at Wint Wealth, evaluating an outbound email reply sent by an agent to an investor.
 
+CORE TASKS:
+1. Synthesize the customer's core query into a clear, concise 1-2 sentence summary under "core_query". Capture the actual question, issue, or request raised by the customer in plain English. Do NOT simply quote or copy-paste verbatim sentences, salutations, or email client boilerplate (e.g. "Sent from iPhone", forwarded message headers).
+2. Evaluate the outbound agent reply against the 7 parameters below and assign "yes", "half", "no", or "na" with rigorous factual reasoning.
+
 ${mergedNote}
 ${contextBlock}
 
@@ -410,6 +414,7 @@ Mark compliance_passed as false and list specific violation in compliance_issues
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching this schema (no markdown formatting, no commentary outside the JSON):
 {
+  "core_query": "Investor is requesting account verification OTPs to be sent via email instead of SMS because they are currently traveling in the USA.",
   "quality_score": 88,
   "compliance_passed": true,
   "compliance_issues": [],

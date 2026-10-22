@@ -12,7 +12,18 @@ const OPTIONS: { val: ParamChoice; label: string }[] = [
  * weight on the same line, the AI reasoning underneath. Pass `onChange` to make it editable (QA); without it the buttons are
  * a read-only display (TL, agent). `description` is shown as a tooltip on the name.
  */
-export default function ParamScoreRow({ name, description, value, allowNA, weight, reason, onChange, last, disputed }: {
+export default function ParamScoreRow({
+  name,
+  description,
+  value,
+  allowNA,
+  weight,
+  reason,
+  onChange,
+  onReasonChange,
+  last,
+  disputed,
+}: {
   name: string;
   description?: string;
   value: unknown;
@@ -20,11 +31,13 @@ export default function ParamScoreRow({ name, description, value, allowNA, weigh
   weight: number;
   reason?: string;
   onChange?: (v: ParamChoice) => void;
+  onReasonChange?: (r: string) => void;
   last?: boolean;
   disputed?: boolean;
 }) {
   const selected = paramChoice(value);
   const editable = Boolean(onChange);
+  const canEditReason = Boolean(onReasonChange);
   const options = allowNA ? OPTIONS : OPTIONS.filter(o => o.val !== 'na');
   // a stored value that is none of the four (numeric, missing) is shown as text when read-only
   const asText = !editable && selected === null;
@@ -78,8 +91,44 @@ export default function ParamScoreRow({ name, description, value, allowNA, weigh
           {weight}%
         </span>
       </div>
-      {reason && (
-        <div style={{ marginTop: 8, padding: '6px 8px', fontSize: 12, lineHeight: 1.5, color: 'var(--qa-text-2)' }}>{reason}</div>
+      {(reason || canEditReason) && (
+        canEditReason ? (
+          <textarea
+            value={reason || ''}
+            onChange={e => onReasonChange?.(e.target.value)}
+            placeholder="Add reasoning…"
+            rows={reason ? Math.max(2, Math.min(8, (reason.match(/\n/g) || []).length + 1)) : 1}
+            style={{
+              marginTop: 8,
+              width: '100%',
+              resize: 'vertical',
+              border: '1px solid transparent',
+              borderRadius: 6,
+              padding: '6px 8px',
+              fontSize: 12,
+              color: 'var(--qa-text-2)',
+              lineHeight: 1.5,
+              fontFamily: 'inherit',
+              background: 'transparent',
+              outline: 'none',
+              transition: 'background 0.12s, border-color 0.12s',
+              cursor: 'text',
+              boxSizing: 'border-box',
+            }}
+            onFocus={e => {
+              e.target.style.background = 'var(--qa-card)';
+              e.target.style.borderColor = 'var(--qa-text)';
+            }}
+            onBlur={e => {
+              e.target.style.background = 'transparent';
+              e.target.style.borderColor = 'transparent';
+            }}
+          />
+        ) : (
+          <div style={{ marginTop: 8, padding: '6px 8px', fontSize: 12, lineHeight: 1.5, color: 'var(--qa-text-2)' }}>
+            {reason}
+          </div>
+        )
       )}
     </div>
   );

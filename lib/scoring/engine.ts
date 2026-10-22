@@ -233,6 +233,14 @@ export async function executeScoring(
     const { extractAgentName } = await import('@/lib/scoring/transcript');
     effectiveAgentName = extractAgentName(transcriptMessages);
   }
+  if (!effectiveAgentName && conv.raw_payload) {
+    const rawName = (
+      (conv.raw_payload as any)?.human_agent_info?.name ||
+      (conv.raw_payload as any)?.data?.human_agent_info?.name ||
+      ''
+    ).trim();
+    if (rawName) effectiveAgentName = rawName;
+  }
   if (!effectiveAgentName && timing.conversationType === 'bot') {
     effectiveAgentName = 'Myra';
   }

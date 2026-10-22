@@ -39,16 +39,25 @@ export function isHtml(str?: string | null): boolean {
  */
 export function extractConciseQuery(raw?: string | null, fallbackSubject?: string): string {
   if (!raw) return fallbackSubject || 'Customer inquiry';
-  const plain = stripHtml(raw);
-  // Remove common reply / forward patterns
-  const cleaned = plain
-    .replace(/^-+ Forwarded message -+[\s\S]*/i, '')
-    .replace(/On .*?wrote:[\s\S]*/i, '')
-    .replace(/^(dear|hi|hello|hey|good morning|good afternoon)\s+[\w\s,.-]+/i, '')
-    .trim();
+  let text = stripHtml(raw);
+
+  // 1. Remove device signatures / footers
+  text = text.replace(/sent from my (iphone|ipad|android|galaxy|mobile)[\s.,-]*/gi, '');
+
+  // 2. Remove forwarded headers blocks (e.g. 'Begin forwarded message:', 'From: ...', etc.)
+  text = text.replace(/begin forwarded message:[\s\S]*?(?=(dear|hi|hello|\b[a-z0-9]))/gi, '');
+  text = text.replace(/-+\s*forwarded message\s*-+[\s\S]*?(?=(dear|hi|hello|\b[a-z0-9]))/gi, '');
+  text = text.replace(/^[> ]*(from|to|date|subject|cc):[^\n\r]+/gim, '');
+  text = text.replace(/on\s+.+?wrote:[\s\S]*/i, '');
+
+  // 3. Remove leading greetings / salutations
+  text = text.replace(/^\s*(dear\s+[a-z0-9\s]{1,30}|hi\s*[a-z0-9\s]{0,20}|hello\s*[a-z0-9\s]{0,20}|hey\s*[a-z0-9\s]{0,20}|good\s+(morning|afternoon|evening)\s*[a-z0-9\s]{0,20})[,.!:-]*/i, '');
+
+  // Normalize whitespace and trim leftover leading punctuation
+  const cleaned = text.replace(/\s+/g, ' ').replace(/^[.,:;!?\s-]+/, '').trim();
 
   if (!cleaned) return fallbackSubject || 'Customer inquiry';
-  // Take first 2 sentences or first 160 chars
+  // Take first 2 sentences or first 200 chars
   const sentences = cleaned.split(/(?<=[.?!])\s+/);
   const snippet = sentences.slice(0, 2).join(' ');
   return snippet.length > 200 ? snippet.slice(0, 197) + '…' : snippet;
@@ -133,19 +142,22 @@ export interface CustomerSummaryBlockProps {
   threadSummary?: any;
   customerMessage?: string | null;
   subjectLine?: string | null;
+  parameterScores?: any;
   style?: React.CSSProperties;
 }
 
 /**
  * Displays ONLY the customer context / query summary:
  * - Structured 4-point summary if thread_summary is provided
- * - Or clean extracted core inquiry
+ * - Or AI synthesized core_query from parameterScores
+ * - Or clean extracted customer inquiry fallback
  * - With a collapsible link to view full raw message if needed
  */
 export function CustomerSummaryBlock({
   threadSummary,
   customerMessage,
   subjectLine,
+  parameterScores,
   style,
 }: CustomerSummaryBlockProps) {
   const [showFullEmail, setShowFullEmail] = useState(false);
@@ -159,7 +171,15 @@ export function CustomerSummaryBlock({
       summaryObj = { core_query: threadSummary };
     }
   } else if (typeof threadSummary === 'object' && threadSummary !== null) {
-    summaryObj = threadSummary;
+    summaryObj = { ...threadSummary };
+  }
+
+  // If thread_summary doesn't have core_query, check parameterScores
+  if (!summaryObj?.core_query && parameterScores?.core_query) {
+    summaryObj = {
+      ...(summaryObj || {}),
+      core_query: parameterScores.core_query,
+    };
   }
 
   const hasStructured = summaryObj && (
@@ -225,7 +245,7 @@ export function CustomerSummaryBlock({
       ) : (
         <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--qa-text, #111111)' }}>
           <span style={{ fontWeight: 600, color: 'var(--qa-text, #111111)', marginRight: 6 }}>
-            Core Query:
+            {subjectLine && subjectLine !== 'Email Support Request' ? `${subjectLine}:` : 'Customer Inquiry:'}
           </span>
           {fallbackSummary}
         </div>
