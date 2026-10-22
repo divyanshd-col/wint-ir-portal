@@ -214,3 +214,19 @@ body {
 .email-html-body { overflow-wrap: anywhere; }
 .email-html-body p, .email-html-body div { margin-top: 0; margin-bottom: 0.6em; }
 .email-html-body > :last-child { margin-bottom: 0; }
+
+/* Internal notes highlighting for emails (matches chat amber theme, tight paragraphs, clickable wrapped links) */
+.email-internal-note-content { overflow-wrap: anywhere; }
+.email-internal-note-content p, .email-internal-note-content div { margin-top: 0; margin-bottom: 0.4em; }
+.email-internal-note-content > :last-child { margin-bottom: 0; }
+.email-internal-note-content a {
+  color: #b45309;
+  text-decoration: underline;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+.email-internal-note-content a:hover {
+  color: #92400e;
+}
+

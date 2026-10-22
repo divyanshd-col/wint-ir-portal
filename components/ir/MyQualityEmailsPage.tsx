@@ -9,7 +9,14 @@ import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
-import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
+import EmailMessageView, {
+  CustomerSummaryBlock,
+  CustomerCoreQueryCard,
+  CustomerEmailThreadCard,
+  EmailHistoryPanel,
+  InternalNotesBlock,
+  type InternalNote,
+} from '@/components/quality/EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 
 interface EvaluationItem {
@@ -38,6 +45,7 @@ interface EvaluationItem {
   reviewed_at?: string;
   subject_line?: string;
   thread_summary?: any;
+  internal_notes?: InternalNote[];
 }
 
 interface SummaryStats {
@@ -289,7 +297,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
         const matchTicket = item.ticket_id?.toLowerCase().includes(s);
         const matchSub = item.subject_line?.toLowerCase().includes(s);
         const matchReply = item.agent_reply_text?.toLowerCase().includes(s);
-        if (!matchTicket && !matchSub && !matchReply) return false;
+        const matchEmail = item.customer_email?.toLowerCase().includes(s);
+        if (!matchTicket && !matchSub && !matchReply && !matchEmail) return false;
       }
       if (complianceFilter === 'compliant' && item.compliance_passed === false) return false;
       if (complianceFilter === 'breach' && item.compliance_passed !== false) return false;
@@ -497,10 +506,10 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             {/* Search */}
             <input
               type="text"
-              placeholder="Search Ticket ID or Subject…"
+              placeholder="Search Ticket, Subject, Email…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              style={{ ...chipInputStyle, width: 220 }}
+              style={{ ...chipInputStyle, width: 230 }}
             />
 
             {/* Compliance Filter */}
@@ -595,6 +604,23 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                       >
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
                           <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 12)}…`} />
+                          {item.customer_email && (
+                            <div
+                              title={`User Email: ${item.customer_email}`}
+                              style={{
+                                fontSize: 11,
+                                color: 'var(--qa-text-3, #71717A)',
+                                fontFamily: SANS,
+                                marginTop: 3,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                maxWidth: 160,
+                              }}
+                            >
+                              {item.customer_email}
+                            </div>
+                          )}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || agentName}</td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -777,9 +803,20 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.08em',
                                     color: 'var(--qa-text-2, #6B6B6B)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
                                   }}
                                 >
-                                  Email Conversation Details
+                                  <span>Email Conversation Details</span>
+                                  {item.customer_email && (
+                                    <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', color: 'var(--qa-text-2, #6B6B6B)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                      <span style={{ color: 'var(--qa-text-3, #71717A)' }}>User:</span>
+                                      <strong style={{ color: 'var(--qa-text, #111111)', fontFamily: MONO }}>{item.customer_email}</strong>
+                                    </span>
+                                  )}
                                 </div>
 
                                 {/* Scrollable message content */}
@@ -806,10 +843,39 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                   )}
 
                                   {/* Customer Context / Query Summary & History */}
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A' }}>
-                                        Customer Context &amp; Query Summary
+                                  {/* 1. Customer Core Query (Separate & prominent) */}
+                                  <CustomerCoreQueryCard
+                                    threadSummary={item.thread_summary}
+                                    customerMessage={item.customer_message}
+                                    subjectLine={item.subject_line}
+                                    customerEmail={item.customer_email}
+                                    parameterScores={item.parameter_scores}
+                                  />
+
+                                  {/* 2. Customer Inbound Email Thread */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A' }}>
+                                          Customer Inbound Email Thread
+                                        </div>
+                                        {item.customer_email && (
+                                          <span
+                                            style={{
+                                              fontSize: 11,
+                                              color: '#1d4ed8',
+                                              background: '#eff6ff',
+                                              border: '1px solid #bfdbfe',
+                                              padding: '1px 7px',
+                                              borderRadius: 4,
+                                              fontWeight: 500,
+                                              fontFamily: MONO,
+                                            }}
+                                            title={`User Email: ${item.customer_email}`}
+                                          >
+                                            {item.customer_email}
+                                          </span>
+                                        )}
                                       </div>
                                       <button
                                         type="button"
@@ -849,26 +915,20 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                       />
                                     )}
 
-                                    {/* Customer Context: ONLY SUMMARY */}
-                                    <div
-                                      style={{
-                                        background: '#F4F4F5',
-                                        border: '1px solid #E4E4E7',
-                                        borderRadius: 8,
-                                        padding: '12px 16px',
-                                      }}
-                                    >
-                                      <CustomerSummaryBlock
-                                        threadSummary={item.thread_summary}
-                                        customerMessage={item.customer_message}
-                                        subjectLine={item.subject_line}
-                                        parameterScores={item.parameter_scores}
-                                      />
-                                    </div>
+                                    <CustomerEmailThreadCard
+                                      customerMessage={item.customer_message}
+                                      subjectLine={item.subject_line}
+                                      customerEmail={item.customer_email}
+                                    />
                                   </div>
 
-                                    {/* Agent Reply */}
-                                    <div>
+                                  {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                                  {item.internal_notes && item.internal_notes.length > 0 && (
+                                    <InternalNotesBlock notes={item.internal_notes} />
+                                  )}
+
+                                  {/* Agent Reply */}
+                                  <div>
                                       <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A', marginBottom: 6 }}>
                                         My Outbound Reply
                                       </div>

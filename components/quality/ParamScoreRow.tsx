@@ -93,39 +93,45 @@ export default function ParamScoreRow({
       </div>
       {(reason || canEditReason) && (
         canEditReason ? (
-          <textarea
-            value={reason || ''}
-            onChange={e => onReasonChange?.(e.target.value)}
-            placeholder="Add reasoning…"
-            rows={reason ? Math.max(2, Math.min(8, (reason.match(/\n/g) || []).length + 1)) : 1}
-            style={{
-              marginTop: 8,
-              width: '100%',
-              resize: 'vertical',
-              border: '1px solid transparent',
-              borderRadius: 6,
-              padding: '6px 8px',
-              fontSize: 12,
-              color: 'var(--qa-text-2)',
-              lineHeight: 1.5,
-              fontFamily: 'inherit',
-              background: 'transparent',
-              outline: 'none',
-              transition: 'background 0.12s, border-color 0.12s',
-              cursor: 'text',
-              boxSizing: 'border-box',
-            }}
-            onFocus={e => {
-              e.target.style.background = 'var(--qa-card)';
-              e.target.style.borderColor = 'var(--qa-text)';
-            }}
-            onBlur={e => {
-              e.target.style.background = 'transparent';
-              e.target.style.borderColor = 'transparent';
-            }}
-          />
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-3)', marginBottom: 4 }}>
+              Reasoning:
+            </div>
+            <textarea
+              value={reason || ''}
+              onChange={e => onReasonChange?.(e.target.value)}
+              placeholder="Reasoning for this parameter score…"
+              rows={reason ? Math.max(2, Math.min(8, (reason.match(/\n/g) || []).length + 1)) : 2}
+              style={{
+                width: '100%',
+                resize: 'vertical',
+                border: '1px solid var(--qa-border)',
+                borderRadius: 6,
+                padding: '6px 8px',
+                fontSize: 12,
+                color: 'var(--qa-text)',
+                lineHeight: 1.5,
+                fontFamily: 'inherit',
+                background: 'var(--qa-card, #fff)',
+                outline: 'none',
+                transition: 'border-color 0.15s, box-shadow 0.15s',
+                cursor: 'text',
+                boxSizing: 'border-box',
+                minHeight: 40,
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = 'var(--qa-text)';
+                e.target.style.boxShadow = '0 0 0 1px var(--qa-text)';
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = 'var(--qa-border)';
+                e.target.style.boxShadow = 'none';
+              }}
+            />
+          </div>
         ) : (
           <div style={{ marginTop: 8, padding: '6px 8px', fontSize: 12, lineHeight: 1.5, color: 'var(--qa-text-2)' }}>
+            <span style={{ fontWeight: 600, color: 'var(--qa-text-3)', marginRight: 4 }}>Reason:</span>
             {reason}
           </div>
         )

@@ -24,6 +24,10 @@ test('resolveDateRange - custom passes the chosen dates through; missing dates f
   assert.deepEqual(resolveDateRange('custom', undefined, undefined, now), { from: '2026-10-08', to: '2026-10-14' });
 });
 
+test('resolveDateRange - all returns empty bounds (unrestricted all-time view)', () => {
+  assert.deepEqual(resolveDateRange('all', undefined, undefined), { from: '', to: '' });
+});
+
 test('intentLabel - L1 name for display, a dash when Robylon has not classified the ticket', () => {
   assert.equal(intentLabel('KYC'), 'KYC');
   assert.equal(intentLabel('  Interest Repayment '), 'Interest Repayment');
@@ -69,3 +73,23 @@ test('paramChoice - which of Yes / Half / No / NA a stored value selects', () =>
     ['yes', 'yes', 'half', 'half', 'no', 'no', 'na', 'na', null, null, null, null],
   );
 });
+
+test('formatNoteDate - formats ISO dates cleanly for internal note headers', async () => {
+  const { formatNoteDate } = await import('../components/quality/EmailContentRenderer');
+  assert.equal(formatNoteDate(null), '');
+  assert.equal(formatNoteDate(undefined), '');
+  const formatted = formatNoteDate('2026-10-22T04:29:04.486Z');
+  assert.ok(formatted.includes('Oct'), `Expected month in formatted date: ${formatted}`);
+  assert.ok(formatted.includes('2026'), `Expected year in formatted date: ${formatted}`);
+});
+
+test('CustomerEmailThreadCard and CustomerCoreQueryCard export properly with customerEmail support', async () => {
+  const renderer = await import('../components/quality/EmailContentRenderer');
+  assert.equal(typeof renderer.CustomerCoreQueryCard, 'function');
+  assert.equal(typeof renderer.CustomerEmailThreadCard, 'function');
+  assert.equal(typeof renderer.CustomerSummaryBlock, 'function');
+  assert.equal(typeof renderer.stripHtml, 'function');
+  assert.equal(renderer.stripHtml('<b>user@example.com</b>'), 'user@example.com');
+});
+
+

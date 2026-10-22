@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
+import DateRangePicker from './DateRangePicker';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
@@ -13,7 +14,14 @@ import {
   calculateEmailIQS,
   normalizeParamScoreValue,
 } from '@/lib/email/context-builder';
-import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from './EmailContentRenderer';
+import EmailMessageView, {
+  CustomerSummaryBlock,
+  CustomerCoreQueryCard,
+  CustomerEmailThreadCard,
+  EmailHistoryPanel,
+  InternalNotesBlock,
+  type InternalNote,
+} from './EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 
 type Tab = 'pending' | 'reviewed' | 'disputes' | 'unscored';
@@ -50,6 +58,7 @@ interface EvaluationItem {
   thread_summary?: any;
   effective_score?: number;
   qa_name?: string;
+  internal_notes?: InternalNote[];
 }
 
 // ─── Design Tokens & Styles (Consistent with ChatEvalTable / EvalPanel) ───────
@@ -110,6 +119,13 @@ const chip: React.CSSProperties = {
   cursor: 'pointer',
   whiteSpace: 'nowrap',
   userSelect: 'none',
+};
+
+const chipActive: React.CSSProperties = {
+  ...chip,
+  background: 'var(--qa-gray-700)',
+  color: '#fff',
+  borderColor: 'var(--qa-gray-700)',
 };
 
 
@@ -210,6 +226,7 @@ export default function EmailEvaluationPage() {
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<{
     pendingReviewCount?: number;
+    totalPendingReviewCount?: number;
     reviewedCount?: number;
     activeDisputesCount?: number;
     qaDisputesCount?: number;
@@ -233,12 +250,14 @@ export default function EmailEvaluationPage() {
     'Vedant G',
   ]);
   const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
+  const [showFilterBarPicker, setShowFilterBarPicker] = useState(false);
   const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null);
 
   // QA action state
   const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
   const [overrideParams, setOverrideParams] = useState<Record<string, Record<string, ParameterScoreValue>>>({});
   const [overrideReasoning, setOverrideReasoning] = useState<Record<string, Record<string, string>>>({});
+  const [overrideComplianceIssues, setOverrideComplianceIssues] = useState<Record<string, string[]>>({});
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
@@ -307,6 +326,24 @@ export default function EmailEvaluationPage() {
     }));
   };
 
+  const getComplianceIssuesForItem = (item: EvaluationItem): string[] => {
+    if (overrideComplianceIssues[item.message_id] !== undefined) {
+      return overrideComplianceIssues[item.message_id];
+    }
+    return item.compliance_issues || [];
+  };
+
+  const handleComplianceIssueChange = (messageId: string, index: number, text: string) => {
+    const item = items.find(i => i.message_id === messageId);
+    const existing = overrideComplianceIssues[messageId] || (item ? getComplianceIssuesForItem(item) : []);
+    const updated = [...existing];
+    updated[index] = text;
+    setOverrideComplianceIssues(prev => ({
+      ...prev,
+      [messageId]: updated,
+    }));
+  };
+
   const handleParamChange = (messageId: string, paramKey: string, val: ParameterScoreValue) => {
     const item = items.find(i => i.message_id === messageId);
     const existing = overrideParams[messageId] || (item ? getParamsForItem(item) : {});
@@ -334,9 +371,10 @@ export default function EmailEvaluationPage() {
       if (agentFilter) params.set('agentName', agentFilter);
       if (dispositionFilter) params.set('disposition', dispositionFilter);
       const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
-      params.set('from', from);
-      params.set('to', to);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
       params.set('tab', tab);
+      params.set('limit', '500');
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
@@ -380,6 +418,7 @@ export default function EmailEvaluationPage() {
   const handleSubmitReview = async (item: EvaluationItem) => {
     const currentParams = getParamsForItem(item);
     const currentReasoning = getReasoningForItem(item);
+    const currentComplianceIssues = getComplianceIssuesForItem(item);
     const scoreVal = overrideScores[item.message_id] !== undefined
       ? Number(overrideScores[item.message_id])
       : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
@@ -399,6 +438,8 @@ export default function EmailEvaluationPage() {
             ...currentParams,
             ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
           },
+          complianceIssues: currentComplianceIssues,
+          compliancePassed: currentComplianceIssues.length === 0,
         }),
       });
       const data = await res.json();
@@ -423,6 +464,11 @@ export default function EmailEvaluationPage() {
           return next;
         });
         setOverrideReasoning(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideComplianceIssues(prev => {
           const next = { ...prev };
           delete next[item.message_id];
           return next;
@@ -471,6 +517,7 @@ export default function EmailEvaluationPage() {
             ...currentParams,
             ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
           } : undefined,
+          complianceIssues: decision === 'Resolved' ? getComplianceIssuesForItem(item) : undefined,
         }),
       });
       const data = await res.json();
@@ -486,6 +533,11 @@ export default function EmailEvaluationPage() {
           return next;
         });
         setOverrideReasoning(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideComplianceIssues(prev => {
           const next = { ...prev };
           delete next[item.message_id];
           return next;
@@ -521,7 +573,7 @@ export default function EmailEvaluationPage() {
     transition: 'background 0.15s, color 0.15s',
   });
 
-  const hasFilters = Boolean(search || agentFilter || dispositionFilter);
+  const hasFilters = Boolean(search || agentFilter || dispositionFilter || period.period !== 'all');
   const cols = TAB_COLS[tab];
   const iqsOf = (i: EvaluationItem) => Number(i.effective_score ?? i.quality_score ?? -1);
   const sortedItems = !sort ? items : [...items].sort((a, b) => {
@@ -588,9 +640,20 @@ export default function EmailEvaluationPage() {
           background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
           borderRadius: 10, padding: 4, width: 'fit-content',
         }}>
-          <button style={tabStyle(tab === 'pending')} onClick={() => handleTabChange('pending')}>
+          <button
+            style={tabStyle(tab === 'pending')}
+            onClick={() => handleTabChange('pending')}
+            title={summary?.totalPendingReviewCount ? `Total pending emails: ${summary.totalPendingReviewCount}` : undefined}
+          >
             Pending Review
-            <CountBadge count={summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0)} active={tab === 'pending'} />
+            <CountBadge
+              count={
+                period.period === 'all'
+                  ? (summary?.totalPendingReviewCount ?? summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0))
+                  : (summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0))
+              }
+              active={tab === 'pending'}
+            />
           </button>
           <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
             Disputes
@@ -630,7 +693,7 @@ export default function EmailEvaluationPage() {
           <div style={{ position: 'relative', width: 220 }}>
             <input
               type="text"
-              placeholder="Search Ticket, Query…"
+              placeholder="Search Ticket, Query, Email…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{
@@ -705,10 +768,66 @@ export default function EmailEvaluationPage() {
             ))}
           </select>
 
+          {/* Date Range Filter Chip */}
+          <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+            <button
+              style={period.period !== 'all' ? chipActive : chip}
+              onClick={() => setShowFilterBarPicker((v) => !v)}
+              title={
+                period.period === 'custom' && period.customFrom && period.customTo
+                  ? `${period.customFrom} to ${period.customTo}`
+                  : period.period === '7'
+                  ? 'Last 7 days'
+                  : period.period === '30'
+                  ? 'Last 30 days'
+                  : 'Filter by date range'
+              }
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ opacity: 0.8 }}
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              {period.period === 'custom' && period.customFrom && period.customTo
+                ? `${period.customFrom} – ${period.customTo}`
+                : period.period === '7'
+                ? 'Last 7 days'
+                : period.period === '30'
+                ? 'Last 30 days'
+                : 'Date range'}
+              <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+            </button>
+            {showFilterBarPicker && (
+              <DateRangePicker
+                onApply={(from, to) => {
+                  setPeriod({ period: 'custom', customFrom: from, customTo: to });
+                  setShowFilterBarPicker(false);
+                }}
+                onCancel={() => setShowFilterBarPicker(false)}
+              />
+            )}
+          </div>
+
           {/* Reset Filters */}
           <button
             disabled={!hasFilters}
-            onClick={() => { setSearch(''); setAgentFilter(''); setDispositionFilter(''); }}
+            onClick={() => {
+              setSearch('');
+              setAgentFilter('');
+              setDispositionFilter('');
+              setPeriod({ period: 'all' });
+            }}
             style={{
               ...chip,
               color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
@@ -778,6 +897,23 @@ export default function EmailEvaluationPage() {
                     ticket: (
                       <td style={tdMono}>
                         <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
+                        {item.customer_email && (
+                          <div
+                            title={`User Email: ${item.customer_email}`}
+                            style={{
+                              fontSize: 11,
+                              color: 'var(--qa-text-3)',
+                              fontFamily: SANS,
+                              marginTop: 3,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: 150,
+                            }}
+                          >
+                            {item.customer_email}
+                          </div>
+                        )}
                       </td>
                     ),
                     agent: (
@@ -897,24 +1033,49 @@ export default function EmailEvaluationPage() {
                                   </div>
                                 </div>
 
-                                {/* Compliance Issues Banner */}
-                                {item.compliance_issues && item.compliance_issues.length > 0 && (
-                                  <div style={{
-                                    background: '#fff1f2',
-                                    border: '1px solid #fecdd3',
-                                    borderRadius: 8,
-                                    padding: '10px 14px',
-                                  }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: '#9f1239', textTransform: 'uppercase' }}>
-                                      Compliance Breaches
+                                {/* Compliance Issues Banner with editable reasons */}
+                                {(() => {
+                                  const issues = getComplianceIssuesForItem(item);
+                                  if (!issues || issues.length === 0) return null;
+                                  return (
+                                    <div style={{
+                                      background: '#fff1f2',
+                                      border: '1px solid #fecdd3',
+                                      borderRadius: 8,
+                                      padding: '10px 14px',
+                                      marginBottom: 12,
+                                    }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9f1239', textTransform: 'uppercase', marginBottom: 6 }}>
+                                        Compliance Breaches — Reason for Breach:
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        {issues.map((iss, idx) => (
+                                          <textarea
+                                            key={idx}
+                                            value={iss}
+                                            onChange={e => handleComplianceIssueChange(item.message_id, idx, e.target.value)}
+                                            placeholder="Specify reason / citation for this compliance breach…"
+                                            rows={2}
+                                            style={{
+                                              width: '100%',
+                                              boxSizing: 'border-box',
+                                              resize: 'vertical',
+                                              border: '1px solid #fca5a5',
+                                              borderRadius: 6,
+                                              padding: '6px 8px',
+                                              fontSize: 12.5,
+                                              color: '#881337',
+                                              lineHeight: 1.45,
+                                              fontFamily: 'inherit',
+                                              background: '#fff',
+                                              outline: 'none',
+                                            }}
+                                          />
+                                        ))}
+                                      </div>
                                     </div>
-                                    <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 12, color: '#881337' }}>
-                                      {item.compliance_issues.map((iss, idx) => (
-                                        <li key={idx}>{iss}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
+                                  );
+                                })()}
 
                                 {/* Parameter Scores (Matching EvalPanel in Chats) */}
                                 <div>
@@ -1023,36 +1184,70 @@ export default function EmailEvaluationPage() {
 
                               {/* Right Pane: Customer Query Context & Agent Outbound Reply (conversation on the right, as in chats) */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                {/* 1. Customer Core Query (Separate, prominent, well-spaced) */}
+                                <CustomerCoreQueryCard
+                                  threadSummary={item.thread_summary}
+                                  customerMessage={item.customer_message}
+                                  subjectLine={item.subject_line}
+                                  customerEmail={item.customer_email}
+                                  parameterScores={item.parameter_scores}
+                                />
+
+                                {/* 2. Customer Inbound Email Thread (Separated with clean controls & History) */}
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
                                     <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Customer Context &amp; Query Summary
+                                      Customer Inbound Email Thread
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
-                                      style={{
-                                        height: 26,
-                                        padding: '0 10px',
-                                        borderRadius: 6,
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        border: '1px solid var(--qa-border)',
-                                        background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                        color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 5,
-                                        transition: 'all 0.15s',
-                                      }}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <polyline points="12 6 12 12 16 14" />
-                                      </svg>
-                                      {historyOpen[item.message_id] ? 'Hide History' : 'History'}
-                                    </button>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                      {item.customer_email && (
+                                        <span
+                                          style={{
+                                            fontSize: 11,
+                                            color: '#1d4ed8',
+                                            background: '#eff6ff',
+                                            border: '1px solid #bfdbfe',
+                                            padding: '1px 7px',
+                                            borderRadius: 4,
+                                            fontWeight: 500,
+                                            fontFamily: MONO,
+                                          }}
+                                          title={`User Email: ${item.customer_email}`}
+                                        >
+                                          {item.customer_email}
+                                        </span>
+                                      )}
+                                      {item.ticket_id && (
+                                        <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: 'var(--font-mono, monospace)' }}>
+                                          Ticket #{item.ticket_id}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
+                                        style={{
+                                          height: 26,
+                                          padding: '0 10px',
+                                          borderRadius: 6,
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          border: '1px solid var(--qa-border)',
+                                          background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                          color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 5,
+                                          transition: 'all 0.15s',
+                                        }}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <polyline points="12 6 12 12 16 14" />
+                                        </svg>
+                                        {historyOpen[item.message_id] ? 'Hide History' : 'History'}
+                                      </button>
+                                    </div>
                                   </div>
 
                                   {/* History Panel */}
@@ -1066,21 +1261,17 @@ export default function EmailEvaluationPage() {
                                     />
                                   )}
 
-                                  {/* Customer Context / Query: ONLY SUMMARY */}
-                                  <div style={{
-                                    background: 'var(--qa-card)',
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    padding: '14px 16px',
-                                  }}>
-                                    <CustomerSummaryBlock
-                                      threadSummary={item.thread_summary}
-                                      customerMessage={item.customer_message}
-                                      subjectLine={item.subject_line}
-                                      parameterScores={item.parameter_scores}
-                                    />
-                                  </div>
+                                  <CustomerEmailThreadCard
+                                    customerMessage={item.customer_message}
+                                    subjectLine={item.subject_line}
+                                    customerEmail={item.customer_email}
+                                  />
                                 </div>
+
+                                {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                                {item.internal_notes && item.internal_notes.length > 0 && (
+                                  <InternalNotesBlock notes={item.internal_notes} />
+                                )}
 
                                 <div>
                                   <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
