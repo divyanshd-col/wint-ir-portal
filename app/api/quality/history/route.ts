@@ -85,10 +85,57 @@ export async function GET(req: NextRequest) {
           [customerEmail, ticketId, chatId]
         );
 
+        // Fetch internal notes for history email tickets
+        const emailChatIds = Array.from(new Set(emailRows.flatMap(r => [r.chatId, r.ticketId].filter(Boolean))));
+        const notesByChatId: Record<string, any[]> = {};
+        if (emailChatIds.length > 0) {
+          try {
+            const noteRows = await query<any>(
+              `SELECT 
+                 w.chat_id,
+                 COALESCE(
+                   w.payload->'human_agent_info'->>'name',
+                   w.payload->'data'->'message'->>'sender',
+                   'Internal Note'
+                 ) AS sender,
+                 COALESCE(
+                   w.payload->'data'->'message'->>'content',
+                   w.payload->'data'->>'content',
+                   w.payload->>'content'
+                 ) AS content,
+                 COALESCE(
+                   (w.payload->'data'->'message'->>'created_at')::timestamptz,
+                   w.received_at
+                 ) AS created_at
+               FROM robylon_webhook_payloads w
+               WHERE w.event_type = 'INTERNAL_NOTE_ADDED'
+                 AND w.chat_id = ANY($1::text[])
+               ORDER BY created_at ASC`,
+              [emailChatIds]
+            );
+            for (const n of noteRows) {
+              const k = String(n.chat_id);
+              if (!notesByChatId[k]) notesByChatId[k] = [];
+              if (n.content && String(n.content).trim()) {
+                notesByChatId[k].push({
+                  sender: (n.sender || 'Agent').trim(),
+                  content: String(n.content).trim(),
+                  created_at: n.created_at,
+                });
+              }
+            }
+          } catch {}
+        }
+
         for (const er of emailRows) {
           const key = `email_${er.messageId || er.evalId || er.ticketId}`;
           if (seenKeys.has(key)) continue;
           seenKeys.add(key);
+
+          const ticketNotes =
+            notesByChatId[String(er.chatId)] ||
+            notesByChatId[String(er.ticketId)] ||
+            [];
 
           combinedHistory.push({
             id: er.messageId || er.evalId || er.ticketId,
@@ -106,6 +153,7 @@ export async function GET(req: NextRequest) {
             status: er.evalStatus || er.convStatus || 'Completed',
             customerMessage: er.customerMessage || null,
             agentReply: er.agentReply || null,
+            internalNotes: ticketNotes,
           });
         }
       } catch (err: any) {

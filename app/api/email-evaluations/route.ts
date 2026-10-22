@@ -126,9 +126,20 @@ async function getScopedDispositionsForUser(
   if (userRole === 'quality') {
     const qaEntry = (config.qaDispositionMap ?? []).find((e: any) => (e.email || '').toLowerCase() === emailLower);
     const configUser = config.users?.find((u: any) => (u.email || u.username || '').toLowerCase() === emailLower);
-    const userDisps = qaEntry?.dispositions ?? configUser?.assignedDispositions ?? [];
+    let userDisps: string[] | undefined = qaEntry?.dispositions ?? configUser?.assignedDispositions;
+
+    if ((!userDisps || userDisps.length === 0) && userEmail) {
+      try {
+        const { getUserByEmail } = await import('@/lib/users');
+        const dbUser = await getUserByEmail(userEmail).catch(() => null);
+        if (dbUser?.assigned_dispositions && dbUser.assigned_dispositions.length > 0) {
+          userDisps = dbUser.assigned_dispositions;
+        }
+      } catch {}
+    }
+
     return {
-      scopedDispositions: Array.isArray(userDisps) ? userDisps : [],
+      scopedDispositions: Array.isArray(userDisps) && userDisps.length > 0 ? userDisps : null,
       allDispositions,
     };
   }
@@ -148,10 +159,7 @@ export async function GET(req: NextRequest) {
     const scopedAgentNames = await getScopedAgentNamesForUser(userEmail, userName, userRole, isAdmin);
     const { scopedDispositions, allDispositions } = await getScopedDispositionsForUser(userEmail, userRole, isAdmin);
 
-    if (
-      (scopedAgentNames !== null && scopedAgentNames.length === 0) ||
-      (scopedDispositions !== null && scopedDispositions.length === 0)
-    ) {
+    if (scopedAgentNames !== null && scopedAgentNames.length === 0) {
       return NextResponse.json({
         ok: true,
         items: [],
@@ -195,7 +203,7 @@ export async function GET(req: NextRequest) {
     const toDate = searchParams.get('to');
     const disputeStatus = searchParams.get('disputeStatus');
     const disputeQueue = searchParams.get('disputeQueue'); // 'tl_pending' (raised, awaiting TL) | 'tl_history' (forwarded or decided)
-    const limit = Math.min(Number(searchParams.get('limit') || 100), 500);
+    const limit = Math.min(Number(searchParams.get('limit') || 500), 1000);
     const offset = Number(searchParams.get('offset') || 0);
 
     let effectiveDispositions: string[] | null = null;
@@ -319,7 +327,7 @@ export async function GET(req: NextRequest) {
     if (search) {
       params.push(`%${search}%`);
       whereClauses.push(
-        `(e.ticket_id ILIKE $${params.length} OR e.agent_reply_text ILIKE $${params.length} OR e.customer_message ILIKE $${params.length} OR c.subject_line ILIKE $${params.length})`
+        `(e.ticket_id ILIKE $${params.length} OR e.agent_reply_text ILIKE $${params.length} OR e.customer_message ILIKE $${params.length} OR c.subject_line ILIKE $${params.length} OR c.customer_email ILIKE $${params.length})`
       );
     }
 
@@ -355,7 +363,65 @@ export async function GET(req: NextRequest) {
       LIMIT ${limit} OFFSET ${offset}
     `;
 
-    const items = await query(itemsQuery, params);
+    const items = await query<any>(itemsQuery, params);
+
+    // Attach internal notes from robylon_webhook_payloads for the retrieved items
+    if (items.length > 0) {
+      const chatIds = Array.from(
+        new Set(items.flatMap((i: any) => [i.chat_id, i.ticket_id].filter(Boolean)))
+      );
+
+      if (chatIds.length > 0) {
+        try {
+          const noteRows = await query<any>(
+            `SELECT 
+               w.chat_id,
+               COALESCE(
+                 w.payload->'human_agent_info'->>'name',
+                 w.payload->'data'->'message'->>'sender',
+                 w.payload->'data'->'message'->>'from_email',
+                 'Internal Note'
+               ) AS sender,
+               COALESCE(
+                 w.payload->'data'->'message'->>'content',
+                 w.payload->'data'->>'content',
+                 w.payload->>'content'
+               ) AS content,
+               COALESCE(
+                 (w.payload->'data'->'message'->>'created_at')::timestamptz,
+                 w.received_at
+               ) AS created_at
+             FROM robylon_webhook_payloads w
+             WHERE w.event_type = 'INTERNAL_NOTE_ADDED'
+               AND w.chat_id = ANY($1::text[])
+             ORDER BY created_at ASC`,
+            [chatIds]
+          );
+
+          const notesByChatId: Record<string, any[]> = {};
+          for (const row of noteRows) {
+            const key = String(row.chat_id);
+            if (!notesByChatId[key]) notesByChatId[key] = [];
+            if (row.content && String(row.content).trim()) {
+              notesByChatId[key].push({
+                sender: (row.sender || 'Agent').trim(),
+                content: String(row.content).trim(),
+                created_at: row.created_at,
+              });
+            }
+          }
+
+          for (const item of items) {
+            item.internal_notes =
+              notesByChatId[String(item.chat_id)] ||
+              notesByChatId[String(item.ticket_id)] ||
+              [];
+          }
+        } catch (err) {
+          console.error('[email-evaluations] Error attaching internal notes:', err);
+        }
+      }
+    }
 
     // The cards (totals, tab counts, per-agent breakdown) follow the same sent_at range as the list.
     const rangeClauses: string[] = [];
@@ -437,6 +503,41 @@ export async function GET(req: NextRequest) {
     `;
     const statsRes = await query(statsQuery, statsParams);
     const summary = statsRes?.[0] || {};
+
+    // Calculate total all-time pending review count respecting agent and disposition scoping
+    let totalPendingCount = Number(summary.pending_review_count || 0);
+    if (rangeClauses.length > 0) {
+      const scopeClauses: string[] = ["e.evaluation_status = 'Completed'", "(e.review_status = 'pending' OR e.review_status IS NULL)"];
+      const scopeParams: any[] = [];
+      if (agentName) {
+        const reqLower = agentName.trim().toLowerCase();
+        const isAllowed = !scopedAgentNames || scopedLower.includes(reqLower) || scopedLower.some(n => n.startsWith(reqLower) || reqLower.startsWith(n));
+        if (isAllowed) {
+          scopeParams.push(agentName.trim());
+          scopeClauses.push(`TRIM(e.agent_name) ILIKE $${scopeParams.length}`);
+        } else {
+          scopeClauses.push('1 = 0');
+        }
+      } else if (scopedAgentNames) {
+        scopeParams.push(scopedLower);
+        scopeClauses.push(`LOWER(TRIM(e.agent_name)) = ANY($${scopeParams.length}::text[])`);
+      }
+      if (hasDispositionFilter) {
+        if (singleDisposition === '__FORBIDDEN__') {
+          scopeClauses.push('1 = 0');
+        } else if (singleDisposition) {
+          scopeParams.push(singleDisposition.toLowerCase());
+          scopeClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${scopeParams.length}`);
+        } else if (effectiveDispositions) {
+          const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
+          scopeParams.push(lowerDisps);
+          scopeClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${scopeParams.length}::text[])`);
+        }
+      }
+      const totalPendingQuery = `SELECT COUNT(*)::int AS total_pending ${statsFrom} WHERE ${scopeClauses.join(' AND ')}`;
+      const totalPendingRes = await query(totalPendingQuery, scopeParams);
+      totalPendingCount = Number(totalPendingRes?.[0]?.total_pending || 0);
+    }
 
     // 3. Member-Level Breakdown for Team Lead View
     const tlBreakdownClauses: string[] = ['e.agent_name IS NOT NULL'];
@@ -524,6 +625,7 @@ export async function GET(req: NextRequest) {
         totalCount: Number(summary.total_count || 0),
         pendingCount: Number(summary.pending_review_count || 0),
         pendingReviewCount: Number(summary.pending_review_count || 0),
+        totalPendingReviewCount: Number(totalPendingCount || 0),
         reviewedCount: Number(summary.reviewed_count || 0),
         unscoredCount: isAdmin ? Number(summary.unscored_count || 0) : 0,
         completedCount: Number(summary.completed_count || 0),

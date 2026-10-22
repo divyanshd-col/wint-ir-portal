@@ -10,8 +10,8 @@ export default async function Page() {
   const rawRole = userAny?.role as string | undefined;
   const role = rawRole || (userAny?.isAdmin ? 'admin' : '');
 
-  // QA and Admin access
-  if (!['admin', 'quality'].includes(role)) {
+  // Access for QA, Admin, TL, and Agent users (scoped automatically by role)
+  if (!['admin', 'quality', 'tl', 'agent'].includes(role)) {
     redirect('/quality');
   }
 
