@@ -138,30 +138,29 @@ export default function EmailMessageView({
 
 // ─── Customer Query / Context Summary Block ───────────────────────────────────
 
-export interface CustomerSummaryBlockProps {
+export interface CustomerCoreQueryCardProps {
   threadSummary?: any;
   customerMessage?: string | null;
   subjectLine?: string | null;
+  customerEmail?: string | null;
   parameterScores?: any;
+  showHeader?: boolean;
   style?: React.CSSProperties;
 }
 
 /**
- * Displays ONLY the customer context / query summary:
- * - Structured 4-point summary if thread_summary is provided
- * - Or AI synthesized core_query from parameterScores
- * - Or clean extracted customer inquiry fallback
- * - With a collapsible link to view full raw message if needed
+ * Dedicated, prominent card for the customer's core query / intent.
+ * Clearly separated from the raw email thread with generous spacing and high readability.
  */
-export function CustomerSummaryBlock({
+export function CustomerCoreQueryCard({
   threadSummary,
   customerMessage,
   subjectLine,
+  customerEmail,
   parameterScores,
+  showHeader = true,
   style,
-}: CustomerSummaryBlockProps) {
-  const [showFullEmail, setShowFullEmail] = useState(false);
-
+}: CustomerCoreQueryCardProps) {
   // Parse structured thread summary if present
   let summaryObj: any = null;
   if (typeof threadSummary === 'string') {
@@ -174,122 +173,505 @@ export function CustomerSummaryBlock({
     summaryObj = { ...threadSummary };
   }
 
-  // If thread_summary doesn't have core_query, check parameterScores
-  if (!summaryObj?.core_query && parameterScores?.core_query) {
-    summaryObj = {
-      ...(summaryObj || {}),
-      core_query: parameterScores.core_query,
-    };
+  // Check synthesized core_query from thread_summary or parameterScores
+  const synthesizedCore = summaryObj?.core_query || parameterScores?.core_query;
+  const isAiSynthesized = Boolean(synthesizedCore && String(synthesizedCore).trim());
+  const coreQueryText = (
+    synthesizedCore ||
+    extractConciseQuery(customerMessage, subjectLine || 'Customer inquiry')
+  )?.trim();
+
+  const actionsTaken = summaryObj?.actions_taken?.trim();
+  const pendingAction = summaryObj?.pending_action?.trim();
+  const commitmentsSet = summaryObj?.commitments_set?.trim();
+  const hasThreadContext = Boolean(actionsTaken || pendingAction || commitmentsSet);
+
+  const displaySubject = subjectLine && subjectLine !== 'Email Support Request' ? subjectLine : null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, ...style }}>
+      {showHeader && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              color: 'var(--qa-text-3, #71717A)',
+            }}>
+              Customer Core Query
+            </span>
+            <span style={{
+              fontSize: 10,
+              fontWeight: 600,
+              padding: '1px 7px',
+              borderRadius: 4,
+              background: isAiSynthesized ? '#eff6ff' : 'var(--qa-fill-light, #F4F4F5)',
+              color: isAiSynthesized ? '#1d4ed8' : 'var(--qa-text-2, #6B6B6B)',
+              border: isAiSynthesized ? '1px solid #bfdbfe' : '1px solid var(--qa-border, #E4E4E7)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+            }}>
+              {isAiSynthesized ? '🎯 AI Synthesized' : 'Customer Intent'}
+            </span>
+            {customerEmail && (
+              <span
+                title={`User Email: ${customerEmail}`}
+                style={{
+                  fontSize: 11,
+                  color: '#1d4ed8',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  padding: '1px 7px',
+                  borderRadius: 4,
+                  fontWeight: 500,
+                  fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                  <polyline points="22,6 12,13 2,6" />
+                </svg>
+                {customerEmail}
+              </span>
+            )}
+          </div>
+
+          {displaySubject && (
+            <span
+              title={displaySubject}
+              style={{
+                fontSize: 11,
+                color: 'var(--qa-text-2, #6B6B6B)',
+                maxWidth: 320,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontStyle: 'italic',
+              }}
+            >
+              Subject: {displaySubject}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Prominent Core Query Card */}
+      <div style={{
+        background: 'var(--qa-card, #FFFFFF)',
+        border: '1px solid var(--qa-border, #E4E4E7)',
+        borderLeft: '4px solid #2563EB',
+        borderRadius: 8,
+        padding: '14px 18px',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+      }}>
+        <div style={{
+          fontSize: 13.5,
+          lineHeight: 1.6,
+          color: 'var(--qa-text, #111111)',
+          fontWeight: 500,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}>
+          {coreQueryText || (
+            <span style={{ fontStyle: 'italic', color: 'var(--qa-text-3, #A1A1AA)' }}>
+              No customer query recorded.
+            </span>
+          )}
+        </div>
+
+        {hasThreadContext && (
+          <div style={{
+            marginTop: 12,
+            paddingTop: 10,
+            borderTop: '1px solid var(--qa-border-sub, #F0F0F2)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}>
+            {actionsTaken && (
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)', minWidth: 125, flexShrink: 0 }}>
+                  Actions Taken:
+                </span>
+                <span style={{ color: 'var(--qa-text-2, #6B6B6B)' }}>{actionsTaken}</span>
+              </div>
+            )}
+            {pendingAction && (
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)', minWidth: 125, flexShrink: 0 }}>
+                  Pending Action:
+                </span>
+                <span style={{ color: 'var(--qa-text-2, #6B6B6B)' }}>{pendingAction}</span>
+              </div>
+            )}
+            {commitmentsSet && (
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, lineHeight: 1.5 }}>
+                <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)', minWidth: 125, flexShrink: 0 }}>
+                  Commitments Set:
+                </span>
+                <span style={{ color: 'var(--qa-text-2, #6B6B6B)' }}>{commitmentsSet}</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export interface CustomerEmailThreadCardProps {
+  customerMessage?: string | null;
+  subjectLine?: string | null;
+  customerEmail?: string | null;
+  defaultExpanded?: boolean;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Dedicated card for the inbound customer email / thread.
+ * Separated cleanly from the core query so reviewers can view the raw email thread
+ * with scrollable or collapsible view without cluttering the synthesized intent.
+ */
+export function CustomerEmailThreadCard({
+  customerMessage,
+  subjectLine,
+  customerEmail,
+  defaultExpanded = true,
+  style,
+}: CustomerEmailThreadCardProps) {
+  const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
+
+  if (!customerMessage) {
+    return (
+      <div style={{
+        background: 'var(--qa-card, #FFFFFF)',
+        border: '1px solid var(--qa-border, #E4E4E7)',
+        borderRadius: 8,
+        padding: '12px 16px',
+        color: 'var(--qa-text-3, #71717A)',
+        fontSize: 12,
+        fontStyle: 'italic',
+        ...style,
+      }}>
+        No inbound email message recorded.
+      </div>
+    );
   }
 
-  const hasStructured = summaryObj && (
-    summaryObj.core_query ||
-    summaryObj.actions_taken ||
-    summaryObj.pending_action ||
-    summaryObj.commitments_set
-  );
+  return (
+    <div style={{
+      background: 'var(--qa-card, #FFFFFF)',
+      border: '1px solid var(--qa-border, #E4E4E7)',
+      borderRadius: 8,
+      overflow: 'hidden',
+      boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+      ...style,
+    }}>
+      {/* Thread subheader / controls */}
+      <div style={{
+        padding: '8px 14px',
+        background: 'var(--qa-gray-50, #FAFAFB)',
+        borderBottom: isExpanded ? '1px solid var(--qa-border-sub, #F0F0F2)' : 'none',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        fontSize: 11,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)' }}>
+            Inbound Message Body
+          </span>
+          {customerEmail && (
+            <span
+              title={`User Email: ${customerEmail}`}
+              style={{
+                fontSize: 11,
+                color: '#1d4ed8',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                padding: '1px 7px',
+                borderRadius: 4,
+                fontWeight: 500,
+                fontFamily: 'ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                <polyline points="22,6 12,13 2,6" />
+              </svg>
+              {customerEmail}
+            </span>
+          )}
+          {subjectLine && subjectLine !== 'Email Support Request' && (
+            <span
+              title={subjectLine}
+              style={{
+                color: 'var(--qa-text-3, #A1A1AA)',
+                maxWidth: 260,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              • {subjectLine}
+            </span>
+          )}
+        </div>
 
-  const fallbackSummary = !hasStructured
-    ? extractConciseQuery(customerMessage, subjectLine || 'Customer inquiry')
-    : null;
+        <button
+          type="button"
+          onClick={() => setIsExpanded(v => !v)}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            fontSize: 11,
+            fontWeight: 500,
+            color: 'var(--accent, #2d9e4f)',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+        >
+          {isExpanded ? '▲ Collapse Email' : '▼ Expand Email'}
+        </button>
+      </div>
+
+      {/* Email Body */}
+      {isExpanded ? (
+        <div style={{
+          padding: '12px 16px',
+          maxHeight: 280,
+          overflowY: 'auto',
+          fontSize: 13,
+          lineHeight: 1.6,
+          color: 'var(--qa-text, #111111)',
+        }}>
+          <EmailMessageView
+            content={customerMessage}
+            fallback="No message body available."
+          />
+        </div>
+      ) : (
+        <div
+          onClick={() => setIsExpanded(true)}
+          style={{
+            padding: '8px 14px',
+            fontSize: 12,
+            color: 'var(--qa-text-3, #71717A)',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title="Click to expand"
+        >
+          {stripHtml(customerMessage).slice(0, 140)}…
+        </div>
+      )}
+    </div>
+  );
+}
+
+export interface CustomerSummaryBlockProps {
+  threadSummary?: any;
+  customerMessage?: string | null;
+  subjectLine?: string | null;
+  customerEmail?: string | null;
+  parameterScores?: any;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Renders the customer context cleanly separated:
+ * 1. Dedicated CustomerCoreQueryCard for the synthesized core query
+ * 2. Dedicated CustomerEmailThreadCard for the inbound message / thread with proper spacing
+ */
+export function CustomerSummaryBlock({
+  threadSummary,
+  customerMessage,
+  subjectLine,
+  customerEmail,
+  parameterScores,
+  style,
+}: CustomerSummaryBlockProps) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, ...style }}>
+      <CustomerCoreQueryCard
+        threadSummary={threadSummary}
+        customerMessage={customerMessage}
+        subjectLine={subjectLine}
+        customerEmail={customerEmail}
+        parameterScores={parameterScores}
+      />
+      {customerMessage && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{
+            fontSize: 11,
+            fontWeight: 600,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: 'var(--qa-text-3, #71717A)',
+          }}>
+            Customer Inbound Email
+          </div>
+          <CustomerEmailThreadCard
+            customerMessage={customerMessage}
+            subjectLine={subjectLine}
+            customerEmail={customerEmail}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Internal Notes Component ────────────────────────────────────────────────
+
+export interface InternalNote {
+  sender?: string;
+  content: string;
+  created_at?: string;
+}
+
+export function formatNoteDate(ts?: string | number | null): string {
+  if (!ts) return '';
+  const d = new Date(ts);
+  if (isNaN(d.getTime())) return String(ts);
+  return d.toLocaleString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
+/**
+ * Safely renders the internal note content, keeping URLs clickable
+ * and preserving HTML formatting if sent as HTML by Robylon.
+ */
+export function renderNoteContent(raw?: string | null) {
+  if (!raw) return 'No note content recorded.';
+
+  if (isHtml(raw)) {
+    const sanitized = sanitizeEmailHtml(raw);
+    return (
+      <div
+        className="email-internal-note-content"
+        dangerouslySetInnerHTML={{ __html: sanitized }}
+      />
+    );
+  }
+
+  const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
+  const parts = raw.split(urlRegex);
+  if (parts.length === 1) {
+    return <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{raw}</span>;
+  }
+
+  return (
+    <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      {parts.map((part, i) => {
+        if (urlRegex.test(part)) {
+          return (
+            <a
+              key={i}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#b45309', textDecoration: 'underline', fontWeight: 600, wordBreak: 'break-all' }}
+            >
+              {part}
+            </a>
+          );
+        }
+        return part;
+      })}
+    </span>
+  );
+}
+
+export interface InternalNotesBlockProps {
+  notes?: InternalNote[] | null;
+  style?: React.CSSProperties;
+}
+
+/**
+ * Renders internal notes with amber/yellow dashed highlighting identical to
+ * chat transcripts in EvalPanel (background: #fffbeb, border: 1px dashed #f59e0b).
+ */
+export function InternalNotesBlock({ notes, style }: InternalNotesBlockProps) {
+  if (!notes || notes.length === 0) return null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, ...style }}>
-      {/* Summary View */}
-      {hasStructured ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {summaryObj.core_query && (
-            <div style={{ display: 'flex', gap: 6, fontSize: 13, lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 600, color: 'var(--qa-text, #111111)', minWidth: 140, flexShrink: 0 }}>
-                Core Query:
-              </span>
-              <span style={{ color: 'var(--qa-text, #111111)' }}>
-                {summaryObj.core_query}
-              </span>
-            </div>
-          )}
+      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#b45309', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+          <polyline points="14 2 14 8 20 8"></polyline>
+          <line x1="16" y1="13" x2="8" y2="13"></line>
+          <line x1="16" y1="17" x2="8" y2="17"></line>
+        </svg>
+        Internal Working Notes ({notes.length})
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {notes.map((note, idx) => {
+          const noteTime = note.created_at ? '  •  ' + formatNoteDate(note.created_at) : '';
+          const senderName = (note.sender || 'Agent').trim();
 
-          {summaryObj.actions_taken && (
-            <div style={{ display: 'flex', gap: 6, fontSize: 13, lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)', minWidth: 140, flexShrink: 0 }}>
-                Actions Taken:
-              </span>
-              <span style={{ color: 'var(--qa-text-2, #6B6B6B)' }}>
-                {summaryObj.actions_taken}
-              </span>
+          return (
+            <div
+              key={idx}
+              style={{
+                background: '#fffbeb',
+                border: '1px dashed #f59e0b',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#78350f',
+                padding: '10px 14px',
+                lineHeight: 1.5,
+                wordBreak: 'break-word',
+                overflowWrap: 'anywhere',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+              }}
+            >
+              <div
+                style={{
+                  fontWeight: 600,
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  color: '#b45309',
+                  marginBottom: 6,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 4,
+                }}
+              >
+                <span>Internal Note ({senderName})</span>
+                {noteTime && <span style={{ fontWeight: 400, color: '#92400e', fontSize: 10 }}>{noteTime.replace(/^\s*•\s*/, '')}</span>}
+              </div>
+              <div style={{ fontStyle: 'italic' }}>
+                {renderNoteContent(note.content)}
+              </div>
             </div>
-          )}
-
-          {summaryObj.pending_action && (
-            <div style={{ display: 'flex', gap: 6, fontSize: 13, lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)', minWidth: 140, flexShrink: 0 }}>
-                Pending Action:
-              </span>
-              <span style={{ color: 'var(--qa-text-2, #6B6B6B)' }}>
-                {summaryObj.pending_action}
-              </span>
-            </div>
-          )}
-
-          {summaryObj.commitments_set && (
-            <div style={{ display: 'flex', gap: 6, fontSize: 13, lineHeight: 1.5 }}>
-              <span style={{ fontWeight: 600, color: 'var(--qa-text-2, #6B6B6B)', minWidth: 140, flexShrink: 0 }}>
-                Commitments Set:
-              </span>
-              <span style={{ color: 'var(--qa-text-2, #6B6B6B)' }}>
-                {summaryObj.commitments_set}
-              </span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ fontSize: 13, lineHeight: 1.55, color: 'var(--qa-text, #111111)' }}>
-          <span style={{ fontWeight: 600, color: 'var(--qa-text, #111111)', marginRight: 6 }}>
-            {subjectLine && subjectLine !== 'Email Support Request' ? `${subjectLine}:` : 'Customer Inquiry:'}
-          </span>
-          {fallbackSummary}
-        </div>
-      )}
-
-      {/* Collapsible toggle to view full raw email if required */}
-      {customerMessage && (
-        <div style={{ paddingTop: 4, borderTop: '1px solid var(--qa-border-sub, #F0F0F2)' }}>
-          <button
-            type="button"
-            onClick={() => setShowFullEmail(v => !v)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              padding: 0,
-              fontSize: 11,
-              fontWeight: 500,
-              color: 'var(--accent, #2d9e4f)',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-            }}
-          >
-            {showFullEmail ? '▲ Hide Full Customer Email' : '▼ View Full Customer Email'}
-          </button>
-
-          {showFullEmail && (
-            <div style={{
-              marginTop: 8,
-              padding: '10px 12px',
-              borderRadius: 6,
-              background: 'var(--qa-fill-light, #F4F4F5)',
-              maxHeight: 200,
-              overflowY: 'auto',
-            }}>
-              <EmailMessageView
-                content={customerMessage}
-                fallback="No additional message body."
-              />
-            </div>
-          )}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -314,6 +696,7 @@ export interface HistoryEntry {
   agentReply?: string | null;
   messageId?: string | null;
   ticketId?: string | null;
+  internalNotes?: InternalNote[];
 }
 
 export interface EmailHistoryPanelProps {
@@ -578,6 +961,10 @@ export function EmailHistoryPanel({
                                   {stripHtml(h.customerMessage)}
                                 </div>
                               </div>
+                            )}
+
+                            {h.internalNotes && h.internalNotes.length > 0 && (
+                              <InternalNotesBlock notes={h.internalNotes} />
                             )}
 
                             {h.agentReply && (

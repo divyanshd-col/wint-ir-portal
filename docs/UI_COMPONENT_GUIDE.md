@@ -73,13 +73,13 @@ Shell wrappers and their layouts:
 
 | Component | File | Use |
 |---|---|---|
-| `PeriodFilter` (+ `DEFAULT_PERIOD`, `PeriodState`) | `components/quality/PeriodFilter.tsx` | 7 days / 30 days / Custom range control (opens `DateRangePicker`). Controlled: `value`, `onChange`. Default 7 days. Pair with `periodBounds()` from `lib/email/ui.ts` to build query params. |
+| `PeriodFilter` (+ `DEFAULT_PERIOD`, `PeriodState`) | `components/quality/PeriodFilter.tsx` | All / 7 days / 30 days / Custom range control (opens `DateRangePicker`). Controlled: `value`, `onChange`. Default All (`'all'`). Pair with `periodBounds()` from `lib/email/ui.ts` to build query params. |
 | `TicketLinkButton` | `components/quality/TicketLinkButton.tsx` | Ticket/chat id rendered as a bordered blue "Show chat ↗"-style button that opens `https://app.robylon.ai/unified-inbox/share/{id}` in a new tab. Props: `id` (used for the URL), optional `label` (display text, e.g. a shortened id). Stops click propagation so the row doesn't expand. |
-| `EmailMessageView`, `CustomerSummaryBlock`, `EmailHistoryPanel`, `stripHtml`, `sanitizeEmailHtml` | `components/quality/EmailContentRenderer.tsx` | Email body rendering. `EmailMessageView` runs content through `trimEmailBody` (no trailing blank lines/empty blocks) and uses the `.email-html-body` rules in `app/globals.css` (tight paragraphs, no trailing margin). `CustomerSummaryBlock` shows the 4-point customer summary; `EmailHistoryPanel` the prior-interaction history. |
+| `EmailMessageView`, `CustomerCoreQueryCard`, `CustomerEmailThreadCard`, `CustomerSummaryBlock`, `EmailHistoryPanel`, `stripHtml`, `sanitizeEmailHtml` | `components/quality/EmailContentRenderer.tsx` | Email body rendering. `EmailMessageView` runs content through `trimEmailBody` (no trailing blank lines/empty blocks) and uses the `.email-html-body` rules in `app/globals.css` (tight paragraphs, no trailing margin). `CustomerCoreQueryCard` renders the prominent, synthesized user intent; `CustomerEmailThreadCard` renders the inbound email thread separately with proper spacing and collapsible controls; `CustomerSummaryBlock` is the composite wrapper; `EmailHistoryPanel` shows prior-interaction history. |
 | `usePaging`, `ShowingCount`, `Pager` | `components/quality/TablePaging.tsx` | Client-side paging for the email tables, same look as the chat tables: `ShowingCount` = "Showing X of N" + rows-per-page button (20/50/100) at the right end of the filter bar; `Pager` = "Page x of y" + Prev/Next footer (hidden on one page); `usePaging(items, resetKey)` slices the rows and returns to page 1 when `resetKey` changes. Pure helpers `pageSlice` / `pageCount` live in `lib/email/ui.ts`. |
 | `ParamScoreRow` | `components/quality/ParamScoreRow.tsx` | One evaluation parameter laid out like the chat evaluation panel: name on the left, Yes / Half / No (/ NA) buttons and the weight (`25%`) on the same line, the AI reasoning underneath (no description; it is the name's tooltip). Pass `onChange` to make it editable (QA email drawer); without it the buttons are a read-only display with the selected answer highlighted and the rest dimmed (TL and agent drawers). A value that is none of the four (missing, numeric) shows as text. Used for every parameter list on the email pages. |
 | `ScoreRing` | `components/quality/ScoreRing.tsx` | Neutral IQS ring (64px, whole-number score, dash when unscored) used in the agent and TL email detail panels; token colours so it works in dark mode. The QA email page keeps its own colour-coded ring. |
-| `DateRangePicker` | `components/quality/DateRangePicker.tsx` | Calendar popover used by `PeriodFilter` and the chat/call tables. |
+| `DateRangePicker` | `components/quality/DateRangePicker.tsx` | Calendar popover used by `PeriodFilter` and the chat/call/email tables. |
 | `DisputeStatusPill` | exported from `components/tl/QualityChatsPage.tsx` | Dispute label for chats/calls (shared by TL chats, TL calls, My Quality Chats/Calls). Now **plain text**, despite the name. |
 | `ParamBadge`, `IQSRing`, `IQSRingCard`, `EvalPanel`, `CallEvalPanel` | `components/quality/` | Older chat/call scoring pieces; not used by the email pages. |
 
@@ -88,9 +88,9 @@ Shell wrappers and their layouts:
 | Function | Purpose |
 |---|---|
 | `robylonTicketUrl(id)` | Robylon unified-inbox link |
-| `Period` (`'7'|'30'|'custom'`), `resolveDateRange(period, from?, to?, now?)` | Inclusive local calendar days; custom without both dates falls back to 7 days |
+| `Period` (`'all'\|'7'\|'30'\|'custom'`), `resolveDateRange(period, from?, to?, now?)` | Inclusive local calendar days; 'all' returns empty bounds; custom without both dates falls back to 7 days |
 | `dayBoundsISO(from, to)` | local day start / day end as ISO instants (so "today" is the viewer's today, not UTC's) |
-| `periodBounds(period, from?, to?)` | `resolveDateRange` + `dayBoundsISO`; what pages send as `from`/`to` |
+| `periodBounds(period, from?, to?)` | `resolveDateRange` + `dayBoundsISO`; what pages send as `from`/`to` (empty if 'all') |
 | `intentLabel(v)` | Intent L1 for a cell; "—" for empty, "None" or a raw UUID |
 | `paramLabel(v)` | Plain label for a stored parameter value: Yes / Half / No / NA, numeric -> `NN%`, missing -> "—" |
 | `paramChoice(v)` | Which button a stored value selects: `'yes' \| 'half' \| 'no' \| 'na'` (accepts pass/partial/fail/n/a), else `null` |

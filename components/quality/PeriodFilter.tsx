@@ -10,10 +10,18 @@ export interface PeriodState {
   customTo?: string;
 }
 
-export const DEFAULT_PERIOD: PeriodState = { period: '7' };
+export const DEFAULT_PERIOD: PeriodState = { period: 'all' };
 
-/** 7 days / 30 days / Custom range control, the same look as the Quality Analytics header. */
-export default function PeriodFilter({ value, onChange }: { value: PeriodState; onChange: (v: PeriodState) => void }) {
+/** All / 7 days / 30 days / Custom range control, the same look as the Quality Analytics header. */
+export default function PeriodFilter({
+  value,
+  onChange,
+  showAll = true,
+}: {
+  value: PeriodState;
+  onChange: (v: PeriodState) => void;
+  showAll?: boolean;
+}) {
   const [showPicker, setShowPicker] = useState(false);
   const on = (active: boolean) => ({
     background: active ? 'var(--qa-text)' : 'transparent',
@@ -24,6 +32,14 @@ export default function PeriodFilter({ value, onChange }: { value: PeriodState; 
   return (
     <div style={{ position: 'relative' }}>
       <div style={{ display: 'inline-flex', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden', background: 'var(--qa-card)' }}>
+        {showAll && (
+          <button
+            onClick={() => { onChange({ period: 'all' }); setShowPicker(false); }}
+            style={{ ...base, ...on(value.period === 'all'), borderRight: '1px solid var(--qa-border)' }}
+          >
+            All
+          </button>
+        )}
         {(['7', '30'] as const).map((p) => (
           <button
             key={p}

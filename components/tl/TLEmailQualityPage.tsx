@@ -8,7 +8,14 @@ import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
-import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from '@/components/quality/EmailContentRenderer';
+import EmailMessageView, {
+  CustomerSummaryBlock,
+  CustomerCoreQueryCard,
+  CustomerEmailThreadCard,
+  EmailHistoryPanel,
+  InternalNotesBlock,
+  type InternalNote,
+} from '@/components/quality/EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 
 
@@ -49,6 +56,7 @@ interface EvaluationItem {
   reviewed_by?: string;
   updated_at?: string;
   reviewed_at?: string;
+  internal_notes?: InternalNote[];
 }
 
 // ─── Design Tokens & Styles ───────────────────────────────────────────────────
@@ -326,7 +334,26 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
                   onClick={() => setExpandedId(isOpen ? null : item.message_id)}
                   style={{ background: isOpen ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
                 >
-                  <td style={tdMono}><TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} /></td>
+                  <td style={tdMono}>
+                    <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
+                    {item.customer_email && (
+                      <div
+                        title={`User Email: ${item.customer_email}`}
+                        style={{
+                          fontSize: 11,
+                          color: 'var(--qa-text-3)',
+                          fontFamily: SANS,
+                          marginTop: 3,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          maxWidth: 150,
+                        }}
+                      >
+                        {item.customer_email}
+                      </div>
+                    )}
+                  </td>
                   <td style={{ ...td, fontWeight: 500 }}>{item.agent_name || 'Unassigned'}</td>
                   <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
                     {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
@@ -413,18 +440,53 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
                             </div>
                           </div>
                         </div>
-                        <div>
-                          <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                            Customer Context / Query
-                          </div>
-                          <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '14px 16px' }}>
-                            <CustomerSummaryBlock
-                              threadSummary={item.thread_summary}
-                              customerMessage={item.customer_message}
-                              subjectLine={item.subject_line}
-                              parameterScores={item.parameter_scores}
-                            />
-                          </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          {/* 1. Customer Core Query (Separate & prominent) */}
+                          <CustomerCoreQueryCard
+                            threadSummary={item.thread_summary}
+                            customerMessage={item.customer_message}
+                            subjectLine={item.subject_line}
+                            customerEmail={item.customer_email}
+                            parameterScores={item.parameter_scores}
+                          />
+
+                          {/* 2. Customer Inbound Email Thread */}
+                          {item.customer_message && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                  Customer Inbound Email Thread
+                                </div>
+                                {item.customer_email && (
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      color: '#1d4ed8',
+                                      background: '#eff6ff',
+                                      border: '1px solid #bfdbfe',
+                                      padding: '1px 7px',
+                                      borderRadius: 4,
+                                      fontWeight: 500,
+                                      fontFamily: MONO,
+                                    }}
+                                    title={`User Email: ${item.customer_email}`}
+                                  >
+                                    {item.customer_email}
+                                  </span>
+                                )}
+                              </div>
+                              <CustomerEmailThreadCard
+                                customerMessage={item.customer_message}
+                                subjectLine={item.subject_line}
+                                customerEmail={item.customer_email}
+                              />
+                            </div>
+                          )}
+
+                          {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                          {item.internal_notes && item.internal_notes.length > 0 && (
+                            <InternalNotesBlock notes={item.internal_notes} />
+                          )}
                         </div>
                       </div>
                     </td>
@@ -777,6 +839,23 @@ export default function TLEmailQualityPage() {
                       >
                         <td style={tdMono}>
                           <TicketLinkButton id={reply.chat_id ?? reply.ticket_id} label={reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`} />
+                          {reply.customer_email && (
+                            <div
+                              title={`User Email: ${reply.customer_email}`}
+                              style={{
+                                fontSize: 11,
+                                color: 'var(--qa-text-3)',
+                                fontFamily: SANS,
+                                marginTop: 3,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                maxWidth: 150,
+                              }}
+                            >
+                              {reply.customer_email}
+                            </div>
+                          )}
                         </td>
                         <td style={{ ...td, fontWeight: 500 }}>
                           {reply.agent_name || 'Unassigned'}
@@ -856,60 +935,88 @@ export default function TLEmailQualityPage() {
 
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                                 <div>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Customer Context / Query
+                                  {/* 1. Customer Core Query (Separate & prominent) */}
+                                  <CustomerCoreQueryCard
+                                    threadSummary={reply.thread_summary}
+                                    customerMessage={reply.customer_message}
+                                    subjectLine={reply.subject_line}
+                                    customerEmail={reply.customer_email}
+                                    parameterScores={reply.parameter_scores}
+                                  />
+
+                                  {/* 2. Customer Inbound Email Thread */}
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                          Customer Inbound Email Thread
+                                        </div>
+                                        {reply.customer_email && (
+                                          <span
+                                            style={{
+                                              fontSize: 11,
+                                              color: '#1d4ed8',
+                                              background: '#eff6ff',
+                                              border: '1px solid #bfdbfe',
+                                              padding: '1px 7px',
+                                              borderRadius: 4,
+                                              fontWeight: 500,
+                                              fontFamily: MONO,
+                                            }}
+                                            title={`User Email: ${reply.customer_email}`}
+                                          >
+                                            {reply.customer_email}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: !prev[reply.message_id] }))}
+                                        style={{
+                                          height: 26,
+                                          padding: '0 10px',
+                                          borderRadius: 6,
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          border: '1px solid var(--qa-border)',
+                                          background: historyOpen[reply.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                          color: historyOpen[reply.message_id] ? '#fff' : 'var(--qa-text-2)',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 5,
+                                          transition: 'all 0.15s',
+                                        }}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <polyline points="12 6 12 12 16 14" />
+                                        </svg>
+                                        {historyOpen[reply.message_id] ? 'Hide History' : 'History'}
+                                      </button>
                                     </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: !prev[reply.message_id] }))}
-                                      style={{
-                                        height: 26,
-                                        padding: '0 10px',
-                                        borderRadius: 6,
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        border: '1px solid var(--qa-border)',
-                                        background: historyOpen[reply.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                        color: historyOpen[reply.message_id] ? '#fff' : 'var(--qa-text-2)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 5,
-                                        transition: 'all 0.15s',
-                                      }}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <polyline points="12 6 12 12 16 14" />
-                                      </svg>
-                                      {historyOpen[reply.message_id] ? 'Hide History' : 'History'}
-                                    </button>
-                                  </div>
 
-                                  {historyOpen[reply.message_id] && (
-                                    <EmailHistoryPanel
-                                      customerEmail={reply.customer_email}
-                                      chatId={reply.chat_id}
-                                      ticketId={reply.ticket_id}
-                                      currentMessageId={reply.message_id}
-                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: false }))}
-                                    />
-                                  )}
+                                    {historyOpen[reply.message_id] && (
+                                      <EmailHistoryPanel
+                                        customerEmail={reply.customer_email}
+                                        chatId={reply.chat_id}
+                                        ticketId={reply.ticket_id}
+                                        currentMessageId={reply.message_id}
+                                        onClose={() => setHistoryOpen(prev => ({ ...prev, [reply.message_id]: false }))}
+                                      />
+                                    )}
 
-                                  <div style={{
-                                    background: 'var(--qa-card)',
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    padding: '14px 16px',
-                                  }}>
-                                    <CustomerSummaryBlock
-                                      threadSummary={reply.thread_summary}
+                                    <CustomerEmailThreadCard
                                       customerMessage={reply.customer_message}
                                       subjectLine={reply.subject_line}
-                                      parameterScores={reply.parameter_scores}
+                                      customerEmail={reply.customer_email}
                                     />
                                   </div>
+
+                                  {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                                  {reply.internal_notes && reply.internal_notes.length > 0 && (
+                                    <InternalNotesBlock notes={reply.internal_notes} />
+                                  )}
                                 </div>
 
                                 <div>
