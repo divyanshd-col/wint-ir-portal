@@ -277,6 +277,10 @@ export interface ConversationRow {
   frt_seconds: number | null;
   bot_to_team_seconds: number | null;
   resolution_seconds: number | null;
+  raw_payload?: any;
+  webhook_trigger?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export async function upsertConversation(data: {

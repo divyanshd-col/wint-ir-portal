@@ -61,6 +61,7 @@ interface EvaluationItem {
 
 // ─── Design Tokens & Styles ───────────────────────────────────────────────────
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
+const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
 const th: React.CSSProperties = {
   height: 40,
