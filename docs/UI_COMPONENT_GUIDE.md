@@ -22,6 +22,26 @@ Plus brand: `--accent` (#2d9e4f), `--accent-hover`, `--accent-active`, `--accent
 
 Light values: eggshell `#f5f3ee` for `--page-bg`, `--tb-bg`, `--sb-bg` (top bar, sidebar and page blend as one surface), white `--qa-card` / `--color-background-primary` for cards. Dark values live under `[data-theme="dark"]`.
 
+### Dark palette (Wint brand scheme)
+Dark mode is the brand black (`#000000`, from Brandfetch for wintwealth.com) with neutral surface steps and the brand green `#05a54b` as the accent. Values live in `[data-theme="dark"]` in `app/dark-theme.css`:
+
+| Role | Value | Notes |
+|---|---|---|
+| Page background (`--page-bg`, `--qa-bg`, `--background`) | `#0a0a0a` | darkest |
+| Sidebar (`--sb-bg`) | `#111111` | |
+| Card / top bar (`--qa-card`, `--color-background-primary`, `--tb-bg`) | `#141414` | |
+| Raised (`--qa-gray-50`) | `#181818` | table headers, drawers |
+| Fill (`--qa-fill-light`, `--qa-gray-100`, `--color-background-secondary`) | `#1c1c1c` | |
+| Hover (`--color-background-tertiary`) | `#242424` | |
+| Borders (`--qa-border`, `--color-border-tertiary`) / strong | `#2a2a2a` / `#3a3a3a` | |
+| Text / muted / faint | `#f4f4f5` / `#a1a1aa` / `#71717a` | 16.8 / 7.2 / 3.8 : 1 on a card; faint is for non-essential labels only |
+| Accent (`--accent`) | `#05a54b` | 5.7:1 on a card |
+| Accent text/links (`--accent-active`) | `#34d27b` | 9.3:1 |
+| Accent hover (`--accent-hover`) / tint (`--accent-weak`) | `#06b852` / `#0a2616` | |
+| Text on green (`--accent-on`) | `#000000` | 6.5:1; white on this green is only 3.2:1 |
+
+Pages that hard-code the old green (`bg-[#2d9e4f]`, `text-[#2d9e4f]`, `focus:ring-[#2d9e4f]/30`, ...) are remapped to these tokens by the "brand green" block at the end of `dark-theme.css`: fills become the brand green with black text, green text becomes the lighter accent. Light mode keeps `#2d9e4f` (not yet aligned with the brand green).
+
 Rules of thumb:
 - Page ground = `var(--page-bg)`; cards/tables = `var(--qa-card)` (quality pages) or `var(--color-background-primary)`; muted text = `--qa-text-2` / `--qa-text-3`; borders = `--qa-border` / `--qa-border-sub`.
 - `--qa-on-text` is the text colour **on top of** a filled `--qa-text` surface (active period pill, primary dark buttons). Don't use `#fff` there: in dark mode `--qa-text` is light, so white text vanishes.
@@ -235,7 +255,8 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `9e10b3a` | Email detail drawers: evaluation (ring + parameters) on the left, conversation on the right, as in chats (QA and TL swapped; agent already matched) |
 | `521766c` | Parameter rows in all three email drawers use the chat layout via the shared `ParamScoreRow` (name + buttons + weight on one line, reasoning below; QA editable, TL/agent read-only) |
 | `17d82f5` | QA Accept / Reject Dispute buttons now show on forwarded (`Under_Review`) disputes; `resolve_dispute` SQL got explicit type casts (it failed with "inconsistent types deduced for parameter $1", so QA could never resolve an email dispute) |
-| (this change) | Member Analytics "Viewing" dropdown: height capped and scrolls inside (167 agents ran off the page); active period pill text uses `--qa-on-text` so it shows in dark mode |
+| `5f2b68b` | Member Analytics "Viewing" dropdown: height capped and scrolls inside (167 agents ran off the page); active period pill text uses `--qa-on-text` so it shows in dark mode |
+| (this change) | Dark mode uses the Wint brand scheme: neutral black surface steps, brand green `#05a54b` accent with black text on green, old hard-coded green remapped in dark (see "Dark palette") |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 

@@ -12,27 +12,31 @@
 
 [data-theme="dark"] {
   color-scheme: dark;
-  --page-bg: #0f0f10;
-  --tb-bg: #18181b; --tb-border: #2e2e33; --tb-capsule: #27272a; --tb-pill: #3f3f46;
-  --sb-bg: #1a1a1a; --sb-border: #ffffff1a;
+  /* Wint brand dark scheme: brand black as the base, neutral (not blue-tinted) surface steps, brand green #05a54b as the accent.
+     Surface steps: page #0a0a0a < card #141414 < raised #181818 < fill #1c1c1c < hover #242424. Borders #2a2a2a / #3a3a3a. */
+  --page-bg: #0a0a0a;
+  --tb-bg: #141414; --tb-border: #2a2a2a; --tb-capsule: #1c1c1c; --tb-pill: #333333;
+  --sb-bg: #111111; --sb-border: #ffffff1a;
   --sb-text: #d4d4d8; --sb-text-muted: #a1a1aa; --sb-hover: rgba(255,255,255,.06);
   --sb-active-bg: #ffffff1a; --sb-active-text: #ffffff; --sb-active-shadow: none;
 
-  --background: #0f0f10; --foreground: #f4f4f5;
+  --background: #0a0a0a; --foreground: #f4f4f5;
 
-  --accent-active: #5fcf86; --accent-weak: #14301f;
+  /* Brand green #05a54b (6.1:1 on the page). Text on green is black (6.5:1); white would be 3.2:1. --accent-active is the lighter
+     green for text/links on dark surfaces (9.3:1). */
+  --accent: #05a54b; --accent-hover: #06b852; --accent-active: #34d27b; --accent-weak: #0a2616; --accent-on: #000000;
 
-  --color-background-primary: #18181b; --color-background-secondary: #1f1f23; --color-background-tertiary: #27272a;
-  --color-background-danger: #3f1d1d; --color-background-warning: #3d2f10; --color-background-success: #14301f; --color-background-info: #172554;
+  --color-background-primary: #141414; --color-background-secondary: #1c1c1c; --color-background-tertiary: #242424;
+  --color-background-danger: #3f1d1d; --color-background-warning: #3d2f10; --color-background-success: #0a2616; --color-background-info: #172554;
   --color-text-primary: #f4f4f5; --color-text-secondary: #a1a1aa; --color-text-tertiary: #71717a;
   --color-text-danger: #fca5a5; --color-text-warning: #fcd34d; --color-text-success: #86efac; --color-text-info: #93c5fd;
-  --color-border-tertiary: #2e2e33; --color-border-secondary: #3f3f46;
+  --color-border-tertiary: #2a2a2a; --color-border-secondary: #3a3a3a;
 
-  --qa-bg: #0f0f10; --qa-card: #18181b; --qa-border: #2e2e33; --qa-border-sub: #26262a;
-  --qa-fill-light: #1f1f23; --qa-fill-med: #2e2e33;
+  --qa-bg: #0a0a0a; --qa-card: #141414; --qa-border: #2a2a2a; --qa-border-sub: #202020;
+  --qa-fill-light: #1c1c1c; --qa-fill-med: #2a2a2a;
   --qa-text: #f4f4f5; --qa-text-2: #a1a1aa; --qa-text-3: #71717a; --qa-text-4: #52525b;
-  --qa-on-text: #18181b;
-  --qa-gray-700: #e4e4e7; --qa-gray-50: #1c1c1f; --qa-gray-100: #1f1f23;
+  --qa-on-text: #0a0a0a;
+  --qa-gray-700: #e4e4e7; --qa-gray-50: #181818; --qa-gray-100: #1c1c1c;
 }
 
 /* ---- backgrounds ---- */
@@ -45,7 +49,7 @@
 [data-theme="dark"] .bg-\[\#f5f5f0\], [data-theme="dark"] .bg-\[\#f5f3ee\], [data-theme="dark"] .bg-\[\#f7f8f7\],
 [data-theme="dark"] .bg-\[\#f7f8fa\], [data-theme="dark"] .bg-\[\#F7F7F8\], [data-theme="dark"] .bg-\[\#fafafa\] { background-color: var(--background); }
 [data-theme="dark"] .hover\:bg-gray-50:hover, [data-theme="dark"] .hover\:bg-slate-50:hover, [data-theme="dark"] .hover\:bg-stone-50:hover { background-color: var(--color-background-tertiary); }
-[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: #2e2e33; }
+[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: #2a2a2a; }
 
 /* status tints */
 [data-theme="dark"] .bg-emerald-50, [data-theme="dark"] .bg-green-50, [data-theme="dark"] .bg-emerald-100, [data-theme="dark"] .bg-green-100 { background-color: var(--color-background-success); }
@@ -81,7 +85,7 @@
 
 /* form controls that inherit nothing */
 [data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select { color: var(--color-text-primary); }
-[data-theme="dark"] ::selection { background: #2d9e4f66; }
+[data-theme="dark"] ::selection { background: #05a54b66; }
 
 /* ---- arbitrary-hex, translucent and hover variants used across the pages ---- */
 [data-theme="dark"] .text-\[\#111827\], [data-theme="dark"] .text-\[\#0a0a0a\], [data-theme="dark"] .text-\[\#18181b\] { color: var(--color-text-primary); }
@@ -93,7 +97,7 @@
 [data-theme="dark"] .bg-slate-50\/50, [data-theme="dark"] .bg-slate-50\/60 { background-color: rgba(255,255,255,.04); }
 [data-theme="dark"] .bg-white\/80, [data-theme="dark"] .bg-white\/90 { background-color: rgba(24,24,27,.9); }
 [data-theme="dark"] .hover\:bg-white:hover { background-color: var(--color-background-tertiary); }
-[data-theme="dark"] .hover\:bg-gray-200:hover, [data-theme="dark"] .hover\:bg-slate-200:hover { background-color: #3f3f46; }
+[data-theme="dark"] .hover\:bg-gray-200:hover, [data-theme="dark"] .hover\:bg-slate-200:hover { background-color: #3a3a3a; }
 [data-theme="dark"] .hover\:text-gray-900:hover, [data-theme="dark"] .hover\:text-gray-800:hover { color: var(--color-text-primary); }
 [data-theme="dark"] .hover\:text-gray-700:hover, [data-theme="dark"] .hover\:text-gray-600:hover { color: #e4e4e7; }
 [data-theme="dark"] .hover\:border-gray-400:hover { border-color: #52525b; }
@@ -108,3 +112,21 @@
 [data-theme="dark"] [style*="color:#6B7280" i], [data-theme="dark"] [style*="color:#71717A" i] { color: var(--color-text-secondary) !important; }
 [data-theme="dark"] [style*="color:#9CA3AF" i], [data-theme="dark"] [style*="color:#A1A1AA" i] { color: var(--color-text-tertiary) !important; }
 [data-theme="dark"] [style*="#E5E7EB" i], [data-theme="dark"] [style*="#E4E4E7" i], [data-theme="dark"] [style*="#F3F4F6" i] { border-color: var(--color-border-tertiary) !important; }
+
+/* ---- brand green: pages that hard-code the old green (#2d9e4f) as Tailwind classes follow the dark accent ---- */
+[data-theme="dark"] .bg-\[\#2d9e4f\] { background-color: var(--accent); color: var(--accent-on); }
+[data-theme="dark"] .hover\:bg-\[\#25883f\]:hover, [data-theme="dark"] .hover\:bg-\[\#27883f\]:hover { background-color: var(--accent-hover); }
+[data-theme="dark"] .text-\[\#2d9e4f\], [data-theme="dark"] .hover\:text-\[\#2d9e4f\]:hover { color: var(--accent-active); }
+[data-theme="dark"] .border-\[\#2d9e4f\] { border-color: var(--accent); }
+[data-theme="dark"] .accent-\[\#2d9e4f\] { accent-color: var(--accent); }
+[data-theme="dark"] .focus\:ring-\[\#2d9e4f\]:focus { --tw-ring-color: var(--accent); }
+[data-theme="dark"] .focus\:ring-\[\#2d9e4f\]\/30:focus { --tw-ring-color: rgba(5,165,75,.3); }
+[data-theme="dark"] .focus\:ring-\[\#2d9e4f\]\/40:focus { --tw-ring-color: rgba(5,165,75,.4); }
+[data-theme="dark"] .focus\:border-\[\#2d9e4f\]\/50:focus, [data-theme="dark"] .focus\:border-\[\#2d9e4f\]\/60:focus { border-color: rgba(5,165,75,.6); }
+[data-theme="dark"] .hover\:border-\[\#2d9e4f\]\/70:hover { border-color: rgba(5,165,75,.7); }
+[data-theme="dark"] .bg-\[\#2d9e4f\]\/10 { background-color: rgba(5,165,75,.10); }
+[data-theme="dark"] .bg-\[\#2d9e4f\]\/20 { background-color: rgba(5,165,75,.20); }
+[data-theme="dark"] .bg-\[\#2d9e4f\]\/40 { background-color: rgba(5,165,75,.40); }
+[data-theme="dark"] .bg-\[\#2d9e4f\]\/60 { background-color: rgba(5,165,75,.60); }
+[data-theme="dark"] .bg-\[\#2d9e4f\]\/80 { background-color: rgba(5,165,75,.80); }
+[data-theme="dark"] .hover\:bg-\[\#2d9e4f\]\/5:hover { background-color: rgba(5,165,75,.05); }
