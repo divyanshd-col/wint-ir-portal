@@ -34,13 +34,24 @@ Dark mode is the brand black (`#000000`, from Brandfetch for wintwealth.com) wit
 | Fill (`--qa-fill-light`, `--qa-gray-100`, `--color-background-secondary`) | `#1c1c1c` | |
 | Hover (`--color-background-tertiary`) | `#242424` | |
 | Borders (`--qa-border`, `--color-border-tertiary`) / strong | `#2a2a2a` / `#3a3a3a` | |
-| Text / muted / faint | `#f4f4f5` / `#a1a1aa` / `#71717a` | 16.8 / 7.2 / 3.8 : 1 on a card; faint is for non-essential labels only |
+| Text / muted / faint | `#f4f4f5` / `#a1a1aa` / `#8b8b94` | 16.8 / 7.2 / 5.5 : 1 on a card (faint text was `#71717a`, 3.8:1, raised so timestamps stay readable on tinted cards). `--qa-text-4` (disabled) is `#666670` |
 | Accent (`--accent`) | `#05a54b` | 5.7:1 on a card |
 | Accent text/links (`--accent-active`) | `#34d27b` | 9.3:1 |
 | Accent hover (`--accent-hover`) / tint (`--accent-weak`) | `#06b852` / `#0a2616` | |
 | Text on green (`--accent-on`) | `#000000` | 6.5:1; white on this green is only 3.2:1 |
 
 Pages that hard-code the old green (`bg-[#2d9e4f]`, `text-[#2d9e4f]`, `focus:ring-[#2d9e4f]/30`, ...) are remapped to these tokens by the "brand green" block at the end of `dark-theme.css`: fills become the brand green with black text, green text becomes the lighter accent. Light mode keeps `#2d9e4f` (not yet aligned with the brand green).
+
+### Why old pages work in dark mode (what `dark-theme.css` covers)
+Most pages predate the tokens and hard-code light colours, so the dark layer catches them. Know what exists before adding more:
+- **Tailwind classes:** `bg-white`, `bg-gray/slate/stone-50..200`, borders, text greys, status tints, hover variants, `disabled:` variants, plus every colour family (indigo, violet, pink, teal, cyan, sky, lime, orange ... shades 50-950 and their `/50`-style opacity variants).
+- **Inline styles in two forms:** the hex form (`background:#fff`, as server-rendered) **and** the `rgb(r, g, b)` form (what the browser writes back once React updates an element). A rule for only one form silently misses half the elements.
+- **Filled controls:** anything filled with `--qa-gray-700` or `--qa-text` (a light fill in dark) gets `--qa-on-text` text, so hard-coded white labels on active tabs, Submit buttons and selected answers stay readable. Count badges inside them get a dark tint.
+- **Transcript bubbles** filled with `--qa-gray-700` keep a light fill with dark text (the executive side), investor bubbles stay dark.
+- **HTML email bodies** (`.email-html-body`) have the sender's own colours neutralised (transparent backgrounds, light text, accent links), since emails ship dark text and white boxes.
+- **Internal Slack notes** (`.email-internal-note-content`) use the warning tint with warm text.
+
+To check a page: toggle dark, open each tab and expand a row, and look for light surfaces and text below ~3:1 contrast against its background (the dark sweep did this with a small script over `getComputedStyle`). New code should still use tokens instead of relying on these catch-alls.
 
 Rules of thumb:
 - Page ground = `var(--page-bg)`; cards/tables = `var(--qa-card)` (quality pages) or `var(--color-background-primary)`; muted text = `--qa-text-2` / `--qa-text-3`; borders = `--qa-border` / `--qa-border-sub`.
@@ -256,7 +267,8 @@ Base: `origin/main` at PR #296 (SLA breach alert). Commits, oldest first:
 | `521766c` | Parameter rows in all three email drawers use the chat layout via the shared `ParamScoreRow` (name + buttons + weight on one line, reasoning below; QA editable, TL/agent read-only) |
 | `17d82f5` | QA Accept / Reject Dispute buttons now show on forwarded (`Under_Review`) disputes; `resolve_dispute` SQL got explicit type casts (it failed with "inconsistent types deduced for parameter $1", so QA could never resolve an email dispute) |
 | `5f2b68b` | Member Analytics "Viewing" dropdown: height capped and scrolls inside (167 agents ran off the page); active period pill text uses `--qa-on-text` so it shows in dark mode |
-| (this change) | Dark mode uses the Wint brand scheme: neutral black surface steps, brand green `#05a54b` accent with black text on green, old hard-coded green remapped in dark (see "Dark palette") |
+| `399312f` | Dark mode uses the Wint brand scheme: neutral black surface steps, brand green `#05a54b` accent with black text on green, old hard-coded green remapped in dark (see "Dark palette") |
+| (this change) | Dark-mode sweep of every Quality page (QA, TL, agent) and their tabs/drawers: rgb-form inline catch-alls, filled-control text, HTML email and note callouts, Tailwind colour families, disabled states, readable faint text |
 
 Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-raised disputes until forwarded; `Under_Review` is shown as "Forwarded to QA" (it used to read "Pending TL Review" on the agent page); the Run Gemini Batch / per-row Eval buttons are gone from the QA page.
 
