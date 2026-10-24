@@ -875,8 +875,8 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                 padding: '14px 16px',
                 boxShadow: overallGateResult === 'FAIL' ? '0 2px 8px rgba(239, 68, 68, 0.08)' : '0 1px 3px rgba(0, 0, 0, 0.02)',
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px 12px', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--qa-text)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
                       Compliance Gates:
                     </span>
@@ -891,11 +891,6 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                       borderRadius: 6,
                     }}>{overallGateResult}</span>
                   </div>
-                  {!isReadOnly && (
-                    <span style={{ fontSize: 11.5, color: overallGateResult === 'FAIL' ? '#b91c1c' : 'var(--qa-text-3)', fontWeight: 500, marginLeft: 'auto' }}>
-                      Fail on any gate flags interaction
-                    </span>
-                  )}
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
