@@ -1163,9 +1163,9 @@ export default function CallEvalPanel({
               marginBottom: 16,
               boxShadow: overallGateResult === 'FAIL' ? '0 2px 8px rgba(239, 68, 68, 0.08)' : '0 1px 3px rgba(0, 0, 0, 0.02)',
             }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--qa-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px 12px', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <h5 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: 'var(--qa-text)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
                     Compliance Gates:
                   </h5>
                   <span style={{
@@ -1180,7 +1180,7 @@ export default function CallEvalPanel({
                   }}>{overallGateResult}</span>
                 </div>
                 {!isReadOnly && (
-                  <span style={{ fontSize: 11.5, color: overallGateResult === 'FAIL' ? '#b91c1c' : 'var(--qa-text-3)', fontWeight: 500 }}>
+                  <span style={{ fontSize: 11.5, color: overallGateResult === 'FAIL' ? '#b91c1c' : 'var(--qa-text-3)', fontWeight: 500, marginLeft: 'auto' }}>
                     Fail on any gate marks call as Critical Fail
                   </span>
                 )}
