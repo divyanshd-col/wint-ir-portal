@@ -111,6 +111,16 @@ export async function PATCH(req: NextRequest) {
       const isV4 = rowExists ? isV4Evaluation(existing[0].parameters) : true;
       const newIqs = scores ? calculateIQS(scores, isBot, isV4) : (rowExists ? existing[0].iqs_score : 0);
 
+      // Keep parameters.__scores in sync with newIqs to prevent stale score overrides on dashboards
+      if (!params.__scores) {
+        params.__scores = {};
+      }
+      if (isBot) {
+        params.__scores.bot_iqs = newIqs;
+      } else {
+        params.__scores.agent_iqs = newIqs;
+      }
+
       if (rowExists) {
         await query(
           `UPDATE iqs_scores
