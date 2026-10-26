@@ -171,17 +171,18 @@ SPEAKER IDENTIFICATION
 ══════════════════════════════════════════
 There are exactly two speakers: IR EXECUTIVE and INVESTOR.
 
-IR EXECUTIVE: The Wint Wealth employee on the call. Introduces themselves by name AND says "Wint Wealth" (e.g. "This is Priya calling from Wint Wealth"). Professional tone. Explains products and answers queries.
-INVESTOR: The customer. May speak first OR second. May ask "Hello, is this Wint Wealth?" — this is still the INVESTOR asking a question, NOT the IR introducing themselves.
+IR EXECUTIVE: The Wint Wealth employee on the call. Professional, consultative tone. Explains bonds/funds and quotes yield, tenure, payout, and lock-in terms. Answers KYC/PAN/documentation questions. References "Wint Wealth", "RBI", "SEBI", or the platform/app. Often closes with "anything else I can help with?" / "thank you for calling Wint Wealth."
+INVESTOR: The customer. Asks about returns, safety, tenure, or redemption. Supplies personal details (name, PAN, amount) when asked. May speak first OR second. May ask "Hello, is this Wint Wealth?" — this is still the INVESTOR asking a question, NOT the IR introducing themselves.
 
-DECISION PROCEDURE (follow in order):
+DECISION PROCEDURE (follow in order — each later step is a fallback for when the step above doesn't give a clear answer):
 1. Listen to the ENTIRE call before labelling any speaker.
-2. Use VOICE CHARACTERISTICS as the PRIMARY identifier: distinguish the two voices by pitch, gender, accent, and speaking style. The same voice must get the same label throughout.
-3. The speaker who says their OWN NAME + "Wint Wealth" in a self-introduction = IR EXECUTIVE (e.g. "This is Rahul from Wint Wealth calling"). Assign that voice as IR EXECUTIVE for the whole call.
-4. The other voice = INVESTOR for the entire call.
-5. CRITICAL EDGE CASE: If the INVESTOR speaks first and says "Hello, is this Wint Wealth?" or similar — that is the INVESTOR asking, not the IR introducing. Do NOT label this voice IR EXECUTIVE.
-6. Do NOT rely on who speaks first. Either speaker may initiate. Use the self-introduction ("I am [Name] from Wint Wealth") as the definitive marker.
-7. Once you have identified both voices, apply the correct label to EVERY segment — never mix labels for the same voice.
+2. Use VOICE CHARACTERISTICS as the PRIMARY identifier: distinguish the two voices by pitch, gender, accent, and speaking style. The same voice must get the same label throughout the call — never re-assign a label to a different voice partway through.
+3. PRIMARY ANCHOR — self-introduction: the speaker who says their OWN NAME + "Wint Wealth" in a self-introduction (e.g. "This is Rahul calling from Wint Wealth") = IR EXECUTIVE. Assign that voice as IR EXECUTIVE for the whole call; the other voice = INVESTOR for the entire call.
+4. CRITICAL EDGE CASE: "Hello, is this Wint Wealth?" / "Am I speaking to Wint Wealth?" / "Are you calling from Wint?" is a QUESTION — only the INVESTOR would ask it. Do NOT label this voice IR EXECUTIVE just because it said "Wint".
+5. FALLBACK ANCHOR — if no clean self-introduction is audible anywhere in the call (garbled opening, IR skips the intro, recording starts mid-call), identify the IR EXECUTIVE by ROLE/CONTENT instead: the voice that explains products, quotes bond/fund terms, answers questions, cites company policy, or requests/confirms KYC details is the IR EXECUTIVE. The voice that asks about returns/safety/tenure, raises concerns, or supplies personal details on request is the INVESTOR.
+6. Do NOT rely on who speaks first. Either speaker may initiate the call.
+7. SELF-CHECK before finalizing: re-scan every segment where "Wint" was spoken. If it was the INVESTOR's voice saying it in a self-introduction ("...from Wint Wealth"), or the IR EXECUTIVE's voice asking "is this Wint Wealth?", your labels are backwards — swap IR EXECUTIVE and INVESTOR across every segment before producing output.
+8. Once you have identified both voices, apply the correct label to EVERY segment — never mix labels for the same voice.
 
 Pay close attention to names — IR executives introduce themselves by name (e.g. "This is Priya from Wint Wealth").
 Transcribe that name EXACTLY as heard. Similarly transcribe bond names, fund names, and product names exactly as spoken.
