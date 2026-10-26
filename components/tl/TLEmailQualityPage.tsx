@@ -6,7 +6,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ScoreRing from '@/components/quality/ScoreRing';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
-import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
+import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, {
   CustomerSummaryBlock,
@@ -179,7 +179,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
     (!agentFilter || r.agent_name === agentFilter) &&
     (!outcomeFilter || r.dispute_status === outcomeFilter));
   const paging = usePaging(shown, `${queue}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
-  const colCount = 7;
+  const colCount = 8;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
 
   return (
@@ -301,6 +301,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 130 }} />
+          <col style={{ width: 135 }} />
           <col />
           <col style={{ width: 90 }} />
           <col style={{ width: 80 }} />
@@ -311,6 +312,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
         <thead>
           <tr>
             <th style={th}>Ticket ID</th>
+            <th style={th}>Date & Time</th>
             <th style={th}>Agent</th>
             <th style={{ ...th, textAlign: 'right' }}>IQS</th>
             <th style={th}>CSAT</th>
@@ -355,6 +357,19 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
                       </div>
                     )}
                   </td>
+                  {(() => {
+                    const dt = formatEmailDateTime(item.sent_at);
+                    return (
+                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
+                        {dt.time && (
+                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
+                            {dt.time}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })()}
                   <td style={{ ...td, fontWeight: 500 }}>{item.agent_name || 'Unassigned'}</td>
                   <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
                     {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
@@ -794,8 +809,9 @@ export default function TLEmailQualityPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 130 }} />
+              <col style={{ width: 135 }} />
+              <col style={{ width: 160 }} />
               <col />
-              <col style={{ width: 220 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 80 }} />
               <col style={{ width: 90 }} />
@@ -803,6 +819,7 @@ export default function TLEmailQualityPage() {
             <thead>
               <tr>
                 <th style={th}>Ticket ID</th>
+                <th style={th}>Date & Time</th>
                 <th style={th}>Agent</th>
                 <th style={th}>Intent</th>
                 <th style={{ ...th, textAlign: 'right' }}>IQS</th>
@@ -813,13 +830,13 @@ export default function TLEmailQualityPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     Loading team email replies…
                   </td>
                 </tr>
               ) : paging.pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     No replies matching selected filters
                   </td>
                 </tr>
@@ -858,6 +875,19 @@ export default function TLEmailQualityPage() {
                             </div>
                           )}
                         </td>
+                        {(() => {
+                          const dt = formatEmailDateTime(reply.sent_at);
+                          return (
+                            <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
+                              {dt.time && (
+                                <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
+                                  {dt.time}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })()}
                         <td style={{ ...td, fontWeight: 500 }}>
                           {reply.agent_name || 'Unassigned'}
                         </td>
@@ -877,7 +907,7 @@ export default function TLEmailQualityPage() {
 
                       {isExpanded && (
                         <tr>
-                          <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={7} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
                             <div style={{
                               background: 'var(--qa-gray-50)',
                               borderTop: '1px solid var(--qa-border-sub)',

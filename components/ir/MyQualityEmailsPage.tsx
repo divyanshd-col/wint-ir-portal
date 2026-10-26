@@ -6,7 +6,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import ScoreRing from '@/components/quality/ScoreRing';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
-import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
+import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
 import type { CSSProperties } from 'react';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, {
@@ -554,7 +554,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
               <col style={{ width: 130 }} />
-              <col style={{ width: 170 }} />
+              <col style={{ width: 135 }} />
+              <col style={{ width: 160 }} />
               <col />
               <col style={{ width: 95 }} />
               <col style={{ width: 80 }} />
@@ -564,6 +565,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <thead>
               <tr>
                 <th style={TH_BASE}>Ticket ID</th>
+                <th style={TH_BASE}>Date & Time</th>
                 <th style={TH_BASE}>Agent</th>
                 <th style={TH_BASE}>Intent</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
@@ -575,13 +577,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === 'evaluated' ? 6 : 7} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     Loading email quality evaluations…
                   </td>
                 </tr>
               ) : currentTabItems.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'evaluated' ? 6 : 7} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
                     No evaluations found in this view.
                   </td>
                 </tr>
@@ -622,6 +624,19 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                             </div>
                           )}
                         </td>
+                        {(() => {
+                          const dt = formatEmailDateTime(item.sent_at);
+                          return (
+                            <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: 13, color: 'var(--qa-text, #111111)' }}>{dt.date}</div>
+                              {dt.time && (
+                                <div style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginTop: 2, fontFamily: MONO }}>
+                                  {dt.time}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })()}
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || agentName}</td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ color: 'var(--qa-text, #111111)' }}>{intentLabel(item.intent_l1)}</span>
@@ -672,7 +687,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                       {/* ── Expanded Detail Drawer (Exact match with IRScorePanel) ── */}
                       {isOpen && (
                         <tr style={{ background: '#FAFAFB' }}>
-                          <td colSpan={activeTab === 'evaluated' ? 6 : 7} style={{ padding: '0 16px 16px' }}>
+                          <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ padding: '0 16px 16px' }}>
                             <div
                               style={{
                                 display: 'flex',

@@ -26,28 +26,43 @@ import {
   collectAndProcessEmailBatchResults,
 } from '@/lib/email/gemini-batch-evaluator';
 
+const submitterCache = new Map<string, string>();
+
 async function getSubmitterName(emailOrName: string): Promise<string> {
   if (!emailOrName) return 'Yashvi Chajjer';
   const clean = emailOrName.trim();
-  if (clean.toLowerCase() === 'qa reviewer' || clean.toLowerCase() === 'qa') {
+  const lower = clean.toLowerCase();
+  if (lower === 'qa reviewer' || lower === 'qa') {
     return 'Yashvi Chajjer';
+  }
+  if (submitterCache.has(lower)) {
+    return submitterCache.get(lower)!;
   }
   try {
     const { readConfig } = await import('@/lib/config');
     const config = await readConfig();
     const configUser = config.users.find(u =>
-      (u.email || u.username)?.toLowerCase() === clean.toLowerCase() ||
-      (u.agentName || '').toLowerCase() === clean.toLowerCase()
+      (u.email || u.username)?.toLowerCase() === lower ||
+      (u.agentName || '').toLowerCase() === lower
     );
-    if (configUser?.agentName) return configUser.agentName;
+    if (configUser?.agentName) {
+      submitterCache.set(lower, configUser.agentName);
+      return configUser.agentName;
+    }
     const { getUserByEmail, getUserByName } = await import('@/lib/users');
     const dbUser = (await getUserByEmail(clean).catch(() => null)) || (await getUserByName(clean).catch(() => null));
-    if (dbUser?.name) return dbUser.name;
+    if (dbUser?.name) {
+      submitterCache.set(lower, dbUser.name);
+      return dbUser.name;
+    }
   } catch {}
   if (clean.includes('@')) {
     const local = clean.split('@')[0];
-    return local.split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    const formatted = local.split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+    submitterCache.set(lower, formatted);
+    return formatted;
   }
+  submitterCache.set(lower, clean);
   return clean;
 }
 
@@ -248,16 +263,16 @@ export async function GET(req: NextRequest) {
       whereClauses.push('1 = 0');
     } else if (singleDisposition) {
       params.push(singleDisposition.toLowerCase());
-      whereClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = $${params.length}`);
+      whereClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = $${params.length}`);
     } else if (effectiveDispositions) {
       const lowerDisps = effectiveDispositions.map(d => d.trim().toLowerCase());
       params.push(lowerDisps);
       const dispIdx = params.length;
       if (tab === 'reviewed') {
         params.push(userEmail.toLowerCase());
-        whereClauses.push(`(LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${dispIdx}::text[]) OR LOWER(COALESCE(e.reviewed_by, '')) = $${params.length})`);
+        whereClauses.push(`(LOWER(TRIM(COALESCE(c.intent_l1, ''))) = ANY($${dispIdx}::text[]) OR LOWER(COALESCE(e.reviewed_by, '')) = $${params.length})`);
       } else {
-        whereClauses.push(`LOWER(TRIM(COALESCE(intent.val, ''))) = ANY($${dispIdx}::text[])`);
+        whereClauses.push(`LOWER(TRIM(COALESCE(c.intent_l1, ''))) = ANY($${dispIdx}::text[])`);
       }
     }
 
@@ -336,7 +351,31 @@ export async function GET(req: NextRequest) {
     // 1. Fetch evaluated items with conversation subject & review metadata
     const itemsQuery = `
       SELECT 
-        e.*,
+        e.id,
+        e.ticket_id,
+        e.message_id,
+        e.agent_id,
+        e.agent_name,
+        e.sent_at,
+        e.customer_message,
+        e.agent_reply_text,
+        e.quality_score,
+        e.qa_override_score,
+        e.compliance_passed,
+        e.compliance_issues,
+        e.parameter_scores,
+        e.evaluation_status,
+        e.review_status,
+        e.reviewed_by,
+        e.reviewed_at,
+        e.dispute_status,
+        e.dispute_notes,
+        e.flag_id,
+        e.challenged_params,
+        e.qa_notes,
+        e.csat_score,
+        e.created_at,
+        e.updated_at,
         c.chat_id,
         c.subject_line,
         c.customer_email,
@@ -344,20 +383,12 @@ export async function GET(req: NextRequest) {
         c.status AS conversation_status,
         c.merged_into_ticket_id,
         c.thread_summary,
-        intent.val AS intent_l1,
+        c.intent_l1,
         COALESCE(e.qa_override_score, e.quality_score) AS effective_score,
         COALESCE(e.reviewed_by, ag.qa_name) AS qa_name
       FROM email_reply_evaluations e
       JOIN email_conversations c ON e.ticket_id = c.id
       LEFT JOIN agents ag ON LOWER(ag.name) = LOWER(e.agent_name)
-      LEFT JOIN LATERAL (
-        SELECT COALESCE(NULLIF(p->>'snapshot_value', ''), p->>'selected_value') AS val
-        FROM robylon_webhook_payloads w,
-             jsonb_array_elements(COALESCE(w.payload->'data'->'properties', '[]'::jsonb)) p
-        WHERE (w.chat_id = c.chat_id OR w.chat_id = c.id)
-          AND p->>'name' = 'Intents_L1' AND COALESCE(p->>'selected_value', '') <> ''
-        ORDER BY w.received_at DESC LIMIT 1
-      ) intent ON true
       WHERE ${whereSQL}
       ORDER BY e.sent_at DESC
       LIMIT ${limit} OFFSET ${offset}

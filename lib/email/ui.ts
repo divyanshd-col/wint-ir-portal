@@ -107,3 +107,13 @@ export function paramChoice(v: unknown): ParamChoice | null {
   if (s === 'na' || s === 'n/a') return 'na';
   return null;
 }
+
+/** Formats ISO date/time for email tables: returns structured date & time strings */
+export function formatEmailDateTime(iso: string | null | undefined): { date: string; time: string; full: string } {
+  if (!iso) return { date: '—', time: '', full: '—' };
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return { date: '—', time: '', full: '—' };
+  const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  return { date, time, full: `${date}, ${time}` };
+}

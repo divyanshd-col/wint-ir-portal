@@ -7,7 +7,7 @@ import DateRangePicker from './DateRangePicker';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
-import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
+import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
 import {
   DEFAULT_EMAIL_PARAMETERS,
   ParameterScoreValue,
@@ -206,18 +206,18 @@ function formatReviewerName(raw?: string | null): string {
   return clean;
 }
 
-// Columns per tab, ordered like the chat tables (ID, Agent, ..., Action).
-type Col = 'ticket' | 'agent' | 'intent' | 'iqs' | 'csat' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
+// Columns per tab, ordered like the chat tables (ID, Date & Time, Agent, ..., Action).
+type Col = 'ticket' | 'dateTime' | 'agent' | 'intent' | 'iqs' | 'csat' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
 const TAB_COLS: Record<Tab, Col[]> = {
-  pending: ['ticket', 'agent', 'intent', 'iqs', 'csat', 'action'],
-  reviewed: ['ticket', 'agent', 'intent', 'iqs', 'csat', 'reviewedBy', 'reviewedAt', 'action'],
-  disputes: ['ticket', 'agent', 'intent', 'iqs', 'csat', 'dispute', 'action'],
-  unscored: ['ticket', 'agent', 'intent', 'action'],
+  pending: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'action'],
+  reviewed: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'reviewedBy', 'reviewedAt', 'action'],
+  disputes: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'dispute', 'action'],
+  unscored: ['ticket', 'dateTime', 'agent', 'intent', 'action'],
 };
-const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', agent: 'Agent', intent: 'Intent', iqs: 'IQS', csat: 'CSAT', dispute: 'Dispute', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
-const COL_WIDTH: Partial<Record<Col, number>> = { ticket: 130, agent: 170, iqs: 90, csat: 80, dispute: 120, reviewedBy: 170, reviewedAt: 130, action: 90 };
+const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', dateTime: 'Date & Time', agent: 'Agent', intent: 'Intent', iqs: 'IQS', csat: 'CSAT', dispute: 'Dispute', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
+const COL_WIDTH: Partial<Record<Col, number>> = { ticket: 130, dateTime: 135, agent: 160, iqs: 90, csat: 80, dispute: 120, reviewedBy: 160, reviewedAt: 130, action: 90 };
 const RIGHT: Col[] = ['iqs', 'action'];
-type SortCol = 'ticket' | 'agent' | 'iqs';
+type SortCol = 'ticket' | 'dateTime' | 'agent' | 'iqs';
 
 export default function EmailEvaluationPage() {
   const { data: session } = useSession();
@@ -579,7 +579,8 @@ export default function EmailEvaluationPage() {
   const sortedItems = !sort ? items : [...items].sort((a, b) => {
     const cmp = sort.col === 'iqs' ? iqsOf(a) - iqsOf(b)
       : sort.col === 'agent' ? (a.agent_name ?? '').localeCompare(b.agent_name ?? '')
-        : String(a.chat_id ?? a.ticket_id).localeCompare(String(b.chat_id ?? b.ticket_id), undefined, { numeric: true });
+      : sort.col === 'dateTime' ? (new Date(a.sent_at || 0).getTime() - new Date(b.sent_at || 0).getTime())
+      : String(a.chat_id ?? a.ticket_id).localeCompare(String(b.chat_id ?? b.ticket_id), undefined, { numeric: true });
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
@@ -850,7 +851,7 @@ export default function EmailEvaluationPage() {
             <thead>
               <tr>
                 {cols.map(c => {
-                  const sortable = c === 'ticket' || c === 'agent' || c === 'iqs';
+                  const sortable = c === 'ticket' || c === 'agent' || c === 'iqs' || c === 'dateTime';
                   return (
                     <th key={c} style={{ ...th, textAlign: RIGHT.includes(c) ? 'right' : 'left' }}>
                       {sortable ? (
@@ -916,6 +917,19 @@ export default function EmailEvaluationPage() {
                         )}
                       </td>
                     ),
+                    dateTime: (() => {
+                      const dt = formatEmailDateTime(item.sent_at);
+                      return (
+                        <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
+                          {dt.time && (
+                            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
+                              {dt.time}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })(),
                     agent: (
                       <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {item.agent_name || 'Unassigned'}
