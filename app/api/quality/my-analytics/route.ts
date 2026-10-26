@@ -379,5 +379,9 @@ export async function GET(req: NextRequest) {
     wowWeeks: wowKeys.map(k => weekLabel(k)),
     wowMetrics,
     wowParams,
+  }, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
   });
 }

@@ -35,6 +35,7 @@ export interface DisputeRow {
   tlForwarded:  boolean;
   conversationType?: 'bot' | 'agent' | 'hybrid';
   reviewedBy?:  string | null;
+  originalScore?: number | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -407,6 +408,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       gates:            callDb?.gates ?? null,
       tlForwarded:      flag.status === 'tl_forwarded',
       conversationType: (db?.conversation_type ?? null) as any,
+      originalScore:    flag.originalScore != null ? parseFloat(flag.originalScore as any) : null,
     } as any);
   }
 
@@ -437,5 +439,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     durationMs: Date.now() - t0,
   });
 
-  return NextResponse.json({ disputes: finalDisputes });
+  return NextResponse.json({ disputes: finalDisputes }, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
+  });
 });
