@@ -727,7 +727,17 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   {d.raisedByName}
                 </td>
                 <td style={tdNum}>
-                  {d.iqsScore != null ? <IQSBadge score={d.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                  {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ textDecoration: 'line-through', opacity: 0.65 }}><IQSBadge score={d.originalScore} /></span>
+                      <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>→</span>
+                      <IQSBadge score={d.iqsScore} />
+                    </span>
+                  ) : (d.originalScore ?? d.iqsScore) != null ? (
+                    <IQSBadge score={d.originalScore ?? d.iqsScore} />
+                  ) : (
+                    <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                  )}
                 </td>
                 <td style={tdNum}>
                   {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
