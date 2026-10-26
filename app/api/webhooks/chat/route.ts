@@ -19,6 +19,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
+
+export const maxDuration = 300;
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import {

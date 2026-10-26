@@ -229,7 +229,7 @@ export async function PATCH(req: NextRequest) {
 
     if (scores && isBot && !isTransferred) {
       const { fireBotQualityAlert } = await import('@/lib/quality-alert');
-      fireBotQualityAlert({
+      await fireBotQualityAlert({
         chatId,
         agentName,
         scores,
@@ -239,7 +239,7 @@ export async function PATCH(req: NextRequest) {
         subDisposition,
         conversationType: convType2 || 'bot',
         isTransferred: false,
-      }).catch(() => {});
+      }).catch(err => console.error('[quality/update] fireBotQualityAlert error:', err));
     }
 
     return NextResponse.json({
