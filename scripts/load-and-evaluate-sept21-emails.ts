@@ -145,6 +145,8 @@ async function main() {
     // Track agent replies
     if (ev.event_type === 'REPLY_SENT') {
       const agentName = String(
+        payload.data?.message?.sender ||
+        payload.data?.message?.sender_name ||
         payload.human_agent_info?.name ||
         payload.handled_by_name ||
         payload.data?.handled_by_name ||

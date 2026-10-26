@@ -83,13 +83,14 @@ test('formatNoteDate - formats ISO dates cleanly for internal note headers', asy
   assert.ok(formatted.includes('2026'), `Expected year in formatted date: ${formatted}`);
 });
 
-test('CustomerEmailThreadCard and CustomerCoreQueryCard export properly with customerEmail support', async () => {
-  const renderer = await import('../components/quality/EmailContentRenderer');
-  assert.equal(typeof renderer.CustomerCoreQueryCard, 'function');
-  assert.equal(typeof renderer.CustomerEmailThreadCard, 'function');
-  assert.equal(typeof renderer.CustomerSummaryBlock, 'function');
-  assert.equal(typeof renderer.stripHtml, 'function');
-  assert.equal(renderer.stripHtml('<b>user@example.com</b>'), 'user@example.com');
+test('formatEmailDateTime - formats email date and time cleanly', async () => {
+  const { formatEmailDateTime } = await import('../lib/email/ui');
+  assert.deepEqual(formatEmailDateTime(null), { date: '—', time: '', full: '—' });
+  assert.deepEqual(formatEmailDateTime(''), { date: '—', time: '', full: '—' });
+  const res = formatEmailDateTime('2026-10-22T08:30:00Z');
+  assert.ok(res.date.includes('Oct') && res.date.includes('2026'));
+  assert.ok(res.time.length > 0);
+  assert.equal(res.full, `${res.date}, ${res.time}`);
 });
 
 

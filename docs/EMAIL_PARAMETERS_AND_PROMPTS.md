@@ -43,12 +43,12 @@ flowchart TD
 | # | Parameter Name | Key | Default Weight | NA Allowed? | Core Focus |
 |---|----------------|-----|:--------------:|:-----------:|------------|
 | 1 | **Issue resolution** | `issue_resolution` | **25%** | Yes | Addresses every question/request; moves the issue forward with clear next steps. |
-| 2 | **Accuracy** | `accuracy` | **25%** | No | Information is factual, compliant, correct product named, disclaimers present, documents attached & verified. |
-| 3 | **Expectation setting** | `expectation_setting` | **15%** | No | Clear process, realistic TATs, personalized follow-ups, educational points. |
-| 4 | **Personalisation** | `personalisation` | **10%** | No | Tailored to client's actual case, references specific details, avoids asking for info already shared. |
+| 2 | **Accuracy** | `accuracy` | **25%** | Yes | Information is factual, compliant, correct product named, disclaimers present, documents attached & verified. |
+| 3 | **Expectation setting** | `expectation_setting` | **15%** | Yes | Clear process, realistic TATs, personalized follow-ups, educational points. |
+| 4 | **Personalisation** | `personalisation` | **10%** | Yes | Tailored to client's actual case, references specific details, avoids asking for info already shared. |
 | 5 | **Empathy** | `empathy` | **10%** | Yes | Understands customer stakes and emotions (especially when money is involved), warmth, calms irritated clients. |
-| 6 | **Sentences (Simple to understand)** | `sentences_simple_to_understand` | **10%** | No | Short sentences, no jargon, key details emphasized (bold/italics), error-free, conversational. |
-| 7 | **Opening and closing message** | `opening_and_closing` | **5%** | No | Natural greeting and sign-off tied to case context; avoids stacked boilerplate. |
+| 6 | **Sentences (Simple to understand)** | `sentences_simple_to_understand` | **10%** | Yes | Short sentences, no jargon, key details emphasized (bold/italics), error-free, conversational. |
+| 7 | **Opening and closing message** | `opening_and_closing` | **5%** | Yes | Natural greeting and sign-off tied to case context; avoids stacked boilerplate. |
 | | **Total** | | **100%** | | |
 
 ---

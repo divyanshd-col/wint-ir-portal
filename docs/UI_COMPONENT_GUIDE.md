@@ -164,17 +164,17 @@ Data: `GET/POST /api/email-evaluations` (`app/api/email-evaluations/route.ts`) o
 
 | View | Columns |
 |---|---|
-| QA, Pending Review | Ticket ID, Agent, Intent, IQS, CSAT, Action |
-| QA, Reviewed Emails | Ticket ID, Agent, Intent, IQS, CSAT, Reviewed By, Reviewed At, Action |
-| QA, Disputes | Ticket ID, Agent, Intent, IQS, CSAT, Dispute, Action |
-| QA, Awaiting AI | Ticket ID, Agent, Intent, Action (no IQS yet) |
-| TL, replies | Ticket ID, Agent, Intent, IQS, CSAT, Action |
+| QA, Pending Review | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Action |
+| QA, Reviewed Emails | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Reviewed By, Reviewed At, Action |
+| QA, Disputes | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Dispute, Action |
+| QA, Awaiting AI | Ticket ID, Date & Time, Agent, Intent, Action (no IQS yet) |
+| TL, replies | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Action |
 | TL, members | Agent Name, Replies, Avg Score, Disputes, Action (Filter) |
-| TL, Disputes Raised | Ticket ID, Agent, IQS, CSAT, Raised, Status, Action (Resolve, Forward to QA, View) |
-| TL, Reviewed Disputes | Ticket ID, Agent, IQS, CSAT, Updated, Outcome, Action (View) |
-| Agent | Ticket ID, Agent, Intent, IQS, CSAT, Dispute, Action |
+| TL, Disputes Raised | Ticket ID, Date & Time, Agent, IQS, CSAT, Raised, Status, Action (Resolve, Forward to QA, View) |
+| TL, Reviewed Disputes | Ticket ID, Date & Time, Agent, IQS, CSAT, Updated, Outcome, Action (View) |
+| Agent | Ticket ID, Date & Time, Agent, Intent, IQS, CSAT, Dispute, Action |
 
-QA columns are driven by `TAB_COLS` / `COL_LABEL` / `COL_WIDTH` in `EmailEvaluationPage.tsx`; Ticket ID, Agent and IQS headers are client-side sortable (like the chat QA table). There is deliberately no Sent/Date column, no Status column and no Compliance column in the tables (compliance details stay in the expanded drawer).
+QA columns are driven by `TAB_COLS` / `COL_LABEL` / `COL_WIDTH` in `EmailEvaluationPage.tsx`; Ticket ID, Date & Time, Agent and IQS headers are client-side sortable (like the chat QA table). Compliance details stay in the expanded drawer.
 
 ### Expanded drawers
 - **QA** (evaluation left, conversation right): IQS ring, compliance badge and breaches, the seven parameters with buttons and AI reasoning, QA override form; on the right the customer summary + history, agent outbound reply, compliance badge and breaches, the seven parameters with Yes/Half/No(/NA) buttons and AI reasoning, QA override form, dispute note and resolve controls.

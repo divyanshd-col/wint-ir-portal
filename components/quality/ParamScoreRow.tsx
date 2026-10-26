@@ -4,11 +4,11 @@ const OPTIONS: { val: ParamChoice; label: string }[] = [
   { val: 'yes', label: 'Yes' },
   { val: 'half', label: 'Half' },
   { val: 'no', label: 'No' },
-  { val: 'na', label: 'NA' },
+  { val: 'na', label: 'N/A' },
 ];
 
 /**
- * One evaluation parameter, laid out like the chat evaluation panel: name on the left, Yes / Half / No (/ NA) buttons and the
+ * One evaluation parameter, laid out like the chat evaluation panel: name on the left, Yes / Half / No (/ N/A) buttons and the
  * weight on the same line, the AI reasoning underneath. Pass `onChange` to make it editable (QA); without it the buttons are
  * a read-only display (TL, agent). `description` is shown as a tooltip on the name.
  */
@@ -16,7 +16,7 @@ export default function ParamScoreRow({
   name,
   description,
   value,
-  allowNA,
+  allowNA = true,
   weight,
   reason,
   onChange,
@@ -38,7 +38,8 @@ export default function ParamScoreRow({
   const selected = paramChoice(value);
   const editable = Boolean(onChange);
   const canEditReason = Boolean(onReasonChange);
-  const options = allowNA ? OPTIONS : OPTIONS.filter(o => o.val !== 'na');
+  const showNA = allowNA ?? true;
+  const options = showNA ? OPTIONS : OPTIONS.filter(o => o.val !== 'na');
   // a stored value that is none of the four (numeric, missing) is shown as text when read-only
   const asText = !editable && selected === null;
 
@@ -72,13 +73,21 @@ export default function ParamScoreRow({
                   disabled={!editable}
                   onClick={() => onChange?.(val)}
                   style={{
-                    height: 28, padding: '0 9px', borderRadius: 8,
+                    height: 28,
+                    minWidth: 42,
+                    padding: '0 8px',
+                    borderRadius: 8,
                     border: '1px solid var(--qa-border)',
                     background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
                     color: isSel ? 'var(--qa-on-text, #fff)' : 'var(--qa-text-2)',
-                    fontSize: 12, fontFamily: 'inherit',
+                    fontSize: 12,
+                    fontFamily: 'inherit',
                     cursor: editable ? 'pointer' : 'default',
                     opacity: !editable && !isSel ? 0.4 : 1,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    textAlign: 'center',
                   }}
                 >
                   {label}
