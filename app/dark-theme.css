@@ -1,42 +1,46 @@
 /* Light/dark theme. Light is the default; dark applies with <html data-theme="dark"> (set by the top bar toggle, persisted in localStorage).
    1) token values   2) overrides for the Tailwind colour classes pages use. Only active in dark, so light mode is unchanged. */
 
-/* Shared chrome tokens: the top bar, the sidebars and the page ground blend as one eggshell surface in light mode. */
+/* Shared chrome tokens: the top bar, the sidebars and the page ground blend as one muted gray-green surface in light mode. */
 :root {
-  --page-bg: #f5f3ee;
-  --tb-bg: #f5f3ee; --tb-border: #e6e2d8; --tb-capsule: #ebe8e1; --tb-pill: #fbfaf6;
-  --sb-bg: #f5f3ee; --sb-border: #e6e2d8;
-  --sb-text: #3f3f46; --sb-text-muted: #71717a; --sb-hover: rgba(0,0,0,.05);
-  --sb-active-bg: #fbfaf6; --sb-active-text: #18181b; --sb-active-shadow: 0 1px 3px rgba(0,0,0,.10);
+  --page-bg: #f5f6f4;
+  --tb-bg: #f5f6f4; --tb-border: #dde1db; --tb-capsule: #eaede8; --tb-pill: #ffffff;
+  --sb-bg: #f5f6f4; --sb-border: #dde1db;
+  --sb-text: #3a423a; --sb-text-muted: #5f685f; --sb-hover: rgba(27,32,27,.06);
+  --sb-active-bg: #ffffff; --sb-active-text: #1b201b; --sb-active-shadow: 0 1px 3px rgba(27,32,27,.10);
 }
 
 [data-theme="dark"] {
   color-scheme: dark;
-  /* Wint brand dark scheme: brand black as the base, neutral (not blue-tinted) surface steps, brand green #05a54b as the accent.
-     Surface steps: page #0a0a0a < card #141414 < raised #181818 < fill #1c1c1c < hover #242424. Borders #2a2a2a / #3a3a3a. */
-  --page-bg: #0a0a0a;
-  --tb-bg: #141414; --tb-border: #2a2a2a; --tb-capsule: #1c1c1c; --tb-pill: #333333;
-  --sb-bg: #111111; --sb-border: #ffffff1a;
-  --sb-text: #d4d4d8; --sb-text-muted: #a1a1aa; --sb-hover: rgba(255,255,255,.06);
-  --sb-active-bg: #ffffff1a; --sb-active-text: #ffffff; --sb-active-shadow: none;
+  /* Chat Evaluation reference dark scheme: deep green-black ground, green-tinted surface steps, brighter green accent.
+     Surface steps: page #121512 < sunk #151815 < card #1a1e1a < raised #1e231e < fill #222722 < hover #272d27. Lines #2b312b / #3c443c.
+     Green = pass, red = breach, blue = focus outlines and change markers only. */
+  --page-bg: #121512;
+  --tb-bg: #1a1e1a; --tb-border: #2b312b; --tb-capsule: #222722; --tb-pill: #2f362f;
+  --sb-bg: #151815; --sb-border: #ffffff1a;
+  --sb-text: #d6dcd5; --sb-text-muted: #a3ada2; --sb-hover: rgba(231,235,230,.07);
+  --sb-active-bg: #ffffff1a; --sb-active-text: #e7ebe6; --sb-active-shadow: none;
 
-  --background: #0a0a0a; --foreground: #f4f4f5;
+  --background: #121512; --foreground: #e7ebe6;
 
-  /* Brand green #05a54b (6.1:1 on the page). Text on green is black (6.5:1); white would be 3.2:1. --accent-active is the lighter
-     green for text/links on dark surfaces (9.3:1). */
-  --accent: #05a54b; --accent-hover: #06b852; --accent-active: #34d27b; --accent-weak: #0a2616; --accent-on: #000000;
+  /* Accent #4cc287 (8.6:1 on the page). Text on green is near-black (#0b1a11). --accent-active is the lighter green for text/links. */
+  --accent: #4cc287; --accent-hover: #62cf98; --accent-active: #7be0a8; --accent-weak: #1c3326; --accent-on: #0b1a11;
 
-  --color-background-primary: #141414; --color-background-secondary: #1c1c1c; --color-background-tertiary: #242424;
-  --color-background-danger: #3f1d1d; --color-background-warning: #3d2f10; --color-background-success: #0a2616; --color-background-info: #172554;
-  --color-text-primary: #f4f4f5; --color-text-secondary: #a1a1aa; --color-text-tertiary: #8b8b94;
-  --color-text-danger: #fca5a5; --color-text-warning: #fcd34d; --color-text-success: #86efac; --color-text-info: #93c5fd;
-  --color-border-tertiary: #2a2a2a; --color-border-secondary: #3a3a3a;
+  --pass: #4cc287; --pass-soft: #1c3326; --fail: #f07167; --fail-soft: #3a1d1a;
+  --marker: #7c94f5; --marker-fg: #0f1320; --ink: #e7ebe6; --ink-fg: #121512;
+  --sunk: #151815; --line: #2b312b; --line-strong: #3c443c; --faint: #818b80;
 
-  --qa-bg: #0a0a0a; --qa-card: #141414; --qa-border: #2a2a2a; --qa-border-sub: #202020;
-  --qa-fill-light: #1c1c1c; --qa-fill-med: #2a2a2a;
-  --qa-text: #f4f4f5; --qa-text-2: #a1a1aa; --qa-text-3: #8b8b94; --qa-text-4: #666670;
-  --qa-on-text: #0a0a0a;
-  --qa-gray-700: #e4e4e7; --qa-gray-50: #181818; --qa-gray-100: #1c1c1c;
+  --color-background-primary: #1a1e1a; --color-background-secondary: #222722; --color-background-tertiary: #272d27;
+  --color-background-danger: #3a1d1a; --color-background-warning: #3d2f10; --color-background-success: #1c3326; --color-background-info: #172554;
+  --color-text-primary: #e7ebe6; --color-text-secondary: #a3ada2; --color-text-tertiary: #818b80;
+  --color-text-danger: #f07167; --color-text-warning: #fcd34d; --color-text-success: #4cc287; --color-text-info: #93c5fd;
+  --color-border-tertiary: #2b312b; --color-border-secondary: #3c443c;
+
+  --qa-bg: #121512; --qa-card: #1a1e1a; --qa-border: #2b312b; --qa-border-sub: #232823;
+  --qa-fill-light: #222722; --qa-fill-med: #2b312b;
+  --qa-text: #e7ebe6; --qa-text-2: #a3ada2; --qa-text-3: #818b80; --qa-text-4: #5a645a;
+  --qa-on-text: #121512;
+  --qa-gray-700: #e0e5df; --qa-gray-50: #1e231e; --qa-gray-100: #222722;
 }
 
 /* ---- Tailwind colour families that pages use but the semantic rules below do not cover (placed first so the semantic rules win where they exist) ---- */
@@ -119,7 +123,7 @@
 [data-theme="dark"] .bg-\[\#f5f5f0\], [data-theme="dark"] .bg-\[\#f5f3ee\], [data-theme="dark"] .bg-\[\#f7f8f7\],
 [data-theme="dark"] .bg-\[\#f7f8fa\], [data-theme="dark"] .bg-\[\#F7F7F8\], [data-theme="dark"] .bg-\[\#fafafa\] { background-color: var(--background); }
 [data-theme="dark"] .hover\:bg-gray-50:hover, [data-theme="dark"] .hover\:bg-slate-50:hover, [data-theme="dark"] .hover\:bg-stone-50:hover { background-color: var(--color-background-tertiary); }
-[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: #2a2a2a; }
+[data-theme="dark"] .hover\:bg-gray-100:hover { background-color: #2b312b; }
 
 /* status tints */
 [data-theme="dark"] .bg-emerald-50, [data-theme="dark"] .bg-green-50, [data-theme="dark"] .bg-emerald-100, [data-theme="dark"] .bg-green-100 { background-color: var(--color-background-success); }
@@ -155,7 +159,7 @@
 
 /* form controls that inherit nothing */
 [data-theme="dark"] input, [data-theme="dark"] textarea, [data-theme="dark"] select { color: var(--color-text-primary); }
-[data-theme="dark"] ::selection { background: #05a54b66; }
+[data-theme="dark"] ::selection { background: #4cc28766; }
 
 /* ---- arbitrary-hex, translucent and hover variants used across the pages ---- */
 [data-theme="dark"] .text-\[\#111827\], [data-theme="dark"] .text-\[\#0a0a0a\], [data-theme="dark"] .text-\[\#18181b\] { color: var(--color-text-primary); }
@@ -167,7 +171,7 @@
 [data-theme="dark"] .bg-slate-50\/50, [data-theme="dark"] .bg-slate-50\/60 { background-color: rgba(255,255,255,.04); }
 [data-theme="dark"] .bg-white\/80, [data-theme="dark"] .bg-white\/90 { background-color: rgba(24,24,27,.9); }
 [data-theme="dark"] .hover\:bg-white:hover { background-color: var(--color-background-tertiary); }
-[data-theme="dark"] .hover\:bg-gray-200:hover, [data-theme="dark"] .hover\:bg-slate-200:hover { background-color: #3a3a3a; }
+[data-theme="dark"] .hover\:bg-gray-200:hover, [data-theme="dark"] .hover\:bg-slate-200:hover { background-color: #3c443c; }
 [data-theme="dark"] .hover\:text-gray-900:hover, [data-theme="dark"] .hover\:text-gray-800:hover { color: var(--color-text-primary); }
 [data-theme="dark"] .hover\:text-gray-700:hover, [data-theme="dark"] .hover\:text-gray-600:hover { color: #e4e4e7; }
 [data-theme="dark"] .hover\:border-gray-400:hover { border-color: #52525b; }

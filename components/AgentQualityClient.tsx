@@ -592,7 +592,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: '#f5f3ee' }}>
+    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: 'var(--page-bg)' }}>
 
       {detailEntry && (
         <ScoreDetailModal

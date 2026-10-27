@@ -6,57 +6,78 @@
   color-scheme: light;
 
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1b201b;
 
   /* ── Brand accent (Wint green) — governed, single source ───────────── */
-  --accent:         #2d9e4f;
-  --accent-hover:   #25883f;
-  --accent-active:  #1f7436;
-  --accent-weak:    #eaf6ee;  /* tinted surface for accent backgrounds */
+  --accent:         #1f7a4d;
+  --accent-hover:   #1a6a42;
+  --accent-active:  #155a38;
+  --accent-weak:    #e3f1e8;  /* tinted surface for accent backgrounds */
   --accent-on:      #ffffff;  /* text/icon on top of --accent */
 
   /* ── QA Analytics design tokens (wireframe) ─────────────────────────── */
-  --qa-bg:           #F5F3EE;  /* the app-wide warm page ground (see topbar.css) */
+  --qa-bg:           #F5F6F4;  /* the app-wide muted gray-green page ground (see topbar.css) */
   --qa-card:         #FFFFFF;
-  --qa-border:       #E4E4E7;
-  --qa-border-sub:   #F0F0F2;
-  --qa-fill-light:   #F4F4F5;
-  --qa-fill-med:     #E4E4E7;
-  --qa-text:         #111111;
-  --qa-text-2:       #6B6B6B;
-  --qa-text-3:       #A1A1AA;
-  --qa-text-4:       #C7C7CC;
-  --qa-gray-700:     #2D2D31;
-  --qa-gray-50:      #FAFAFB;
-  --qa-gray-100:     #F4F4F5;
+  --qa-border:       #DDE1DB;
+  --qa-border-sub:   #E8EBE6;
+  --qa-fill-light:   #EEF0EC;
+  --qa-fill-med:     #DDE1DB;
+  --qa-text:         #1B201B;
+  --qa-text-2:       #5F685F;
+  --qa-text-3:       #8A938A;
+  --qa-text-4:       #B3BAB2;
+  --qa-gray-700:     #2C332C;
+  --qa-gray-50:      #F7F8F6;
+  --qa-gray-100:     #EEF0EC;
   --qa-on-text:      #FFFFFF;  /* text on a filled --qa-text surface (active pills, primary buttons) */
 
   /* ── Design system tokens ─────────────────────────────────────────── */
   --color-background-primary:   #ffffff;
-  --color-background-secondary: #fafafa;  /* zinc-50 (was slate #f8fafc) */
-  --color-background-tertiary:  #f4f4f5;  /* zinc-100 (was slate #f1f5f9) */
-  --color-background-danger:    #fee2e2;
+  --color-background-secondary: #f7f8f6;
+  --color-background-tertiary:  #eef0ec;
+  --color-background-danger:    #fbe7e5;
   --color-background-warning:   #fef3c7;
-  --color-background-success:   #dcfce7;
+  --color-background-success:   #e3f1e8;
   --color-background-info:      #dbeafe;
 
-  --color-text-primary:   #18181b;  /* zinc-900 (was gray #111827) */
-  --color-text-secondary: #71717a;  /* zinc-500 (was gray #6b7280) */
-  --color-text-tertiary:  #a1a1aa;  /* zinc-400 (was gray #9ca3af) */
-  --color-text-danger:    #b91c1c;
+  --color-text-primary:   #1b201b;
+  --color-text-secondary: #5f685f;
+  --color-text-tertiary:  #8a938a;
+  --color-text-danger:    #c0352b;
   --color-text-warning:   #b45309;
-  --color-text-success:   #15803d;
+  --color-text-success:   #1f7a4d;
   --color-text-info:      #1d4ed8;
 
-  --color-border-tertiary:  #e4e4e7;  /* zinc-200 (was gray #e5e7eb) */
-  --color-border-secondary: #d4d4d8;  /* zinc-300 (was gray #d1d5db) */
-  --color-border-danger:    #ef4444;
+  --color-border-tertiary:  #dde1db;
+  --color-border-secondary: #c4cac1;
+  --color-border-danger:    #c0352b;
   --color-border-warning:   #f59e0b;
-  --color-border-success:   #22c55e;
+  --color-border-success:   #1f7a4d;
   --color-border-info:      #3b82f6;
+
+  /* ── Semantic status + emphasis tokens (Chat Evaluation reference) ───
+     green = pass, red = breach/failure, blue = change markers + focus outlines only. */
+  --pass:        #1f7a4d;
+  --pass-soft:   #e3f1e8;
+  --fail:        #c0352b;
+  --fail-soft:   #fbe7e5;
+  --marker:      #3b5bdb;  /* focus ring + change markers only */
+  --marker-fg:   #ffffff;
+  --ink:         #1b201b;  /* primary action surface (Submit) */
+  --ink-fg:      #ffffff;
+  --sunk:        #eef0ec;  /* recessed surface: filter bars, notes */
+  --line:        #dde1db;
+  --line-strong: #c4cac1;
+  --faint:       #8a938a;  /* low-priority text: table heads, metadata */
 
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
+}
+
+/* Focus outlines are the one place blue appears in chrome (reference: blue = focus + change markers only). */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--marker);
+  outline-offset: 2px;
 }
 
 body {

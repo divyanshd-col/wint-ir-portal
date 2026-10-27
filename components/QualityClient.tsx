@@ -2908,7 +2908,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: '#f5f3ee' }}>
+    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: 'var(--page-bg)' }}>
       {detailEntry && (
         <ScoreDetail
           entry={detailEntry}
