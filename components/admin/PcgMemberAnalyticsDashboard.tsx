@@ -98,7 +98,6 @@ export default function PcgMemberAnalyticsDashboard({
   const [agentSearch, setAgentSearch] = useState('');
   const agentDropRef = useRef<HTMLDivElement>(null);
 
-  const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set());
   const [wowTab, setWowTab] = useState<'metrics' | 'params'>('metrics');
   const [wowChannel, setWowChannel] = useState<'chats' | 'calls'>('calls');
   const [wowCategory, setWowCategory] = useState<'all' | '13_pitching' | 'upselling' | 'support'>('all');
@@ -133,15 +132,6 @@ export default function PcgMemberAnalyticsDashboard({
     setShowPicker(false);
   };
 
-  const toggleCat = (disp: string) => {
-    setExpandedCats(prev => {
-      const next = new Set(prev);
-      if (next.has(disp)) next.delete(disp);
-      else next.add(disp);
-      return next;
-    });
-  };
-
   // Derive call analytics for this RM
   const rmScorecard = rmScorecards.find(s => s.rmName.toLowerCase() === effectiveRm.toLowerCase());
   const rmCalls = calls.filter(c => c.rmName.toLowerCase() === effectiveRm.toLowerCase());
@@ -152,64 +142,38 @@ export default function PcgMemberAnalyticsDashboard({
   const callsVol = rmScorecard?.totalCalls ?? (rmCalls.length > 0 ? rmCalls.length : 7);
   const callsIqs = rmAvgIqs;
 
-  // Real or deterministic mock category data matching screenshot format
-  const categories = [
-    {
-      disposition: '13% Club Pitching',
-      chats_iqs: null,
-      calls_iqs: callsIqs >= 90 ? 98.5 : 88.0,
-      emails_iqs: null,
-      resolution: 35080, // ~584m
-      subs: [
-        { sub_disposition: 'Pitch Clarity & Senior Secured Backing', chats_iqs: null, calls_iqs: 99.0, emails_iqs: null, resolution: 18400 },
-        { sub_disposition: 'Secondary Liquidity Window Framing', chats_iqs: null, calls_iqs: 86.5, emails_iqs: null, resolution: 16680 },
-        { sub_disposition: 'Investment Horizon & Due Diligence', chats_iqs: null, calls_iqs: 92.0, emails_iqs: null, resolution: 12000 },
-      ],
-    },
-    {
-      disposition: 'Portfolio Upselling',
-      chats_iqs: null,
-      calls_iqs: 94.2,
-      emails_iqs: null,
-      resolution: 47150, // ~785m
-      subs: [
-        { sub_disposition: 'Asset Allocation Need Discovery', chats_iqs: null, calls_iqs: 95.0, emails_iqs: null, resolution: 24000 },
-        { sub_disposition: 'Reinvestment & Compounding Pitch', chats_iqs: null, calls_iqs: 93.4, emails_iqs: null, resolution: 23150 },
-      ],
-    },
-    {
-      disposition: 'Investor Support & Operations',
-      chats_iqs: null,
-      calls_iqs: 91.8,
-      emails_iqs: null,
-      resolution: 32650, // ~544m
-      subs: [
-        { sub_disposition: 'Monthly Interest Payout Timeline', chats_iqs: null, calls_iqs: 96.0, emails_iqs: null, resolution: 18000 },
-        { sub_disposition: 'Form 15G / Tax Deduction Queries', chats_iqs: null, calls_iqs: 88.0, emails_iqs: null, resolution: 14650 },
-      ],
-    },
-    {
-      disposition: 'KYC & Verification',
-      chats_iqs: null,
-      calls_iqs: 98.0,
-      emails_iqs: null,
-      resolution: 41380, // ~689m
-      subs: [
-        { sub_disposition: 'PAN Verification & Demat Linking', chats_iqs: null, calls_iqs: 98.0, emails_iqs: null, resolution: 22000 },
-        { sub_disposition: 'Bank Account & Penny Drop Status', chats_iqs: null, calls_iqs: 98.0, emails_iqs: null, resolution: 19380 },
-      ],
-    },
-    {
-      disposition: 'Secondary Exit & Liquidity Queries',
-      chats_iqs: null,
-      calls_iqs: 87.5,
-      emails_iqs: null,
-      resolution: 5490, // ~91m
-      subs: [
-        { sub_disposition: 'Emergency Secondary Sale Window', chats_iqs: null, calls_iqs: 87.5, emails_iqs: null, resolution: 5490 },
-      ],
-    },
+  const PCG_PARAMETERS = [
+    { key: 'pitch_clarity', label: 'Pitch Clarity & Senior Secured Debt Backing', weight: 25, deptScore: 95 },
+    { key: 'yield_framing', label: 'Indicative Yield Framing & Disclaimers', weight: 20, deptScore: 98 },
+    { key: 'secondary_liquidity', label: 'Secondary Liquidity Window Framing', weight: 20, deptScore: 88 },
+    { key: 'asset_allocation', label: 'Asset Allocation Need Discovery', weight: 10, deptScore: 90 },
+    { key: 'payout_timeline', label: 'Monthly Interest Payout Timeline Clarity', weight: 10, deptScore: 92 },
+    { key: 'active_listening', label: 'Active Listening & Objection Handling', weight: 5, deptScore: 90 },
+    { key: 'demat_linking', label: 'Demat Linking & Account Verification', weight: 5, deptScore: 94 },
+    { key: 'tds_compliance', label: 'TDS & Form 15G Compliance', weight: 3, deptScore: 96 },
+    { key: 'tone_pacing', label: 'Greeting, Pacing & Handover', weight: 2, deptScore: 93 },
+    { key: 'call_recap', label: 'Post-Call Recap & Follow-Through', weight: 5, deptScore: 78 },
   ];
+
+  const AGENT_PARAMETER_SCORES: Record<string, Record<string, number>> = {
+    'Yaashvi Arora': { pitch_clarity: 99, yield_framing: 100, secondary_liquidity: 91, asset_allocation: 96, payout_timeline: 98, active_listening: 96, demat_linking: 97, tds_compliance: 99, tone_pacing: 96, call_recap: 88 },
+    'Aditya R': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 90, asset_allocation: 95, payout_timeline: 97, active_listening: 96, demat_linking: 96, tds_compliance: 98, tone_pacing: 95, call_recap: 86 },
+    'Aahan Thaker': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 97, active_listening: 95, demat_linking: 96, tds_compliance: 98, tone_pacing: 94, call_recap: 83 },
+    'Aravind': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 96, active_listening: 94, demat_linking: 95, tds_compliance: 98, tone_pacing: 94, call_recap: 82 },
+    'Dhanush': { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 92, call_recap: 81 },
+    'Sujal Dadwani': { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 93, call_recap: 80 },
+    'Samskriti Rao': { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 79 },
+    'Antara Chakrabarty': { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 78 },
+    'Swati Singh': { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 },
+    'Gaurav Nautiyal': { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 },
+  };
+
+  const getAgentParamScore = (rm: string, key: string, fallbackBase: number) => {
+    const scores = AGENT_PARAMETER_SCORES[rm];
+    if (scores && scores[key] !== undefined) return scores[key];
+    const delta = (callsIqs - 85) * 0.4;
+    return Math.min(100, Math.max(50, Math.round(fallbackBase + delta)));
+  };
 
   const wowWeeks = ['2026-09-21', '2026-09-28', '2026-10-05', '2026-10-12', '2026-10-19'];
   const wowWeekLabels = ['SEP 21 – 27', 'SEP 28 – OCT 4', 'OCT 5 – 11', 'OCT 12 – 18', 'OCT 19 – 25'];
@@ -217,34 +181,29 @@ export default function PcgMemberAnalyticsDashboard({
   const wowMetrics = (() => {
     if (wowChannel !== 'calls') {
       return [
-        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'IQS', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'Volume', vals: [null, null, null, null, null] as (number | null)[], isPct: false },
       ];
     }
     if (wowCategory === '13_pitching') {
       return [
-        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'IQS', vals: [91.5, 94.0, 92.8, 95.0, callsIqs >= 85 ? Math.min(100, callsIqs + 3) : 88.0] as (number | null)[], isPct: true },
         { name: 'Volume', vals: [6, 4, 8, 5, Math.max(1, Math.round(callsVol * 0.5))] as (number | null)[], isPct: false },
       ];
     }
     if (wowCategory === 'upselling') {
       return [
-        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'IQS', vals: [84.0, 87.5, 86.2, 88.0, callsIqs >= 85 ? callsIqs : 82.0] as (number | null)[], isPct: true },
         { name: 'Volume', vals: [4, 3, 5, 4, Math.max(1, Math.round(callsVol * 0.3))] as (number | null)[], isPct: false },
       ];
     }
     if (wowCategory === 'support') {
       return [
-        { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
         { name: 'IQS', vals: [88.0, 90.5, 89.0, 91.5, callsIqs >= 85 ? Math.min(100, callsIqs + 1) : 85.0] as (number | null)[], isPct: true },
         { name: 'Volume', vals: [2, 2, 2, 2, Math.max(1, Math.round(callsVol * 0.2))] as (number | null)[], isPct: false },
       ];
     }
     return [
-      { name: 'CSAT %', vals: [null, null, null, null, null] as (number | null)[], isPct: true },
       { name: 'IQS', vals: [85.7, 88.0, 84.8, 86.7, callsIqs] as (number | null)[], isPct: true },
       { name: 'Volume', vals: [12, 9, 15, 11, callsVol] as (number | null)[], isPct: false },
     ];
@@ -557,17 +516,12 @@ export default function PcgMemberAnalyticsDashboard({
             CALLS
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 16, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>CSAT</span>
-            </div>
-            <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '0 16px', lineHeight: 1.1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 24, lineHeight: 1.1 }}>
               <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text, #111111)' }}>{callsIqs.toFixed(1)}%</span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
             </div>
             <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 16, lineHeight: 1.1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 24, lineHeight: 1.1 }}>
               <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text, #111111)' }}>{callsVol}</span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
             </div>
@@ -580,17 +534,12 @@ export default function PcgMemberAnalyticsDashboard({
             CHATS
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 16, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>CSAT</span>
-            </div>
-            <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '0 16px', lineHeight: 1.1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 24, lineHeight: 1.1 }}>
               <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
             </div>
             <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 16, lineHeight: 1.1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 24, lineHeight: 1.1 }}>
               <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
             </div>
@@ -606,17 +555,12 @@ export default function PcgMemberAnalyticsDashboard({
             EMAILS
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 16, lineHeight: 1.1 }}>
-              <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
-              <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>CSAT</span>
-            </div>
-            <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '0 16px', lineHeight: 1.1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingRight: 24, lineHeight: 1.1 }}>
               <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>IQS</span>
             </div>
             <div style={{ width: 1, height: 32, background: 'var(--qa-border, #E4E4E7)', alignSelf: 'center' }} />
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 16, lineHeight: 1.1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', paddingLeft: 24, lineHeight: 1.1 }}>
               <span style={{ fontSize: 24, fontWeight: 700, lineHeight: 1, color: 'var(--qa-text-4, #C7C7CC)' }}>—</span>
               <span style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3, #A1A1AA)', marginTop: 6 }}>VOLUME</span>
             </div>
@@ -627,19 +571,21 @@ export default function PcgMemberAnalyticsDashboard({
         </div>
       </div>
 
-      {/* ── Section 2: Performance by Category ── */}
+      {/* ── Section 2: IQS by Parameters ── */}
       <section style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <SectionTitle>Performance by Category</SectionTitle>
+          <SectionTitle>IQS by Parameters</SectionTitle>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic' }}>
-            {periodLabel} · click a row to expand subcategories
+            {periodLabel} · 10 voice quality parameters evaluated for {effectiveRm}
           </span>
         </div>
         <Panel>
           <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>Top categories by volume</span>
+            <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
+              10 quality parameters · evaluated across calls
+            </span>
           </div>
-          <div style={{ overflowY: 'auto', maxHeight: 340 }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr>
@@ -649,7 +595,7 @@ export default function PcgMemberAnalyticsDashboard({
                   </th>
                 </tr>
                 <tr>
-                  {['Category', 'Calls', 'Chats', 'Emails'].map((h, i) => (
+                  {['Parameter', 'Calls', 'Chats', 'Emails'].map((h, i) => (
                     <th
                       key={h}
                       style={{
@@ -673,73 +619,47 @@ export default function PcgMemberAnalyticsDashboard({
                 </tr>
               </thead>
               <tbody>
-                {categories.map(cat => {
-                  const open = expandedCats.has(cat.disposition);
+                {PCG_PARAMETERS.map(param => {
+                  const score = getAgentParamScore(effectiveRm, param.key, param.deptScore);
                   return (
-                    <React.Fragment key={cat.disposition}>
-                      <tr
-                        onClick={() => cat.subs.length > 0 && toggleCat(cat.disposition)}
-                        style={{
-                          height: 48,
-                          cursor: cat.subs.length > 0 ? 'pointer' : 'default',
-                          background: 'transparent',
-                          transition: 'background 0.1s',
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light, #F4F4F5)')}
-                        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                      >
-                        <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
-                          {cat.subs.length > 0 && (
-                            <span
-                              style={{
-                                display: 'inline-block',
-                                width: 10,
-                                height: 10,
-                                marginRight: 10,
-                                color: 'var(--qa-text-2, #6B6B6B)',
-                                fontSize: 10,
-                                transition: 'transform 0.15s ease',
-                                transform: open ? 'rotate(90deg)' : 'rotate(0deg)',
-                              }}
-                            >
-                              ▶
-                            </span>
-                          )}
-                          {cat.disposition}
-                        </td>
-                        <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
-                          {fmtPct(cat.calls_iqs)}
-                        </td>
-                        <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
-                          —
-                        </td>
-                        <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
-                          —
-                        </td>
-                      </tr>
-                      {open &&
-                        cat.subs.map(sub => (
-                          <tr
-                            key={sub.sub_disposition}
-                            style={{ height: 44 }}
-                            onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light, #F4F4F5)')}
-                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    <tr
+                      key={param.key}
+                      style={{ height: 48, transition: 'background 0.1s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = 'var(--qa-fill-light, #F4F4F5)')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
+                            {param.label}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              padding: '1px 6px',
+                              borderRadius: 4,
+                              background: 'var(--qa-fill-light, #F4F4F5)',
+                              border: '1px solid var(--qa-border, #E4E4E7)',
+                              color: 'var(--qa-text-3, #71717A)',
+                              fontFamily: 'monospace',
+                              fontWeight: 600,
+                              whiteSpace: 'nowrap',
+                            }}
                           >
-                            <td style={{ padding: '0 16px 0 44px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)' }}>
-                              {sub.sub_disposition}
-                            </td>
-                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
-                              {fmtPct(sub.calls_iqs)}
-                            </td>
-                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
-                              —
-                            </td>
-                            <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
-                              —
-                            </td>
-                          </tr>
-                        ))}
-                    </React.Fragment>
+                            {param.weight}%
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontFamily: 'monospace', fontSize: 13, color: 'var(--qa-text, #111111)' }}>
+                        {fmtPct(score)}
+                      </td>
+                      <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
+                        —
+                      </td>
+                      <td style={{ padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)', textAlign: 'right', fontSize: 13, color: 'var(--qa-text-4, #C7C7CC)' }}>
+                        —
+                      </td>
+                    </tr>
                   );
                 })}
               </tbody>
@@ -761,7 +681,7 @@ export default function PcgMemberAnalyticsDashboard({
             {/* Tabs */}
             <div style={{ display: 'flex', gap: 4 }}>
               {[
-                ['metrics', 'CSAT + IQS + Volume'],
+                ['metrics', 'IQS + Volume'],
                 ['params', 'IQS by Parameter'],
               ].map(([key, lbl]) => (
                 <button
@@ -1073,7 +993,7 @@ export default function PcgMemberAnalyticsDashboard({
             <>
               {/* AI Narrative Analysis Paragraph */}
               <p style={{ fontSize: 14, color: 'var(--qa-text, #111111)', lineHeight: 1.6, margin: '0 0 18px', maxWidth: 860 }}>
-                {effectiveRm} demonstrated strong performance over the last {periodLabel || '7 days'}, achieving a 100.0% CSAT and an IQS of{' '}
+                {effectiveRm} demonstrated strong performance over the last {periodLabel || '7 days'}, achieving an IQS of{' '}
                 {callsIqs.toFixed(1)}% across {callsVol} evaluated calls. He maintained consistent pitch structure across key investment categories
                 including 13% Club Pitching and Portfolio Upselling. While overall quality remains high, his lowest performing parameter was Secondary
                 Liquidity Disclaimer at 85.7%.

@@ -9,7 +9,7 @@ export type Channel = 'chats' | 'calls' | 'emails';
 export type Period  = '7' | '30' | 'custom';
 
 export interface ChannelStats {
-  csat_pct: number | null;
+  pickup_rate?: number | null;
   iqs: number | null;
   volume: number;
 }
@@ -23,7 +23,7 @@ export interface ParamData {
 }
 
 export interface AgentChannelData {
-  csat_pct: number | null;
+  pickup_rate?: number | null;
   iqs: number | null;
   volume: number;
   params: Record<string, number | null>;
@@ -94,40 +94,40 @@ const GOKUL_AGENTS: AgentData[] = [
     name: 'Yaashvi Arora',
     ini: 'YA',
     tl: 'Gokul',
-    chats: { csat_pct: 95.0, iqs: 96, volume: 45, params: { issue_resolution: 96, accuracy: 97, expectation: 97, dissatisfaction: 93, personalization: 96, empathy: 97, escalation: 97, readability: 97, greeting: 96, recap: 85 } },
-    calls: { csat_pct: 94.0, iqs: 91, volume: 68, params: { pitch_clarity: 99, yield_framing: 100, secondary_liquidity: 91, asset_allocation: 96, payout_timeline: 98, active_listening: 96, demat_linking: 97, tds_compliance: 99, tone_pacing: 96, call_recap: 88 } },
+    chats: { pickup_rate: 95.0, iqs: 96, volume: 45, params: { issue_resolution: 96, accuracy: 97, expectation: 97, dissatisfaction: 93, personalization: 96, empathy: 97, escalation: 97, readability: 97, greeting: 96, recap: 85 } },
+    calls: { pickup_rate: 94.0, iqs: 91, volume: 68, params: { pitch_clarity: 99, yield_framing: 100, secondary_liquidity: 91, asset_allocation: 96, payout_timeline: 98, active_listening: 96, demat_linking: 97, tds_compliance: 99, tone_pacing: 96, call_recap: 88 } },
     emails: null,
   },
   {
     name: 'Aahan Thaker',
     ini: 'AT',
     tl: 'Gokul',
-    chats: { csat_pct: 92.5, iqs: 94, volume: 60, params: { issue_resolution: 94, accuracy: 95, expectation: 95, dissatisfaction: 89, personalization: 94, empathy: 95, escalation: 95, readability: 95, greeting: 94, recap: 80 } },
-    calls: { csat_pct: 91.5, iqs: 88, volume: 74, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 97, active_listening: 95, demat_linking: 96, tds_compliance: 98, tone_pacing: 94, call_recap: 83 } },
+    chats: { pickup_rate: 92.5, iqs: 94, volume: 60, params: { issue_resolution: 94, accuracy: 95, expectation: 95, dissatisfaction: 89, personalization: 94, empathy: 95, escalation: 95, readability: 95, greeting: 94, recap: 80 } },
+    calls: { pickup_rate: 91.5, iqs: 88, volume: 74, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 97, active_listening: 95, demat_linking: 96, tds_compliance: 98, tone_pacing: 94, call_recap: 83 } },
     emails: null,
   },
   {
     name: 'Dhanush',
     ini: 'D',
     tl: 'Gokul',
-    chats: { csat_pct: 88.0, iqs: 90, volume: 50, params: { issue_resolution: 91, accuracy: 92, expectation: 91, dissatisfaction: 86, personalization: 91, empathy: 92, escalation: 92, readability: 92, greeting: 91, recap: 76 } },
-    calls: { csat_pct: 87.0, iqs: 86, volume: 58, params: { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 92, call_recap: 81 } },
+    chats: { pickup_rate: 88.0, iqs: 90, volume: 50, params: { issue_resolution: 91, accuracy: 92, expectation: 91, dissatisfaction: 86, personalization: 91, empathy: 92, escalation: 92, readability: 92, greeting: 91, recap: 76 } },
+    calls: { pickup_rate: 87.0, iqs: 86, volume: 58, params: { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 92, call_recap: 81 } },
     emails: null,
   },
   {
     name: 'Samskriti Rao',
     ini: 'SR',
     tl: 'Gokul',
-    chats: { csat_pct: 86.5, iqs: 88, volume: 40, params: { issue_resolution: 89, accuracy: 90, expectation: 90, dissatisfaction: 84, personalization: 89, empathy: 90, escalation: 90, readability: 90, greeting: 90, recap: 74 } },
-    calls: { csat_pct: 85.0, iqs: 85, volume: 52, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 79 } },
+    chats: { pickup_rate: 86.5, iqs: 88, volume: 40, params: { issue_resolution: 89, accuracy: 90, expectation: 90, dissatisfaction: 84, personalization: 89, empathy: 90, escalation: 90, readability: 90, greeting: 90, recap: 74 } },
+    calls: { pickup_rate: 85.0, iqs: 85, volume: 52, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 79 } },
     emails: null,
   },
   {
     name: 'Gaurav Nautiyal',
     ini: 'GN',
     tl: 'Gokul',
-    chats: { csat_pct: 84.0, iqs: 86, volume: 35, params: { issue_resolution: 87, accuracy: 88, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 88, escalation: 88, readability: 88, greeting: 88, recap: 72 } },
-    calls: { csat_pct: 83.5, iqs: 83, volume: 44, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 } },
+    chats: { pickup_rate: 84.0, iqs: 86, volume: 35, params: { issue_resolution: 87, accuracy: 88, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 88, escalation: 88, readability: 88, greeting: 88, recap: 72 } },
+    calls: { pickup_rate: 83.5, iqs: 83, volume: 44, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 } },
     emails: null,
   },
 ];
@@ -137,32 +137,32 @@ const VAISHNAVI_AGENTS: AgentData[] = [
     name: 'Aravind',
     ini: 'AR',
     tl: 'Vaishnavi',
-    chats: { csat_pct: 91.0, iqs: 93, volume: 52, params: { issue_resolution: 93, accuracy: 94, expectation: 94, dissatisfaction: 88, personalization: 93, empathy: 94, escalation: 94, readability: 94, greeting: 93, recap: 79 } },
-    calls: { csat_pct: 90.0, iqs: 88, volume: 62, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 96, active_listening: 94, demat_linking: 95, tds_compliance: 98, tone_pacing: 94, call_recap: 82 } },
+    chats: { pickup_rate: 91.0, iqs: 93, volume: 52, params: { issue_resolution: 93, accuracy: 94, expectation: 94, dissatisfaction: 88, personalization: 93, empathy: 94, escalation: 94, readability: 94, greeting: 93, recap: 79 } },
+    calls: { pickup_rate: 90.0, iqs: 88, volume: 62, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 96, active_listening: 94, demat_linking: 95, tds_compliance: 98, tone_pacing: 94, call_recap: 82 } },
     emails: null,
   },
   {
     name: 'Sujal Dadwani',
     ini: 'SD',
     tl: 'Vaishnavi',
-    chats: { csat_pct: 87.5, iqs: 90, volume: 48, params: { issue_resolution: 90, accuracy: 92, expectation: 91, dissatisfaction: 85, personalization: 90, empathy: 91, escalation: 91, readability: 92, greeting: 90, recap: 76 } },
-    calls: { csat_pct: 86.5, iqs: 86, volume: 56, params: { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 93, call_recap: 80 } },
+    chats: { pickup_rate: 87.5, iqs: 90, volume: 48, params: { issue_resolution: 90, accuracy: 92, expectation: 91, dissatisfaction: 85, personalization: 90, empathy: 91, escalation: 91, readability: 92, greeting: 90, recap: 76 } },
+    calls: { pickup_rate: 86.5, iqs: 86, volume: 56, params: { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 93, call_recap: 80 } },
     emails: null,
   },
   {
     name: 'Antara Chakrabarty',
     ini: 'AC',
     tl: 'Vaishnavi',
-    chats: { csat_pct: 85.0, iqs: 88, volume: 44, params: { issue_resolution: 88, accuracy: 90, expectation: 89, dissatisfaction: 83, personalization: 88, empathy: 90, escalation: 89, readability: 90, greeting: 89, recap: 74 } },
-    calls: { csat_pct: 84.5, iqs: 84, volume: 50, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 78 } },
+    chats: { pickup_rate: 85.0, iqs: 88, volume: 44, params: { issue_resolution: 88, accuracy: 90, expectation: 89, dissatisfaction: 83, personalization: 88, empathy: 90, escalation: 89, readability: 90, greeting: 89, recap: 74 } },
+    calls: { pickup_rate: 84.5, iqs: 84, volume: 50, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 78 } },
     emails: null,
   },
   {
     name: 'Swati Singh',
     ini: 'SS',
     tl: 'Vaishnavi',
-    chats: { csat_pct: 84.5, iqs: 87, volume: 46, params: { issue_resolution: 87, accuracy: 89, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 89, escalation: 88, readability: 89, greeting: 88, recap: 73 } },
-    calls: { csat_pct: 84.0, iqs: 84, volume: 56, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 } },
+    chats: { pickup_rate: 84.5, iqs: 87, volume: 46, params: { issue_resolution: 87, accuracy: 89, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 89, escalation: 88, readability: 89, greeting: 88, recap: 73 } },
+    calls: { pickup_rate: 84.0, iqs: 84, volume: 56, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 } },
     emails: null,
   },
 ];
@@ -255,7 +255,7 @@ function StatCard({
   label,
   teamValue,
   cxValue,
-  cxLabel = 'RM',
+  cxLabel = 'Department',
 }: {
   label: string;
   teamValue: string;
@@ -388,7 +388,7 @@ function ParamRow({ p }: { p: ParamData }) {
               borderLeft: '2px dashed var(--qa-text-2, #71717a)',
               transform: 'translateX(-1px)',
             }}
-            title={`RM avg ${cx}%`}
+            title={`Department avg ${cx}%`}
           />
         )}
       </span>
@@ -568,7 +568,7 @@ function SummaryRow({
           <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #18181b)' }}>{agent.name}</span>
         </span>
       </td>
-      <td style={numTd(false)}>{activeChannel === 'calls' && chData ? fmtPct(chData.csat_pct) : '—'}</td>
+      <td style={numTd(false)}>{activeChannel === 'calls' && chData ? `${90 + (agent.ini.charCodeAt(0) % 8)}%` : '—'}</td>
       <td style={numTd(false)}>{activeChannel === 'calls' && chData ? fmtIqs(chData.iqs) : '—'}</td>
       <td style={numTd(false)}>—</td>
       <td style={numTd(activeChannel === 'calls')}>{fmtVol(agent.calls.volume)}</td>
@@ -651,8 +651,8 @@ export default function PcgTeamAnalyticsDashboard({
   const getStatMetrics = () => {
     if (channel !== 'calls') {
       return {
-        csatTeam: '—',
-        csatCx: '—',
+        pickupTeam: '—',
+        pickupCx: '—',
         iqsTeam: '—',
         iqsCx: '—',
         volumeTeam: '—',
@@ -661,8 +661,8 @@ export default function PcgTeamAnalyticsDashboard({
     }
     if (currentTL === 'Vaishnavi') {
       return {
-        csatTeam: '87.0%',
-        csatCx: '87.4%',
+        pickupTeam: '91.8%',
+        pickupCx: '91.0%',
         iqsTeam: '85.1%',
         iqsCx: '85.0%',
         volumeTeam: '224',
@@ -671,8 +671,8 @@ export default function PcgTeamAnalyticsDashboard({
     } else {
       // Gokul
       return {
-        csatTeam: '89.2%',
-        csatCx: '87.4%',
+        pickupTeam: '93.2%',
+        pickupCx: '91.0%',
         iqsTeam: '86.8%',
         iqsCx: '85.0%',
         volumeTeam: '296',
@@ -853,9 +853,9 @@ export default function PcgTeamAnalyticsDashboard({
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
         {channel !== 'calls' ? (
           [
-            'CSAT %',
             'IQS',
             channel === 'emails' ? 'EMAILS HANDLED' : 'CHATS HANDLED',
+            'PICKUP RATE',
           ].map((title, i) => (
             <div
               key={i}
@@ -883,14 +883,14 @@ export default function PcgTeamAnalyticsDashboard({
           ))
         ) : (
           <>
-            <StatCard label="CSAT %" teamValue={metrics.csatTeam} cxValue={metrics.csatCx} cxLabel="RM" />
-            <StatCard label="IQS" teamValue={metrics.iqsTeam} cxValue={metrics.iqsCx} cxLabel="RM" />
+            <StatCard label="IQS" teamValue={metrics.iqsTeam} cxValue={metrics.iqsCx} cxLabel="Department" />
             <StatCard
               label="CALLS HANDLED"
               teamValue={metrics.volumeTeam}
               cxValue={metrics.volumeCx}
-              cxLabel="RM"
+              cxLabel="Department"
             />
+            <StatCard label="PICKUP RATE" teamValue={metrics.pickupTeam} cxValue={metrics.pickupCx} cxLabel="Department" />
           </>
         )}
       </div>
@@ -954,7 +954,7 @@ export default function PcgTeamAnalyticsDashboard({
             </span>
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
               <span style={{ width: 0, height: 14, borderLeft: '2px dashed var(--qa-text-2, #71717a)' }} />
-              RM average
+              Department average
             </span>
           </div>
 
@@ -1034,7 +1034,7 @@ export default function PcgTeamAnalyticsDashboard({
                 <thead>
                   <tr>
                     <Th left>Agent</Th>
-                    <Th>CSAT %</Th>
+                    <Th>Pickup Rate</Th>
                     <Th>IQS</Th>
                     <Th active={channel === 'chats'}>Chats</Th>
                     <Th active={channel === 'calls'}>Calls</Th>
@@ -1162,7 +1162,7 @@ export default function PcgTeamAnalyticsDashboard({
 
       {/* Footer Note */}
       <p style={{ fontSize: 11, color: 'var(--qa-text-3, #a1a1aa)', fontStyle: 'italic', margin: '0 0 16px' }}>
-        CSAT % = good ratings / all rated · IQS = avg internal quality score · Parameter scores = pass rate
+        Pickup Rate = connected calls / total actionable calls · IQS = avg internal quality score · Parameter scores = pass rate
       </p>
     </div>
   );

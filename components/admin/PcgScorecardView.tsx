@@ -30,7 +30,7 @@ export interface PcgWeeklyReport {
     callsHandled: number;
     averageScore: number;
     below85Count: number;
-    csatText?: string;
+    pickupRateText?: string;
     connectRateText?: string;
     complianceBreachesCount: number;
   };
@@ -75,7 +75,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 30,
       averageScore: 98.6,
       below85Count: 2,
-      csatText: '100% positive (13 of 13 rated good)',
+      pickupRateText: '100% positive (13 of 13 rated good)',
       connectRateText: '100% positive (13 of 13 rated good)',
       complianceBreachesCount: 0,
     },
@@ -125,7 +125,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 28,
       averageScore: 99.2,
       below85Count: 1,
-      csatText: '100% positive (11 of 11 rated good)',
+      pickupRateText: '100% positive (11 of 11 rated good)',
       connectRateText: '100% positive (11 of 11 rated good)',
       complianceBreachesCount: 0,
     },
@@ -169,7 +169,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 32,
       averageScore: 98.6,
       below85Count: 2,
-      csatText: '100% positive (14 of 14 rated good)',
+      pickupRateText: '100% positive (14 of 14 rated good)',
       connectRateText: '100% positive (14 of 14 rated good)',
       complianceBreachesCount: 0,
     },
@@ -213,7 +213,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 35,
       averageScore: 99.7,
       below85Count: 0,
-      csatText: '100% positive (18 of 18 rated good)',
+      pickupRateText: '100% positive (18 of 18 rated good)',
       connectRateText: '100% positive (18 of 18 rated good)',
       complianceBreachesCount: 0,
     },
@@ -238,7 +238,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 29,
       averageScore: 98.9,
       below85Count: 1,
-      csatText: '100% positive (12 of 12 rated good)',
+      pickupRateText: '100% positive (12 of 12 rated good)',
       connectRateText: '100% positive (12 of 12 rated good)',
       complianceBreachesCount: 0,
     },
@@ -282,7 +282,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 34,
       averageScore: 99.8,
       below85Count: 0,
-      csatText: '100% positive (15 of 15 rated good)',
+      pickupRateText: '100% positive (15 of 15 rated good)',
       connectRateText: '100% positive (15 of 15 rated good)',
       complianceBreachesCount: 0,
     },
@@ -307,7 +307,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 27,
       averageScore: 98.6,
       below85Count: 1,
-      csatText: '100% positive (10 of 10 rated good)',
+      pickupRateText: '100% positive (10 of 10 rated good)',
       connectRateText: '100% positive (10 of 10 rated good)',
       complianceBreachesCount: 0,
     },
@@ -351,7 +351,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 26,
       averageScore: 95.4,
       below85Count: 3,
-      csatText: '96% positive (12 of 13 rated good)',
+      pickupRateText: '96% positive (12 of 13 rated good)',
       connectRateText: '96% positive (12 of 13 rated good)',
       complianceBreachesCount: 0,
     },
@@ -399,7 +399,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 30,
       averageScore: 98.6,
       below85Count: 2,
-      csatText: '100% positive (13 of 13 rated good)',
+      pickupRateText: '100% positive (13 of 13 rated good)',
       connectRateText: '100% positive (13 of 13 rated good)',
       complianceBreachesCount: 0,
     },
@@ -449,7 +449,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 28,
       averageScore: 98.2,
       below85Count: 2,
-      csatText: '100% positive (12 of 12 rated good)',
+      pickupRateText: '100% positive (12 of 12 rated good)',
       connectRateText: '100% positive (12 of 12 rated good)',
       complianceBreachesCount: 0,
     },
@@ -499,7 +499,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 34,
       averageScore: 94.2,
       below85Count: 1,
-      csatText: '94% positive (16 of 17 rated good)',
+      pickupRateText: '94% positive (16 of 17 rated good)',
       connectRateText: '74% connect rate',
       complianceBreachesCount: 0,
     },
@@ -543,7 +543,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 22,
       averageScore: 68.0,
       below85Count: 9,
-      csatText: '83.5% positive',
+      pickupRateText: '83.5% positive',
       connectRateText: '60% connect rate',
       complianceBreachesCount: 1,
     },
@@ -600,7 +600,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 26,
       averageScore: 69.5,
       below85Count: 8,
-      csatText: '84.0% positive',
+      pickupRateText: '84.0% positive',
       connectRateText: '61% connect rate',
       complianceBreachesCount: 0,
     },
@@ -650,7 +650,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 28,
       averageScore: 87.0,
       below85Count: 3,
-      csatText: '86.5% positive',
+      pickupRateText: '86.5% positive',
       connectRateText: '65% connect rate',
       complianceBreachesCount: 0,
     },
@@ -694,7 +694,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 26,
       averageScore: 85.4,
       below85Count: 4,
-      csatText: '85.0% positive',
+      pickupRateText: '85.0% positive',
       connectRateText: '63% connect rate',
       complianceBreachesCount: 0,
     },
@@ -738,7 +738,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 31,
       averageScore: 89.8,
       below85Count: 2,
-      csatText: '90.0% positive',
+      pickupRateText: '90.0% positive',
       connectRateText: '68% connect rate',
       complianceBreachesCount: 0,
     },
@@ -782,7 +782,7 @@ const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
       callsHandled: 25,
       averageScore: 84.2,
       below85Count: 4,
-      csatText: '84.5% positive',
+      pickupRateText: '84.5% positive',
       connectRateText: '62% connect rate',
       complianceBreachesCount: 0,
     },
@@ -1076,16 +1076,16 @@ export default function PcgScorecardView({
                   </span>
                 </div>
 
-                {/* CSAT Metrics / Reachability */}
+                {/* Pickup Rate */}
                 <div className="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-sm flex flex-col col-span-2 justify-between">
                   <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
-                    CSAT Metrics
+                    Pickup Rate
                   </span>
                   <span
-                    className="text-xs font-semibold text-gray-800 mt-3 bg-indigo-50 p-1.5 rounded-lg border border-indigo-100 text-center truncate"
-                    title={numbers?.csatText || numbers?.connectRateText}
+                    className="text-xs font-semibold text-gray-800 mt-3 bg-zinc-50 p-1.5 rounded-lg border border-zinc-200 text-center truncate"
+                    title={numbers?.pickupRateText || numbers?.connectRateText}
                   >
-                    {numbers?.csatText || numbers?.connectRateText || '100% positive (13 of 13 rated good)'}
+                    {numbers?.pickupRateText || numbers?.connectRateText || '92% pickup rate'}
                   </span>
                 </div>
 

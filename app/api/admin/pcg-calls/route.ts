@@ -286,10 +286,10 @@ function buildDummyCalls(): DummyPCGCall[] {
         !isAnswered ? '13_pitching' : (catMod < 5 ? '13_pitching' : catMod < 8 ? 'upselling' : 'support');
       let category = categoryKey === '13_pitching' ? '13% Club / Pitching' : categoryKey === 'upselling' ? 'Upselling Calls' : 'General / Support';
 
-      // Timestamps spread across last 14 days
+      // Timestamps spread across last 13 days
       const daysAgo = (globalId % 13);
       const hoursAgo = (globalId * 7) % 24;
-      const startTime = new Date(Date.UTC(2026, 9, 18 - daysAgo, hoursAgo, 15, 0)).toISOString();
+      const startTime = new Date(Date.now() - (daysAgo * 86400000) - (hoursAgo * 3600000)).toISOString();
 
       // IQS Score
       let iqsScore = 0;
@@ -510,7 +510,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
 
   const { searchParams } = new URL(req.url);
   const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20')));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '10')));
   const offset = (page - 1) * limit;
 
   const rmFilter = searchParams.get('rm_name')?.trim();
@@ -521,6 +521,8 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   const dateFrom = searchParams.get('date_from')?.trim();
   const dateTo = searchParams.get('date_to')?.trim();
   const dateRangeParam = searchParams.get('date_range')?.trim();
+  const minIqsParam = searchParams.get('min_iqs')?.trim();
+  const maxIqsParam = searchParams.get('max_iqs')?.trim();
 
   // Filter in-memory dummy calls
   let filtered = ALL_DUMMY_CALLS;
@@ -566,11 +568,15 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
   }
 
   // Summary calculation strictly scoped to filtered calls before evaluation table connected-only filter
-  const scopedTotal = filtered.length;
-  const answeredCallsList = filtered.filter(c => c.isAnswered);
+  const scopedCallsList = filtered;
+  const scopedTotal = scopedCallsList.length;
+  const answeredCallsList = scopedCallsList.filter(c => c.isAnswered);
+  const unansweredCallsList = scopedCallsList.filter(c => !c.isAnswered);
   const answeredCount = answeredCallsList.length;
-  const unansweredCount = filtered.filter(c => !c.isAnswered).length;
-  const totalDuration = filtered.reduce((acc, c) => acc + c.durationSeconds, 0);
+  const unansweredCount = unansweredCallsList.length;
+  const unansweredByRmCount = unansweredCallsList.filter(c => c.unansweredBy === 'RM').length;
+  const unansweredByCustomerCount = unansweredCallsList.filter(c => c.unansweredBy === 'Customer').length;
+  const totalDuration = scopedCallsList.reduce((acc, c) => acc + c.durationSeconds, 0);
 
   // Dynamic avgIqs computation across all answered calls in this scoped filter
   const avgIqs = answeredCount > 0
@@ -587,7 +593,22 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     filtered = filtered.filter(c => c.isAnswered);
   }
 
-  // Total count for current filter (connected evaluation calls)
+  // Filter by Min / Max IQS
+  if (minIqsParam && minIqsParam !== 'all') {
+    const minVal = parseFloat(minIqsParam);
+    if (!isNaN(minVal)) {
+      filtered = filtered.filter(c => c.iqsScore >= minVal);
+    }
+  }
+
+  if (maxIqsParam && maxIqsParam !== 'all') {
+    const maxVal = parseFloat(maxIqsParam);
+    if (!isNaN(maxVal)) {
+      filtered = filtered.filter(c => c.iqsScore <= maxVal);
+    }
+  }
+
+  // Total count for current filter (connected evaluation calls matching IQS range)
   const total = filtered.length;
 
   // Paginated calls
@@ -694,22 +715,24 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       totalCalls: scopedTotal,
       answeredCalls: answeredCount,
       unansweredCalls: unansweredCount,
+      unansweredByRm: unansweredByRmCount,
+      unansweredByCustomer: unansweredByCustomerCount,
       avgIqs,
       totalDurationSeconds: totalDuration,
-      activeRmsCount: new Set(filtered.map(c => c.rmName)).size,
+      activeRmsCount: new Set(scopedCallsList.map(c => c.rmName)).size,
       categoryCounts: {
-        pitching: filtered.filter(c => c.categoryKey === '13_pitching').length,
-        upselling: filtered.filter(c => c.categoryKey === 'upselling').length,
-        support: filtered.filter(c => c.categoryKey === 'support').length,
+        pitching: scopedCallsList.filter(c => c.categoryKey === '13_pitching').length,
+        upselling: scopedCallsList.filter(c => c.categoryKey === 'upselling').length,
+        support: scopedCallsList.filter(c => c.categoryKey === 'support').length,
       },
       unansweredBreakdown: {
-        customerRangOut: filtered.filter(c => c.unansweredReason?.includes('Rang Out')).length,
-        customerBusy: filtered.filter(c => c.unansweredReason?.includes('Busy')).length,
-        rmDroppedEarly: filtered.filter(c => c.unansweredReason?.includes('Dropped Early')).length,
-        rmMissed: filtered.filter(c => c.unansweredReason?.includes('Missed')).length,
+        customerRangOut: unansweredCallsList.filter(c => c.unansweredReason?.includes('Rang Out')).length,
+        customerBusy: unansweredCallsList.filter(c => c.unansweredReason?.includes('Busy')).length,
+        rmDroppedEarly: unansweredCallsList.filter(c => c.unansweredReason?.includes('Dropped Early')).length,
+        rmMissed: unansweredCallsList.filter(c => c.unansweredReason?.includes('Missed')).length,
       },
-      needsAttentionCount: filtered.filter(c => c.needsAttention).length,
-      complianceFlagsCount: filtered.filter(c => c.gates.status === 'FAIL').length,
+      needsAttentionCount: scopedCallsList.filter(c => c.needsAttention).length,
+      complianceFlagsCount: scopedCallsList.filter(c => c.gates.status === 'FAIL').length,
     },
     calls: paginatedCalls,
   });

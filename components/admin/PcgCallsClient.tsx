@@ -241,6 +241,8 @@ export default function PcgCallsClient() {
   const [selectedTl, setSelectedTl] = useState<string>('Gokul');
   const [adminTlFilter, setAdminTlFilter] = useState<'all' | 'Gokul' | 'Vaishnavi'>('all');
   const [adminRmFilter, setAdminRmFilter] = useState<string>('all');
+  const [minIqsFilter, setMinIqsFilter] = useState<string>('');
+  const [maxIqsFilter, setMaxIqsFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'answered' | 'unanswered' | 'needs_attention'>('answered');
   const [searchQuery, setSearchQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -279,14 +281,14 @@ export default function PcgCallsClient() {
       fetchData();
     }, 250);
     return () => clearTimeout(handler);
-  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, adminTlFilter, adminRmFilter, searchQuery]);
+  }, [selectedCategory, dateRange, customStartDate, customEndDate, statusFilter, page, selectedTl, selectedRm, adminTlFilter, adminRmFilter, searchQuery, minIqsFilter, maxIqsFilter]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams({
         page: page.toString(),
-        limit: '20',
+        limit: '10',
         category: (selectedCategory === 'tl_analytics' || selectedCategory === 'rm_performance' || selectedCategory === 'ai_coaching_insights') ? 'all' : selectedCategory,
         status: statusFilter,
         date_range: dateRange,
@@ -306,6 +308,12 @@ export default function PcgCallsClient() {
       }
       if (searchQuery.trim()) {
         p.set('search', searchQuery.trim());
+      }
+      if (minIqsFilter.trim() !== '' && minIqsFilter !== 'all') {
+        p.set('min_iqs', minIqsFilter.trim());
+      }
+      if (maxIqsFilter.trim() !== '' && maxIqsFilter !== 'all') {
+        p.set('max_iqs', maxIqsFilter.trim());
       }
 
       const res = await fetch(`/api/admin/pcg-calls?${p.toString()}`);
@@ -560,6 +568,20 @@ export default function PcgCallsClient() {
   const disputeRaisedCalls = calls.filter((c) => c.disputeStatus === 'pending');
   const disputeReviewedCalls = calls.filter((c) => c.disputeStatus === 'resolved' || c.disputeStatus === 'overridden');
 
+  // Filtered evaluated calls list based on Min and Max IQS filter
+  const displayedEvaluatedCalls = calls.filter((call) => {
+    if (!call.isAnswered) return false;
+    if (minIqsFilter.trim() !== '' && minIqsFilter !== 'all') {
+      const minVal = parseFloat(minIqsFilter);
+      if (!isNaN(minVal) && call.iqsScore < minVal) return false;
+    }
+    if (maxIqsFilter.trim() !== '' && maxIqsFilter !== 'all') {
+      const maxVal = parseFloat(maxIqsFilter);
+      if (!isNaN(maxVal) && call.iqsScore > maxVal) return false;
+    }
+    return true;
+  });
+
   // RM Scorecard lookups & real computed metrics for RM view
   const currentRmScorecard = rmScorecards.find((r) => r.rmName.toLowerCase() === selectedRm.toLowerCase());
   const myScorecard = currentRmScorecard || rmScorecards[0];
@@ -571,6 +593,12 @@ export default function PcgCallsClient() {
   const rmTotalCallsCount = summary?.totalCalls ?? calls.length;
   const rmAnsweredCallsCount = summary?.answeredCalls ?? rmAnsweredCalls.length;
   const rmUnansweredCallsCount = summary?.unansweredCalls ?? Math.max(0, rmTotalCallsCount - rmAnsweredCallsCount);
+  const rmUnansweredByAgentCount = summary?.unansweredByRm ?? 
+    (summary?.unansweredBreakdown ? ((summary.unansweredBreakdown.rmDroppedEarly || 0) + (summary.unansweredBreakdown.rmMissed || 0)) : 1);
+  const rmActionablePickupCalls = rmAnsweredCallsCount + rmUnansweredByAgentCount;
+  const rmPickupRate = rmActionablePickupCalls > 0
+    ? Math.round((rmAnsweredCallsCount / rmActionablePickupCalls) * 100)
+    : (rmTotalCallsCount > 0 ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100) : 92);
   const rmConnectRate = rmTotalCallsCount > 0
     ? Math.round((rmAnsweredCallsCount / rmTotalCallsCount) * 100)
     : 60;
@@ -1406,7 +1434,9 @@ export default function PcgCallsClient() {
                 <span className="text-xs font-semibold text-zinc-600">▲ +2.4%</span>
               </div>
               <p className="text-[11px] text-[#71717A] mt-1">
-                100% AI Automated audits · {activeDateInfo.datesOnly}
+                {activePersona === 'admin'
+                  ? `100% AI Automated audits · ${activeDateInfo.datesOnly}`
+                  : activeDateInfo.datesOnly}
               </p>
             </div>
 
@@ -1432,7 +1462,9 @@ export default function PcgCallsClient() {
 
             <div className="bg-white p-4 rounded-xl border border-[#E4E4E7]">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">Connect Rate</p>
+                <p className="text-[11px] font-semibold text-[#71717A] uppercase tracking-wider">
+                  Pickup Rate
+                </p>
                 <span className="text-[10px] font-semibold text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded">
                   {activeDateInfo.short}
                 </span>
@@ -1440,13 +1472,15 @@ export default function PcgCallsClient() {
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-2xl font-bold tabular-nums text-[#111111]">
                   {activePersona === 'agent'
-                    ? rmConnectRate
+                    ? rmPickupRate
                     : (summary?.totalCalls ? Math.round((summary.answeredCalls / summary.totalCalls) * 100) : (calls.length ? Math.round((calls.filter((c) => c.isAnswered).length / calls.length) * 100) : 0))}%
                 </span>
                 <span className="text-xs text-[#71717A]">pickup</span>
               </div>
               <p className="text-[11px] text-[#71717A] mt-1">
-                {activePersona === 'agent' ? rmUnansweredCallsCount : (summary?.unansweredCalls ?? Math.max(0, (summary?.totalCalls ?? calls.length) - (summary?.answeredCalls ?? calls.filter((c) => c.isAnswered).length)))} unanswered · {activeDateInfo.datesOnly}
+                {activePersona === 'agent'
+                  ? `${rmUnansweredByAgentCount} unanswered · ${activeDateInfo.datesOnly}`
+                  : `${summary?.unansweredCalls ?? Math.max(0, (summary?.totalCalls ?? calls.length) - (summary?.answeredCalls ?? calls.filter((c) => c.isAnswered).length))} unanswered · ${activeDateInfo.datesOnly}`}
               </p>
             </div>
           </div>
@@ -1468,7 +1502,7 @@ export default function PcgCallsClient() {
                 <div>
                   <p className="text-sm font-bold text-gray-900">Agent Wise Analytics</p>
                   <p className="text-xs text-gray-500 mt-0.5">
-                    IQS, Connect Rate, and performance per agent · Team {selectedTl} · {activeDateInfo.full}
+                    IQS, Pickup Rate, and performance per agent · Team {selectedTl} · {activeDateInfo.full}
                   </p>
                 </div>
               </div>
@@ -1479,7 +1513,7 @@ export default function PcgCallsClient() {
                     <tr className="bg-gray-50/60 border-b border-gray-100 text-[#6B6B6B] font-semibold">
                       <th className="py-3 px-4 text-left">RM Name</th>
                       <th className="py-3 px-4 text-right">Calls Handled</th>
-                      <th className="py-3 px-4 text-right">Connect Rate</th>
+                      <th className="py-3 px-4 text-right">Pickup Rate</th>
                       <th className="py-3 px-4 text-right">Avg IQS</th>
                       <th className="py-3 px-4 text-center">Compliance</th>
                     </tr>
@@ -1530,7 +1564,7 @@ export default function PcgCallsClient() {
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Comparative voice call quality, connect rates, and volume across Team Leaders
+                      Comparative voice call quality, pickup rates, and volume across Team Leaders
                     </p>
                   </div>
 
@@ -1579,7 +1613,7 @@ export default function PcgCallsClient() {
                             <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.totalCalls}</span>
                           </div>
                           <div className="bg-white p-2 rounded-lg border border-zinc-100">
-                            <span className="text-[10px] uppercase font-bold text-zinc-400 block">Connect Rate</span>
+                            <span className="text-[10px] uppercase font-bold text-zinc-400 block">Pickup Rate</span>
                             <span className="text-sm font-bold tabular-nums text-zinc-900">{tl.connectRate}%</span>
                           </div>
                           <div className="bg-white p-2 rounded-lg border border-zinc-100">
@@ -2048,7 +2082,7 @@ export default function PcgCallsClient() {
                   : 'Evaluated Call Audits'}
               </h3>
               <p className="text-xs text-[#71717A] mt-0.5">
-                Showing {calls.length} calls • Auto-categorised with separate quality parameters
+                Showing {displayedEvaluatedCalls.length} calls • Auto-categorised with separate quality parameters
               </p>
             </div>
 
@@ -2075,6 +2109,81 @@ export default function PcgCallsClient() {
                 </div>
               )}
 
+              {/* Min IQS Input */}
+              <input
+                id="table-min-iqs-input"
+                type="number"
+                min={0}
+                max={100}
+                placeholder="Min IQS"
+                value={minIqsFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setMinIqsFilter('');
+                    setPage(1);
+                  } else {
+                    const n = parseFloat(val);
+                    if (!isNaN(n)) {
+                      if (n < 0) setMinIqsFilter('0');
+                      else if (n > 100) setMinIqsFilter('100');
+                      else setMinIqsFilter(val);
+                      setPage(1);
+                    }
+                  }
+                }}
+                className={`w-24 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                  minIqsFilter !== ''
+                    ? 'border-[#111111] ring-1 ring-[#111111]'
+                    : 'border-[#E4E4E7] focus:border-[#111111]'
+                }`}
+              />
+
+              {/* Max IQS Input */}
+              <input
+                id="table-max-iqs-input"
+                type="number"
+                min={0}
+                max={100}
+                placeholder="Max IQS"
+                value={maxIqsFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val === '') {
+                    setMaxIqsFilter('');
+                    setPage(1);
+                  } else {
+                    const n = parseFloat(val);
+                    if (!isNaN(n)) {
+                      if (n < 0) setMaxIqsFilter('0');
+                      else if (n > 100) setMaxIqsFilter('100');
+                      else setMaxIqsFilter(val);
+                      setPage(1);
+                    }
+                  }
+                }}
+                className={`w-24 text-xs border rounded-lg px-3 py-1.5 outline-none shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                  maxIqsFilter !== ''
+                    ? 'border-[#111111] ring-1 ring-[#111111]'
+                    : 'border-[#E4E4E7] focus:border-[#111111]'
+                }`}
+              />
+
+              {(minIqsFilter !== '' || maxIqsFilter !== '') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMinIqsFilter('');
+                    setMaxIqsFilter('');
+                    setPage(1);
+                  }}
+                  title="Reset IQS filters"
+                  className="text-[11px] font-semibold text-zinc-600 hover:text-black underline px-1 py-1 cursor-pointer"
+                >
+                  Reset IQS
+                </button>
+              )}
+
               <input
                 type="text"
                 placeholder={activePersona === 'agent' ? "Search Client Name..." : "Search Client or RM Name..."}
@@ -2087,7 +2196,7 @@ export default function PcgCallsClient() {
 
           {loading ? (
             <div className="p-12 text-center text-zinc-400 text-xs">Loading PCG calls data...</div>
-          ) : calls.length === 0 ? (
+          ) : displayedEvaluatedCalls.length === 0 ? (
             <div className="p-12 text-center text-zinc-400 text-xs">No calls match the selected filters.</div>
           ) : (
             <div className="overflow-x-auto">
@@ -2103,7 +2212,7 @@ export default function PcgCallsClient() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#F0F0F2]">
-                  {calls.filter((call) => call.isAnswered).map((call) => {
+                  {displayedEvaluatedCalls.map((call) => {
                     const isExpanded = expandedCallId === call.id;
                     return (
                       <React.Fragment key={call.id}>

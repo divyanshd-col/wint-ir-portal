@@ -11,7 +11,6 @@ export interface RmPerformanceItem {
   prev2WkIqs: number;
   delta2Wk: number;
   callsVolume: number;
-  csatPct: number;
   focusArea: string;
   improvementDriver?: string;
 }
@@ -26,7 +25,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 91.8,
     delta2Wk: 2.4,
     callsVolume: 68,
-    csatPct: 94.0,
     focusArea: 'Pitch Clarity & Senior Secured Debt Backing',
     improvementDriver: '+4% in Senior Secured Backing pitch',
   },
@@ -39,7 +37,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 89.0,
     delta2Wk: 4.5,
     callsVolume: 72,
-    csatPct: 93.0,
     focusArea: 'Active Listening & Objection Handling',
     improvementDriver: '+8% in Handling secondary liquidity objections',
   },
@@ -52,7 +49,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 87.5,
     delta2Wk: 4.0,
     callsVolume: 74,
-    csatPct: 91.5,
     focusArea: 'Indicative Yield Framing & Disclaimers',
     improvementDriver: '+7% in Indicative Yield disclaimers',
   },
@@ -65,7 +61,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 86.6,
     delta2Wk: 3.2,
     callsVolume: 62,
-    csatPct: 90.0,
     focusArea: 'Demat Linking & Account Verification',
     improvementDriver: '+6% in Demat verification walkthrough',
   },
@@ -78,7 +73,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 83.1,
     delta2Wk: 5.1,
     callsVolume: 58,
-    csatPct: 87.0,
     focusArea: 'Asset Allocation Need Discovery',
     improvementDriver: '+9% in Asset allocation discovery questions',
   },
@@ -91,7 +85,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 80.2,
     delta2Wk: 6.8,
     callsVolume: 56,
-    csatPct: 86.5,
     focusArea: 'Monthly Interest Payout Timeline Clarity',
     improvementDriver: '+12% in Interest payout timeline disclosures',
   },
@@ -104,7 +97,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 79.6,
     delta2Wk: 5.8,
     callsVolume: 52,
-    csatPct: 85.0,
     focusArea: 'Secondary Liquidity Window Framing',
     improvementDriver: '+11% in Secondary window liquidity framing',
   },
@@ -117,7 +109,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 82.4,
     delta2Wk: 1.8,
     callsVolume: 50,
-    csatPct: 84.5,
     focusArea: 'Post-Call Recap & Follow-Through',
     improvementDriver: '+3% in Follow-up WhatsApp recap scheduling',
   },
@@ -130,7 +121,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 72.0,
     delta2Wk: -2.5,
     callsVolume: 56,
-    csatPct: 84.0,
     focusArea: 'Active Listening & Objection Handling',
     improvementDriver: 'Needs coaching on demat linking objection handling',
   },
@@ -143,7 +133,6 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 71.5,
     delta2Wk: -3.5,
     callsVolume: 44,
-    csatPct: 83.5,
     focusArea: 'Post-Call Recap & Follow-Through',
     improvementDriver: 'Needs coaching on explicit post-call WhatsApp summary',
   },
@@ -290,7 +279,7 @@ export default function PcgRmPerformanceDashboard({
                         </span>
                       </div>
                       <div style={{ fontSize: 11, color: '#71717a', marginTop: 2 }}>
-                        {rm.callsVolume} calls · {rm.csatPct}% CSAT
+                        {rm.callsVolume} calls
                       </div>
                     </div>
                   </div>

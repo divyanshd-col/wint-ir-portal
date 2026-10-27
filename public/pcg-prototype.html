@@ -126,7 +126,7 @@
         <div class="text-[11px] text-zinc-500 font-normal mt-1">Across 9 Active RMs</div>
       </div>
       <div class="bg-white p-4 rounded-xl border border-[#E4E4E7] shadow-2xs">
-        <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Connect Rate</div>
+        <div id="metric-connect-title" class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider">Connect Rate</div>
         <div class="text-2xl font-black text-[#111111] mt-1">68.2%</div>
         <div class="text-[11px] text-zinc-500 font-normal mt-1">81 Connected • 37 Unanswered</div>
       </div>
@@ -197,6 +197,38 @@
                 <option value="Swati Singh">Swati Singh</option>
               </select>
             </div>
+
+            <!-- Min IQS Input -->
+            <input
+              type="number"
+              id="table-min-iqs-input"
+              min="0"
+              max="100"
+              placeholder="Min IQS"
+              oninput="handleMinIqsInput(this.value)"
+              class="w-24 text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 outline-none focus:border-[#111111] shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+
+            <!-- Max IQS Input -->
+            <input
+              type="number"
+              id="table-max-iqs-input"
+              min="0"
+              max="100"
+              placeholder="Max IQS"
+              oninput="handleMaxIqsInput(this.value)"
+              class="w-24 text-xs border border-[#E4E4E7] rounded-lg px-3 py-1.5 outline-none focus:border-[#111111] shadow-2xs bg-white text-zinc-900 placeholder:text-zinc-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+
+            <button
+              id="btn-reset-iqs"
+              type="button"
+              onclick="resetIqsFilters()"
+              title="Reset IQS filters"
+              class="hidden text-[11px] font-semibold text-zinc-600 hover:text-black underline px-1 py-1 cursor-pointer"
+            >
+              Reset IQS
+            </button>
 
             <input
               type="text"
@@ -273,25 +305,9 @@
         </div>
       </div>
 
-      <!-- Top Stat Cards (CSAT % | IQS | CALLS HANDLED) -->
+      <!-- Top Stat Cards (IQS | CALLS HANDLED | PICKUP RATE) -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <!-- Card 1: CSAT % -->
-        <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
-          <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3">CSAT %</div>
-          <div class="flex items-end gap-4">
-            <div class="flex flex-col gap-1.5">
-              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
-              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-csat-team">89.2%</span>
-            </div>
-            <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
-            <div class="flex items-baseline gap-1.5 pb-0.5">
-              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">RM</span>
-              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-csat-cx">87.4%</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 2: IQS -->
+        <!-- Card 1: IQS -->
         <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
           <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3">IQS</div>
           <div class="flex items-end gap-4">
@@ -301,13 +317,13 @@
             </div>
             <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
             <div class="flex items-baseline gap-1.5 pb-0.5">
-              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">RM</span>
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Department</span>
               <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-iqs-cx">85.0%</span>
             </div>
           </div>
         </div>
 
-        <!-- Card 3: CALLS HANDLED -->
+        <!-- Card 2: CALLS HANDLED -->
         <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
           <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3" id="ta-stat-vol-title">CALLS HANDLED</div>
           <div class="flex items-end gap-4">
@@ -317,8 +333,24 @@
             </div>
             <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
             <div class="flex items-baseline gap-1.5 pb-0.5">
-              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">RM</span>
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Department</span>
               <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-vol-cx">520</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: PICKUP RATE -->
+        <div class="bg-white border border-[#E4E4E7] rounded-lg p-5 shadow-2xs">
+          <div class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold mb-3">PICKUP RATE</div>
+          <div class="flex items-end gap-4">
+            <div class="flex flex-col gap-1.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Team</span>
+              <span class="text-[32px] font-bold text-[#18181B] leading-none" id="ta-stat-pickup-team">93.2%</span>
+            </div>
+            <div class="w-px bg-[#E4E4E7] self-stretch mb-0.5"></div>
+            <div class="flex items-baseline gap-1.5 pb-0.5">
+              <span class="text-[11px] uppercase tracking-wider text-[#A1A1AA] font-semibold">Department</span>
+              <span class="text-[20px] font-semibold text-[#71717A] leading-none" id="ta-stat-pickup-cx">91.0%</span>
             </div>
           </div>
         </div>
@@ -349,7 +381,7 @@
             </span>
             <span class="inline-flex items-center gap-2">
               <span class="w-0 h-3.5 border-l-2 border-dashed border-[#71717A]"></span>
-              RM average
+              Department average
             </span>
           </div>
 
@@ -388,7 +420,7 @@
               <thead>
                 <tr class="h-10 bg-[#FAFAFA] border-b border-[#E4E4E7] text-[12px] uppercase tracking-wider text-[#71717A]">
                   <th class="px-4 font-semibold text-left">Agent</th>
-                  <th class="px-4 font-semibold text-right">CSAT %</th>
+                  <th class="px-4 font-semibold text-right">Pickup Rate</th>
                   <th class="px-4 font-semibold text-right">IQS</th>
                   <th id="th-col-chats" class="px-4 font-semibold text-right">Chats</th>
                   <th id="th-col-calls" class="px-4 font-bold text-right bg-[#F4F4F5] text-[#18181B]">Calls</th>
@@ -441,7 +473,7 @@
 
       <!-- Footer Note -->
       <p class="text-[11px] text-[#A1A1AA] italic m-0 mb-4">
-        CSAT % = good ratings / all rated · IQS = avg internal quality score · Parameter scores = pass rate
+        Pickup Rate = connected calls / total actionable calls · IQS = avg internal quality score · Parameter scores = pass rate
       </p>
     </div>
 
@@ -560,12 +592,7 @@
         <!-- Calls Card -->
         <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
           <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">CALLS</div>
-          <div class="flex items-end gap-4">
-            <div>
-              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
-              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">CSAT</div>
-            </div>
-            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+          <div class="flex items-end gap-6">
             <div>
               <div class="text-2xl font-extrabold text-[#111111] leading-none" id="ma-stat-iqs">88.5%</div>
               <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
@@ -581,12 +608,7 @@
         <!-- Chats Card -->
         <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
           <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">CHATS</div>
-          <div class="flex items-end gap-4">
-            <div>
-              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
-              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">CSAT</div>
-            </div>
-            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+          <div class="flex items-end gap-6">
             <div>
               <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
               <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
@@ -603,12 +625,7 @@
         <!-- Emails Card -->
         <div class="bg-white rounded-xl border border-[#E4E4E7] p-5 shadow-2xs">
           <div class="text-[11px] font-bold text-[#71717A] uppercase tracking-wider mb-3">EMAILS</div>
-          <div class="flex items-end gap-4">
-            <div>
-              <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
-              <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">CSAT</div>
-            </div>
-            <div class="w-px h-8 bg-[#E4E4E7]"></div>
+          <div class="flex items-end gap-6">
             <div>
               <div class="text-2xl font-bold text-zinc-400 leading-none">—</div>
               <div class="text-[10px] uppercase font-semibold text-[#71717A] mt-1.5">IQS</div>
@@ -623,21 +640,20 @@
         </div>
       </div>
 
-      <!-- Performance by Category -->
+      <!-- IQS by Parameters -->
       <div class="bg-white rounded-xl border border-[#E4E4E7] overflow-hidden shadow-2xs">
         <div class="p-4 border-b border-[#E4E4E7] flex items-center justify-between bg-[#FAFAFB]">
-          <h3 class="text-sm font-bold text-[#111111]">Performance by Category</h3>
-          <span class="text-xs text-[#71717A] italic">Click a category row to expand sub-parameters</span>
+          <h3 class="text-sm font-bold text-[#111111]">IQS by Parameters</h3>
+          <span class="text-xs text-[#71717A] italic">10 voice quality parameters · evaluated across calls</span>
         </div>
         <div class="overflow-x-auto">
           <table class="w-full text-left border-collapse text-xs">
             <thead>
               <tr class="bg-[#FAFAFB] border-b border-[#E4E4E7] text-[#6B6B6B] font-semibold uppercase">
-                <th class="py-3 px-4">Disposition</th>
-                <th class="py-3 px-4">Chats IQS</th>
-                <th class="py-3 px-4">Calls IQS</th>
-                <th class="py-3 px-4">Emails IQS</th>
-                <th class="py-3 px-4 text-right">Duration (TAT)</th>
+                <th class="py-3 px-4 w-[40%]">Parameter</th>
+                <th class="py-3 px-4 text-right w-[20%]">Calls IQS</th>
+                <th class="py-3 px-4 text-right w-[20%]">Chats</th>
+                <th class="py-3 px-4 text-right w-[20%]">Emails</th>
               </tr>
             </thead>
             <tbody id="ma-category-table-body" class="divide-y divide-[#E4E4E7]">
@@ -1213,6 +1229,18 @@
           if (!c.callId.toLowerCase().includes(q) && !c.phoneNumber.includes(q) && !c.rmName.toLowerCase().includes(q)) return false;
         }
 
+        // Min IQS filter
+        if (currentMinIqs !== '' && currentMinIqs !== 'all') {
+          const minVal = parseFloat(currentMinIqs);
+          if (!isNaN(minVal) && c.iqsScore < minVal) return false;
+        }
+
+        // Max IQS filter
+        if (currentMaxIqs !== '' && currentMaxIqs !== 'all') {
+          const maxVal = parseFloat(currentMaxIqs);
+          if (!isNaN(maxVal) && c.iqsScore > maxVal) return false;
+        }
+
         return true;
       });
 
@@ -1221,7 +1249,7 @@
         return;
       }
 
-      filtered.forEach(c => {
+      filtered.slice(0, 10).forEach(c => {
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-[#FAFAFB] transition-colors cursor-pointer';
         tr.onclick = () => openDrawer(c.id);
@@ -1636,64 +1664,55 @@
         coachingFocus.innerHTML = `<strong>Coaching Focus:</strong> ${data.focus}`;
       }
 
-      // Render category breakdown rows
+      // Render parameter breakdown rows
       const tbody = document.getElementById('ma-category-table-body');
       if (tbody) {
-        tbody.innerHTML = `
-          <tr class="hover:bg-zinc-50 font-medium">
-            <td class="py-3 px-4 font-bold text-zinc-900">13% Club Pitching</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 font-bold text-zinc-900">${data.pitch}%</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 text-right text-zinc-600 font-mono">584m</td>
-          </tr>
-          <tr class="bg-zinc-50/60 text-zinc-600 text-[11px]">
-            <td class="py-2 px-6 pl-8 flex items-center gap-1.5 text-zinc-700">
-              <span class="text-zinc-400">↳</span> Pitch Clarity & Senior Secured Backing
-            </td>
-            <td class="py-2 px-4 text-zinc-400">—</td>
-            <td class="py-2 px-4 font-semibold text-emerald-700">${(data.pitch + 1.5).toFixed(1)}%</td>
-            <td class="py-2 px-4 text-zinc-400">—</td>
-            <td class="py-2 px-4 text-right text-zinc-500 font-mono">306m</td>
-          </tr>
-          <tr class="bg-zinc-50/60 text-zinc-600 text-[11px]">
-            <td class="py-2 px-6 pl-8 flex items-center gap-1.5 text-zinc-700">
-              <span class="text-zinc-400">↳</span> Secondary Liquidity Window Framing
-            </td>
-            <td class="py-2 px-4 text-zinc-400">—</td>
-            <td class="py-2 px-4 font-semibold text-zinc-800">${(data.pitch - 3.5).toFixed(1)}%</td>
-            <td class="py-2 px-4 text-zinc-400">—</td>
-            <td class="py-2 px-4 text-right text-zinc-500 font-mono">278m</td>
-          </tr>
-          <tr class="hover:bg-zinc-50 font-medium">
-            <td class="py-3 px-4 font-bold text-zinc-900">Portfolio Upselling</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 font-bold text-zinc-900">${data.upsell}%</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 text-right text-zinc-600 font-mono">785m</td>
-          </tr>
-          <tr class="hover:bg-zinc-50 font-medium">
-            <td class="py-3 px-4 font-bold text-zinc-900">Investor Support & Operations</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 font-bold text-zinc-900">${data.support}%</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 text-right text-zinc-600 font-mono">544m</td>
-          </tr>
-          <tr class="hover:bg-zinc-50 font-medium">
-            <td class="py-3 px-4 font-bold text-zinc-900">KYC & Verification</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 font-bold text-emerald-700">98.0%</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 text-right text-zinc-600 font-mono">689m</td>
-          </tr>
-          <tr class="hover:bg-zinc-50 font-medium">
-            <td class="py-3 px-4 font-bold text-zinc-900">Secondary Exit & Liquidity Queries</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 font-bold text-zinc-900">87.5%</td>
-            <td class="py-3 px-4 text-zinc-400">—</td>
-            <td class="py-3 px-4 text-right text-zinc-600 font-mono">91m</td>
-          </tr>
-        `;
+        const pcgParams = [
+          { key: 'pitch_clarity', label: 'Pitch Clarity & Senior Secured Debt Backing', weight: 25 },
+          { key: 'yield_framing', label: 'Indicative Yield Framing & Disclaimers', weight: 20 },
+          { key: 'secondary_liquidity', label: 'Secondary Liquidity Window Framing', weight: 20 },
+          { key: 'asset_allocation', label: 'Asset Allocation Need Discovery', weight: 10 },
+          { key: 'payout_timeline', label: 'Monthly Interest Payout Timeline Clarity', weight: 10 },
+          { key: 'active_listening', label: 'Active Listening & Objection Handling', weight: 5 },
+          { key: 'demat_linking', label: 'Demat Linking & Account Verification', weight: 5 },
+          { key: 'tds_compliance', label: 'TDS & Form 15G Compliance', weight: 3 },
+          { key: 'tone_pacing', label: 'Greeting, Pacing & Handover', weight: 2 },
+          { key: 'call_recap', label: 'Post-Call Recap & Follow-Through', weight: 5 },
+        ];
+
+        const agentScores = {
+          'Yaashvi Arora': { pitch_clarity: 99, yield_framing: 100, secondary_liquidity: 91, asset_allocation: 96, payout_timeline: 98, active_listening: 96, demat_linking: 97, tds_compliance: 99, tone_pacing: 96, call_recap: 88 },
+          'Aditya R': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 90, asset_allocation: 95, payout_timeline: 97, active_listening: 96, demat_linking: 96, tds_compliance: 98, tone_pacing: 95, call_recap: 86 },
+          'Aahan Thaker': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 97, active_listening: 95, demat_linking: 96, tds_compliance: 98, tone_pacing: 94, call_recap: 83 },
+          'Aravind': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 96, active_listening: 94, demat_linking: 95, tds_compliance: 98, tone_pacing: 94, call_recap: 82 },
+          'Dhanush': { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 92, call_recap: 81 },
+          'Sujal Dadwani': { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 93, call_recap: 80 },
+          'Samskriti Rao': { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 79 },
+          'Antara Chakrabarty': { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 78 },
+          'Swati Singh': { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 },
+          'Gaurav Nautiyal': { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 },
+        };
+
+        const scores = agentScores[selectedMaAgent] || agentScores['Aahan Thaker'];
+
+        tbody.innerHTML = pcgParams.map(p => {
+          const score = scores[p.key] || 90;
+          return `
+            <tr class="hover:bg-zinc-50 font-medium">
+              <td class="py-3 px-4">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-zinc-900">${p.label}</span>
+                  <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 font-semibold border border-zinc-200">${p.weight}%</span>
+                </div>
+              </td>
+              <td class="py-3 px-4 text-right font-bold font-mono text-zinc-900">
+                ${score.toFixed(1)}%
+              </td>
+              <td class="py-3 px-4 text-right text-zinc-300 font-mono">—</td>
+              <td class="py-3 px-4 text-right text-zinc-300 font-mono">—</td>
+            </tr>
+          `;
+        }).join('');
       }
     }
 
@@ -1721,6 +1740,11 @@
 
       if (tabScorecard) {
         tabScorecard.innerText = (role === 'agent') ? 'My Scorecard' : 'RM Scorecard';
+      }
+
+      const metricConnectTitle = document.getElementById('metric-connect-title');
+      if (metricConnectTitle) {
+        metricConnectTitle.innerText = (role === 'admin') ? 'Connect Rate' : 'Pickup Rate';
       }
 
       if (role === 'admin') {
@@ -1805,6 +1829,65 @@
       renderTable();
     }
 
+    let currentMinIqs = '';
+    let currentMaxIqs = '';
+
+    function handleMinIqsInput(val) {
+      if (val === '') {
+        currentMinIqs = '';
+      } else {
+        const n = parseFloat(val);
+        if (!isNaN(n)) {
+          if (n < 0) currentMinIqs = '0';
+          else if (n > 100) currentMinIqs = '100';
+          else currentMinIqs = val;
+        }
+      }
+      const el = document.getElementById('table-min-iqs-input');
+      if (el && el.value !== currentMinIqs) el.value = currentMinIqs;
+      updateResetIqsVisibility();
+      renderTable();
+    }
+
+    function handleMaxIqsInput(val) {
+      if (val === '') {
+        currentMaxIqs = '';
+      } else {
+        const n = parseFloat(val);
+        if (!isNaN(n)) {
+          if (n < 0) currentMaxIqs = '0';
+          else if (n > 100) currentMaxIqs = '100';
+          else currentMaxIqs = val;
+        }
+      }
+      const el = document.getElementById('table-max-iqs-input');
+      if (el && el.value !== currentMaxIqs) el.value = currentMaxIqs;
+      updateResetIqsVisibility();
+      renderTable();
+    }
+
+    function updateResetIqsVisibility() {
+      const resetBtn = document.getElementById('btn-reset-iqs');
+      if (resetBtn) {
+        if ((currentMinIqs !== '' && currentMinIqs !== 'all') || (currentMaxIqs !== '' && currentMaxIqs !== 'all')) {
+          resetBtn.classList.remove('hidden');
+        } else {
+          resetBtn.classList.add('hidden');
+        }
+      }
+    }
+
+    function resetIqsFilters() {
+      currentMinIqs = '';
+      currentMaxIqs = '';
+      const minEl = document.getElementById('table-min-iqs-input');
+      const maxEl = document.getElementById('table-max-iqs-input');
+      if (minEl) minEl.value = '';
+      if (maxEl) maxEl.value = '';
+      updateResetIqsVisibility();
+      renderTable();
+    }
+
     function filterAgent(agent) {
       currentAgent = agent;
       renderTable();
@@ -1852,18 +1935,18 @@
     let taBreakdownChannel = 'calls';
 
     const TA_GOKUL_AGENTS = [
-      { name: 'Yaashvi Arora', ini: 'YA', chats: { csat: '95.0%', iqs: '96%', vol: 45 }, calls: { csat: '94.0%', iqs: '91%', vol: 68 } },
-      { name: 'Aahan Thaker', ini: 'AT', chats: { csat: '92.5%', iqs: '94%', vol: 60 }, calls: { csat: '91.5%', iqs: '88%', vol: 74 } },
-      { name: 'Dhanush', ini: 'D', chats: { csat: '88.0%', iqs: '90%', vol: 50 }, calls: { csat: '87.0%', iqs: '86%', vol: 58 } },
-      { name: 'Samskriti Rao', ini: 'SR', chats: { csat: '86.5%', iqs: '88%', vol: 40 }, calls: { csat: '85.0%', iqs: '85%', vol: 52 } },
-      { name: 'Gaurav Nautiyal', ini: 'GN', chats: { csat: '84.0%', iqs: '86%', vol: 35 }, calls: { csat: '83.5%', iqs: '83%', vol: 44 } }
+      { name: 'Yaashvi Arora', ini: 'YA', chats: { pickup: '95.0%', iqs: '96%', vol: 45 }, calls: { pickup: '94.0%', iqs: '91%', vol: 68 } },
+      { name: 'Aahan Thaker', ini: 'AT', chats: { pickup: '92.5%', iqs: '94%', vol: 60 }, calls: { pickup: '91.5%', iqs: '88%', vol: 74 } },
+      { name: 'Dhanush', ini: 'D', chats: { pickup: '88.0%', iqs: '90%', vol: 50 }, calls: { pickup: '87.0%', iqs: '86%', vol: 58 } },
+      { name: 'Samskriti Rao', ini: 'SR', chats: { pickup: '86.5%', iqs: '88%', vol: 40 }, calls: { pickup: '85.0%', iqs: '85%', vol: 52 } },
+      { name: 'Gaurav Nautiyal', ini: 'GN', chats: { pickup: '84.0%', iqs: '86%', vol: 35 }, calls: { pickup: '83.5%', iqs: '83%', vol: 44 } }
     ];
 
     const TA_VAISHNAVI_AGENTS = [
-      { name: 'Aravind', ini: 'AR', chats: { csat: '91.0%', iqs: '93%', vol: 52 }, calls: { csat: '90.0%', iqs: '88%', vol: 62 } },
-      { name: 'Sujal Dadwani', ini: 'SD', chats: { csat: '87.5%', iqs: '90%', vol: 48 }, calls: { csat: '86.5%', iqs: '86%', vol: 56 } },
-      { name: 'Antara Chakrabarty', ini: 'AC', chats: { csat: '85.0%', iqs: '88%', vol: 44 }, calls: { csat: '84.5%', iqs: '84%', vol: 50 } },
-      { name: 'Swati Singh', ini: 'SS', chats: { csat: '84.5%', iqs: '87%', vol: 46 }, calls: { csat: '84.0%', iqs: '84%', vol: 56 } }
+      { name: 'Aravind', ini: 'AR', chats: { pickup: '91.0%', iqs: '93%', vol: 52 }, calls: { pickup: '90.0%', iqs: '88%', vol: 62 } },
+      { name: 'Sujal Dadwani', ini: 'SD', chats: { pickup: '87.5%', iqs: '90%', vol: 48 }, calls: { pickup: '86.5%', iqs: '86%', vol: 56 } },
+      { name: 'Antara Chakrabarty', ini: 'AC', chats: { pickup: '85.0%', iqs: '88%', vol: 44 }, calls: { pickup: '84.5%', iqs: '84%', vol: 50 } },
+      { name: 'Swati Singh', ini: 'SS', chats: { pickup: '84.5%', iqs: '87%', vol: 46 }, calls: { pickup: '84.0%', iqs: '84%', vol: 56 } }
     ];
 
     const TA_CHAT_PARAMS = [
@@ -1981,8 +2064,8 @@
       else agents = TA_GOKUL_AGENTS;
 
       // 2. Update Top Stat Cards
-      const csatTeamEl = document.getElementById('ta-stat-csat-team');
-      const csatCxEl = document.getElementById('ta-stat-csat-cx');
+      const pickupTeamEl = document.getElementById('ta-stat-pickup-team');
+      const pickupCxEl = document.getElementById('ta-stat-pickup-cx');
       const iqsTeamEl = document.getElementById('ta-stat-iqs-team');
       const iqsCxEl = document.getElementById('ta-stat-iqs-cx');
       const volTitleEl = document.getElementById('ta-stat-vol-title');
@@ -1990,16 +2073,16 @@
       const volCxEl = document.getElementById('ta-stat-vol-cx');
 
       if (taCurrentChannel !== 'calls') {
-        if (csatTeamEl) csatTeamEl.innerText = '—';
-        if (csatCxEl) csatCxEl.innerText = '—';
+        if (pickupTeamEl) pickupTeamEl.innerText = '—';
+        if (pickupCxEl) pickupCxEl.innerText = '—';
         if (iqsTeamEl) iqsTeamEl.innerText = '—';
         if (iqsCxEl) iqsCxEl.innerText = '—';
         if (volTitleEl) volTitleEl.innerText = taCurrentChannel === 'emails' ? 'EMAILS HANDLED' : 'CHATS HANDLED';
         if (volTeamEl) volTeamEl.innerText = '—';
         if (volCxEl) volCxEl.innerText = '—';
       } else if (taCurrentTL === 'Vaishnavi') {
-        if (csatTeamEl) csatTeamEl.innerText = '87.0%';
-        if (csatCxEl) csatCxEl.innerText = '87.4%';
+        if (pickupTeamEl) pickupTeamEl.innerText = '91.8%';
+        if (pickupCxEl) pickupCxEl.innerText = '91.0%';
         if (iqsTeamEl) iqsTeamEl.innerText = '85.1%';
         if (iqsCxEl) iqsCxEl.innerText = '85.0%';
         if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
@@ -2007,8 +2090,8 @@
         if (volCxEl) volCxEl.innerText = '520';
       } else {
         // Gokul
-        if (csatTeamEl) csatTeamEl.innerText = '89.2%';
-        if (csatCxEl) csatCxEl.innerText = '87.4%';
+        if (pickupTeamEl) pickupTeamEl.innerText = '93.2%';
+        if (pickupCxEl) pickupCxEl.innerText = '91.0%';
         if (iqsTeamEl) iqsTeamEl.innerText = '86.8%';
         if (iqsCxEl) iqsCxEl.innerText = '85.0%';
         if (volTitleEl) volTitleEl.innerText = 'CALLS HANDLED';
@@ -2045,7 +2128,7 @@
               <span class="w-11 shrink-0 text-xs font-mono text-[#A1A1AA] text-right">${p.weight}</span>
               <div class="flex-1 h-2.5 bg-[#E4E4E7] rounded-full relative">
                 <div class="h-full bg-[#27272A] rounded-full" style="width: ${p.team}%;"></div>
-                <div class="absolute -top-1 w-0 h-[18px] border-l-2 border-dashed border-[#71717A] -translate-x-px" style="left: ${p.dept}%;" title="RM avg ${p.dept}%"></div>
+                <div class="absolute -top-1 w-0 h-[18px] border-l-2 border-dashed border-[#71717A] -translate-x-px" style="left: ${p.dept}%;" title="Department avg ${p.dept}%"></div>
               </div>
               <span class="w-11 shrink-0 text-sm font-semibold font-mono text-[#18181B] text-right">${p.team}%</span>
             </div>
@@ -2083,7 +2166,7 @@
                   <span class="text-sm font-medium text-[#18181B]">${agent.name}</span>
                 </span>
               </td>
-              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${chData ? chData.csat : '—'}</td>
+              <td class="px-4 text-right font-mono text-sm text-[#18181B]">${chData ? `${90 + (agent.ini.charCodeAt(0) % 8)}%` : '—'}</td>
               <td class="px-4 text-right font-mono text-sm text-[#18181B]">${chData ? chData.iqs : '—'}</td>
               <td class="px-4 text-right font-mono text-sm ${chatsBg}">—</td>
               <td class="px-4 text-right font-mono text-sm ${callsBg}">${agent.calls.vol}</td>
@@ -2148,16 +2231,16 @@
     let rmPerfCurrentTeam = 'all';
 
     const RM_PERFORMANCE_DATA = [
-      { name: 'Yaashvi Arora', ini: 'YA', tl: 'Gokul', currentIqs: 94.2, prev2WkIqs: 91.8, delta2Wk: 2.4, calls: 68, csat: '94.0%', focusArea: 'Pitch Clarity & Senior Secured Backing' },
-      { name: 'Aditya R', ini: 'AR', tl: 'Gokul', currentIqs: 93.5, prev2WkIqs: 89.0, delta2Wk: 4.5, calls: 72, csat: '93.0%', focusArea: 'Active Listening & Objection Handling' },
-      { name: 'Aahan Thaker', ini: 'AT', tl: 'Gokul', currentIqs: 91.5, prev2WkIqs: 87.5, delta2Wk: 4.0, calls: 74, csat: '91.5%', focusArea: 'Indicative Yield Framing & Disclaimers' },
-      { name: 'Aravind', ini: 'AR', tl: 'Vaishnavi', currentIqs: 89.8, prev2WkIqs: 86.6, delta2Wk: 3.2, calls: 62, csat: '90.0%', focusArea: 'Demat Linking & Account Verification' },
-      { name: 'Dhanush', ini: 'D', tl: 'Gokul', currentIqs: 88.2, prev2WkIqs: 83.1, delta2Wk: 5.1, calls: 58, csat: '87.0%', focusArea: 'Asset Allocation Need Discovery' },
-      { name: 'Sujal Dadwani', ini: 'SD', tl: 'Vaishnavi', currentIqs: 87.0, prev2WkIqs: 80.2, delta2Wk: 6.8, calls: 56, csat: '86.5%', focusArea: 'Monthly Interest Payout Timeline Clarity' },
-      { name: 'Samskriti Rao', ini: 'SR', tl: 'Gokul', currentIqs: 85.4, prev2WkIqs: 79.6, delta2Wk: 5.8, calls: 52, csat: '85.0%', focusArea: 'Secondary Liquidity Window Framing' },
-      { name: 'Antara Chakrabarty', ini: 'AC', tl: 'Vaishnavi', currentIqs: 84.2, prev2WkIqs: 82.4, delta2Wk: 1.8, calls: 50, csat: '84.5%', focusArea: 'Post-Call Recap & Follow-Through' },
-      { name: 'Swati Singh', ini: 'SS', tl: 'Vaishnavi', currentIqs: 69.5, prev2WkIqs: 72.0, delta2Wk: -2.5, calls: 56, csat: '84.0%', focusArea: 'Active Listening & Objection Handling' },
-      { name: 'Gaurav Nautiyal', ini: 'GN', tl: 'Gokul', currentIqs: 68.0, prev2WkIqs: 71.5, delta2Wk: -3.5, calls: 44, csat: '83.5%', focusArea: 'Post-Call Recap & Follow-Through' }
+      { name: 'Yaashvi Arora', ini: 'YA', tl: 'Gokul', currentIqs: 94.2, prev2WkIqs: 91.8, delta2Wk: 2.4, calls: 68, focusArea: 'Pitch Clarity & Senior Secured Backing' },
+      { name: 'Aditya R', ini: 'AR', tl: 'Gokul', currentIqs: 93.5, prev2WkIqs: 89.0, delta2Wk: 4.5, calls: 72, focusArea: 'Active Listening & Objection Handling' },
+      { name: 'Aahan Thaker', ini: 'AT', tl: 'Gokul', currentIqs: 91.5, prev2WkIqs: 87.5, delta2Wk: 4.0, calls: 74, focusArea: 'Indicative Yield Framing & Disclaimers' },
+      { name: 'Aravind', ini: 'AR', tl: 'Vaishnavi', currentIqs: 89.8, prev2WkIqs: 86.6, delta2Wk: 3.2, calls: 62, focusArea: 'Demat Linking & Account Verification' },
+      { name: 'Dhanush', ini: 'D', tl: 'Gokul', currentIqs: 88.2, prev2WkIqs: 83.1, delta2Wk: 5.1, calls: 58, focusArea: 'Asset Allocation Need Discovery' },
+      { name: 'Sujal Dadwani', ini: 'SD', tl: 'Vaishnavi', currentIqs: 87.0, prev2WkIqs: 80.2, delta2Wk: 6.8, calls: 56, focusArea: 'Monthly Interest Payout Timeline Clarity' },
+      { name: 'Samskriti Rao', ini: 'SR', tl: 'Gokul', currentIqs: 85.4, prev2WkIqs: 79.6, delta2Wk: 5.8, calls: 52, focusArea: 'Secondary Liquidity Window Framing' },
+      { name: 'Antara Chakrabarty', ini: 'AC', tl: 'Vaishnavi', currentIqs: 84.2, prev2WkIqs: 82.4, delta2Wk: 1.8, calls: 50, focusArea: 'Post-Call Recap & Follow-Through' },
+      { name: 'Swati Singh', ini: 'SS', tl: 'Vaishnavi', currentIqs: 69.5, prev2WkIqs: 72.0, delta2Wk: -2.5, calls: 56, focusArea: 'Active Listening & Objection Handling' },
+      { name: 'Gaurav Nautiyal', ini: 'GN', tl: 'Gokul', currentIqs: 68.0, prev2WkIqs: 71.5, delta2Wk: -3.5, calls: 44, focusArea: 'Post-Call Recap & Follow-Through' }
     ];
 
     function onRmPerfTeamChange(team) {
@@ -2194,7 +2277,7 @@
                   <span class="text-xs font-semibold text-[#18181B] truncate">${rm.name}</span>
                   <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-zinc-100 text-zinc-600 shrink-0">Team ${rm.tl}</span>
                 </div>
-                <div class="text-[11px] text-[#71717A] mt-0.5 truncate">${rm.calls} calls · ${rm.csat} CSAT</div>
+                <div class="text-[11px] text-[#71717A] mt-0.5 truncate">${rm.calls} calls</div>
               </div>
             </div>
             <div class="text-right shrink-0 flex flex-col items-end gap-1">
