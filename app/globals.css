@@ -238,20 +238,33 @@ body {
 .quality-shell-sidebar-link .quality-shell-sidebar-label,
 .quality-shell-sidebar-link.active .quality-shell-sidebar-label { color: inherit; display: inline; }
 
-/* Navigation collapses to icons (reference). Labels stay in the DOM for assistive tech and as tooltips. */
+/* Sidebar: pinned under the top bar (it does not scroll with the page), scrolls on its own if the nav is long, and collapses to
+   icons on request (the choice is remembered; first visit starts collapsed on screens <= 1100px). Labels stay in the DOM for
+   assistive tech and as tooltips. */
+.quality-shell-sidebar { position: sticky; top: var(--topbar-h, 0px); align-self: flex-start; height: calc(100vh - var(--topbar-h, 0px)); overflow-x: hidden; overflow-y: auto; transition: width .16s ease; }
+.quality-shell-sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px 2px 16px; min-height: 36px; }
+.quality-shell-sidebar-head .quality-shell-sidebar-title { padding: 0; }
+.quality-shell-sidebar-toggle { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--qa-text-3); cursor: pointer; }
+.quality-shell-sidebar-toggle:hover { background: var(--sb-hover); color: var(--qa-text); }
+.quality-shell-sidebar-toggle svg { transition: transform .16s ease; }
+.quality-shell-sidebar.collapsed { width: 64px; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-head { justify-content: center; padding: 6px 0 2px; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-head .quality-shell-sidebar-title { display: none; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-toggle svg { transform: rotate(180deg); }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-title { height: 1px; margin: 12px 16px; padding: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-link { justify-content: center; margin: 0 10px 2px; padding: 0; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (max-width: 1100px) {
-  .quality-shell-sidebar { width: 64px; }
-  .quality-shell-sidebar-title { height: 1px; margin: 12px 16px; padding: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
-  .quality-shell-sidebar-link { justify-content: center; margin: 0 10px 2px; padding: 0; }
-  .quality-shell-sidebar-link .quality-shell-sidebar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .quality-shell-main { padding: 24px; }
 }
 /* Below 560px the rail becomes a scrolling icon strip above the content, so every page stays reachable. */
 @media (max-width: 560px) {
   .quality-shell-body { flex-direction: column; }
-  .quality-shell-sidebar { width: 100%; min-height: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--sb-border); }
-  .quality-shell-sidebar-title { width: 1px; height: 20px; margin: 0 6px; flex-shrink: 0; }
-  .quality-shell-sidebar-link { width: 44px; height: 44px; margin: 0; flex-shrink: 0; }
+  .quality-shell-sidebar, .quality-shell-sidebar.collapsed { position: static; width: 100%; height: auto; min-height: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--sb-border); }
+  .quality-shell-sidebar-head { display: none; }
+  .quality-shell-sidebar-title, .quality-shell-sidebar.collapsed .quality-shell-sidebar-title { width: 1px; height: 20px; margin: 0 6px; padding: 0; flex-shrink: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
+  .quality-shell-sidebar-link, .quality-shell-sidebar.collapsed .quality-shell-sidebar-link { width: 44px; height: 44px; margin: 0; padding: 0; justify-content: center; flex-shrink: 0; }
+  .quality-shell-sidebar-label, .quality-shell-sidebar.collapsed .quality-shell-sidebar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .quality-shell-main { padding: 16px; }
 }
 
@@ -376,3 +389,4 @@ tr[data-row-click] { cursor: pointer; }
 .qfilters .qf-label { font-size: 12px; color: var(--qa-text-3); }
 .qfilters .qf-group { display: inline-flex; align-items: center; gap: 8px; }
 .qfilters select { max-width: 220px; }
+.quality-shell-sidebar-link { white-space: nowrap; }

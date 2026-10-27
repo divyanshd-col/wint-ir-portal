@@ -337,7 +337,7 @@ export default function TLQualityCallsPage() {
   };
 
   return (
-    <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto', fontFamily: SANS }}>
+    <div style={{ fontFamily: SANS }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>

@@ -87,7 +87,7 @@ interface NavItem { label; href; icon; roles?: string[]; skill?: string; section
 ```
 - Visibility: admin sees every item; others need `roles` to include their role and, if set, the `skill`.
 - **Section headings (admin only):** when `role === 'admin'` and an item has `section`, a heading is rendered whenever the section changes between consecutive visible items. The sidebar title (`Admin`) covers the first group; headings are **QA**, **TL**, **IR Agent**. Keep items of one section contiguous in the array.
-- **Responsive:** <=1100px the sidebar is a 64px icon rail (labels stay in the DOM as `.quality-shell-sidebar-label`, visually hidden, plus a `title` tooltip); <=560px it becomes a scrolling icon strip above the content (the reference hides it; the strip keeps every page reachable).
+- **Pinned and collapsible:** the sidebar is `position: sticky` under the top bar (own scroll if the nav is long, never scrolls with the page). The chevron at the top collapses it to a 64px icon rail; the choice is stored in `localStorage.wint_sidebar`, and a first visit on <=1100px starts collapsed. Labels stay in the DOM as `.quality-shell-sidebar-label` (visually hidden, plus a `title` tooltip). <=560px it becomes a scrolling icon strip above the content (the reference hides it; the strip keeps every page reachable).
 - CSS classes (in `app/globals.css`): `.quality-shell-sidebar`, `.quality-shell-sidebar-title` (also used for section headings), `.quality-shell-sidebar-link` (+ `.active`), `.quality-shell-main`.
 
 Shell wrappers and their layouts:
@@ -288,6 +288,12 @@ Source of truth: `Chat Evaluation Redesign.html`. Classes live in the "Evaluatio
 - **Rubric tabs**: `.eval-rtab[aria-selected]` (underline uses `--qa-text`; the old `--qa-primary` was never defined, so no underline rendered).
 - **Queue pages**: tabs are underlined (`tabStyle` in each page, hairline tab bar, count chip on `--ink`); the interaction select is `AgentFilterSelect` rendered through each table's `leadingFilter` slot; filter bars sit on `--sunk`; chat tables show Agent IQS first (bold) and Bot IQS muted; the Status column only shows when a re-opened chat is listed.
 
+### Queue consistency rules
+- **Rows**: a click anywhere on a row opens its inline panel (`rowClick` from `components/quality/rowClick.ts`; mark the `<tr>` with `data-row-click`). Buttons, links and inputs inside the row keep their own behaviour.
+- **Filter bar**: wrap controls in `.qfilters` (add `.standalone` when the bar is not the top of a table card). Order: interaction, search, agent / disposition, status or parameter, IQS min-max (`.qf-group` + `.qf-label`), CSAT, `DateRangeChip` (or `PeriodRangeChip` for e-mail), `Reset Filters` (`.qf-chip`, always shown, disabled when nothing is filtered), then count and the list-icon page-size control on the right. Controls inherit the 32px / 8px-radius look from the class; do not restyle them inline.
+- **Page frame**: pages render a title and content directly inside the shell's `<main>`; no extra padded or tinted wrapper.
+- **Copy**: no emoji and no helper sentences under titles or tables ("click a row to expand", "data from live DB"). Section headers carry at most the period label.
+
 ## 8. Do / Don't (for AI assistants editing the UI)
 
 - **Do** use `var(--ink)` / `var(--ink-fg)` for filled neutral chips and buttons, `--pass` / `--fail` for status, and `--marker` only for focus and change markers.
@@ -295,7 +301,7 @@ Source of truth: `Chat Evaluation Redesign.html`. Classes live in the "Evaluatio
 - **Do** round numeric scores from the API (`numeric` arrives as a string).
 - **Do** keep `colSpan` and `<colgroup>` in step with the column list.
 - **Do** keep a sidebar item's `section` contiguous in `NAV_ALL`.
-- **Don't** add coloured pills/badges to tables, or emoji to UI text.
+- **Don't** add coloured pills/badges to tables, or emoji to UI text (including status dots like 🟢/🟡 and icon glyphs like ⚡/📱/💬; use words or SVG).
 - **Don't** hard-code `#fff`/`#111` text or backgrounds in new UI; dark mode will break. (Some older files, notably parts of `MyQualityEmailsPage.tsx` and the call pages, still use fixed light hex colours and rely on the dark-theme inline-style overrides.)
 - **Do** cap any dropdown/popover list that can grow (agents, dispositions): `maxHeight: 'min(360px, calc(100vh - 220px))'`, `overflowY: 'auto'`, `overscrollBehavior: 'contain'`, so it scrolls inside the panel instead of running off the page (the Member Analytics "Viewing" agent list has ~170 entries).
 - **Don't** make the chat sidebar expand on hover.
