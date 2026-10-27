@@ -7,11 +7,13 @@ import {
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
 import { maskText, renderMasked } from './mask';
+import { isActivityEvent } from './transcript-events';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { renderWithAttachments } from './attachments';
 import { CsatPill } from './csat';
+import AutoTextarea from './AutoTextarea';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -978,14 +980,14 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                     }
 
                     const msg = item.data;
-                    const type = senderType(msg.sender_type ?? msg.sender);
+                    const type = isActivityEvent(msg.sender_type ?? msg.sender, msg.content) ? 'system' : senderType(msg.sender_type ?? msg.sender);
                     
                     // Determine gap based on previous item
                     let gap = 16;
                     if (idx > 0) {
                       const prevItem = items[idx - 1];
                       if (prevItem.type === 'message') {
-                        const prevType = senderType(prevItem.data.sender_type ?? prevItem.data.sender);
+                        const prevType = isActivityEvent(prevItem.data.sender_type ?? prevItem.data.sender, prevItem.data.content) ? 'system' : senderType(prevItem.data.sender_type ?? prevItem.data.sender);
                         gap = prevType === type ? 8 : 16;
                       }
                     }
@@ -1179,7 +1181,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                         ) : (
                           <div className="eval-gate-extra">
                             <div className="eval-reason-label">Reason for Breach:</div>
-                            <textarea
+                            <AutoTextarea
                               className="eval-reason-input"
                               value={gItem.reasoning}
                               onChange={e => handleGateReasoningChange(g.key, e.target.value)}
@@ -1247,7 +1249,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
 
                     {/* Reasoning */}
                     {(st.reasoning || !paramReadOnly) && (
-                      <textarea
+                      <AutoTextarea
                         value={st.reasoning}
                         onChange={e => !paramReadOnly && setReasoning(pascal, e.target.value)}
                         readOnly={paramReadOnly}
@@ -1305,7 +1307,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                 <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
                   Reason for Dispute (QA Review)
                 </div>
-                <textarea
+                <AutoTextarea
                   value={disputeReason}
                   onChange={e => setDisputeReason(e.target.value)}
                   placeholder="Explain why you disagree with the score on selected parameters…"

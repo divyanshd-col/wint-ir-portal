@@ -11,6 +11,7 @@ import {
 import { resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import { renderWithAttachments } from '@/components/quality/attachments';
+import { isActivityEvent } from '@/components/quality/transcript-events';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -147,7 +148,7 @@ export default function IRScorePanel({
       .then(d => {
         const raw: any[] = d.timedMessages ?? d.messages ?? d.transcript ?? [];
         const msgs: TranscriptMsg[] = Array.isArray(raw) ? raw.map(m => ({
-          role: m.role ?? (m.sender === 'user' ? 'user' : m.sender === 'bot' ? 'bot' : m.sender === 'activity' ? 'system' : 'assistant'),
+          role: m.role ?? (isActivityEvent(m.sender, m.content ?? m.text) ? 'system' : m.sender === 'user' ? 'user' : m.sender === 'bot' ? 'bot' : 'assistant'),
           content: m.content ?? m.text ?? '',
           timestamp: m.timestamp,
         })) : [];

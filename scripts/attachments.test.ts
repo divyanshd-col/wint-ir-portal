@@ -40,3 +40,12 @@ test('html body: marker (plain or already linkified) becomes an anchor with the 
     assert.ok(!out.includes('[Attachment:'));
   }
 });
+
+import { isActivityEvent } from '../components/quality/transcript-events';
+test('assignment events are events even when the sender is the agent', () => {
+  assert.equal(isActivityEvent('Nirmiti', 'Claimed by Nirmiti'), true);
+  assert.equal(isActivityEvent('activity', 'Waiting to assign to agent'), true);
+  assert.equal(isActivityEvent('Priya D', 'Assigned by Puja to Priya D'), true);
+  assert.equal(isActivityEvent('Nirmiti', 'Sir, I have claimed your request and will update you'), false);
+  assert.equal(isActivityEvent('bot', 'Hello. Welcome to Wint Wealth support.'), false);
+});

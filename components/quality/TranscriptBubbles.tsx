@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { isActivityEvent } from './transcript-events';
 
 const BOT_NAMES = new Set(['myra', 'bot', 'wint bot', 'wintbot', 'robylon ai', 'robylon']);
 const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
@@ -126,7 +127,7 @@ export default function TranscriptBubbles({
         const senderLc = (m.sender || '').toLowerCase().trim();
         const isCustomer = CUSTOMER_LABELS.has(senderLc);
         const isBot = BOT_NAMES.has(senderLc);
-        const isActivity = senderLc === 'activity' || senderLc === 'system';
+        const isActivity = isActivityEvent(senderLc, m.content);
         const timeStr = m.timestamp ? formatTranscriptDate(m.timestamp) : '';
 
         if (isActivity) {

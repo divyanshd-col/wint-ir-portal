@@ -32,7 +32,29 @@ export function stripHtml(raw?: string | null): string {
  */
 export function isHtml(str?: string | null): boolean {
   if (!str) return false;
-  return /<\/?[a-z][\s\S]*>/i.test(str);
+  // Real markup only: a plain-text address like "Name <name@gmail.com>" must not count as a tag.
+  return /<\/?(?:html|head|body|style|p|div|br|span|a|b|i|u|em|strong|ul|ol|li|table|thead|tbody|tr|td|th|h[1-6]|blockquote|img|hr|pre|font|center)\b[^>]*>/i.test(str);
+}
+
+/**
+ * Splits a plain-text e-mail into the new message and the quoted history below an "On <date>, <name> wrote:" header
+ * (also works on text whose line breaks were already collapsed).
+ */
+export function splitQuotedReply(text: string): { main: string; quoted: string } {
+  const m = /(?:^|\n|(?<=[.!?]\s))\s*On\s+(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,?\s+)?(?:\d{1,2}|[A-Z][a-z]{2,8})\b[^\n]{0,200}?\bwrote:/.exec(text)
+    ?? /(?:^|\n)\s*-{2,}\s*Original Message\s*-{2,}/i.exec(text);
+  if (!m || m.index === undefined) return { main: text, quoted: '' };
+  return { main: text.slice(0, m.index).trimEnd(), quoted: text.slice(m.index).trim() };
+}
+
+/** Quoted history arrives with its ">" markers flattened onto one line; give every quoted line its own row again. */
+export function formatQuoted(q: string): string {
+  return q
+    .replace(/<([^<>\s@]+@[^<>\s]+)>/g, '\u27E8$1\u27E9') // keep "<name@mail.com>" intact
+    .replace(/\s*(?:>\s*)+/g, '\n')
+    .replace(/\u27E8([^\u27E9]+)\u27E9/g, '<$1>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -50,7 +72,7 @@ export function extractConciseQuery(raw?: string | null, fallbackSubject?: strin
   text = text.replace(/begin forwarded message:[\s\S]*?(?=(dear|hi|hello|\b[a-z0-9]))/gi, '');
   text = text.replace(/-+\s*forwarded message\s*-+[\s\S]*?(?=(dear|hi|hello|\b[a-z0-9]))/gi, '');
   text = text.replace(/^[> ]*(from|to|date|subject|cc):[^\n\r]+/gim, '');
-  text = text.replace(/on\s+.+?wrote:[\s\S]*/i, '');
+  text = splitQuotedReply(text).main;
 
   // 3. Remove leading greetings / salutations
   text = text.replace(/^\s*(dear\s+[a-z0-9\s]{1,30}|hi\s*[a-z0-9\s]{0,20}|hello\s*[a-z0-9\s]{0,20}|hey\s*[a-z0-9\s]{0,20}|good\s+(morning|afternoon|evening)\s*[a-z0-9\s]{0,20})[,.!:-]*/i, '');
@@ -104,6 +126,8 @@ export default function EmailMessageView({
   className = '',
 }: EmailMessageViewProps) {
   const text = trimEmailBody(content);
+  const parts = React.useMemo(() => (isHtml(text) ? { main: text, quoted: '' } : splitQuotedReply(text)), [text]);
+  const [showQuoted, setShowQuoted] = useState(false);
 
   if (!text) {
     return (
@@ -133,7 +157,17 @@ export default function EmailMessageView({
         ...style,
       }}
     >
-      {renderWithAttachments(text)}
+      {renderWithAttachments(parts.main)}
+      {parts.quoted && (
+        <>
+          <div>
+            <button type="button" className="email-quote-toggle" aria-expanded={showQuoted} title={showQuoted ? 'Hide quoted text' : 'Show quoted text'} onClick={() => setShowQuoted(v => !v)}>
+              •••
+            </button>
+          </div>
+          {showQuoted && <div className="email-quoted">{formatQuoted(parts.quoted)}</div>}
+        </>
+      )}
     </div>
   );
 }
@@ -430,7 +464,7 @@ export function CustomerEmailThreadCard({
           }}
           title="Click to expand"
         >
-          {stripHtml(customerMessage).slice(0, 140)}…
+          {splitQuotedReply(stripHtml(customerMessage)).main.slice(0, 140)}…
         </div>
       )}
     </div>
