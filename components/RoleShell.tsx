@@ -99,11 +99,13 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
                 <Link
                   href={item.href}
                   className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
+                  title={item.label}
+                  aria-current={active ? 'page' : undefined}
                 >
                   <span>
                     <Icon />
                   </span>
-                  {item.label}
+                  <span className="quality-shell-sidebar-label">{item.label}</span>
                 </Link>
               </React.Fragment>
             );

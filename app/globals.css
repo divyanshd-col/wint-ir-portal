@@ -231,6 +231,27 @@ body {
   max-width: 1400px;
 }
 
+/* The label keeps the link's own colour; only the icon span is tinted. */
+.quality-shell-sidebar-link .quality-shell-sidebar-label,
+.quality-shell-sidebar-link.active .quality-shell-sidebar-label { color: inherit; display: inline; }
+
+/* Navigation collapses to icons (reference). Labels stay in the DOM for assistive tech and as tooltips. */
+@media (max-width: 1100px) {
+  .quality-shell-sidebar { width: 64px; }
+  .quality-shell-sidebar-title { height: 1px; margin: 12px 16px; padding: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
+  .quality-shell-sidebar-link { justify-content: center; margin: 0 10px 2px; padding: 0; }
+  .quality-shell-sidebar-link .quality-shell-sidebar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .quality-shell-main { padding: 24px; }
+}
+/* Below 560px the rail becomes a scrolling icon strip above the content, so every page stays reachable. */
+@media (max-width: 560px) {
+  .quality-shell-body { flex-direction: column; }
+  .quality-shell-sidebar { width: 100%; min-height: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--sb-border); }
+  .quality-shell-sidebar-title { width: 1px; height: 20px; margin: 0 6px; flex-shrink: 0; }
+  .quality-shell-sidebar-link { width: 44px; height: 44px; margin: 0; flex-shrink: 0; }
+  .quality-shell-main { padding: 16px; }
+}
+
 /* Email bodies in the quality review panels: tight like chat transcripts, no dangling space after the last paragraph. */
 .email-html-body { overflow-wrap: anywhere; }
 .email-html-body p, .email-html-body div { margin-top: 0; margin-bottom: 0.6em; }
