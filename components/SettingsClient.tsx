@@ -641,7 +641,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-gray-900">Quality Scoring Keys</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Dedicated keys for IQS scoring — keeps spend separate from chat usage</p>
+                <p className="text-xs text-gray-400 mt-0.5">Dedicated keys for IQS scoring. Keeps spend separate from chat usage</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1089,7 +1089,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 <h3 className="text-sm font-bold text-gray-900">Quality Alert Sheet</h3>
                 <p className="text-xs text-gray-400 mt-0.5">
                   When a chat fails a critical quality parameter, a row is appended to a Google Sheet alongside the Slack alert.
-                  Uses a Google Apps Script web app — no service account needed.
+                  Uses a Google Apps Script web app. No service account needed.
                 </p>
               </div>
               <div className="bg-stone-50 rounded-xl p-3 text-xs text-stone-600 space-y-1 max-w-lg">
@@ -1122,7 +1122,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 </button>
                 {qualitySheetUrl && !sheetSaved && (
                   <p className="text-xs text-emerald-600 font-medium">
-                    ✓ Active — rows will be appended on every parameter failure alert.
+                    ✓ Active. Rows will be appended on every parameter failure alert.
                   </p>
                 )}
               </div>

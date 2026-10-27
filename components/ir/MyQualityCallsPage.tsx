@@ -7,6 +7,7 @@ import { DisputeThread } from '../quality/DisputeThread';
 import { DisputeStatusPill, getDisputeOutcomeKey } from '@/components/tl/QualityChatsPage';
 import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import UISelect from '@/components/quality/UISelect';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -445,9 +446,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
       {/* ── TAB 1: EVALUATED CALLS ────────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters */}
-          <div className="qfilters standalone">
+          <div className="qfilters">
             <input
               type="text"
               placeholder="Search by Call ID…"
@@ -463,7 +464,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               style={{ ...chipInputStyle, width: 130 }}
             />
 
-            <select
+            <UISelect
               value={qualityParam}
               onChange={e => { setQualityParam(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, minWidth: 160 }}
@@ -472,7 +473,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               {Object.entries(CALL_PARAM_NAMES).map(([k, label]) => (
                 <option key={k} value={k}>Failed {label}</option>
               ))}
-            </select>
+            </UISelect>
 
             <span className="qf-group">
 <span className="qf-label">IQS</span>
@@ -537,7 +538,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
           </div>
 
           {/* Table */}
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
@@ -813,10 +814,10 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
       {/* ── TAB 2: DISPUTES RAISED (PENDING TL REVIEW) ───────────────────────── */}
       {activeTab === 'disputes' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div className="qfilters standalone">
-            <select
+          <div className="qfilters">
+            <UISelect
               value={pendingOutcomeFilter}
               onChange={e => { setPendingOutcomeFilter(e.target.value); setPendingPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -824,7 +825,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <option value="">All Statuses</option>
               <option value="raised_ir">Dispute raised by IR</option>
               <option value="raised_tl">Dispute raised by TL</option>
-            </select>
+            </UISelect>
 
 
             <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
@@ -867,7 +868,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
@@ -1011,10 +1012,10 @@ export default function MyQualityCallsPage({ agentName }: Props) {
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div className="qfilters standalone">
-            <select
+          <div className="qfilters">
+            <UISelect
               value={reviewedOutcomeFilter}
               onChange={e => { setReviewedOutcomeFilter(e.target.value); setReviewedPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -1025,7 +1026,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <option value="resolved_tl">Resolved by TL</option>
               <option value="forwarded">Forwarded by TL</option>
               <option value="cancelled">Cancelled</option>
-            </select>
+            </UISelect>
 
 
             <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />
@@ -1068,7 +1069,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>

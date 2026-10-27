@@ -20,6 +20,15 @@ test('file names containing " - " keep their full name', () => {
   assert.match(html, />Jan - Mar statement\.pdf</);
 });
 
+test('[Image: url] becomes an "Image" chip that opens the picture', () => {
+  const html = renderToStaticMarkup(React.createElement('div', null, renderWithAttachments(`I have filled the form please check [Image: ${URL}]`)));
+  assert.match(html, /I have filled the form please check /);
+  assert.match(html, new RegExp(`href="${URL.replace(/[.]/g, '\\.')}"`));
+  assert.match(html, />Image</);
+  assert.ok(!html.includes('[Image:'));
+  assert.match(attachmentsToHtml(`<p>see [Image: ${URL}]</p>`), /class="attachment-chip"[^>]*>.*Image/);
+});
+
 test('text without markers is untouched', () => {
   assert.equal(renderWithAttachments('just a message'), 'just a message');
 });

@@ -404,3 +404,25 @@ tr[style*="--accent-weak"] > td:first-child { box-shadow: inset 3px 0 0 var(--ac
 .attachment-chip:hover { background: var(--qa-fill-light); }
 .attachment-chip .attachment-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-chip .attachment-arrow { color: var(--qa-text-3); flex-shrink: 0; }
+
+/* CSAT pills: sans, sentence case, semantic colour (green = Good, red = Bad). */
+.csat-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; border: 1px solid transparent; font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.csat-pill.good { background: var(--pass-soft); color: var(--pass); }
+.csat-pill.bad { background: var(--fail-soft); color: var(--fail); }
+.csat-pill.mid { background: var(--sunk); color: var(--qa-text-2); border-color: var(--qa-border); }
+
+/* UISelect: themed replacement for native <select> (see components/quality/UISelect.tsx). */
+.ui-select-btn { width: 100%; height: 32px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; border: 1px solid var(--qa-border); border-radius: 8px; background: var(--qa-card); color: var(--qa-text); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.ui-select-btn:hover { background: var(--qa-fill-light); }
+.ui-select-btn.on { background: var(--ink); color: var(--ink-fg); border-color: var(--ink); }
+.ui-select-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ui-select-btn svg { flex-shrink: 0; opacity: .7; }
+.ui-select-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-select-menu { z-index: 200; max-height: 280px; overflow-y: auto; padding: 6px 0; border: 1px solid var(--qa-border); border-radius: 8px; background: var(--qa-card); box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+.ui-select-item { display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 10px; font-size: 13px; color: var(--qa-text); cursor: pointer; white-space: nowrap; }
+.ui-select-item.hi { background: var(--qa-fill-light); }
+.ui-select-item[aria-selected="true"] { font-weight: 600; }
+.ui-select-item.off { opacity: .45; cursor: not-allowed; }
+.ui-select-check { width: 12px; font-size: 11px; text-align: center; color: var(--accent); }
+/* A filter bar that opens a card sits flush with the card's rounded top. */
+.qfilters:first-child { border-radius: 7px 7px 0 0; }

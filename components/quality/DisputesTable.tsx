@@ -8,6 +8,7 @@ import { getDisputeClassification } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 import { rowClick } from './rowClick';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { CsatPill } from './csat';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -348,13 +349,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                     )}
                   </td>
                   <td style={td}>
-                    {d.csatScore == null ? (
-                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-                    ) : (
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>
-                        {d.csatScore === 1 ? 'Bad' : d.csatScore === 3 ? 'Neutral' : 'Good'}
-                      </span>
-                    )}
+                    <CsatPill value={d.csatScore} />
                   </td>
                   <td style={{ ...tdAct, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, border: 'none', height: 52 }}>
                     <button

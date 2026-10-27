@@ -18,6 +18,7 @@ import EmailMessageView, {
   type InternalNote,
 } from '@/components/quality/EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import UISelect from '@/components/quality/UISelect';
 
 
 interface AgentBreakdown {
@@ -157,7 +158,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       setModalNotes('');
       onChanged();
     } catch {
-      setError(action === 'forward_dispute' ? 'Could not forward that dispute — please retry.' : 'Could not resolve that dispute — please retry.');
+      setError(action === 'forward_dispute' ? 'Could not forward that dispute. Please retry.' : 'Could not resolve that dispute. Please retry.');
     } finally {
       setActioning(null);
     }
@@ -277,19 +278,19 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
 
       <div className="qfilters">
         {agentsInRows.length > 0 && (
-          <select value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={field}>
+          <UISelect value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={field}>
             <option value="">All Agents</option>
             {agentsInRows.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
+          </UISelect>
         )}
         {!pending && (
-          <select value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
+          <UISelect value={outcomeFilter} onChange={e => setOutcomeFilter(e.target.value)} style={field}>
             <option value="">All Outcomes</option>
             <option value="Under_Review">Forwarded to QA</option>
             <option value="TL_Resolved">Resolved by TL</option>
             <option value="Resolved">Resolved by QA</option>
             <option value="Rejected">Rejected by QA</option>
-          </select>
+          </UISelect>
         )}
         <PeriodRangeChip value={period} onChange={onPeriod} />
         <button
@@ -749,7 +750,7 @@ export default function TLEmailQualityPage() {
       }}>
         {/* Filter bar, same slots as the chat tables: filters left, count + rows per page right */}
         <div className="qfilters">
-          <select
+          <UISelect
             value={selectedAgent}
             onChange={e => setSelectedAgent(e.target.value)}
             style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: selectedAgent ? 'var(--qa-text)' : 'var(--qa-text-2)', fontSize: 13, fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}
@@ -758,7 +759,7 @@ export default function TLEmailQualityPage() {
             {(availableAgents.length > 0 ? availableAgents : agents.map(a => a.agent_name)).map(name => (
               <option key={name} value={name}>{name}</option>
             ))}
-          </select>
+          </UISelect>
           <PeriodRangeChip value={period} onChange={setPeriod} />
           <button type="button" className="qf-chip" disabled={!(selectedAgent || period.period !== 'all')} onClick={() => { setSelectedAgent(''); setPeriod(DEFAULT_PERIOD); }}>
               Reset Filters

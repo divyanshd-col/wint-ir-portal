@@ -849,7 +849,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                             </svg>
                           </span>
                           <span className="text-[13px] text-gray-400">
-                            {msg.form.stepTitle ? `${msg.form.stepTitle} — submitted` : 'Step submitted'}
+                            {msg.form.stepTitle ? `${msg.form.stepTitle} submitted` : 'Step submitted'}
                           </span>
                         </div>
                       ) : (
@@ -1177,7 +1177,7 @@ export default function ChatInterface({ historyEnabled = false, initialConversat
                               {/* Fix 11 — Zone C: Escalation */}
                               {zoneC && (
                                 <div style={{ background: 'color-mix(in srgb, var(--color-background-warning) 30%, transparent)', borderLeft: '3px solid var(--color-border-warning)', borderRadius: 8 }} className="px-4 py-3">
-                                  <p style={{ color: 'var(--color-text-warning)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Escalation — only if needed</p>
+                                  <p style={{ color: 'var(--color-text-warning)' }} className="text-[9px] font-black uppercase tracking-widest mb-2">Escalation. Only if needed</p>
                                   <div className="text-sm leading-relaxed" style={{ color: 'var(--color-text-primary)' }}>{renderContent(zoneC)}</div>
                                 </div>
                               )}

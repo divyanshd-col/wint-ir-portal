@@ -7,6 +7,7 @@ import EvalPanel from './EvalPanel';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { csatLabel } from './csat';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -370,18 +371,18 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
         {/* CSAT filter */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button style={csatFilter.length ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'csat' ? null : 'csat')}>
-            {csatFilter.length ? `CSAT: ${csatFilter.join(', ')}` : 'CSAT'} <span style={{ fontSize: 9 }}>▾</span>
+            {csatFilter.length ? `CSAT: ${csatFilter.map(v => csatLabel(v)).join(', ')}` : 'CSAT'} <span style={{ fontSize: 9 }}>▾</span>
           </button>
           {openDrop === 'csat' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
-              {[1, 3, 5].map(v => {
+              {[5, 3, 1].map(v => {
                 const checked = csatFilter.includes(v);
                 return (
                   <div key={v} style={dropItem} onClick={() => {
                     setCsatFilter(prev => checked ? prev.filter(x => x !== v) : [...prev, v]);
                   }}>
                     <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span>
-                    {v === 1 ? '1 — Negative' : v === 3 ? '3 — Neutral' : '5 — Positive'}
+                    {csatLabel(v)}
                   </div>
                 );
               })}

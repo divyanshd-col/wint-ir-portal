@@ -108,14 +108,14 @@ function ConnectInstructions({ mcpUrl }: { mcpUrl: string }) {
         {step(
           2,
           <>
-            Click <strong>Connect</strong>. Claude opens a Wint sign-in — log in with your Wint
+            Click <strong>Connect</strong>. Claude opens a Wint sign-in. Log in with your Wint
             email, the same one you use here.
           </>,
         )}
         {step(
           3,
           <>
-            Approve the access request. That&apos;s it — there&apos;s no token to copy or paste.
+            Approve the access request. That&apos;s it. There&apos;s no token to copy or paste.
           </>,
         )}
         {step(

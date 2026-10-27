@@ -399,7 +399,7 @@ function DateRangePicker({ from, to, onChange, onClose }: {
         </button>
       </div>
       <p className="text-[10px] text-gray-400 text-center mb-1.5">
-        {step === 'from' ? 'Click start date' : `From ${pendingFrom} — click end`}
+        {step === 'from' ? 'Click start date' : `From ${pendingFrom}, click end`}
       </p>
       <div className="grid grid-cols-7 mb-0.5">
         {DAY_NAMES.map(d => <div key={d} className="text-center text-[9px] text-gray-400 py-0.5">{d}</div>)}
@@ -1214,7 +1214,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
           {hasPrevChatRef && (
             <div className="flex items-start gap-2 bg-amber-50 border-b border-amber-200 px-4 py-2.5">
               <svg className="shrink-0 mt-0.5 text-amber-500" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7.5a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/></svg>
-              <p className="text-xs text-amber-800 flex-1"><span className="font-semibold">Previous conversation referenced</span> — this transcript refers to a prior chat. Scores may not reflect the full context. Review carefully and override if needed.</p>
+              <p className="text-xs text-amber-800 flex-1"><span className="font-semibold">Previous conversation referenced</span>. This transcript refers to a prior chat. Scores may not reflect the full context. Review carefully and override if needed.</p>
             </div>
           )}
           <div className="flex divide-x divide-gray-100" style={{ maxHeight: 560, minHeight: 220 }}>
@@ -1608,7 +1608,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
           {/* Row 4: Disposition + Sub-Disposition */}
           {assignedDispositions && (
             <p className="text-[11px] text-emerald-700 font-medium">
-              Default view: {assignedDispositions.join(', ')} — select a different disposition below to override
+              Default view: {assignedDispositions.join(', ')}. Select a different disposition below to override
             </p>
           )}
           <div className="flex flex-wrap items-end gap-4">
@@ -2108,7 +2108,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
               </div>
               {!callOverrideItem.chatId && (
                 <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
-                  This call has no linked chat — override cannot be saved until the call is linked to a chat.
+                  This call has no linked chat. Override cannot be saved until the call is linked to a chat.
                 </p>
               )}
               <div className="flex gap-3 pt-1">
@@ -2151,7 +2151,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
         {/* QA disposition scope label */}
         {assignedCallDispositions.length > 0 && (
           <p className="text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">
-            Default scope: {assignedCallDispositions.join(', ')} — select a different filter to override
+            Default scope: {assignedCallDispositions.join(', ')}. Select a different filter to override
           </p>
         )}
 
@@ -2785,7 +2785,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const chatId = row.chatId || `row_${i + 1}`;
-      setProgressLabel(`${i + 1} / ${rows.length} — ${row.agent || chatId}`);
+      setProgressLabel(`${i + 1} / ${rows.length} · ${row.agent || chatId}`);
       setProgress(Math.round(((i + 1) / rows.length) * 100));
       if (!row.transcript.trim() || row.transcript === 'nan') {
         errors.push({ row: i + 1, chatId, error: 'Empty transcript' }); continue;
@@ -2805,7 +2805,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setBatchResults([...results]);
     }
     setBatchErrors(errors);
-    setProgressLabel(`Done — ${results.length} scored${errors.length ? `, ${errors.length} failed` : ''}`);
+    setProgressLabel(`Done · ${results.length} scored${errors.length ? `, ${errors.length} failed` : ''}`);
     setScoring(false);
     setLogsLoaded(false);
   };
@@ -3139,7 +3139,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {tab === 'calls' && 'Scored IR call recordings'}
               {tab === 'call-queue' && 'Calls pending QA review'}
               {tab === 'call-test' && 'Link a call to a chat and run the full scoring pipeline'}
-              {tab === 'unified' && 'Score chat + call together — transcribe, retrieve KB, and evaluate both in one run'}
+              {tab === 'unified' && 'Score chat + call together. Transcribe, retrieve KB, and evaluate both in one run'}
             </p>
           </div>
 
@@ -3965,7 +3965,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h2 className="text-sm font-bold text-gray-900">Metadata file <span className="text-gray-400 font-normal">(optional)</span></h2>
-                      <p className="text-xs text-gray-400 mt-1">Excel/CSV with <strong className="text-gray-600">chat_id, agent_name, tags, csat</strong> — matched by chat_id to enrich scores</p>
+                      <p className="text-xs text-gray-400 mt-1">Excel/CSV with <strong className="text-gray-600">chat_id, agent_name, tags, csat</strong>. Matched by chat_id to enrich scores</p>
                     </div>
                     <input ref={metaFileRef} type="file" accept=".csv,.xlsx,.xls,.ods" className="hidden" onChange={handleMetaFile} />
                     <button onClick={() => metaFileRef.current?.click()}
@@ -4286,7 +4286,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {/* Download buttons */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <p className="text-sm font-bold text-gray-900 mb-1">Download</p>
-                <p className="text-xs text-gray-500 mb-5">Exports all chats matching the filters above — no pagination limit.</p>
+                <p className="text-xs text-gray-500 mb-5">Exports all chats matching the filters above. No pagination limit.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <button
                     onClick={() => downloadReport()}

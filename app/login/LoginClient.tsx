@@ -112,7 +112,7 @@ function LoginForm() {
             </form>
 
             <p className="mt-5 text-center text-xs text-gray-400">
-              Need an account? Ask an admin to invite you — you'll get a signup link by email.
+              Need an account? Ask an admin to invite you. You'll get a signup link by email.
             </p>
             <p className="mt-2 text-center text-xs text-gray-400">
               Need help?{' '}

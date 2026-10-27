@@ -8,6 +8,7 @@ import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
 import { DisputeStatusPill, getDisputeOutcomeKey } from './QualityChatsPage';
 import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import UISelect from '@/components/quality/UISelect';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -342,7 +343,7 @@ export default function TLQualityCallsPage() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>
-          Team Lead — Quality Calls
+          Quality Calls
         </h1>
       </div>
 
@@ -370,10 +371,10 @@ export default function TLQualityCallsPage() {
 
       {/* ── TAB 1: EVALUATED CALLS ────────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div className="qfilters standalone">
-            <select
+          <div className="qfilters">
+            <UISelect
               value={agentFilter}
               onChange={e => { setAgentFilter(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, minWidth: 160 }}
@@ -382,7 +383,7 @@ export default function TLQualityCallsPage() {
               {agentsList.map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
-            </select>
+            </UISelect>
 
 
             <span className="qf-group">
@@ -447,7 +448,7 @@ export default function TLQualityCallsPage() {
           </div>
 
           {/* Table */}
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
@@ -512,7 +513,7 @@ export default function TLQualityCallsPage() {
                               }}
                               style={{
                                 background: 'none', border: 0, padding: 0,
-                                fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer',
+                                fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', whiteSpace: 'nowrap',
                               }}
                             >
                               {isExpanded ? 'Hide' : 'View Details'}
@@ -574,10 +575,10 @@ export default function TLQualityCallsPage() {
 
       {/* ── TAB 2: DISPUTES RAISED (PENDING TL ACTION) ───────────────────────── */}
       {activeTab === 'disputes' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div className="qfilters standalone">
-            <select
+          <div className="qfilters">
+            <UISelect
               value={pendingAgentFilter}
               onChange={e => { setPendingAgentFilter(e.target.value); setPendingPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -586,9 +587,9 @@ export default function TLQualityCallsPage() {
               {Array.from(new Set(pendingDisputes.map(d => d.agentName).filter(Boolean))).sort().map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
-            </select>
+            </UISelect>
 
-            <select
+            <UISelect
               value={pendingOutcomeFilter}
               onChange={e => { setPendingOutcomeFilter(e.target.value); setPendingPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -596,7 +597,7 @@ export default function TLQualityCallsPage() {
               <option value="">All Statuses</option>
               <option value="raised_ir">Dispute raised by IR</option>
               <option value="raised_tl">Dispute raised by TL</option>
-            </select>
+            </UISelect>
 
 
             <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
@@ -640,7 +641,7 @@ export default function TLQualityCallsPage() {
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
@@ -799,10 +800,10 @@ export default function TLQualityCallsPage() {
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div className="qfilters standalone">
-            <select
+          <div className="qfilters">
+            <UISelect
               value={reviewedAgentFilter}
               onChange={e => { setReviewedAgentFilter(e.target.value); setReviewedPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -811,9 +812,9 @@ export default function TLQualityCallsPage() {
               {Array.from(new Set(reviewedDisputes.map(d => d.agentName).filter(Boolean))).sort().map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
-            </select>
+            </UISelect>
 
-            <select
+            <UISelect
               value={reviewedOutcomeFilter}
               onChange={e => { setReviewedOutcomeFilter(e.target.value); setReviewedPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -824,7 +825,7 @@ export default function TLQualityCallsPage() {
               <option value="resolved_tl">Resolved by TL</option>
               <option value="forwarded">Forwarded by TL</option>
               <option value="cancelled">Cancelled</option>
-            </select>
+            </UISelect>
 
 
             <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />
@@ -868,7 +869,7 @@ export default function TLQualityCallsPage() {
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>

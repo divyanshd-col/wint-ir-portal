@@ -97,7 +97,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
             
             <span className="text-xs text-red-700 font-medium">
               <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>
-              {seg.words_spoken != null ? ` — ${seg.words_spoken} word${seg.words_spoken !== 1 ? 's' : ''} spoken before cutoff` : ''}
+              {seg.words_spoken != null ? ` · ${seg.words_spoken} word${seg.words_spoken !== 1 ? 's' : ''} spoken before cutoff` : ''}
             </span>
           </div>
         </td>
@@ -112,7 +112,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
           <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-slate-50 border border-slate-200">
             
             <span className="text-xs text-slate-500">
-              Dead air{seg.duration ? ` — ${seg.duration}` : ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}
+              Dead air{seg.duration ? ` · ${seg.duration}` : ''}{seg.resumed_by ? ` · resumed by ${seg.resumed_by}` : ''}
             </span>
           </div>
         </td>
@@ -127,7 +127,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
           <div className="flex items-center gap-2 px-3 py-1.5 rounded bg-amber-50 border border-amber-200">
             
             <span className="text-xs text-amber-700">
-              IR asked investor to repeat{seg.phrase ? ` — "${seg.phrase}"` : ''}
+              IR asked investor to repeat{seg.phrase ? ` · "${seg.phrase}"` : ''}
             </span>
           </div>
         </td>

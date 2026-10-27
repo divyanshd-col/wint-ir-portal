@@ -9,6 +9,8 @@ import { DisputeThread } from '@/components/quality/DisputeThread';
 import { rowClick } from '@/components/quality/rowClick';
 import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { CsatPill, csatLabel } from '@/components/quality/csat';
+import UISelect from '@/components/quality/UISelect';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -40,31 +42,20 @@ const chipActive: React.CSSProperties = {
 };
 
 // ─── IQS score badge ──────────────────────────────────────────────────────────
-function IQSBadge({ score }: { score: number | null }) {
+function IQSBadge({ score, muted }: { score: number | null; muted?: boolean }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
       fontFamily: 'ui-monospace, monospace',
-      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-      border: '1px solid var(--qa-border)',
+      fontSize: muted ? 12 : 14, fontWeight: muted ? 400 : 700,
+      color: muted ? 'var(--faint)' : 'var(--qa-text)',
     }}>{score}</span>
   );
 }
 
 // ─── CSAT badge ───────────────────────────────────────────────────────────────
 function CSATBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>;
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-      minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
-      fontFamily: 'ui-monospace, monospace',
-      background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-      border: '1px solid var(--qa-border)',
-    }}>{score === 1 ? 'Bad' : score === 3 ? 'Neutral' : 'Good'}</span>
-  );
+  return <CsatPill value={score} />;
 }
 
 // ─── Dispute Status Pill ───────────────────────────────────────────────────────
@@ -210,10 +201,10 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
           style={{ ...inputStyle, width: 170 }}
         />
         {agents.length > 0 && (
-          <select value={agent} onChange={e => setAgent(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
+          <UISelect value={agent} onChange={e => setAgent(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
             <option value="">All Agents</option>
             {agents.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
+          </UISelect>
         )}
         <span className="qf-group">
 <span className="qf-label">IQS</span>
@@ -222,13 +213,13 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 </span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>CSAT</span>
-          {['1','3','5'].map(v => (
+          {['5','3','1'].map(v => (
             <button
               key={v}
               style={csat.includes(v) ? chipActive : chip}
               onClick={() => setCsat(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])}
             >
-              {v === '1' ? 'Bad' : v === '3' ? 'Neutral' : 'Good'}
+              {csatLabel(v)}
             </button>
           ))}
         </div>
@@ -292,20 +283,20 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: 110 }} />
-          <col />
-          <col style={{ width: 90 }} />
-          <col style={{ width: 90 }} />
-          <col style={{ width: 65 }} />
-          <col style={{ width: 80 }} />
+          <col style={{ width: '16%' }} />
+          <col style={{ width: '28%' }} />
+          <col style={{ width: '13%' }} />
+          <col style={{ width: '13%' }} />
+          <col style={{ width: '18%' }} />
+          <col style={{ width: '12%' }} />
         </colgroup>
         <thead>
           <tr>
             <th style={th}>Chat ID</th>
             <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
+            <th style={{ ...th, textAlign: 'right' }}>Agent IQS</th>
             <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
-            <th style={th}>CSAT</th>
+            <th style={{ ...th, paddingLeft: 32 }}>CSAT</th>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
@@ -341,7 +332,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                   </td>
                   <td style={tdNum}>
                     {chat.callIqsScore != null ? (
-                      <IQSBadge score={chat.callIqsScore} />
+                      <IQSBadge score={chat.callIqsScore} muted />
                     ) : chat.callTranscriptStatus === 'transcribed' ? (
                       <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>Transcribed</span>
                     ) : chat.callTranscriptStatus === 'pending' ? (
@@ -350,7 +341,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                     )}
                   </td>
-                  <td style={td}><CSATBadge score={chat.csatScore} /></td>
+                  <td style={{ ...td, paddingLeft: 32 }}><CSATBadge score={chat.csatScore} /></td>
                   <td style={{ ...td, textAlign: 'right' }}>
                     <button
                       onClick={() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId)}
@@ -516,10 +507,10 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           return next;
         });
       } else {
-        setActionError('Could not forward that dispute — please retry.');
+        setActionError('Could not forward that dispute. Please retry.');
       }
     } catch {
-      setActionError('Could not forward that dispute — please retry.');
+      setActionError('Could not forward that dispute. Please retry.');
     } finally {
       setActioning(null);
     }
@@ -543,10 +534,10 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           return next;
         });
       } else {
-        setActionError('Could not resolve that dispute — please retry.');
+        setActionError('Could not resolve that dispute. Please retry.');
       }
     } catch {
-      setActionError('Could not resolve that dispute — please retry.');
+      setActionError('Could not resolve that dispute. Please retry.');
     } finally {
       setActioning(null);
     }
@@ -564,13 +555,13 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     {/* Header / Filter & Rows per page bar */}
     <div className="qfilters">
       {agents.length > 0 && (
-        <select value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
+        <UISelect value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
           <option value="">All Agents</option>
           {agents.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
+        </UISelect>
       )}
 
-      <select value={outcomeFilter} onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
+      <UISelect value={outcomeFilter} onChange={e => { setOutcomeFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
         <option value="">{status === 'pending' ? 'All Statuses' : 'All Outcomes'}</option>
         {status === 'resolved' ? (
           <>
@@ -586,7 +577,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
             <option value="raised_tl">Dispute raised by TL</option>
           </>
         )}
-      </select>
+      </UISelect>
 
 
       <DateRangeChip from={fromFilter} to={toFilter} onChange={(f, t) => { setFromFilter(f); setToFilter(t); setPage(1); }} />

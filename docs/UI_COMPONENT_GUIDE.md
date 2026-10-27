@@ -295,7 +295,11 @@ Source of truth: `Chat Evaluation Redesign.html`. Classes live in the "Evaluatio
 - **ID links**: chat, call-linked-chat and ticket IDs all render `TicketLinkButton` (the `.id-link` chip, opens Robylon in a new tab). Do not hand-roll `<a href=".../unified-inbox/share/...">`. No customer e-mail address under the ID in rows.
 - **Evaluation panels** (chat, call, e-mail): all use `.eval-wrap` with the conversation/transcript left and scoring right; the scoring head is ring + agent + `id · date · disposition/intent · mobile` + Close, the footer is `.eval-foot`. Dates and times live in that head line, not under the ID in the table row. Panes scroll internally (`.eval-scroll-t` / `.eval-scroll-r`), so collapsing an e-mail thread never resizes the panes. Internal notes (chat and e-mail) are collapsed `.eval-note` rows with secrets masked (`components/quality/mask.tsx`).
 - **Page frame**: pages render a title and content directly inside the shell's `<main>`; no extra padded or tinted wrapper.
-- **Copy**: no emoji and no helper sentences under titles or tables ("click a row to expand", "data from live DB"). Section headers carry at most the period label.
+- **Dropdowns**: never a native `<select>` in the UI; use `UISelect` (`components/quality/UISelect.tsx`), a drop-in with the same `<option>` children and `value` / `onChange(e.target.value)`. It opens a themed popover; anything other than the first ("all") option shows as an active ink chip.
+- **CSAT**: render `CsatPill` (`components/quality/csat.tsx`); labels are Robylon's own: Good (5), Could be better (3), Bad (1). Green / neutral / red, sans font, no mono.
+- **Message markers**: `[Attachment: name - url]` and `[Image: url]` become `.attachment-chip` links via `components/quality/attachments.tsx` (chat transcripts and e-mail bodies).
+- **Cards**: a filter bar that opens a table is the top of the same card (`.qfilters` first child), not a separate box with a gap.
+- **Copy**: no emoji, no em dashes (use a period, colon or middle dot) and no helper sentences under titles or tables ("click a row to expand", "data from live DB"). Section headers carry at most the period label.
 
 ## 8. Do / Don't (for AI assistants editing the UI)
 

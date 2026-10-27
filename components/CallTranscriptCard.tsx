@@ -101,7 +101,7 @@ export function CallTranscriptCard({
                 return (
                   <div key={i} className="flex justify-center my-2">
                     <span className="text-[11px] text-red-500 bg-red-50 border border-red-100 rounded-full px-3 py-1 font-sans italic text-center">
-                      <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` — ${seg.words_spoken} words` : ''}
+                      <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` · ${seg.words_spoken} words` : ''}
                     </span>
                   </div>
                 );
@@ -111,7 +111,7 @@ export function CallTranscriptCard({
                 return (
                   <div key={i} className="flex justify-center my-2">
                     <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 font-sans italic text-center">
-                      Dead air — {seg.duration || ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}
+                      Dead air · {seg.duration || ''}{seg.resumed_by ? ` · resumed by ${seg.resumed_by}` : ''}
                     </span>
                   </div>
                 );

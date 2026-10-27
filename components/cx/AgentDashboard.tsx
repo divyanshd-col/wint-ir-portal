@@ -197,7 +197,7 @@ export default function AgentDashboard() {
                   <div className="flex items-center justify-between">
                     <span className="text-stone-400 text-sm">Your rank</span>
                     <span className="text-white text-sm font-semibold tabular-nums">
-                      #{top3.my_rank} — {top3.my_composite_score?.toFixed(2) ?? '—'}
+                      #{top3.my_rank} · {top3.my_composite_score?.toFixed(2) ?? '—'}
                     </span>
                   </div>
                 ) : (

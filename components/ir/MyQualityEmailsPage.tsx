@@ -20,6 +20,7 @@ import EmailMessageView, {
 } from '@/components/quality/EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import { rowClick } from '@/components/quality/rowClick';
+import UISelect from '@/components/quality/UISelect';
 
 interface EvaluationItem {
   id: number;
@@ -487,7 +488,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             />
 
             {/* Compliance Filter */}
-            <select
+            <UISelect
               value={complianceFilter}
               onChange={(e) => setComplianceFilter(e.target.value as any)}
               style={chipInputStyle}
@@ -495,7 +496,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
               <option value="">All Compliance</option>
               <option value="compliant">Compliant</option>
               <option value="breach">Non-Compliant</option>
-            </select>
+            </UISelect>
 
             <PeriodRangeChip value={period} onChange={setPeriod} />
 

@@ -11,6 +11,7 @@ import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { renderWithAttachments } from './attachments';
+import { CsatPill } from './csat';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -373,7 +374,7 @@ function extractGateReasoning(item: any): string {
         const turnStr = ev.turn !== undefined && ev.turn !== null ? `Turn ${ev.turn}: ` : '';
         const quoteStr = ev.quote ? `"${ev.quote}"` : '';
         const whyStr = ev.why || ev.note || '';
-        if (quoteStr && whyStr) return `${turnStr}${quoteStr} — Note: ${whyStr}`;
+        if (quoteStr && whyStr) return `${turnStr}${quoteStr} · Note: ${whyStr}`;
         if (quoteStr) return `${turnStr}${quoteStr}`;
         if (whyStr) return `${turnStr}Note: ${whyStr}`;
         return typeof ev === 'object' ? JSON.stringify(ev) : String(ev);
@@ -448,7 +449,7 @@ function findChatBreachesForGate(params: any, gateKey: string): string {
     }
     const q = b.quote ? `"${b.quote}"` : '';
     const n = b.note || b.why || b.reason || '';
-    if (q && n) return `${q} — Note: ${n}`;
+    if (q && n) return `${q} · Note: ${n}`;
     return q || (n ? `Note: ${n}` : JSON.stringify(b));
   }).filter(Boolean).join('\n');
 }
@@ -913,16 +914,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                             ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                           </td>
                           <td style={{ padding: '6px 12px' }}>
-                            {h.csat ? (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                minWidth: 36, height: 18, borderRadius: 4, fontSize: 11, fontWeight: 600,
-                                background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-                                border: '1px solid var(--qa-border)',
-                              }}>
-                                {h.csat === '1' ? 'Bad' : h.csat === '3' ? 'Neutral' : 'Good'}
-                              </span>
-                            ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                            <CsatPill value={h.csat} />
                           </td>
                         </tr>
                       ))}

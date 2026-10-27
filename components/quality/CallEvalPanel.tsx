@@ -208,7 +208,7 @@ function extractGateReasoning(item: any): string {
         const turnStr = ev.turn !== undefined && ev.turn !== null ? `Turn ${ev.turn}: ` : '';
         const quoteStr = ev.quote ? `"${ev.quote}"` : '';
         const whyStr = ev.why || ev.note || '';
-        if (quoteStr && whyStr) return `${turnStr}${quoteStr} — Note: ${whyStr}`;
+        if (quoteStr && whyStr) return `${turnStr}${quoteStr} · Note: ${whyStr}`;
         if (quoteStr) return `${turnStr}${quoteStr}`;
         if (whyStr) return `${turnStr}Note: ${whyStr}`;
         return typeof ev === 'object' ? JSON.stringify(ev) : String(ev);

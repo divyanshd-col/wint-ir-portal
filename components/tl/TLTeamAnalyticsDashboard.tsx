@@ -356,7 +356,7 @@ export default function TLTeamAnalyticsDashboard() {
       {/* ── IQS by Parameter ──────────────────────────────────────────── */}
       <section style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>IQS by Parameter — Your Team</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>IQS by Parameter: Your Team</h2>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
             {periodLabel}
           </span>

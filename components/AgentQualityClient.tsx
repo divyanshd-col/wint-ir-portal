@@ -81,7 +81,7 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
     <div className="fixed inset-0 bg-black/50 z-[70] flex items-center justify-center px-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 z-[71] max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h3 className="text-sm font-bold text-gray-900 mb-1">Challenge this IQS score</h3>
-        <p className="text-xs text-gray-500 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}% — select the parameters you think are wrong</p>
+        <p className="text-xs text-gray-500 mb-4">Chat #{entry.chatId} · IQS {entry.iqs}%. Select the parameters you think are wrong</p>
 
         {failedParams.length > 0 ? (
           <div className="space-y-2 mb-4">
@@ -110,7 +110,7 @@ function ChallengeModal({ entry, onClose, onDone }: { entry: IQSScoreEntry; onCl
           </div>
         ) : (
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 mb-4">
-            <p className="text-xs text-emerald-700 font-semibold">No failed parameters — all scored Yes.</p>
+            <p className="text-xs text-emerald-700 font-semibold">No failed parameters. All scored Yes.</p>
             <p className="text-[11px] text-emerald-600 mt-0.5">Use the general note below if you disagree with the overall score.</p>
           </div>
         )}
@@ -799,7 +799,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                       <div className="px-5 py-4 border-b border-gray-100">
                         <p className="text-sm font-bold text-gray-900">Disposition Performance</p>
-                        <p className="text-xs text-gray-500 mt-0.5">Your IQS by conversation topic — {dispositionStats.length} disposition{dispositionStats.length !== 1 ? 's' : ''}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">Your IQS by conversation topic · {dispositionStats.length} disposition{dispositionStats.length !== 1 ? 's' : ''}</p>
                       </div>
 
                       {/* Highlights row */}
@@ -901,7 +901,7 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
                       <div className="flex items-center justify-between mb-4">
                         <div>
                           <p className="text-sm font-bold text-gray-900">Parameter Fail Rates</p>
-                          <p className="text-xs text-gray-500 mt-0.5">Your fail% vs top-3 benchmark — lower is better</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Your fail% vs top-3 benchmark. Lower is better</p>
                         </div>
                         <div className="flex items-center gap-3 text-[10px] text-gray-400">
                           <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-400" />Mine</span>

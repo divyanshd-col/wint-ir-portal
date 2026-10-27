@@ -139,9 +139,9 @@ export default function UsersManager({
       await reloadUsers();
       setInviteOpen(false);
       resetInviteForm();
-      showToast(data.emailed ? 'Invite sent' : 'User created — email not sent, use Resend');
+      showToast(data.emailed ? 'Invite sent' : 'User created. Email not sent, use Resend');
     } catch {
-      setInviteError('Network error — try again.');
+      setInviteError('Network error. Try again.');
     } finally { setInviting(false); }
   };
 
@@ -186,9 +186,9 @@ export default function UsersManager({
       setEditUser(null);
       await reloadUsers();
       const emailChanged = email !== editUser.email.toLowerCase();
-      showToast(emailChanged ? 'User updated — any pending invite link was invalidated' : 'User updated');
+      showToast(emailChanged ? 'User updated. Any pending invite link was invalidated' : 'User updated');
     } catch {
-      setEditError('Network error — try again.');
+      setEditError('Network error. Try again.');
     } finally { setSavingEdit(false); }
   };
 
@@ -663,7 +663,7 @@ export default function UsersManager({
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Name (must match Robylon exactly)</label>
               <input type="text" value={inviteName} onChange={e => setInviteName(e.target.value)} placeholder="Exact name as it appears in call/chat data…" className={`${inputCls} w-full`} />
-              <p className="text-[11px] text-gray-400 mt-1">This is the attribution key for their calls &amp; chats — enter it exactly as the source system sends it.</p>
+              <p className="text-[11px] text-gray-400 mt-1">This is the attribution key for their calls &amp; chats. Enter it exactly as the source system sends it.</p>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Role</label>
@@ -703,7 +703,7 @@ export default function UsersManager({
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Email</label>
               <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className={`${inputCls} w-full`} />
               {editUser.status === 'invited' && (
-                <p className="text-[11px] text-amber-600 mt-1">This user hasn&apos;t signed up yet — changing the email invalidates their current invite link. Use Resend afterward.</p>
+                <p className="text-[11px] text-amber-600 mt-1">This user hasn&apos;t signed up yet. Changing the email invalidates their current invite link. Use Resend afterward.</p>
               )}
             </div>
 

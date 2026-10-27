@@ -6,6 +6,7 @@ import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 import { rowClick } from './rowClick';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { CsatPill } from './csat';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -312,13 +313,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                       )}
                     </td>
                     <td style={td}>
-                      {chat.csatScore == null ? (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-                      ) : (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                          {chat.csatScore === 1 ? 'Bad' : chat.csatScore === 3 ? 'Neutral' : 'Good'}
-                        </span>
-                      )}
+                      <CsatPill value={chat.csatScore} />
                     </td>
                     <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
                       {chat.disposition}

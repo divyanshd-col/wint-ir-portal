@@ -3,7 +3,7 @@ import { authOptions } from '@/auth';
 import { redirect } from 'next/navigation';
 import CallLinkTestClient from '@/components/CallLinkTestClient';
 
-export const metadata = { title: 'Call Link Test — Wint IR Portal' };
+export const metadata = { title: 'Call Link Test · Wint IR Portal' };
 
 export default async function CallLinkTestPage() {
   const session = await getServerSession(authOptions);

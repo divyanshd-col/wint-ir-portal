@@ -11,6 +11,8 @@ import { rowClick } from '@/components/quality/rowClick';
 import { DateRangeChip } from '@/components/quality/FilterControls';
 import AgentFilterSelect from '@/components/quality/AgentFilterSelect';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { CsatPill } from '@/components/quality/csat';
+import UISelect from '@/components/quality/UISelect';
 
 // ─── Shared UI Tokens & Styles ────────────────────────────────────────────────
 
@@ -84,30 +86,7 @@ function IQSBadge({ score }: { score: number | null }) {
 }
 
 function CSATBadge({ score }: { score: string | number | null }) {
-  if (!score) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
-  const s = String(score);
-  const label = s === '5' ? 'Good' : s === '3' ? 'Neutral' : s === '1' ? 'Bad' : s;
-  const bg = s === '5' ? '#f0fdf4' : s === '3' ? '#fefce8' : '#fef2f2';
-  const color = s === '5' ? '#166534' : s === '3' ? '#854d0e' : '#991b1b';
-  const border = s === '5' ? '#bbf7d0' : s === '3' ? '#fef08a' : '#fecaca';
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '2px 8px',
-        borderRadius: 6,
-        fontSize: 12,
-        fontWeight: 600,
-        background: bg,
-        color: color,
-        border: `1px solid ${border}`,
-      }}
-    >
-      {label}
-    </span>
-  );
+  return <CsatPill value={score} />;
 }
 
 function ChatIdCell({ chatId }: { chatId: string }) {
@@ -474,7 +453,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               />
 
               {/* Disposition */}
-              <select
+              <UISelect
                 value={disposition}
                 onChange={(e) => {
                   setDisposition(e.target.value);
@@ -488,11 +467,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     {d}
                   </option>
                 ))}
-              </select>
+              </UISelect>
 
               {/* Subdisposition */}
               {disposition && subDispsForPicked.length > 0 && (
-                <select
+                <UISelect
                   value={subDisposition}
                   onChange={(e) => setSubDisposition(e.target.value)}
                   style={{ ...chipInputStyle, maxWidth: 150 }}
@@ -503,7 +482,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       {sd}
                     </option>
                   ))}
-                </select>
+                </UISelect>
               )}
 
               {/* Date Range */}
@@ -528,22 +507,22 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 </span>
 
               {/* CSAT */}
-              <select value={csat} onChange={(e) => setCsat(e.target.value)} style={chipInputStyle}>
+              <UISelect value={csat} onChange={(e) => setCsat(e.target.value)} style={chipInputStyle}>
                 <option value="">All CSAT</option>
-                <option value="5">Good (5)</option>
-                <option value="3">Neutral (3)</option>
-                <option value="1">Bad (1)</option>
-              </select>
+                <option value="5">Good</option>
+                <option value="3">Could be better</option>
+                <option value="1">Bad</option>
+              </UISelect>
 
               {/* Quality Param Filter */}
-              <select value={qualityParam} onChange={(e) => setQualityParam(e.target.value)} style={{ ...chipInputStyle, maxWidth: 150 }}>
+              <UISelect value={qualityParam} onChange={(e) => setQualityParam(e.target.value)} style={{ ...chipInputStyle, maxWidth: 150 }}>
                 <option value="">All Param Failures</option>
                 {PARAM_LIST.map((p) => (
                   <option key={p.key} value={p.key}>
                     Failed: {p.label}
                   </option>
                 ))}
-              </select>
+              </UISelect>
 
               <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
               <button type="button" className="qf-chip" disabled={!(hasFilters)}
@@ -851,7 +830,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
           {/* Single-line Filter & Pagination Bar */}
           <div className="qfilters">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <select
+              <UISelect
                 value={pendingOutcomeFilter}
                 onChange={(e) => {
                   setPendingOutcomeFilter(e.target.value);
@@ -862,7 +841,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 <option value="">All Statuses</option>
                 <option value="raised_ir">Dispute raised by IR</option>
                 <option value="raised_tl">Dispute raised by TL</option>
-              </select>
+              </UISelect>
 
 
               <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
@@ -1216,7 +1195,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
           {/* Single-line Filter & Pagination Bar */}
           <div className="qfilters">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-              <select
+              <UISelect
                 value={reviewedOutcomeFilter}
                 onChange={(e) => {
                   setReviewedOutcomeFilter(e.target.value);
@@ -1230,7 +1209,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 <option value="resolved_tl">Resolved by TL</option>
                 <option value="forwarded">Forwarded by TL</option>
                 <option value="cancelled">Cancelled</option>
-              </select>
+              </UISelect>
 
 
               <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />

@@ -23,6 +23,7 @@ import EmailMessageView, {
   type InternalNote,
 } from './EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import UISelect from '@/components/quality/UISelect';
 
 type Tab = 'pending' | 'reviewed' | 'disputes' | 'unscored';
 
@@ -711,7 +712,7 @@ export default function EmailEvaluationPage() {
           </div>
 
           {/* Agent Filter Dropdown */}
-          <select
+          <UISelect
             value={agentFilter}
             onChange={(e) => setAgentFilter(e.target.value)}
             style={{
@@ -733,10 +734,10 @@ export default function EmailEvaluationPage() {
                 {name}
               </option>
             ))}
-          </select>
+          </UISelect>
 
           {/* Disposition Filter Dropdown */}
-          <select
+          <UISelect
             value={dispositionFilter}
             onChange={(e) => setDispositionFilter(e.target.value)}
             style={{
@@ -758,7 +759,7 @@ export default function EmailEvaluationPage() {
                 {disp}
               </option>
             ))}
-          </select>
+          </UISelect>
 
           {/* Date Range Filter Chip */}
           <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
@@ -1098,7 +1099,7 @@ export default function EmailEvaluationPage() {
                                       margin: '16px 16px 0',
                                     }}>
                                       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fail)', textTransform: 'uppercase', marginBottom: 6 }}>
-                                        Compliance Breaches — Reason for Breach:
+                                        Reason for Compliance Breach:
                                       </div>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         {issues.map((iss, idx) => (

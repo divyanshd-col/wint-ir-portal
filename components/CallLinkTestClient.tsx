@@ -44,7 +44,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
             
             <span className="text-xs text-red-700">
               <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>
-              {seg.words_spoken != null && ` — ${seg.words_spoken} word${seg.words_spoken !== 1 ? 's' : ''} before cutoff`}
+              {seg.words_spoken != null && ` · ${seg.words_spoken} word${seg.words_spoken !== 1 ? 's' : ''} before cutoff`}
             </span>
           </div>
         </td>
@@ -58,7 +58,7 @@ function SegmentRow({ seg }: { seg: CallSegment }) {
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-slate-200">
             
             <span className="text-xs text-slate-500">
-              Dead air{seg.duration ? ` — ${seg.duration}` : ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}
+              Dead air{seg.duration ? ` · ${seg.duration}` : ''}{seg.resumed_by ? ` · resumed by ${seg.resumed_by}` : ''}
             </span>
           </div>
         </td>
@@ -410,7 +410,7 @@ function ResultPanel({
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-slate-800">
-              {(savedIqs ?? data.callIqs) != null ? `${t.label} — Call IQS` : 'Call IQS unavailable'}
+              {(savedIqs ?? data.callIqs) != null ? `${t.label} · Call IQS` : 'Call IQS unavailable'}
               {savedIqs !== null && <span className="ml-2 text-xs font-normal text-emerald-500">(overridden)</span>}
             </p>
             {data.callSummary && (

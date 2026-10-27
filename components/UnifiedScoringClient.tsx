@@ -143,7 +143,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
             
             <span className="text-xs text-red-700">
               <strong>{data.interrupted_speaker}</strong> interrupted by <strong>{data.interrupted_by}</strong>
-              {data.words_spoken != null ? ` — ${data.words_spoken} words` : ''}
+              {data.words_spoken != null ? ` · ${data.words_spoken} words` : ''}
             </span>
           </div>
         </div>
@@ -158,7 +158,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
           <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded bg-slate-50 border border-slate-200">
             
             <span className="text-xs text-slate-500">
-              Dead air{data.duration ? ` — ${data.duration}` : ''}{data.resumed_by ? ` — resumed by ${data.resumed_by}` : ''}
+              Dead air{data.duration ? ` · ${data.duration}` : ''}{data.resumed_by ? ` · resumed by ${data.resumed_by}` : ''}
             </span>
           </div>
         </div>
@@ -172,7 +172,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
           </div>
           <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded bg-orange-50 border border-orange-200">
             
-            <span className="text-xs text-orange-700 font-medium">Active Listening flag{data.phrase ? ` — "${data.phrase}"` : ''}</span>
+            <span className="text-xs text-orange-700 font-medium">Active Listening flag{data.phrase ? ` · "${data.phrase}"` : ''}</span>
           </div>
         </div>
       );
@@ -357,7 +357,7 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
               <p className="text-sm font-semibold text-slate-800">Unified Quality Score</p>
               {!result.hasCallRecording && (
                 <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-2 py-1">
-                  No call recording found for this chat — only chat was scored.
+                  No call recording found for this chat. Only chat was scored.
                 </p>
               )}
               {result.chatSummary && <p className="text-xs text-slate-500"><span className="font-medium text-slate-600">Chat:</span> {result.chatSummary}</p>}
@@ -469,7 +469,7 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
         <h1 className="text-2xl font-bold text-slate-800">Unified Quality Score</h1>
         <p className="text-slate-500 mt-1.5 text-sm">
           Enter a Chat ID to score both the WhatsApp chat and any linked call recording.<br />
-          Transcripts are fetched from DB — no audio URL needed.
+          Transcripts are fetched from DB. No audio URL needed.
         </p>
       </div>
 
@@ -486,7 +486,7 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
               value={chatId}
               onChange={e => setChatId(e.target.value)}
             />
-            <p className="text-xs text-slate-400 mt-1">WhatsApp conversation ID — fetches chat transcript and any linked call recording from DB.</p>
+            <p className="text-xs text-slate-400 mt-1">WhatsApp conversation ID. Fetches chat transcript and any linked call recording from DB.</p>
           </div>
 
           {stage === 'error' && (
