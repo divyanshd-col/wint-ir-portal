@@ -6,6 +6,7 @@ import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 import { getDisputeClassification } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
+import { rowClick } from './rowClick';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -314,7 +315,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
 
             return (
               <React.Fragment key={d.flagId}>
-                <tr
+                <tr data-row-click onClick={rowClick(() => toggleExpand(rowKey))}
                   style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined }}
                   onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}

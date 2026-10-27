@@ -385,7 +385,7 @@ export default function CallEvalTable({ leadingFilter, dispositions, onCountChan
 
         <button style={chip} onClick={() => {
           setCallIdSearch(''); setMobileSearch(''); setDebouncedMobile(''); setDispFilter([]); setIqsMin(''); setIqsMax(''); setStatusFilter(''); setCustomFrom(''); setCustomTo('');
-        }}>Reset</button>
+        }}>Reset Filters</button>
 
         <div style={{ flex: 1 }} />
 

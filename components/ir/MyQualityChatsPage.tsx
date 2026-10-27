@@ -7,6 +7,9 @@ import type { IQSScoreEntry } from '@/lib/quality';
 import { PARAM_NAMES, getDisputeClassification, formatParamLabel } from '@/lib/quality';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import IRScorePanel from './IRScorePanel';
+import { rowClick } from '@/components/quality/rowClick';
+import { DateRangeChip } from '@/components/quality/FilterControls';
+import AgentFilterSelect from '@/components/quality/AgentFilterSelect';
 
 // ─── Shared UI Tokens & Styles ────────────────────────────────────────────────
 
@@ -421,7 +424,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
   };
 
   return (
-    <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
+    <div style={{ fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
@@ -461,65 +464,20 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <CountBadge count={filteredReviewedDisputes.length} active={activeTab === 'reviewed'} />
           </button>
         </div>
-
-        {/* Agent / Interaction Filter Dropdown */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', fontWeight: 500 }}>Interaction:</span>
-          <select
-            value={agentFilter}
-            onChange={(e) => {
-              setAgentFilter(e.target.value as any);
-              setPage(0);
-            }}
-            style={{
-              height: 36,
-              padding: '0 28px 0 12px',
-              border: '1px solid var(--qa-border, var(--qa-border))',
-              borderRadius: 8,
-              background: 'var(--qa-card, #FFFFFF)',
-              color: 'var(--qa-text, #111111)',
-              fontSize: 13,
-              fontFamily: SANS,
-              outline: 'none',
-              cursor: 'pointer',
-              appearance: 'none',
-              backgroundImage:
-                'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23a1a1aa\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'/%3E%3C/svg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 10px center',
-              backgroundSize: '12px',
-              fontWeight: 500,
-            }}
-          >
-            <option value="all">All Interactions</option>
-            <option value="has_calls">Has Calls</option>
-          </select>
-        </div>
       </div>
 
       {/* ── TAB 1: EVALUATED CHATS ──────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
           {/* Single-line Filter & Pagination Bar */}
-          <div
-            style={{
-              minHeight: 52,
-              background: '#FFFFFF',
-              borderBottom: '1px solid var(--qa-border, var(--qa-border))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '10px 16px',
-              overflowX: 'auto',
-            }}
-          >
+          <div className="qfilters">
+            <AgentFilterSelect value={agentFilter} onChange={(v) => { setAgentFilter(v as 'all' | 'has_calls'); setPage(0); }} options={[{ value: 'all', label: 'All Interactions' }, { value: 'has_calls', label: 'Has Calls' }]} />
             {/* Filter Inputs (Inline flex group) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <div style={{ display: 'contents' }}>
               {/* Search Chat ID */}
               <input
                 type="text"
-                placeholder="Search Chat ID…"
+                placeholder="Search by Chat ID…"
                 value={chatIdSearch}
                 onChange={(e) => {
                   setChatIdSearch(e.target.value);
@@ -562,37 +520,25 @@ export default function MyQualityChatsPage({ agentName }: Props) {
               )}
 
               {/* Date Range */}
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                style={{ ...chipInputStyle, width: 120 }}
-                title="From Date"
-              />
-              <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>→</span>
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                style={{ ...chipInputStyle, width: 120 }}
-                title="To Date"
-              />
 
               {/* IQS Range */}
-              <input
+              <span className="qf-group">
+<span className="qf-label">IQS</span>
+<input
                 type="number"
-                placeholder="Min IQS"
+                placeholder="min"
                 value={iqsMin}
                 onChange={(e) => setIqsMin(e.target.value)}
                 style={{ ...chipInputStyle, width: 70 }}
               />
-              <input
+<input
                 type="number"
-                placeholder="Max IQS"
+                placeholder="max"
                 value={iqsMax}
                 onChange={(e) => setIqsMax(e.target.value)}
                 style={{ ...chipInputStyle, width: 70 }}
               />
+</span>
 
               {/* CSAT */}
               <select value={csat} onChange={(e) => setCsat(e.target.value)} style={chipInputStyle}>
@@ -612,24 +558,12 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 ))}
               </select>
 
-              {hasFilters && (
-                <button
+              <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} />
+              <button type="button" className="qf-chip" disabled={!(hasFilters)}
                   onClick={resetFilters}
-                  style={{
-                    height: 28,
-                    padding: '0 10px',
-                    borderRadius: 6,
-                    border: '1px solid var(--qa-border)',
-                    background: '#FFFFFF',
-                    color: 'var(--qa-text-2)',
-                    fontSize: 12,
-                    fontFamily: SANS,
-                    cursor: 'pointer',
-                  }}
                 >
-                  Clear
-                </button>
-              )}
+              Reset Filters
+            </button>
             </div>
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
@@ -761,7 +695,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={e.id}>
-                      <tr style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                      <tr data-row-click onClick={rowClick(() => setExpandedEvalId(isOpen ? null : e.id))} style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={e.chatId} />
                         </td>
@@ -928,19 +862,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
       {activeTab === 'disputes' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
           {/* Single-line Filter & Pagination Bar */}
-          <div
-            style={{
-              minHeight: 52,
-              background: '#FFFFFF',
-              borderBottom: '1px solid var(--qa-border, var(--qa-border))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '10px 16px',
-              overflowX: 'auto',
-            }}
-          >
+          <div className="qfilters">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <select
                 value={pendingOutcomeFilter}
@@ -955,50 +877,18 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 <option value="raised_tl">Dispute raised by TL</option>
               </select>
 
-              <input
-                type="date"
-                value={pendingFromFilter}
-                onChange={(e) => {
-                  setPendingFromFilter(e.target.value);
-                  setPendingPage(0);
-                }}
-                style={chipInputStyle}
-                placeholder="From"
-              />
-              <input
-                type="date"
-                value={pendingToFilter}
-                onChange={(e) => {
-                  setPendingToFilter(e.target.value);
-                  setPendingPage(0);
-                }}
-                style={chipInputStyle}
-                placeholder="To"
-              />
 
-              {(pendingOutcomeFilter || pendingFromFilter || pendingToFilter) && (
-                <button
+              <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
+              <button type="button" className="qf-chip" disabled={!(pendingOutcomeFilter || pendingFromFilter || pendingToFilter)}
                   onClick={() => {
                     setPendingOutcomeFilter('');
                     setPendingFromFilter('');
                     setPendingToFilter('');
                     setPendingPage(0);
                   }}
-                  style={{
-                    height: 28,
-                    padding: '0 10px',
-                    borderRadius: 6,
-                    border: '1px solid var(--qa-border)',
-                    background: '#FFFFFF',
-                    color: 'var(--qa-text-2)',
-                    fontSize: 12,
-                    fontFamily: SANS,
-                    cursor: 'pointer',
-                  }}
                 >
-                  Clear
-                </button>
-              )}
+              Reset Filters
+            </button>
             </div>
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
@@ -1131,7 +1021,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={row.flagId}>
-                      <tr style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                      <tr data-row-click onClick={rowClick(() => setExpandedDisputeId(isOpen ? null : row.flagId))} style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={row.chatId} />
                         </td>
@@ -1337,19 +1227,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
       {activeTab === 'reviewed' && (
         <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
           {/* Single-line Filter & Pagination Bar */}
-          <div
-            style={{
-              minHeight: 52,
-              background: '#FFFFFF',
-              borderBottom: '1px solid var(--qa-border, var(--qa-border))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              padding: '10px 16px',
-              overflowX: 'auto',
-            }}
-          >
+          <div className="qfilters">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
               <select
                 value={reviewedOutcomeFilter}
@@ -1367,50 +1245,18 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 <option value="cancelled">Cancelled</option>
               </select>
 
-              <input
-                type="date"
-                value={reviewedFromFilter}
-                onChange={(e) => {
-                  setReviewedFromFilter(e.target.value);
-                  setReviewedPage(0);
-                }}
-                style={chipInputStyle}
-                placeholder="From"
-              />
-              <input
-                type="date"
-                value={reviewedToFilter}
-                onChange={(e) => {
-                  setReviewedToFilter(e.target.value);
-                  setReviewedPage(0);
-                }}
-                style={chipInputStyle}
-                placeholder="To"
-              />
 
-              {(reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter) && (
-                <button
+              <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />
+              <button type="button" className="qf-chip" disabled={!(reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter)}
                   onClick={() => {
                     setReviewedOutcomeFilter('');
                     setReviewedFromFilter('');
                     setReviewedToFilter('');
                     setReviewedPage(0);
                   }}
-                  style={{
-                    height: 28,
-                    padding: '0 10px',
-                    borderRadius: 6,
-                    border: '1px solid var(--qa-border)',
-                    background: '#FFFFFF',
-                    color: 'var(--qa-text-2)',
-                    fontSize: 12,
-                    fontFamily: SANS,
-                    cursor: 'pointer',
-                  }}
                 >
-                  Clear
-                </button>
-              )}
+              Reset Filters
+            </button>
             </div>
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
@@ -1547,7 +1393,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={row.flagId}>
-                      <tr style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                      <tr data-row-click onClick={rowClick(() => setExpandedDisputeId(isOpen ? null : row.flagId))} style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={row.chatId} />
                         </td>

@@ -345,7 +345,7 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
 
         <button style={chip} onClick={() => {
           setCallIdSearch(''); setMobileSearch(''); setDebouncedMobile(''); setDispFilter([]); setIqsMin(''); setIqsMax(''); setCustomFrom(''); setCustomTo('');
-        }}>Reset</button>
+        }}>Reset Filters</button>
 
         <div style={{ flex: 1 }} />
 

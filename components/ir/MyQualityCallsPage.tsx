@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import CallEvalPanel from '../quality/CallEvalPanel';
 import { DisputeThread } from '../quality/DisputeThread';
 import { DisputeStatusPill, getDisputeOutcomeKey } from '@/components/tl/QualityChatsPage';
+import { DateRangeChip } from '@/components/quality/FilterControls';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -417,7 +418,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
   };
 
   return (
-    <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
+    <div style={{ fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
@@ -445,10 +446,10 @@ export default function MyQualityCallsPage({ agentName }: Props) {
       {activeTab === 'evaluated' && (
         <div>
           {/* Filters */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+          <div className="qfilters standalone">
             <input
               type="text"
-              placeholder="Search Call ID…"
+              placeholder="Search by Call ID…"
               value={callIdSearch}
               onChange={e => { setCallIdSearch(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, width: 140 }}
@@ -459,20 +460,6 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               value={disposition}
               onChange={e => { setDisposition(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, width: 130 }}
-            />
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => { setDateFrom(e.target.value); setPage(0); }}
-              style={chipInputStyle}
-              title="From Date"
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => { setDateTo(e.target.value); setPage(0); }}
-              style={chipInputStyle}
-              title="To Date"
             />
 
             <select
@@ -486,23 +473,26 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               ))}
             </select>
 
-            <input
+            <span className="qf-group">
+<span className="qf-label">IQS</span>
+<input
               type="number"
-              placeholder="Min IQS"
+              placeholder="min"
               value={iqsMin}
               onChange={e => { setIqsMin(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, width: 80 }}
             />
-            <input
+<input
               type="number"
-              placeholder="Max IQS"
+              placeholder="max"
               value={iqsMax}
               onChange={e => { setIqsMax(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, width: 80 }}
             />
+</span>
 
-            {(callIdSearch || disposition || dateFrom || dateTo || qualityParam || iqsMin || iqsMax) && (
-              <button
+            <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); setPage(0); }} />
+            <button type="button" className="qf-chip" disabled={!(callIdSearch || disposition || dateFrom || dateTo || qualityParam || iqsMin || iqsMax)}
                 onClick={() => {
                   setCallIdSearch('');
                   setDisposition('');
@@ -513,11 +503,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                   setIqsMax('');
                   setPage(0);
                 }}
-                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
               >
-                Clear Filters
-              </button>
-            )}
+              Reset Filters
+            </button>
 
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
@@ -526,9 +514,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab1' ? null : 'tab1')}
-                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                  title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {limit} / page ▾
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
                 {openPageDrop === 'tab1' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -847,7 +835,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
       {activeTab === 'disputes' && (
         <div>
           {/* Filters Bar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+          <div className="qfilters standalone">
             <select
               value={pendingOutcomeFilter}
               onChange={e => { setPendingOutcomeFilter(e.target.value); setPendingPage(1); }}
@@ -858,34 +846,18 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <option value="raised_tl">Dispute raised by TL</option>
             </select>
 
-            <input
-              type="date"
-              value={pendingFromFilter}
-              onChange={e => { setPendingFromFilter(e.target.value); setPendingPage(1); }}
-              style={chipInputStyle}
-              title="From Date"
-            />
-            <input
-              type="date"
-              value={pendingToFilter}
-              onChange={e => { setPendingToFilter(e.target.value); setPendingPage(1); }}
-              style={chipInputStyle}
-              title="To Date"
-            />
 
-            {(pendingOutcomeFilter || pendingFromFilter || pendingToFilter) && (
-              <button
+            <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
+            <button type="button" className="qf-chip" disabled={!(pendingOutcomeFilter || pendingFromFilter || pendingToFilter)}
                 onClick={() => {
                   setPendingOutcomeFilter('');
                   setPendingFromFilter('');
                   setPendingToFilter('');
                   setPendingPage(1);
                 }}
-                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
               >
-                Clear Filters
-              </button>
-            )}
+              Reset Filters
+            </button>
 
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
@@ -894,9 +866,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab2' ? null : 'tab2')}
-                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                  title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {pendingLimit} / page ▾
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
                 {openPageDrop === 'tab2' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -1090,7 +1062,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
       {activeTab === 'reviewed' && (
         <div>
           {/* Filters Bar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
+          <div className="qfilters standalone">
             <select
               value={reviewedOutcomeFilter}
               onChange={e => { setReviewedOutcomeFilter(e.target.value); setReviewedPage(1); }}
@@ -1104,34 +1076,18 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <option value="cancelled">Cancelled</option>
             </select>
 
-            <input
-              type="date"
-              value={reviewedFromFilter}
-              onChange={e => { setReviewedFromFilter(e.target.value); setReviewedPage(1); }}
-              style={chipInputStyle}
-              title="From Date"
-            />
-            <input
-              type="date"
-              value={reviewedToFilter}
-              onChange={e => { setReviewedToFilter(e.target.value); setReviewedPage(1); }}
-              style={chipInputStyle}
-              title="To Date"
-            />
 
-            {(reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter) && (
-              <button
+            <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />
+            <button type="button" className="qf-chip" disabled={!(reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter)}
                 onClick={() => {
                   setReviewedOutcomeFilter('');
                   setReviewedFromFilter('');
                   setReviewedToFilter('');
                   setReviewedPage(1);
                 }}
-                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
               >
-                Clear Filters
-              </button>
-            )}
+              Reset Filters
+            </button>
 
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
@@ -1140,9 +1096,9 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab3' ? null : 'tab3')}
-                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                  title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {reviewedLimit} / page ▾
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
                 {openPageDrop === 'tab3' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>

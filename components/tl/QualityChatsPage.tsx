@@ -6,6 +6,8 @@ import type { TLChatRow } from '@/app/api/cx/tl/chats/route';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
 import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import { rowClick } from '@/components/quality/rowClick';
+import { DateRangeChip } from '@/components/quality/FilterControls';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -194,7 +196,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 
   useEffect(() => { fetchChats(page); }, [fetchChats, page]);
 
-  function applyFilters() { setPage(1); setPageSizeDrop(false); fetchChats(1); }
+  useEffect(() => { setPage(1); }, [chatIdSearch, agent, from, to, iqsMin, iqsMax, csat, limit]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -206,16 +208,13 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
   return (
     <div>
       {/* Filters */}
-      <div style={{
-        display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
-        padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
-      }}>
+      <div className="qfilters">
         <input
           type="text"
           value={chatIdSearch}
           onChange={e => setChatIdSearch(e.target.value)}
-          placeholder="Search Chat ID…"
-          style={{ ...inputStyle, width: 130 }}
+          placeholder="Search by Chat ID…"
+          style={{ ...inputStyle, width: 170 }}
         />
         {agents.length > 0 && (
           <select value={agent} onChange={e => setAgent(e.target.value)} style={{ ...inputStyle, paddingRight: 4 }}>
@@ -223,10 +222,11 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
             {agents.map(a => <option key={a} value={a}>{a}</option>)}
           </select>
         )}
-        <input type="date" value={from} onChange={e => setFrom(e.target.value)} style={inputStyle} placeholder="From" />
-        <input type="date" value={to}   onChange={e => setTo(e.target.value)}   style={inputStyle} placeholder="To" />
-        <input type="number" value={iqsMin} onChange={e => setIqsMin(e.target.value)} placeholder="IQS min" style={{ ...inputStyle, width: 70 }} />
-        <input type="number" value={iqsMax} onChange={e => setIqsMax(e.target.value)} placeholder="IQS max" style={{ ...inputStyle, width: 70 }} />
+        <span className="qf-group">
+<span className="qf-label">IQS</span>
+<input type="number" value={iqsMin} onChange={e => setIqsMin(e.target.value)} placeholder="min" style={{ ...inputStyle, width: 70 }} />
+<input type="number" value={iqsMax} onChange={e => setIqsMax(e.target.value)} placeholder="max" style={{ ...inputStyle, width: 70 }} />
+</span>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>CSAT</span>
           {['1','3','5'].map(v => (
@@ -239,11 +239,14 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
             </button>
           ))}
         </div>
-        <button onClick={applyFilters} style={{ ...chip, background: 'var(--qa-gray-700)', color: '#fff', borderColor: 'var(--qa-gray-700)' }}>
-          Apply
+        <DateRangeChip from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+        <button
+          type="button" className="qf-chip"
+          disabled={!(chatIdSearch || agent || from || to || iqsMin || iqsMax || csat.length)}
+          onClick={() => { setChatIdSearch(''); setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setPage(1); }}
+        >
+          Reset Filters
         </button>
-        <button onClick={() => { setAgent(''); setFrom(''); setTo(''); setIqsMin(''); setIqsMax(''); setCsat([]); setPage(1); fetchChats(1); }}
-          style={chip}>Clear</button>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
             {loading ? 'Loading…' : `Showing ${chats.length} of ${total}`}
@@ -333,7 +336,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
           ) : (
             chats.map(chat => (
               <React.Fragment key={chat.chatId}>
-                <tr
+                <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
                   style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
                   onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
@@ -566,10 +569,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     )}
 
     {/* Header / Filter & Rows per page bar */}
-    <div style={{
-      display: 'flex', flexWrap: 'nowrap', gap: 8, alignItems: 'center', overflowX: 'auto',
-      padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)',
-    }}>
+    <div className="qfilters">
       {agents.length > 0 && (
         <select value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
           <option value="">All Agents</option>
@@ -595,11 +595,9 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
         )}
       </select>
 
-      <input type="date" value={fromFilter} onChange={e => { setFromFilter(e.target.value); setPage(1); }} style={inputStyle} placeholder="From" />
-      <input type="date" value={toFilter}   onChange={e => { setToFilter(e.target.value); setPage(1); }}   style={inputStyle} placeholder="To" />
 
-      {(agentFilter || outcomeFilter || fromFilter || toFilter) && (
-        <button
+      <DateRangeChip from={fromFilter} to={toFilter} onChange={(f, t) => { setFromFilter(f); setToFilter(t); setPage(1); }} />
+      <button type="button" className="qf-chip" disabled={!(agentFilter || outcomeFilter || fromFilter || toFilter)}
           onClick={() => {
             setAgentFilter('');
             setOutcomeFilter('');
@@ -607,11 +605,9 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
             setToFilter('');
             setPage(1);
           }}
-          style={chip}
         >
-          Clear
-        </button>
-      )}
+              Reset Filters
+            </button>
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
@@ -710,7 +706,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
             const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
             return (
             <React.Fragment key={d.flagId}>
-              <tr
+              <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === d.chatId ? null : d.chatId))}
                 style={{ background: expandedId === d.chatId ? 'var(--qa-gray-50)' : undefined }}
                 onMouseEnter={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                 onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}

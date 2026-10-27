@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { PeriodRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ScoreRing from '@/components/quality/ScoreRing';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
@@ -109,7 +110,7 @@ const actionBtn: React.CSSProperties = {
   background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, fontWeight: 500, cursor: 'pointer',
 };
 
-function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending' | 'tl_history'; period: PeriodState; onChanged: () => void }) {
+function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: 'tl_pending' | 'tl_history'; period: PeriodState; onPeriod: (v: PeriodState) => void; onChanged: () => void }) {
   const [rows, setRows] = useState<EvaluationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -274,7 +275,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
+      <div className="qfilters">
         {agentsInRows.length > 0 && (
           <select value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={field}>
             <option value="">All Agents</option>
@@ -290,9 +291,14 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
             <option value="Rejected">Rejected by QA</option>
           </select>
         )}
-        {(agentFilter || outcomeFilter) && (
-          <button onClick={() => { setAgentFilter(''); setOutcomeFilter(''); }} style={actionBtn}>Clear</button>
-        )}
+        <PeriodRangeChip value={period} onChange={onPeriod} />
+        <button
+          type="button" className="qf-chip"
+          disabled={!(agentFilter || outcomeFilter || period.period !== 'all')}
+          onClick={() => { setAgentFilter(''); setOutcomeFilter(''); onPeriod(DEFAULT_PERIOD); }}
+        >
+          Reset Filters
+        </button>
         <div style={{ marginLeft: 'auto' }}>
           <ShowingCount shown={paging.pageItems.length} total={shown.length} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
         </div>
@@ -595,11 +601,10 @@ export default function TLEmailQualityPage() {
           );
         })}
       </div>
-      <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
-      {tab === 'raised' && <EmailDisputesSection queue="tl_pending" period={period} onChanged={fetchData} />}
-      {tab === 'reviewed' && <EmailDisputesSection queue="tl_history" period={period} onChanged={fetchData} />}
+      {tab === 'raised' && <EmailDisputesSection queue="tl_pending" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
+      {tab === 'reviewed' && <EmailDisputesSection queue="tl_history" period={period} onPeriod={setPeriod} onChanged={fetchData} />}
 
       {tab === 'evaluated' && (
       <>
@@ -760,14 +765,7 @@ export default function TLEmailQualityPage() {
         overflow: 'hidden',
       }}>
         {/* Filter bar, same slots as the chat tables: filters left, count + rows per page right */}
-        <div style={{
-          padding: '10px 16px',
-          borderBottom: '1px solid var(--qa-border)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          flexWrap: 'wrap',
-        }}>
+        <div className="qfilters">
           <select
             value={selectedAgent}
             onChange={e => setSelectedAgent(e.target.value)}
@@ -778,11 +776,10 @@ export default function TLEmailQualityPage() {
               <option key={name} value={name}>{name}</option>
             ))}
           </select>
-          {selectedAgent && (
-            <button onClick={() => setSelectedAgent('')} style={{ height: 32, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 13, fontFamily: 'inherit', cursor: 'pointer' }}>
+          <PeriodRangeChip value={period} onChange={setPeriod} />
+          <button type="button" className="qf-chip" disabled={!(selectedAgent || period.period !== 'all')} onClick={() => { setSelectedAgent(''); setPeriod(DEFAULT_PERIOD); }}>
               Reset Filters
             </button>
-          )}
           <div style={{ flex: 1 }} />
           <ShowingCount shown={paging.pageItems.length} total={paging.total} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
         </div>

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
-import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
+import { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import DateRangePicker from './DateRangePicker';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
@@ -662,7 +662,6 @@ export default function EmailEvaluationPage() {
           )}
         </div>
 
-        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
       {/* ── One card: filter bar + table + pager (as in the chat tables) ── */}
@@ -673,7 +672,9 @@ export default function EmailEvaluationPage() {
         overflow: 'hidden',
       }}>
         <div style={{
-          padding: '10px 16px',
+          padding: '8px 16px',
+          minHeight: 56,
+          background: 'var(--sunk)',
           borderBottom: '1px solid var(--qa-border)',
           display: 'flex',
           alignItems: 'center',

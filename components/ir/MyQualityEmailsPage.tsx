@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
-import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { PeriodRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import ScoreRing from '@/components/quality/ScoreRing';
@@ -18,6 +19,7 @@ import EmailMessageView, {
   type InternalNote,
 } from '@/components/quality/EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import { rowClick } from '@/components/quality/rowClick';
 
 interface EvaluationItem {
   id: number;
@@ -335,7 +337,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   };
 
   return (
-    <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
+    <div style={{ fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* ── Page Header ── */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
@@ -376,7 +378,6 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           </button>
         </div>
 
-        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
       {/* ── KPI Cards (Evaluated tab, between the tabs and the table) ── */}
@@ -473,21 +474,9 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
         }}
       >
         {/* Single-line Filter Bar */}
-        <div
-          style={{
-            minHeight: 52,
-            background: '#FFFFFF',
-            borderBottom: '1px solid var(--qa-border, var(--qa-border))',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '10px 16px',
-            overflowX: 'auto',
-          }}
-        >
+        <div className="qfilters">
           {/* Filter Inputs Group */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'contents' }}>
             {/* Search */}
             <input
               type="text"
@@ -508,24 +497,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
               <option value="breach">Non-Compliant</option>
             </select>
 
-            {hasFilters && (
-              <button
-                onClick={clearFilters}
-                style={{
-                  height: 28,
-                  padding: '0 10px',
-                  borderRadius: 6,
-                  border: '1px solid var(--qa-border)',
-                  background: '#FFFFFF',
-                  color: 'var(--qa-text-2)',
-                  fontSize: 12,
-                  fontFamily: SANS,
-                  cursor: 'pointer',
-                }}
+            <PeriodRangeChip value={period} onChange={setPeriod} />
+
+            <button type="button" className="qf-chip" disabled={!(hasFilters || period.period !== 'all')}
+                onClick={() => { clearFilters(); setPeriod(DEFAULT_PERIOD); }}
               >
-                Clear
-              </button>
-            )}
+              Reset Filters
+            </button>
           </div>
 
           {/* Records Counter */}
@@ -581,7 +559,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
 
                   return (
                     <Fragment key={item.message_id}>
-                      <tr
+                      <tr data-row-click onClick={rowClick(() => { setExpandedId(isOpen ? null : item.message_id); setDisputeSuccessMsg(null); })}
                         style={{
                           background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF',
                           transition: 'background 0.1s',

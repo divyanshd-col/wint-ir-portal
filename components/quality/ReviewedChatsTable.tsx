@@ -4,6 +4,7 @@ import EvalPanel from './EvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
+import { rowClick } from './rowClick';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -266,7 +267,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
             ) : (
               chats.map(chat => (
                 <React.Fragment key={chat.chatId}>
-                  <tr
+                  <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
                     style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
                     onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                     onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
