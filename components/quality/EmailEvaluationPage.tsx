@@ -177,8 +177,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   return (
     <span style={{
       fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px',
-      background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100)',
-      color: active ? '#fff' : 'var(--qa-text-2)',
+      background: active ? 'var(--ink)' : 'var(--qa-fill-light)',
+      color: active ? 'var(--ink-fg)' : 'var(--qa-text-2)',
     }}>
       {count}
     </span>
@@ -557,20 +557,12 @@ export default function EmailEvaluationPage() {
   };
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    height: 36,
-    padding: '0 16px',
-    border: 'none',
-    borderRadius: 8,
-    background: active ? 'var(--qa-gray-700)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2)',
-    fontFamily: 'inherit',
-    fontSize: 13,
-    fontWeight: active ? 500 : 400,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    transition: 'background 0.15s, color 0.15s',
+    height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+    background: 'transparent',
+    color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+    borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+    fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 600 : 500,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
   const hasFilters = Boolean(search || agentFilter || dispositionFilter || period.period !== 'all');
@@ -637,8 +629,7 @@ export default function EmailEvaluationPage() {
       }}>
         <div style={{
           display: 'flex', gap: 4,
-          background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
-          borderRadius: 10, padding: 4, width: 'fit-content',
+          borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
         }}>
           <button
             style={tabStyle(tab === 'pending')}

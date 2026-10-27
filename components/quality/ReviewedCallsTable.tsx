@@ -5,6 +5,7 @@ import DateRangePicker from './DateRangePicker';
 import type { CallToReviewRow } from '@/app/api/cx/qa/calls-to-review/route';
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   dispositions:   string[];
   agentFilter?:   'all' | 'human_only';
   initialCallId?: string;
@@ -161,7 +162,7 @@ const CallEvalRow = React.memo(function CallEvalRow({
 
 type SortCol = 'callId' | 'agentName' | 'iqsScore';
 
-export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', initialCallId, initialMobile }: Props) {
+export default function ReviewedCallsTable({ leadingFilter, dispositions, agentFilter = 'all', initialCallId, initialMobile }: Props) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -266,10 +267,11 @@ export default function ReviewedCallsTable({ dispositions, agentFilter = 'all', 
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
       {/* Filter bar */}
       <div style={{
-        minHeight: 56, background: 'var(--qa-card)', borderBottom: '1px solid var(--qa-border)',
+        minHeight: 56, background: 'var(--sunk)', borderBottom: '1px solid var(--qa-border)',
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 16px',
         borderRadius: '8px 8px 0 0',
       }}>
+        {leadingFilter}
         <input
           placeholder="Search by Call ID…"
           value={callIdSearch}

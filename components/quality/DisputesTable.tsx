@@ -8,6 +8,7 @@ import { getDisputeClassification } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   onCountChange?: (count: number) => void;
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
@@ -32,7 +33,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', type = 'all', initialMobile }: Props) {
+export default function DisputesTable({ leadingFilter, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', type = 'all', initialMobile }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
@@ -152,7 +153,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)', flexWrap: 'wrap', background: 'var(--sunk)' }}>
+        {leadingFilter}
         <input
           placeholder={isCallsOnly ? "Search by Call ID…" : "Search by ID…"}
           value={chatIdSearch}

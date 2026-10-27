@@ -21,6 +21,7 @@ interface UnscoredChatRow {
 }
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   onCountChange?: (count: number) => void;
 }
@@ -30,7 +31,7 @@ function fmtDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange }: Props) {
+export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all', onCountChange }: Props) {
   const [chats, setChats] = useState<UnscoredChatRow[]>([]);
   const [total, setTotal] = useState(0);
   const [unscoredCount, setUnscoredCount] = useState(0);
@@ -153,6 +154,7 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
       }}>
         {/* Filters */}
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          {leadingFilter}
           <input
             type="text"
             placeholder="Search Chat ID..."

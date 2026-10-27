@@ -141,8 +141,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
         borderRadius: 10,
         fontWeight: 600,
         lineHeight: '18px',
-        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, var(--qa-fill-light))',
-        color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
+        background: active ? 'var(--ink)' : 'var(--qa-fill-light)',
+        color: active ? 'var(--ink-fg)' : 'var(--qa-text-2, var(--qa-text-2))',
       }}
     >
       {count}
@@ -400,19 +400,12 @@ export default function MyQualityChatsPage({ agentName }: Props) {
   const subDispsForPicked = disposition && dispositionSubMap[disposition] ? dispositionSubMap[disposition] : [];
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    height: 36,
-    padding: '0 16px',
-    border: 'none',
-    borderRadius: 8,
-    background: active ? 'var(--qa-gray-700, #111111)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
-    fontFamily: SANS,
-    fontSize: 13,
-    fontWeight: active ? 600 : 400,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
+    height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+    background: 'transparent',
+    color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+    borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+    fontFamily: SANS, fontSize: 13, fontWeight: active ? 600 : 500,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
   const chipInputStyle: CSSProperties = {
@@ -455,11 +448,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
           style={{
             display: 'flex',
             gap: 4,
-            background: 'var(--qa-card, #FFFFFF)',
-            border: '1px solid var(--qa-border, var(--qa-border))',
-            borderRadius: 10,
-            padding: 4,
-            width: 'fit-content',
+            borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
           }}
         >
           <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>

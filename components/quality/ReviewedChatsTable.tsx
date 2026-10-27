@@ -6,6 +6,7 @@ import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   dispositions: string[];
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
@@ -19,7 +20,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId }: Props) {
+export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId }: Props) {
   const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
   const [total,         setTotal]         = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
@@ -85,8 +86,8 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-    fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
+    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--faint)',
+    fontWeight: 600, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
   };
   const td: React.CSSProperties = {
     height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
@@ -108,10 +109,11 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
 
       {/* Filter bar */}
       <div style={{
-        minHeight: 56, borderBottom: '1px solid var(--qa-border)',
+        minHeight: 56, background: 'var(--sunk)', borderBottom: '1px solid var(--qa-border)',
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 16px',
         borderRadius: '8px 8px 0 0',
       }}>
+        {leadingFilter}
         <input
           style={inputStyle}
           placeholder="Search by Chat ID…"
@@ -234,8 +236,8 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
             <tr>
               <th style={th}>Chat ID</th>
               <th style={th}>Agent</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
+              <th style={{ ...th, textAlign: 'right' }}>Agent IQS</th>
+              <th style={{ ...th, textAlign: 'right' }}>Bot IQS</th>
               <th style={th}>Call Transcript</th>
               <th style={th}>CSAT</th>
               <th style={th}>Disposition</th>
@@ -284,21 +286,21 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                     </td>
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                     <td style={tdNum}>
-                      {chat.botIqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                          {chat.botIqsScore}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-                      )}
-                    </td>
-                    <td style={tdNum}>
                       {chat.iqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
                           {chat.iqsScore}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
+                      )}
+                    </td>
+                    <td style={tdNum}>
+                      {chat.botIqsScore !== null ? (
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 400, color: 'var(--faint)' }}>
+                          {chat.botIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                       )}
                     </td>
                     <td style={td}>
