@@ -6,7 +6,7 @@
   --page-bg: #f5f6f4;
   --tb-bg: #f5f6f4; --tb-border: #dde1db; --tb-capsule: #eaede8; --tb-pill: #ffffff;
   --sb-bg: #f5f6f4; --sb-border: #dde1db;
-  --sb-text: #3a423a; --sb-text-muted: #5f685f; --sb-hover: rgba(27,32,27,.06);
+  --sb-text: #3a423a; --sb-text-muted: #4f584f; --sb-hover: rgba(27,32,27,.06);
   --sb-active-bg: #ffffff; --sb-active-text: #1b201b; --sb-active-shadow: 0 1px 3px rgba(27,32,27,.10);
 }
 

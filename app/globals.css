@@ -23,8 +23,8 @@
   --qa-fill-light:   #EEF0EC;
   --qa-fill-med:     #DDE1DB;
   --qa-text:         #1B201B;
-  --qa-text-2:       #5F685F;
-  --qa-text-3:       #8A938A;
+  --qa-text-2:       #4F584F;
+  --qa-text-3:       #667066;
   --qa-text-4:       #B3BAB2;
   --qa-gray-700:     #2C332C;
   --qa-gray-50:      #F7F8F6;
@@ -41,8 +41,8 @@
   --color-background-info:      #dbeafe;
 
   --color-text-primary:   #1b201b;
-  --color-text-secondary: #5f685f;
-  --color-text-tertiary:  #8a938a;
+  --color-text-secondary: #4f584f;
+  --color-text-tertiary:  #667066;
   --color-text-danger:    #c0352b;
   --color-text-warning:   #b45309;
   --color-text-success:   #1f7a4d;
@@ -68,7 +68,7 @@
   --sunk:        #eef0ec;  /* recessed surface: filter bars, notes */
   --line:        #dde1db;
   --line-strong: #c4cac1;
-  --faint:       #8a938a;  /* low-priority text: table heads, metadata */
+  --faint:       #667066;  /* low-priority text: table heads, metadata (AA on white; reference #8a938a is 3.2:1) */
 
   --border-radius-md: 8px;
   --border-radius-lg: 12px;

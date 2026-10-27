@@ -90,7 +90,7 @@ export default function KBGapsPage() {
             <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>
               KB Gap Intelligence & Answer Drafting Bot
             </h1>
-            <span style={{ background: '#EFF6FF', color: '#1D4ED8', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>
+            <span style={{ background: 'var(--qa-fill-light)', color: 'var(--qa-text)', fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>
               Gemini 3.5 End-to-End Analysis
             </span>
           </div>
@@ -110,7 +110,7 @@ export default function KBGapsPage() {
               padding: '8px 12px',
               borderRadius: 8,
               border: '1px solid var(--qa-border)',
-              background: '#FFFFFF',
+              background: 'var(--qa-card)',
               fontSize: 13,
               color: 'var(--qa-gray-700)',
               cursor: 'pointer',
@@ -130,7 +130,7 @@ export default function KBGapsPage() {
               padding: '8px 12px',
               borderRadius: 8,
               border: '1px solid var(--qa-border)',
-              background: '#FFFFFF',
+              background: 'var(--qa-card)',
               fontSize: 13,
               color: 'var(--qa-gray-700)',
               cursor: 'pointer',
@@ -157,8 +157,8 @@ export default function KBGapsPage() {
               padding: '9px 16px',
               borderRadius: 8,
               border: 'none',
-              background: runningAnalysis ? 'var(--qa-text-3)' : '#10B981',
-              color: '#FFFFFF',
+              background: runningAnalysis ? 'var(--qa-text-3)' : 'var(--accent)',
+              color: runningAnalysis ? 'var(--qa-card)' : 'var(--accent-on)',
               fontSize: 13,
               fontWeight: 600,
               cursor: runningAnalysis ? 'not-allowed' : 'pointer',
@@ -177,28 +177,28 @@ export default function KBGapsPage() {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div style={{ background: '#111827', color: '#FFFFFF', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, marginBottom: 20 }}>
+        <div style={{ background: 'var(--ink)', color: 'var(--ink-fg)', padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500, marginBottom: 20 }}>
           {toastMessage}
         </div>
       )}
 
       {/* Summary Metric Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>TOTAL DRAFTED SUGGESTIONS</div>
           <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--qa-text)', marginTop: 4 }}>{rows.length}</div>
-          <div style={{ fontSize: 12, color: '#059669', marginTop: 2 }}>Stored in table `kb_draft_suggestions`</div>
+          <div style={{ fontSize: 12, color: 'var(--pass)', marginTop: 2 }}>Stored in table `kb_draft_suggestions`</div>
         </div>
 
-        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>🤖 BOT HANDLED CHATS</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: '#1D4ED8', marginTop: 4 }}>{botHandledCount}</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--qa-text)', marginTop: 4 }}>{botHandledCount}</div>
           <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>Answered by Bot without agent transfer</div>
         </div>
 
-        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>👨‍💼 TRANSFERRED TO AGENTS</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: '#6B21A8', marginTop: 4 }}>{transferredCount}</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--qa-text-2)', marginTop: 4 }}>{transferredCount}</div>
           <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>Escalated to human IR support agents</div>
         </div>
       </div>
@@ -214,8 +214,8 @@ export default function KBGapsPage() {
             fontSize: 14,
             fontWeight: 600,
             cursor: 'pointer',
-            borderBottom: activeTab === 'Educational' ? '2px solid #059669' : '2px solid transparent',
-            color: activeTab === 'Educational' ? '#059669' : 'var(--qa-text-2)',
+            borderBottom: activeTab === 'Educational' ? '2px solid var(--pass)' : '2px solid transparent',
+            color: activeTab === 'Educational' ? 'var(--pass)' : 'var(--qa-text-2)',
           }}
         >
           🟢 Educational Drafts ({educationalCount})
@@ -239,7 +239,7 @@ export default function KBGapsPage() {
       </div>
 
       {/* Main Data Table */}
-      <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 12, padding: 20 }}>
+      <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12, padding: 20 }}>
         {loading ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--qa-text-2)', fontSize: 14 }}>Loading database entries...</div>
         ) : rows.length === 0 ? (
@@ -282,9 +282,9 @@ export default function KBGapsPage() {
                             borderRadius: 6,
                             fontSize: 11,
                             fontWeight: 600,
-                            background: isBot ? '#EFF6FF' : '#F3E8FF',
-                            color: isBot ? '#1D4ED8' : '#6B21A8',
-                            border: `1px solid ${isBot ? '#BFDBFE' : '#E9D5FF'}`,
+                            background: isBot ? 'var(--qa-fill-light)' : 'var(--sunk)',
+                            color: isBot ? 'var(--qa-text)' : 'var(--qa-text-2)',
+                            border: `1px solid ${isBot ? 'var(--line-strong)' : 'var(--line-strong)'}`,
                           }}
                         >
                           {isBot ? '🤖 Bot Handled' : '👨‍💼 Transferred'}
@@ -305,11 +305,11 @@ export default function KBGapsPage() {
                         </div>
                       </td>
 
-                      <td style={{ padding: '12px', color: '#4B5563', fontSize: 12, lineHeight: '1.4' }}>
+                      <td style={{ padding: '12px', color: 'var(--qa-text-2)', fontSize: 12, lineHeight: '1.4' }}>
                         {r.agent_answer}
                       </td>
 
-                      <td style={{ padding: '12px', background: '#F0FDF4', color: '#166534', fontSize: 12, lineHeight: '1.4', borderRadius: 6 }}>
+                      <td style={{ padding: '12px', background: 'var(--pass-soft)', color: 'var(--pass)', fontSize: 12, lineHeight: '1.4', borderRadius: 6 }}>
                         {r.suggested_kb_content}
                       </td>
 
@@ -325,9 +325,9 @@ export default function KBGapsPage() {
                           style={{
                             padding: '6px 12px',
                             borderRadius: 6,
-                            border: '1px solid #D1D5DB',
-                            background: copiedKey === itemKey ? '#10B981' : '#FFFFFF',
-                            color: copiedKey === itemKey ? '#FFFFFF' : '#374151',
+                            border: '1px solid var(--line-strong)',
+                            background: copiedKey === itemKey ? 'var(--accent)' : 'var(--qa-card)',
+                            color: copiedKey === itemKey ? 'var(--accent-on)' : 'var(--qa-gray-700)',
                             fontSize: 11,
                             fontWeight: 600,
                             cursor: 'pointer',
