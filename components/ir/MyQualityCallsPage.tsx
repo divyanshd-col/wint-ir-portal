@@ -6,6 +6,7 @@ import CallEvalPanel from '../quality/CallEvalPanel';
 import { DisputeThread } from '../quality/DisputeThread';
 import { DisputeStatusPill, getDisputeOutcomeKey } from '@/components/tl/QualityChatsPage';
 import { DateRangeChip } from '@/components/quality/FilterControls';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -574,7 +575,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                         <tr
                           onClick={() => setExpandedCallId(isExpanded ? null : call.callId)}
                           style={{
-                            background: isExpanded ? 'var(--qa-gray-50, var(--qa-gray-50))' : undefined,
+                            background: isExpanded ? 'var(--accent-weak)' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
@@ -587,28 +588,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           <td style={TD_BASE}>{call.disposition || '—'}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {call.chatId ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  padding: '3px 8px',
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  borderRadius: 6,
-                                  border: '1px solid var(--qa-border, var(--qa-border))',
-                                  background: '#fff',
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={`Open chat ${call.chatId} in Robylon`}
-                              >
-                                Show chat ↗
-                              </a>
+                              <TicketLinkButton id={call.chatId} />
                             ) : (
                               <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
@@ -924,22 +904,14 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                         <tr
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
                           style={{
-                            background: isOpen ? 'var(--qa-gray-50, var(--qa-gray-50))' : undefined,
+                            background: isOpen ? 'var(--accent-weak)' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
                         >
                           <td style={TD_MONO}>
                             {/^\d+$/.test(String(callKey).trim()) ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: 'var(--qa-text-4)', fontFamily: MONO, fontSize: 13 }}
-                              >
-                                {callKey}
-                              </a>
+                              <TicketLinkButton id={String(callKey).trim()} label={callKey} />
                             ) : (
                               callKey
                             )}
@@ -951,28 +923,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  padding: '3px 8px',
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  borderRadius: 6,
-                                  border: '1px solid var(--qa-border, var(--qa-border))',
-                                  background: '#fff',
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={`Open chat ${dispute.chatId} in Robylon`}
-                              >
-                                Show chat ↗
-                              </a>
+                              <TicketLinkButton id={dispute.chatId} />
                             ) : (
                               <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
@@ -1154,22 +1105,14 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                         <tr
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
                           style={{
-                            background: isOpen ? 'var(--qa-gray-50, var(--qa-gray-50))' : undefined,
+                            background: isOpen ? 'var(--accent-weak)' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
                         >
                           <td style={TD_MONO}>
                             {/^\d+$/.test(String(callKey).trim()) ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: 'var(--qa-text-4)', fontFamily: MONO, fontSize: 13 }}
-                              >
-                                {callKey}
-                              </a>
+                              <TicketLinkButton id={String(callKey).trim()} label={callKey} />
                             ) : (
                               callKey
                             )}
@@ -1181,28 +1124,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  padding: '3px 8px',
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  borderRadius: 6,
-                                  border: '1px solid var(--qa-border, var(--qa-border))',
-                                  background: '#fff',
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={`Open chat ${dispute.chatId} in Robylon`}
-                              >
-                                Show chat ↗
-                              </a>
+                              <TicketLinkButton id={dispute.chatId} />
                             ) : (
                               <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}

@@ -8,6 +8,7 @@ import { getDisputeClassification, formatParamLabel } from '@/lib/quality';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import { rowClick } from '@/components/quality/rowClick';
 import { DateRangeChip } from '@/components/quality/FilterControls';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -119,15 +120,7 @@ function ChatIdCell({ chatId }: { chatId: string }) {
   const id = String(chatId ?? '').trim();
   if (/^\d+$/.test(id)) {
     return (
-      <a
-        href={`https://app.robylon.ai/unified-inbox/share/${id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={e => e.stopPropagation()}
-        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-      >{chatId}</a>
+      <TicketLinkButton id={id} label={chatId} />
     );
   }
   return <>{chatId}</>;
@@ -337,7 +330,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
             chats.map(chat => (
               <React.Fragment key={chat.chatId}>
                 <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
-                  style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
+                  style={{ background: expandedId === chat.chatId ? 'var(--accent-weak)' : undefined }}
                   onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                 >
@@ -707,7 +700,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
             return (
             <React.Fragment key={d.flagId}>
               <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === d.chatId ? null : d.chatId))}
-                style={{ background: expandedId === d.chatId ? 'var(--qa-gray-50)' : undefined }}
+                style={{ background: expandedId === d.chatId ? 'var(--accent-weak)' : undefined }}
                 onMouseEnter={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                 onMouseLeave={e => { if (expandedId !== d.chatId) e.currentTarget.style.background = ''; }}
               >

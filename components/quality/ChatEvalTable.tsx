@@ -6,6 +6,7 @@ import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import EvalPanel from './EvalPanel';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -549,17 +550,7 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
                   >
                     <td style={{ ...tdMono, boxShadow: expandedId === chat.chatId ? 'inset 3px 0 0 var(--accent)' : undefined }}>
                       {/^\d+$/.test(chat.chatId.trim()) ? (
-                        <a
-                          href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
-                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                        >
-                          {chat.chatId}
-                        </a>
+                        <TicketLinkButton id={chat.chatId} label={chat.chatId} />
                       ) : (
                         chat.chatId
                       )}

@@ -561,29 +561,12 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                     <Fragment key={item.message_id}>
                       <tr data-row-click onClick={rowClick(() => { setExpandedId(isOpen ? null : item.message_id); setDisputeSuccessMsg(null); })}
                         style={{
-                          background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF',
+                          background: isOpen ? 'var(--accent-weak)' : '#FFFFFF',
                           transition: 'background 0.1s',
                         }}
                       >
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 12)}…`} />
-                          {item.customer_email && (
-                            <div
-                              title={`User Email: ${item.customer_email}`}
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--qa-text-3, var(--qa-text-2))',
-                                fontFamily: SANS,
-                                marginTop: 3,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                maxWidth: 160,
-                              }}
-                            >
-                              {item.customer_email}
-                            </div>
-                          )}
                         </td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || agentName}</td>
                         <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

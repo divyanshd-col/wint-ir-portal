@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import CallEvalPanel from './CallEvalPanel';
 import DateRangePicker from './DateRangePicker';
 import type { CallToReviewRow } from '@/app/api/cx/qa/calls-to-review/route';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -69,45 +70,17 @@ const CallEvalRow = React.memo(function CallEvalRow({
     <React.Fragment>
       <tr
         onClick={() => onToggleExpand(call.callId)}
-        style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
+        style={{ background: isExpanded ? 'var(--accent-weak)' : undefined, cursor: 'pointer' }}
         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
       >
-        <td style={tdMono}>
-          <div>{call.callId}</div>
-          {call.calledAt && (
-            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2 }}>
-              {new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
-            </div>
-          )}
-        </td>
+        <td style={tdMono}>{call.callId}</td>
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
         <td style={tdMono}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}</td>
         <td style={td}>{call.disposition}</td>
         <td style={td} onClick={e => e.stopPropagation()}>
           {call.chatId ? (
-            <a
-              href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 8px',
-                fontSize: 12,
-                fontWeight: 500,
-                borderRadius: 6,
-                border: '1px solid var(--qa-border)',
-                background: 'var(--qa-card)',
-                color: '#2563eb',
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-              }}
-              title={`Open chat ${call.chatId} in Robylon`}
-            >
-              Show chat ↗
-            </a>
+            <TicketLinkButton id={call.chatId} />
           ) : (
             <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
           )}

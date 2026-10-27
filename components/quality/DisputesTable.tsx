@@ -7,6 +7,7 @@ import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 import { getDisputeClassification } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 import { rowClick } from './rowClick';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -316,35 +317,15 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
             return (
               <React.Fragment key={d.flagId}>
                 <tr data-row-click onClick={rowClick(() => toggleExpand(rowKey))}
-                  style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined }}
+                  style={{ background: isExpanded ? 'var(--accent-weak)' : undefined }}
                   onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                 >
                   <td style={tdMono}>
                     {d.chatId && /^\d+$/.test(String(d.chatId).trim()) ? (
-                      <a
-                        href={`https://app.robylon.ai/unified-inbox/share/${String(d.chatId).trim()}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                      >
-                        {rowKey}
-                      </a>
+                      <TicketLinkButton id={String(d.chatId).trim()} label={rowKey} />
                     ) : /^\d+$/.test(String(rowKey).trim()) ? (
-                      <a
-                        href={`https://app.robylon.ai/unified-inbox/share/${String(rowKey).trim()}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                      >
-                        {rowKey}
-                      </a>
+                      <TicketLinkButton id={String(rowKey).trim()} label={rowKey} />
                     ) : (
                       rowKey
                     )}

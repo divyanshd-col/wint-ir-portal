@@ -10,6 +10,7 @@ import IRScorePanel from './IRScorePanel';
 import { rowClick } from '@/components/quality/rowClick';
 import { DateRangeChip } from '@/components/quality/FilterControls';
 import AgentFilterSelect from '@/components/quality/AgentFilterSelect';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 // ─── Shared UI Tokens & Styles ────────────────────────────────────────────────
 
@@ -115,21 +116,7 @@ function ChatIdCell({ chatId }: { chatId: string }) {
   const isRobylon = /^\d+$/.test(id);
   if (isRobylon) {
     return (
-      <a
-        href={`https://app.robylon.ai/unified-inbox/share/${id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          color: 'var(--qa-text, #111111)',
-          textDecoration: 'underline',
-          textDecorationColor: 'var(--qa-text-4)',
-          fontFamily: MONO,
-          fontSize: 13,
-        }}
-      >
-        {display}
-      </a>
+      <TicketLinkButton id={id} label={display} />
     );
   }
   return <span style={{ color: 'var(--qa-text-2, var(--qa-text-2))', fontFamily: MONO, fontSize: 13 }}>{display}</span>;
@@ -695,7 +682,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={e.id}>
-                      <tr data-row-click onClick={rowClick(() => setExpandedEvalId(isOpen ? null : e.id))} style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                      <tr data-row-click onClick={rowClick(() => setExpandedEvalId(isOpen ? null : e.id))} style={{ background: isOpen ? 'var(--accent-weak)' : '#FFFFFF' }}>
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={e.chatId} />
                         </td>
@@ -1021,7 +1008,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={row.flagId}>
-                      <tr data-row-click onClick={rowClick(() => setExpandedDisputeId(isOpen ? null : row.flagId))} style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                      <tr data-row-click onClick={rowClick(() => setExpandedDisputeId(isOpen ? null : row.flagId))} style={{ background: isOpen ? 'var(--accent-weak)' : '#FFFFFF' }}>
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={row.chatId} />
                         </td>
@@ -1393,7 +1380,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={row.flagId}>
-                      <tr data-row-click onClick={rowClick(() => setExpandedDisputeId(isOpen ? null : row.flagId))} style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                      <tr data-row-click onClick={rowClick(() => setExpandedDisputeId(isOpen ? null : row.flagId))} style={{ background: isOpen ? 'var(--accent-weak)' : '#FFFFFF' }}>
                         <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={row.chatId} />
                         </td>

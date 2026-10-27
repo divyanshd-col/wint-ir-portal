@@ -292,7 +292,7 @@ export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all',
                   <React.Fragment key={chat.id}>
                     <tr
                       style={{
-                        background: isExpanded ? 'var(--qa-gray-50)' : undefined,
+                        background: isExpanded ? 'var(--accent-weak)' : undefined,
                         cursor: 'pointer',
                       }}
                       onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}

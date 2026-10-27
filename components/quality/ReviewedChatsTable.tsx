@@ -5,6 +5,7 @@ import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 import { rowClick } from './rowClick';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -268,21 +269,13 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
               chats.map(chat => (
                 <React.Fragment key={chat.chatId}>
                   <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
-                    style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
+                    style={{ background: expandedId === chat.chatId ? 'var(--accent-weak)' : undefined }}
                     onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                     onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                   >
                     <td style={tdMono}>
                       {/^\d+$/.test(chat.chatId.trim()) ? (
-                        <a
-                          href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
-                          target="_blank" rel="noopener noreferrer"
-                          style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                        >
-                          {chat.chatId}
-                        </a>
+                        <TicketLinkButton id={chat.chatId} label={chat.chatId} />
                       ) : chat.chatId}
                     </td>
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>

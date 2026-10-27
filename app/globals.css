@@ -390,3 +390,11 @@ tr[data-row-click] { cursor: pointer; }
 .qfilters .qf-group { display: inline-flex; align-items: center; gap: 8px; }
 .qfilters select { max-width: 220px; }
 .quality-shell-sidebar-link { white-space: nowrap; }
+
+/* Chat / ticket ID link chip: identical in every queue and panel. */
+.id-link { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--qa-border); border-radius: 6px; background: var(--qa-card); color: var(--qa-text); font-family: ui-monospace, monospace; font-size: 12px; line-height: 18px; text-decoration: none; white-space: nowrap; }
+.id-link:hover { background: var(--qa-fill-light); }
+.id-link span { color: var(--qa-text-3); font-family: inherit; }
+
+/* Selected (expanded) queue row: accent tint plus an inset marker on the first cell, as in Chat Evaluation. */
+tr[style*="--accent-weak"] > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }

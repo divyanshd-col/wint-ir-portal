@@ -339,27 +339,10 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
               <React.Fragment key={item.message_id}>
                 <tr
                   onClick={() => setExpandedId(isOpen ? null : item.message_id)}
-                  style={{ background: isOpen ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
+                  style={{ background: isOpen ? 'var(--accent-weak)' : undefined, cursor: 'pointer' }}
                 >
                   <td style={tdMono}>
                     <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
-                    {item.customer_email && (
-                      <div
-                        title={`User Email: ${item.customer_email}`}
-                        style={{
-                          fontSize: 11,
-                          color: 'var(--qa-text-3)',
-                          fontFamily: SANS,
-                          marginTop: 3,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          maxWidth: 150,
-                        }}
-                      >
-                        {item.customer_email}
-                      </div>
-                    )}
                   </td>
                   <td style={{ ...td, fontWeight: 500 }}>{item.agent_name || 'Unassigned'}</td>
                   <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
@@ -827,7 +810,7 @@ export default function TLEmailQualityPage() {
                       <tr
                         onClick={() => setExpandedId(isExpanded ? null : reply.message_id)}
                         style={{
-                          background: isExpanded ? 'var(--qa-gray-50)' : undefined,
+                          background: isExpanded ? 'var(--accent-weak)' : undefined,
                           cursor: 'pointer',
                         }}
                         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
@@ -835,23 +818,6 @@ export default function TLEmailQualityPage() {
                       >
                         <td style={tdMono}>
                           <TicketLinkButton id={reply.chat_id ?? reply.ticket_id} label={reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`} />
-                          {reply.customer_email && (
-                            <div
-                              title={`User Email: ${reply.customer_email}`}
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--qa-text-3)',
-                                fontFamily: SANS,
-                                marginTop: 3,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                maxWidth: 150,
-                              }}
-                            >
-                              {reply.customer_email}
-                            </div>
-                          )}
                         </td>
                         <td style={{ ...td, fontWeight: 500 }}>
                           {reply.agent_name || 'Unassigned'}
