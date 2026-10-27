@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { maskText, renderMasked } from './mask';
+import { renderWithAttachments, attachmentsToHtml } from './attachments';
 import { trimEmailBody } from '@/lib/email/ui';
 
 /**
@@ -113,7 +114,7 @@ export default function EmailMessageView({
   }
 
   if (isHtml(text)) {
-    const sanitized = sanitizeEmailHtml(text);
+    const sanitized = sanitizeEmailHtml(attachmentsToHtml(text));
     return (
       <div
         className={`email-html-body ${className}`}
@@ -132,7 +133,7 @@ export default function EmailMessageView({
         ...style,
       }}
     >
-      {text}
+      {renderWithAttachments(text)}
     </div>
   );
 }

@@ -398,3 +398,9 @@ tr[data-row-click] { cursor: pointer; }
 
 /* Selected (expanded) queue row: accent tint plus an inset marker on the first cell, as in Chat Evaluation. */
 tr[style*="--accent-weak"] > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Attachments in chat transcripts and e-mail bodies: a clickable chip, readable on light and ink bubbles alike. */
+.attachment-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin: 2px 0; padding: 4px 10px; border: 1px solid var(--qa-border); border-radius: 8px; background: var(--qa-card); color: var(--qa-text) !important; font-size: 12.5px; font-weight: 500; line-height: 18px; text-decoration: none !important; vertical-align: middle; }
+.attachment-chip:hover { background: var(--qa-fill-light); }
+.attachment-chip .attachment-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip .attachment-arrow { color: var(--qa-text-3); flex-shrink: 0; }

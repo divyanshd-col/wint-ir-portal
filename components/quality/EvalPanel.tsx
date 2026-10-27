@@ -10,6 +10,7 @@ import { maskText, renderMasked } from './mask';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { renderWithAttachments } from './attachments';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -116,6 +117,11 @@ interface HistoryEntry {
 }
 
 function renderContentWithLinks(text: string, isOutgoing?: boolean) {
+  if (!text) return '';
+  return renderWithAttachments(text, part => linkifyText(part, isOutgoing));
+}
+
+function linkifyText(text: string, isOutgoing?: boolean) {
   if (!text) return '';
   const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
   const parts = text.split(urlRegex);

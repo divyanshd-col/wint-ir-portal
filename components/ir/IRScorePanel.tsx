@@ -10,6 +10,7 @@ import {
 } from '@/lib/quality';
 import { resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import { renderWithAttachments } from '@/components/quality/attachments';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -596,7 +597,7 @@ export default function IRScorePanel({
                           padding: '10px 14px', borderRadius: 8,
                           fontSize: 13, lineHeight: 1.5, maxWidth: '76%',
                         }}>
-                          {msg.content}
+                          {renderWithAttachments(msg.content)}
                         </div>
                       </div>
                     );

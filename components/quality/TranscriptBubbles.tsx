@@ -7,6 +7,11 @@ const CUSTOMER_LABELS = new Set(['user', 'customer', 'visitor']);
 
 export function renderContentWithLinks(text: string, isOutgoing?: boolean) {
   if (!text) return '';
+  return renderWithAttachments(text, part => linkifyText(part, isOutgoing));
+}
+
+function linkifyText(text: string, isOutgoing?: boolean) {
+  if (!text) return '';
   const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
   const parts = text.split(urlRegex);
   if (parts.length === 1) return text;
@@ -34,6 +39,7 @@ export function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 }
 
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
+import { renderWithAttachments } from './attachments';
 
 interface TranscriptMsg {
   sender: string;
