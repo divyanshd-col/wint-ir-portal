@@ -3,6 +3,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { normalizeScore } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
+import ScoreRing from './ScoreRing';
+import TicketLinkButton from './TicketLinkButton';
 
 // Parameter weights for call IQS (v3.1 Spec)
 const CALL_IQS_WEIGHTS: Record<string, number> = {
@@ -737,50 +739,132 @@ export default function CallEvalPanel({
 
   const effectiveMobile = mobileNumber || fetchedMobileNumber;
 
+  const panelWrap: React.CSSProperties = {
+    width: '100%', maxWidth: '100%',
+    border: '1px solid var(--qa-border)', borderRadius: 8,
+    background: 'var(--qa-card)',
+    margin: '16px auto', boxSizing: 'border-box',
+  };
+  const hasBanners = Boolean((dispute?.challengedParams && dispute.challengedParams.length > 0) || dispute?.flagId || raisingDispute);
+
   return (
-    <tr>
-      <td colSpan={colSpan} style={{ padding: '16px 20px', background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
-        {/* Header bar */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--qa-text)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span>Call Evaluation Panel — ID: {callId} ({agentName})</span>
-            {callDateStr && <span>· {callDateStr}</span>}
-            {effectiveMobile && (
-              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 500, color: 'var(--qa-text-2)', background: 'var(--qa-fill-light, var(--qa-fill-light))', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--qa-border, var(--qa-border))' }}>
-                {effectiveMobile}
+    <tr className="eval-panel-row">
+      <td colSpan={colSpan} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+        {hasBanners && (
+          <div style={{ padding: '16px 16px 0' }}>
+          {/* Disputed Params banner */}
+          {dispute?.challengedParams && dispute.challengedParams.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)' }}>
+                Disputed Params:
               </span>
-            )}
-          </h3>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {effectiveChatId && (
-              <a
-                href={`https://app.robylon.ai/unified-inbox/share/${effectiveChatId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  border: '1px solid var(--qa-border, var(--qa-border))',
-                  background: 'var(--qa-card)',
-                  color: 'var(--qa-text, #111111)',
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                }}
-                title={`Open chat ${effectiveChatId} in Robylon`}
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                </svg>
-                Show Chat
-                <span style={{ fontSize: 11, opacity: 0.6 }}>↗</span>
-              </a>
-            )}
+              {dispute.challengedParams.map((cp: any) => (
+                <span
+                  key={cp.param}
+                  title={cp.note}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    background: 'var(--qa-fill-light)',
+                    border: '1px solid var(--qa-border)',
+                    borderRadius: 4,
+                    padding: '2px 8px',
+                    color: 'var(--qa-text-2)',
+                    cursor: cp.note ? 'help' : 'default',
+                  }}
+                >
+                  {PARAM_NAMES[cp.param] ? `${cp.param}: ${PARAM_NAMES[cp.param]}` : cp.param}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Dispute Thread & Activity (When reviewing dispute or viewing existing dispute) */}
+          {dispute?.flagId && (
+            <div style={{ marginBottom: 16 }}>
+              <DisputeThread
+                flagId={dispute.flagId}
+                agentNote={dispute.agentNote}
+                reviewNote={dispute.reviewNote || note}
+                agentName={dispute.agentName || agentName}
+                raisedByRole={dispute.raisedByRole || (dispute.raisedBy === 'TL' ? 'tl' : 'agent')}
+                raisedByName={dispute.raisedByName}
+                reviewedBy={dispute.reviewedBy || dispute.resolvedBy || dispute.qaName}
+                reviewerRole="quality"
+                flaggedAt={dispute.flaggedAt || dispute.raisedAt}
+                reviewedAt={dispute.reviewedAt}
+              />
+            </div>
+          )}
+
+          {/* Inline Raise Dispute Form */}
+          {raisingDispute && (
+            <div style={{ padding: 16, background: 'var(--sunk)', border: '1px solid var(--line-strong)', borderRadius: 8, marginBottom: 16 }}>
+              <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
+                Raise Dispute on Call {callId}
+              </h4>
+              <p style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 12 }}>
+                Select parameters to challenge and add brief justification:
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8, marginBottom: 12 }}>
+                {Object.keys(PARAM_NAMES).map(pKey => {
+                  const isChecked = Boolean(disputeSelectedParams[pKey]);
+                  return (
+                    <div key={pKey} style={{ padding: 8, background: 'var(--qa-card)', border: `1px solid ${isChecked ? 'var(--marker)' : 'var(--qa-border)'}`, borderRadius: 6 }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => setDisputeSelectedParams(prev => ({ ...prev, [pKey]: e.target.checked }))}
+                        />
+                        {PARAM_NAMES[pKey]}
+                      </label>
+                      {isChecked && (
+                        <input
+                          type="text"
+                          placeholder="Reason for challenge…"
+                          value={disputeParamNotes[pKey] || ''}
+                          onChange={e => setDisputeParamNotes(prev => ({ ...prev, [pKey]: e.target.value }))}
+                          style={{ width: '100%', marginTop: 6, padding: '4px 6px', fontSize: 11, border: '1px solid var(--qa-border)', borderRadius: 4 }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <textarea
+                placeholder="Overall explanation note…"
+                value={agentDisputeNote}
+                onChange={e => setAgentDisputeNote(e.target.value)}
+                style={{ width: '100%', height: 48, padding: 8, fontSize: 12, border: '1px solid var(--qa-border)', borderRadius: 6, marginBottom: 10 }}
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  disabled={submittingDispute}
+                  onClick={handleRaiseDisputeSubmit}
+                  style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--qa-text)', color: 'var(--ink-fg)', border: 0, borderRadius: 6, cursor: 'pointer' }}
+                >
+                  {submittingDispute ? 'Submitting…' : 'Submit Dispute'}
+                </button>
+                <button
+                  onClick={() => setRaisingDispute(false)}
+                  style={{ padding: '6px 14px', fontSize: 12, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 6, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          </div>
+        )}
+
+        <div className="eval-wrap" style={panelWrap}>
+          <div className="eval-pane">
+            <div style={{ height: 52, padding: '0 12px', borderBottom: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, minWidth: 0 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', flexShrink: 0 }}>Transcript</span>
+              {effectiveChatId && <TicketLinkButton id={effectiveChatId} label={`Chat ${effectiveChatId}`} />}
+              <div style={{ flex: 1 }} />
             {allowRaiseDispute && mode === 'view' && !dispute && !raisingDispute && (
               <button
                 onClick={() => setRaisingDispute(true)}
@@ -798,167 +882,6 @@ export default function CallEvalPanel({
                 Raise Dispute
               </button>
             )}
-            {allowReevaluate && !hasReevaluated && isTranscriptModified && (
-              <button
-                onClick={handleSaveTranscriptAndReevaluate}
-                disabled={isSavingTranscript || isReevaluating || saving}
-                title="Save modified speaker diarization and re-evaluate this call"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '6px 12px',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  borderRadius: 6,
-                  border: '1px solid var(--ink)',
-                  background: 'var(--ink)',
-                  color: 'var(--ink-fg)',
-                  cursor: (isSavingTranscript || isReevaluating || saving) ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
-                  transition: 'all 0.15s ease'
-                }}
-              >
-                
-                {isSavingTranscript ? 'Saving transcript…' : isReevaluating ? 'Re-evaluating Call…' : 'Save & Re-evaluate Call'}
-              </button>
-            )}
-            <button onClick={onClose} style={{ background: 'none', border: 0, fontSize: 18, color: 'var(--qa-text-3)', cursor: 'pointer', padding: '2px 6px' }}>✕</button>
-          </div>
-        </div>
-
-        {/* Disputed Params banner */}
-        {dispute?.challengedParams && dispute.challengedParams.length > 0 && (
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)' }}>
-              Disputed Params:
-            </span>
-            {dispute.challengedParams.map((cp: any) => (
-              <span
-                key={cp.param}
-                title={cp.note}
-                style={{
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: '0.02em',
-                  background: 'var(--qa-fill-light)',
-                  border: '1px solid var(--qa-border)',
-                  borderRadius: 4,
-                  padding: '2px 8px',
-                  color: 'var(--qa-text-2)',
-                  cursor: cp.note ? 'help' : 'default',
-                }}
-              >
-                {PARAM_NAMES[cp.param] ? `${cp.param}: ${PARAM_NAMES[cp.param]}` : cp.param}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {/* Dispute Thread & Activity (When reviewing dispute or viewing existing dispute) */}
-        {dispute?.flagId && (
-          <div style={{ marginBottom: 16 }}>
-            <DisputeThread
-              flagId={dispute.flagId}
-              agentNote={dispute.agentNote}
-              reviewNote={dispute.reviewNote || note}
-              agentName={dispute.agentName || agentName}
-              raisedByRole={dispute.raisedByRole || (dispute.raisedBy === 'TL' ? 'tl' : 'agent')}
-              raisedByName={dispute.raisedByName}
-              reviewedBy={dispute.reviewedBy || dispute.resolvedBy || dispute.qaName}
-              reviewerRole="quality"
-              flaggedAt={dispute.flaggedAt || dispute.raisedAt}
-              reviewedAt={dispute.reviewedAt}
-            />
-          </div>
-        )}
-
-        {/* Inline Raise Dispute Form */}
-        {raisingDispute && (
-          <div style={{ padding: 16, background: 'var(--sunk)', border: '1px solid var(--line-strong)', borderRadius: 8, marginBottom: 16 }}>
-            <h4 style={{ margin: '0 0 8px 0', fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
-              Raise Dispute on Call {callId}
-            </h4>
-            <p style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 12 }}>
-              Select parameters to challenge and add brief justification:
-            </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 8, marginBottom: 12 }}>
-              {Object.keys(PARAM_NAMES).map(pKey => {
-                const isChecked = Boolean(disputeSelectedParams[pKey]);
-                return (
-                  <div key={pKey} style={{ padding: 8, background: 'var(--qa-card)', border: `1px solid ${isChecked ? 'var(--marker)' : 'var(--qa-border)'}`, borderRadius: 6 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={e => setDisputeSelectedParams(prev => ({ ...prev, [pKey]: e.target.checked }))}
-                      />
-                      {PARAM_NAMES[pKey]}
-                    </label>
-                    {isChecked && (
-                      <input
-                        type="text"
-                        placeholder="Reason for challenge…"
-                        value={disputeParamNotes[pKey] || ''}
-                        onChange={e => setDisputeParamNotes(prev => ({ ...prev, [pKey]: e.target.value }))}
-                        style={{ width: '100%', marginTop: 6, padding: '4px 6px', fontSize: 11, border: '1px solid var(--qa-border)', borderRadius: 4 }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-            <textarea
-              placeholder="Overall explanation note…"
-              value={agentDisputeNote}
-              onChange={e => setAgentDisputeNote(e.target.value)}
-              style={{ width: '100%', height: 48, padding: 8, fontSize: 12, border: '1px solid var(--qa-border)', borderRadius: 6, marginBottom: 10 }}
-            />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button
-                disabled={submittingDispute}
-                onClick={handleRaiseDisputeSubmit}
-                style={{ padding: '6px 14px', fontSize: 12, fontWeight: 600, background: 'var(--qa-text)', color: 'var(--ink-fg)', border: 0, borderRadius: 6, cursor: 'pointer' }}
-              >
-                {submittingDispute ? 'Submitting…' : 'Submit Dispute'}
-              </button>
-              <button
-                onClick={() => setRaisingDispute(false)}
-                style={{ padding: '6px 14px', fontSize: 12, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 6, cursor: 'pointer' }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-          {/* Left panel: Transcript bubbles and audio */}
-          <div style={{ flex: 1, minWidth: 320, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16, maxHeight: '600px', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Transcript</h4>
-                {effectiveChatId && (
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontFamily: 'ui-monospace, monospace',
-                      color: 'var(--qa-text-2)',
-                      background: 'var(--qa-fill-light)',
-                      padding: '2px 8px',
-                      borderRadius: 4,
-                      border: '1px solid var(--qa-border)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      fontWeight: 500,
-                    }}
-                  >
-                    Chat #{effectiveChatId}
-                  </span>
-                )}
-              </div>
-              
               {allowReevaluate && (
                 hasReevaluated ? (
                   <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--qa-text-2)', background: 'var(--qa-fill-light)', padding: '3px 8px', borderRadius: 4 }}>
@@ -990,6 +913,7 @@ export default function CallEvalPanel({
               )}
             </div>
 
+            <div className="eval-scroll-t" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
             {allowReevaluate && !hasReevaluated && isTranscriptModified && (
               <div style={{
                 padding: '10px 14px',
@@ -1114,39 +1038,38 @@ export default function CallEvalPanel({
                 })}
               </div>
             )}
+            </div>
           </div>
 
-          {/* Right panel: Parameters & Scoring */}
-          <div style={{
-            flex: '0 0 440px',
-            width: 440,
-            minWidth: 320,
-            background: 'var(--qa-card)',
-            border: '1px solid var(--qa-border)',
-            borderRadius: 10,
-            padding: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-            maxHeight: '600px',
-            overflowY: 'auto'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              position: 'sticky',
-              top: -16,
-              background: 'var(--qa-card)',
-              zIndex: 2,
-              paddingTop: 4,
-              paddingBottom: 8,
-              borderBottom: '1px solid var(--qa-border-sub, var(--qa-fill-light))',
-              marginBottom: -4
-            }}>
-              <h4 style={{ margin: 0, fontSize: 13, fontWeight: 600, textTransform: 'uppercase', color: 'var(--qa-text-2)' }}>Evaluation Parameters</h4>
+          <div className="eval-pane">
+            <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <ScoreRing score={displayedIqs != null && !isNaN(displayedIqs) ? displayedIqs : null} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>{agentName}</div>
+                  <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                    <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{callId}</span>
+                    {callDateStr && (<><span>·</span><span>{callDateStr}</span></>)}
+                    {disposition && (<><span>·</span><span>{disposition}</span></>)}
+                    {effectiveMobile && (<><span>·</span><span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{effectiveMobile}</span></>)}
+                  </div>
+                </div>
+                <button
+                  type="button" onClick={onClose} aria-label="Close evaluation" title="Close"
+                  style={{
+                    marginLeft: 'auto', alignSelf: 'flex-start', flexShrink: 0,
+                    width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
+                    background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </div>
             </div>
 
+            <div className="eval-scroll-r" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 12 }}>Evaluation Parameters</div>
             {/* Compliance Gates Card */}
             <div className={`eval-gates${gateFail ? ' failed' : ''}`} style={{ margin: '0 0 16px' }}>
               <div className="eval-ghead">
@@ -1287,9 +1210,10 @@ export default function CallEvalPanel({
                 );
               })}
             </div>
+            </div>
 
             {/* Sticky commit footer: score, gate status, review note, submit. Turns red on any gate breach. */}
-            <div className={`eval-foot${gateFail ? ' failed' : ''}`} style={{ margin: '0 -16px -16px', marginTop: 'auto', flexDirection: 'column', alignItems: 'stretch' }}>
+            <div className={`eval-foot${gateFail ? ' failed' : ''}`} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 12px' }}>
                 <div className="eval-status">
                   <div className="eval-big">
@@ -1328,3 +1252,4 @@ export default function CallEvalPanel({
     </tr>
   );
 }
+
