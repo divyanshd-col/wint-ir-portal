@@ -889,23 +889,6 @@ export default function EmailEvaluationPage() {
                     ticket: (
                       <td style={tdMono}>
                         <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
-                        {item.customer_email && (
-                          <div
-                            title={`User Email: ${item.customer_email}`}
-                            style={{
-                              fontSize: 11,
-                              color: 'var(--qa-text-3)',
-                              fontFamily: SANS,
-                              marginTop: 3,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                              maxWidth: 150,
-                            }}
-                          >
-                            {item.customer_email}
-                          </div>
-                        )}
                       </td>
                     ),
                     agent: (
@@ -949,7 +932,7 @@ export default function EmailEvaluationPage() {
                       <tr
                         onClick={() => setExpandedId(isExpanded ? null : item.message_id)}
                         style={{
-                          background: isExpanded ? 'var(--qa-gray-50)' : undefined,
+                          background: isExpanded ? 'var(--accent-weak)' : undefined,
                           cursor: 'pointer',
                           transition: 'background 0.1s',
                         }}
@@ -959,223 +942,44 @@ export default function EmailEvaluationPage() {
                         {cols.map(c => <React.Fragment key={c}>{cell[c]}</React.Fragment>)}
                       </tr>
 
-                      {/* ── Expanded Inline Review Drawer (Matching EvalPanel Structure) ── */}
+                      {/* ── Expanded inline review: conversation left, scoring right (same layout as chat and call evaluation) ── */}
                       {isExpanded && (
-                        <tr>
-                          <td colSpan={cols.length} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
-                            <div style={{
-                              background: 'var(--qa-gray-50)',
-                              borderTop: '1px solid var(--qa-border-sub)',
-                              padding: '24px 28px',
-                              display: 'grid',
-                              gridTemplateColumns: '1fr 1.2fr',
-                              gap: 28,
-                            }}>
-                              {/* Left Pane: AI Score Ring, Parameters, Compliance & QA Override Form (evaluation on the left, as in chats) */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-                                {/* Top Ring & Score Summary Card */}
-                                <div style={{
-                                  background: 'var(--qa-card)',
-                                  border: '1px solid var(--qa-border)',
-                                  borderRadius: 8,
-                                  padding: '16px 20px',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'space-between',
-                                  gap: 20,
-                                }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                                    <ScoreRing score={currentIQS} />
-                                    <div>
-                                      <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                        IQS
-                                      </div>
-                                      <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--qa-text)', marginTop: 2 }}>
-                                        {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : 'Pending'}
-                                      </div>
-                                      {isSessionOverridden && item.quality_score != null ? (
-                                        <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          Adjusted from {Math.round(Number(item.quality_score))}%
-                                        </div>
-                                      ) : tab !== 'disputes' && hasOverride && item.quality_score != null ? (
-                                        <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          QA Override from {Math.round(Number(item.quality_score))}%
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  </div>
-
-                                  <div style={{ textAlign: 'right' }}>
-                                    <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Compliance
-                                    </div>
-                                    <div style={{ marginTop: 4 }}>
-                                      {item.compliance_passed === false ? (
-                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                          Non-Compliant
-                                        </span>
-                                      ) : item.compliance_passed === true ? (
-                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                          Compliant
-                                        </span>
-                                      ) : (
-                                        <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>Pending Eval</span>
-                                      )}
-                                    </div>
-                                  </div>
+                        <tr className="eval-panel-row">
+                          <td colSpan={cols.length} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+                            <div className="eval-wrap" style={{ width: '100%', maxWidth: '100%', margin: '16px auto', boxSizing: 'border-box', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)' }}>
+                              {/* Conversation */}
+                              <div className="eval-pane">
+                                <div style={{ height: 52, padding: '0 12px', borderBottom: '1px solid var(--qa-border)', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, minWidth: 0 }}>
+                                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', flexShrink: 0 }}>Conversation</span>
+                                  <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
+                                  <div style={{ flex: 1 }} />
+                                  <button
+                                    type="button"
+                                    onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
+                                    style={{
+                                      height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
+                                      background: historyOpen[item.message_id] ? 'var(--ink)' : 'var(--qa-card)',
+                                      color: historyOpen[item.message_id] ? 'var(--ink-fg)' : 'var(--qa-text-2)',
+                                      cursor: 'pointer', fontSize: 12, fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 5,
+                                    }}
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h18v4H3z" /><path d="M3 9h18v4H3z" /><path d="M3 15h10v4H3z" /></svg>
+                                    {historyOpen[item.message_id] ? 'Hide History' : 'History'}
+                                  </button>
                                 </div>
+                                <div className="eval-scroll-t" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                  {/* History Panel */}
+                                {historyOpen[item.message_id] && (
+                                  <EmailHistoryPanel
+                                    customerEmail={item.customer_email}
+                                    chatId={item.chat_id}
+                                    ticketId={item.ticket_id}
+                                    currentMessageId={item.message_id}
+                                    onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
+                                  />
+                                )}
 
-                                {/* Compliance Issues Banner with editable reasons */}
-                                {(() => {
-                                  const issues = getComplianceIssuesForItem(item);
-                                  if (!issues || issues.length === 0) return null;
-                                  return (
-                                    <div style={{
-                                      background: '#fff1f2',
-                                      border: '1px solid #fecdd3',
-                                      borderRadius: 8,
-                                      padding: '10px 14px',
-                                      marginBottom: 12,
-                                    }}>
-                                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9f1239', textTransform: 'uppercase', marginBottom: 6 }}>
-                                        Compliance Breaches — Reason for Breach:
-                                      </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        {issues.map((iss, idx) => (
-                                          <textarea
-                                            key={idx}
-                                            value={iss}
-                                            onChange={e => handleComplianceIssueChange(item.message_id, idx, e.target.value)}
-                                            placeholder="Specify reason / citation for this compliance breach…"
-                                            rows={2}
-                                            style={{
-                                              width: '100%',
-                                              boxSizing: 'border-box',
-                                              resize: 'vertical',
-                                              border: '1px solid #fca5a5',
-                                              borderRadius: 6,
-                                              padding: '6px 8px',
-                                              fontSize: 12.5,
-                                              color: '#881337',
-                                              lineHeight: 1.45,
-                                              fontFamily: 'inherit',
-                                              background: '#fff',
-                                              outline: 'none',
-                                            }}
-                                          />
-                                        ))}
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
 
-                                {/* Parameter Scores (Matching EvalPanel in Chats) */}
-                                <div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})
-                                    </div>
-                                  </div>
-
-                                  <div style={{
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    background: 'var(--qa-card)',
-                                    overflow: 'hidden',
-                                  }}>
-                                    {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
-                                      const currentParams = getParamsForItem(item);
-                                      const currentReasoning = getReasoningForItem(item);
-                                      const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
-                                      return (
-                                        <ParamScoreRow
-                                          key={def.key}
-                                          name={def.name}
-                                          description={def.description}
-                                          value={currentParams[def.key] ?? 'yes'}
-                                          allowNA={def.allowNA}
-                                          weight={def.defaultWeight}
-                                          disputed={isDisputed}
-                                          reason={currentReasoning[def.key] ?? ''}
-                                          onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
-                                          onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
-                                          last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-
-                                {/* Action Bar: Submit Review / Update */}
-                                <div style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  paddingTop: 6,
-                                }}>
-                                  <div>
-                                    {item.review_status === 'reviewed' && item.reviewed_by && (
-                                      <div style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>
-                                        Reviewed by <strong>{formatReviewerName(item.reviewed_by)}</strong> {item.reviewed_at ? `on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
-                                    {item.review_status === 'reviewed' ? (
-                                      <button
-                                        onClick={() => handleSubmitReview(item)}
-                                        disabled={submittingAction}
-                                        style={{
-                                          height: 34,
-                                          padding: '0 18px',
-                                          border: 'none',
-                                          borderRadius: 6,
-                                          background: 'var(--qa-gray-700)',
-                                          color: '#fff',
-                                          fontSize: 12,
-                                          fontWeight: 600,
-                                          cursor: submittingAction ? 'not-allowed' : 'pointer',
-                                          opacity: submittingAction ? 0.7 : 1,
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 6,
-                                        }}
-                                      >
-                                        {submittingAction ? 'Updating…' : 'Update Review'}
-                                      </button>
-                                    ) : (
-                                      <button
-                                        onClick={() => handleSubmitReview(item)}
-                                        disabled={submittingAction}
-                                        style={{
-                                          height: 36,
-                                          padding: '0 20px',
-                                          border: 'none',
-                                          borderRadius: 8,
-                                          background: 'var(--accent, #16a34a)',
-                                          color: '#fff',
-                                          fontSize: 13,
-                                          fontWeight: 600,
-                                          cursor: submittingAction ? 'not-allowed' : 'pointer',
-                                          opacity: submittingAction ? 0.7 : 1,
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 6,
-                                          boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                                        }}
-                                      >
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                                          <polyline points="20 6 9 17 4 12" />
-                                        </svg>
-                                        {submittingAction ? 'Submitting…' : 'Submit Evaluation Score'}
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Right Pane: Customer Query Context & Agent Outbound Reply (conversation on the right, as in chats) */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                                 {/* 1. Customer Core Query (Separate, prominent, well-spaced) */}
                                 <CustomerCoreQueryCard
                                   threadSummary={item.thread_summary}
@@ -1185,80 +989,18 @@ export default function EmailEvaluationPage() {
                                   parameterScores={item.parameter_scores}
                                 />
 
-                                {/* 2. Customer Inbound Email Thread (Separated with clean controls & History) */}
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                     <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
                                       Customer Inbound Email Thread
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                      {item.customer_email && (
-                                        <span
-                                          style={{
-                                            fontSize: 11,
-                                            color: '#1d4ed8',
-                                            background: '#eff6ff',
-                                            border: '1px solid #bfdbfe',
-                                            padding: '1px 7px',
-                                            borderRadius: 4,
-                                            fontWeight: 500,
-                                            fontFamily: MONO,
-                                          }}
-                                          title={`User Email: ${item.customer_email}`}
-                                        >
-                                          {item.customer_email}
-                                        </span>
-                                      )}
-                                      {item.ticket_id && (
-                                        <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: 'var(--font-mono, monospace)' }}>
-                                          Ticket #{item.ticket_id}
-                                        </span>
-                                      )}
-                                      <button
-                                        type="button"
-                                        onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
-                                        style={{
-                                          height: 26,
-                                          padding: '0 10px',
-                                          borderRadius: 6,
-                                          fontSize: 11,
-                                          fontWeight: 600,
-                                          cursor: 'pointer',
-                                          border: '1px solid var(--qa-border)',
-                                          background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                          color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: 5,
-                                          transition: 'all 0.15s',
-                                        }}
-                                      >
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <circle cx="12" cy="12" r="10" />
-                                          <polyline points="12 6 12 12 16 14" />
-                                        </svg>
-                                        {historyOpen[item.message_id] ? 'Hide History' : 'History'}
-                                      </button>
-                                    </div>
-                                  </div>
-
-                                  {/* History Panel */}
-                                  {historyOpen[item.message_id] && (
-                                    <EmailHistoryPanel
-                                      customerEmail={item.customer_email}
-                                      chatId={item.chat_id}
-                                      ticketId={item.ticket_id}
-                                      currentMessageId={item.message_id}
-                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
-                                    />
-                                  )}
-
                                   <CustomerEmailThreadCard
                                     customerMessage={item.customer_message}
                                     subjectLine={item.subject_line}
                                     customerEmail={item.customer_email}
                                   />
-                                </div>
+
+                                  </div>
 
                                 {/* Internal Working Notes (highlighted amber, matching chat style) */}
                                 {item.internal_notes && item.internal_notes.length > 0 && (
@@ -1307,6 +1049,148 @@ export default function EmailEvaluationPage() {
                                     />
                                   </div>
                                 )}
+                                </div>
+                              </div>
+
+                              {/* Scoring */}
+                              <div className="eval-pane">
+                                <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                    <ScoreRing score={currentIQS != null ? Math.round(Number(currentIQS)) : null} />
+                                    <div style={{ minWidth: 0 }}>
+                                      <div style={{ fontSize: 14, fontWeight: 600 }}>{item.agent_name || 'Unassigned'}</div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                                        <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`}</span>
+                                        {item.sent_at && (<><span>·</span><span>{new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span></>)}
+                                        {intentLabel(item.intent_l1) !== '—' && (<><span>·</span><span>{intentLabel(item.intent_l1)}</span></>)}
+                                      </div>
+                                      {isSessionOverridden && item.quality_score != null ? (
+                                        <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 2 }}>Adjusted from {Math.round(Number(item.quality_score))}%</div>
+                                      ) : tab !== 'disputes' && hasOverride && item.quality_score != null ? (
+                                        <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 2 }}>QA override from {Math.round(Number(item.quality_score))}%</div>
+                                      ) : null}
+                                    </div>
+                                    <button
+                                      type="button" onClick={() => setExpandedId(null)} aria-label="Close evaluation" title="Close"
+                                      style={{
+                                        marginLeft: 'auto', alignSelf: 'flex-start', flexShrink: 0,
+                                        width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
+                                        background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                      }}
+                                    >
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div className="eval-scroll-r" style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                                {/* Compliance Issues Banner with editable reasons */}
+                                {(() => {
+                                  const issues = getComplianceIssuesForItem(item);
+                                  if (!issues || issues.length === 0) return null;
+                                  return (
+                                    <div style={{
+                                      background: 'var(--fail-soft)',
+                                      border: '1px solid var(--fail)',
+                                      borderRadius: 8,
+                                      padding: '10px 14px',
+                                      margin: '16px 16px 0',
+                                    }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fail)', textTransform: 'uppercase', marginBottom: 6 }}>
+                                        Compliance Breaches — Reason for Breach:
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        {issues.map((iss, idx) => (
+                                          <textarea
+                                            key={idx}
+                                            value={iss}
+                                            onChange={e => handleComplianceIssueChange(item.message_id, idx, e.target.value)}
+                                            placeholder="Specify reason / citation for this compliance breach…"
+                                            rows={2}
+                                            style={{
+                                              width: '100%',
+                                              boxSizing: 'border-box',
+                                              resize: 'vertical',
+                                              border: '1px solid var(--fail)',
+                                              borderRadius: 6,
+                                              padding: '6px 8px',
+                                              fontSize: 12.5,
+                                              color: 'var(--qa-text)',
+                                              lineHeight: 1.45,
+                                              fontFamily: 'inherit',
+                                              background: 'var(--qa-card)',
+                                              outline: 'none',
+                                            }}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+                                  <div style={{ padding: 16 }}>
+                                <div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                      Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})
+                                    </div>
+                                  </div>
+
+                                  <div style={{
+                                    border: '1px solid var(--qa-border)',
+                                    borderRadius: 8,
+                                    background: 'var(--qa-card)',
+                                    overflow: 'hidden',
+                                  }}>
+                                    {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                      const currentParams = getParamsForItem(item);
+                                      const currentReasoning = getReasoningForItem(item);
+                                      const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
+                                      return (
+                                        <ParamScoreRow
+                                          key={def.key}
+                                          name={def.name}
+                                          description={def.description}
+                                          value={currentParams[def.key] ?? 'yes'}
+                                          allowNA={def.allowNA}
+                                          weight={def.defaultWeight}
+                                          disputed={isDisputed}
+                                          reason={currentReasoning[def.key] ?? ''}
+                                          onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
+                                          onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
+                                          last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                        />
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                                  </div>
+                                </div>
+
+                                {/* Sticky commit footer: score, compliance, submit */}
+                                <div className={`eval-foot${item.compliance_passed === false ? ' failed' : ''}`}>
+                                  <div className="eval-status">
+                                    <div className="eval-big">
+                                      <span style={{ fontFamily: 'ui-monospace, monospace' }}>IQS {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : '—'}</span>
+                                      {item.compliance_passed !== null && item.compliance_passed !== undefined && (
+                                        <span className={`eval-chip ${item.compliance_passed === false ? 'fail' : 'pass'}`}>{item.compliance_passed === false ? 'NON-COMPLIANT' : 'COMPLIANT'}</span>
+                                      )}
+                                    </div>
+                                    <div className="eval-small">
+                                      {item.review_status === 'reviewed' && item.reviewed_by
+                                        ? <>Reviewed by {formatReviewerName(item.reviewed_by)}{item.reviewed_at ? ` on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}</>
+                                        : 'Check the score before you submit'}
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className={`eval-submit${item.compliance_passed === false ? ' danger' : ''}`}
+                                    onClick={() => handleSubmitReview(item)}
+                                    disabled={submittingAction}
+                                  >
+                                    {submittingAction ? (item.review_status === 'reviewed' ? 'Updating…' : 'Submitting…') : item.review_status === 'reviewed' ? 'Update Review' : 'Submit Evaluation Score'}
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </td>

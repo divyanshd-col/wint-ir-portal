@@ -6,8 +6,10 @@ import {
   V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification, formatParamLabel,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
+import { maskText, renderMasked } from './mask';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -143,14 +145,6 @@ function renderContentWithLinks(text: string, isOutgoing?: boolean) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-
-// Secrets that show up in Robylon internal notes (API keys, JWTs) are masked in the transcript.
-const SECRET_RE = /\b((?:[a-z]{2,4}_(?:live|test)_[A-Za-z0-9]{8,})|(?:eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+))\b/g;
-const maskLabel = (m: string) => (m.startsWith('eyJ') ? 'eyJ' : m.replace(/(_(?:live|test)_).*/, '$1')) + '••••••••';
-const maskText = (t: string) => t.replace(SECRET_RE, m => maskLabel(m));
-function renderMasked(t: string) {
-  return t.split(SECRET_RE).map((part, i) => (i % 2 ? <span key={i} className="eval-mask">{maskLabel(part)}</span> : part));
-}
 
 export default function EvalPanel({
   chatId, agentName, closedAt, disposition,
@@ -894,16 +888,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                           <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>{h.date}</td>
                           <td style={{ padding: '6px 12px', fontFamily: 'ui-monospace, monospace' }}>
                             {h.chatId && /^\d+$/.test(h.chatId.trim()) ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${h.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: 'var(--qa-text-2)', textDecoration: 'none' }}
-                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                              >
-                                {h.chatId}
-                              </a>
+                              <TicketLinkButton id={h.chatId} label={h.chatId} />
                             ) : (
                               h.chatId
                             )}
