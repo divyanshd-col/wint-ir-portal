@@ -364,7 +364,7 @@ export default function TokensClient() {
                   transition: 'all 0.15s ease',
                 }}
               >
-                {p === '24h' ? '24 Hours' : p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '📅 Custom Range'}
+                {p === '24h' ? '24 Hours' : p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : 'Custom Range'}
               </button>
             ))}
           </div>
@@ -407,7 +407,7 @@ export default function TokensClient() {
             }}
           >
             <span style={{ display: 'inline-block', transform: loading ? 'rotate(360deg)' : 'none', transition: 'transform 0.6s linear' }}>
-              🔄
+              Refresh
             </span>
           </button>
         </div>

@@ -358,7 +358,7 @@ export default function TLTeamAnalyticsDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>IQS by Parameter — Your Team</h2>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-            {periodLabel} · avg across all evaluated {CHANNEL_LABELS[channel].toLowerCase()}
+            {periodLabel}
           </span>
         </div>
 
@@ -413,7 +413,7 @@ export default function TLTeamAnalyticsDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0 }}>Team Member Performance</h2>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-            {loading ? '…' : `${data?.agentCount ?? 0} active members`} · click a tab to switch view
+            {loading ? '…' : `${data?.agentCount ?? 0} active members`}
           </span>
         </div>
 

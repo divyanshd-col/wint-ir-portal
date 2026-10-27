@@ -196,7 +196,7 @@ export default function SetupPage() {
               <h2 className="text-lg font-semibold text-[#1a1a1a] mb-1">Knowledge Base Documents</h2>
               <p className="text-gray-500 text-sm mb-2">Paste links to your Google Docs. Make sure each is set to <strong>"Anyone with the link can view"</strong>.</p>
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 mb-5 text-xs text-amber-700">
-                💡 In Google Drive: Right-click doc → Share → "Anyone with the link" → Viewer → Copy link
+                In Google Drive: Right-click doc → Share → "Anyone with the link" → Viewer → Copy link
               </div>
               <div className="space-y-2">
                 {urls.map((url, i) => (

@@ -794,7 +794,7 @@ function AgentCard({
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-bold text-gray-900 text-sm truncate">{stat.agent}</p>
               {isAtRisk && (
-                <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full shrink-0">⚠ At Risk</span>
+                <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full shrink-0">At Risk</span>
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">{stat.chats} chats · range {stat.minIqs}–{stat.maxIqs}%</p>
@@ -1490,7 +1490,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-[160px]">
           <h2 className="text-sm font-bold text-gray-900">Chats Pending Review</h2>
-          <p className="text-xs text-gray-400 mt-0.5">IQS &lt; 80% or needs bot review — scoped to your agents</p>
+          <p className="text-xs text-gray-400 mt-0.5">IQS &lt; 80% or needs bot review</p>
         </div>
         {/* All / Needs Review / Challenged filter */}
         <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
@@ -1654,7 +1654,6 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
       {/* Items */}
       {displayItems.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-14 text-center">
-          <p className="text-2xl mb-2">{section === 'pending' ? '✓' : '📋'}</p>
           <p className="text-sm font-semibold text-gray-700">{section === 'pending' ? 'All caught up' : 'No reviewed chats yet'}</p>
           <p className="text-xs text-gray-400 mt-1">{section === 'pending' ? 'No chats pending review for your agents.' : 'Mark some chats as reviewed to see them here.'}</p>
         </div>
@@ -1917,9 +1916,9 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
             <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
               <span>{item.date}</span>
               {item.calledAt && <span>{new Date(item.calledAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>}
-              <span>⏱ {fmtDurQ(item.durationSeconds)}</span>
-              {item.interruptionCount > 0 && <span className="text-orange-500">⚡ {item.interruptionCount} interruptions</span>}
-              {item.deadAirCount > 0 && <span className="text-slate-400">🔇 {item.deadAirCount} dead air</span>}
+              <span>{fmtDurQ(item.durationSeconds)}</span>
+              {item.interruptionCount > 0 && <span className="text-orange-500">{item.interruptionCount} interruptions</span>}
+              {item.deadAirCount > 0 && <span className="text-slate-400">{item.deadAirCount} dead air</span>}
             </div>
             {item.failedParams.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
@@ -1980,7 +1979,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
                       onClick={() => openCallOverride(item, activeScores, activeReasoning)}
                       className="text-xs px-3 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold transition-colors"
                     >
-                      ✏️ Override
+                      Override
                     </button>
                   )}
                   <button
@@ -1988,7 +1987,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
                     disabled={callScoreLoading[item.callId]}
                     className="text-xs px-3 py-1 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50 font-semibold transition-colors"
                   >
-                    {callScoreLoading[item.callId] ? '⏳ Scoring…' : '⚡ Score This Call'}
+                    {callScoreLoading[item.callId] ? 'Scoring…' : 'Score This Call'}
                   </button>
                 </div>
               </div>
@@ -2109,7 +2108,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
               </div>
               {!callOverrideItem.chatId && (
                 <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
-                  ⚠️ This call has no linked chat — override cannot be saved until the call is linked to a chat.
+                  This call has no linked chat — override cannot be saved until the call is linked to a chat.
                 </p>
               )}
               <div className="flex gap-3 pt-1">
@@ -2232,7 +2231,6 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
       <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-3">
         {displayItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-2xl mb-2">{section === 'pending' ? '✓' : '📋'}</p>
             <p className="text-sm font-semibold text-gray-700">
               {section === 'pending' ? 'All caught up' : 'No reviewed calls yet'}
             </p>
@@ -3139,7 +3137,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {tab === 'reports' && 'Download filtered data as CSV'}
               {tab === 'pending' && `${challengeCount} pending review`}
               {tab === 'calls' && 'Scored IR call recordings'}
-              {tab === 'call-queue' && 'Calls pending QA review — scoped to your agents'}
+              {tab === 'call-queue' && 'Calls pending QA review'}
               {tab === 'call-test' && 'Link a call to a chat and run the full scoring pipeline'}
               {tab === 'unified' && 'Score chat + call together — transcribe, retrieve KB, and evaluate both in one run'}
             </p>
@@ -3518,7 +3516,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                     <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                       <div>
                         <p className="text-sm font-bold text-gray-900">Parameter Pass Rate by Week</p>
-                        <p className="text-xs text-gray-500 mt-0.5">% of chats passing each parameter per week · click a row to filter Score Log</p>
+                        <p className="text-xs text-gray-500 mt-0.5">% of chats passing each parameter per week</p>
                       </div>
                       {weeklyParamData.length > 5 && (
                         <button onClick={() => setShowAllWeeks(v => !v)} className="text-xs text-emerald-600 font-semibold hover:underline shrink-0">
@@ -3719,7 +3717,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         onClick={() => setShowColPicker(v => !v)}
                         className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 transition font-medium"
                       >
-                        Columns ⚙
+                        Columns 
                       </button>
                       {showColPicker && (
                         <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-lg rounded-xl z-10 p-3 min-w-[160px]">
@@ -4137,7 +4135,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               <td className="py-2.5 px-2"><ChatLink chatId={e.chatId} className="text-xs" /></td>
                               <td className="py-2.5 px-2"><IQSPill iqs={e.iqs} /></td>
                               <td className="py-2.5 px-2 text-gray-500">
-                                {e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : '—'}
+                                {e.csat === '5' ? 'Good' : e.csat === '3' ? 'Neutral' : e.csat === '1' ? 'Bad' : '—'}
                               </td>
                               <td className="py-2.5 px-2">
                                 {fails.length > 0 ? <span className="text-red-500 font-semibold">{fails.length} ✗</span> : <span className="text-emerald-600">✓ Clean</span>}

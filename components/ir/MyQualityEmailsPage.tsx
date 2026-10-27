@@ -341,9 +341,6 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
           My Quality Emails
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, var(--qa-text-2))', margin: '4px 0 0' }}>
-          View evaluated email replies, track parameter grading, and raise or monitor disputes for {agentName}.
-        </p>
       </div>
 
       {/* ── Tabs & Interaction Bar (Exact match with MyQualityChatsPage) ── */}

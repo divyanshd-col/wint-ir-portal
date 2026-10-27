@@ -146,10 +146,6 @@ export default function ChatEvaluationPage({ role }: Props) {
           />
         </div>
       )}
-
-      <p style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic', marginTop: 16 }}>
-        Data from live DB · scoped to your assigned dispositions
-      </p>
     </div>
   );
 }

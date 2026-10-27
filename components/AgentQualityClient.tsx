@@ -1099,7 +1099,6 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
                   <p className="text-sm font-bold text-gray-900">{displayedEntries.length} chats</p>
-                  <p className="text-xs text-gray-400">click any row to view scores + transcript</p>
                 </div>
 
                 <div className="overflow-x-auto">

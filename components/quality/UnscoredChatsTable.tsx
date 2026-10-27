@@ -209,7 +209,7 @@ export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all',
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}
           >
-            {scoringBatch ? 'Running Batch...' : '⚡ Score Pending Batch'}
+            {scoringBatch ? 'Running Batch...' : 'Score Pending Batch'}
           </button>
 
           {/* Rows per page selector */}
@@ -282,7 +282,7 @@ export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all',
             ) : chats.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
-                  🎉 No unscored conversations found matching filters.
+                  No unscored conversations found matching filters.
                 </td>
               </tr>
             ) : (

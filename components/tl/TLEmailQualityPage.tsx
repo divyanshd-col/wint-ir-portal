@@ -563,9 +563,6 @@ export default function TLEmailQualityPage() {
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
           Quality Emails
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0' }}>
-          Team-level email performance and individual member results
-        </p>
       </div>
 
       {/* ── Tabs (left) + period filter (right), same slot as the chat/call pages ── */}

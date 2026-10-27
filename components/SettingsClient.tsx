@@ -780,7 +780,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                               className="text-[10px] text-gray-400 hover:text-[#1f7a4d] opacity-0 group-hover:opacity-100 transition shrink-0"
                               title="Rename"
                             >
-                              ✏️
+                              Rename
                             </button>
                           </div>
                         )}

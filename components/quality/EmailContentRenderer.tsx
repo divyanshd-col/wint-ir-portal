@@ -214,7 +214,7 @@ export function CustomerCoreQueryCard({
               alignItems: 'center',
               gap: 3,
             }}>
-              {isAiSynthesized ? '🎯 AI Synthesized' : 'Customer Intent'}
+              {isAiSynthesized ? 'AI Synthesized' : 'Customer Intent'}
             </span>
             {customerEmail && (
               <span

@@ -747,7 +747,7 @@ export default function CallEvalPanel({
             {callDateStr && <span>· {callDateStr}</span>}
             {effectiveMobile && (
               <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 500, color: 'var(--qa-text-2)', background: 'var(--qa-fill-light, var(--qa-fill-light))', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--qa-border, var(--qa-border))' }}>
-                📱 {effectiveMobile}
+                {effectiveMobile}
               </span>
             )}
           </h3>
@@ -819,13 +819,7 @@ export default function CallEvalPanel({
                   transition: 'all 0.15s ease'
                 }}
               >
-                <span style={{
-                  display: 'inline-block',
-                  transform: (isSavingTranscript || isReevaluating) ? 'rotate(180deg)' : 'none',
-                  transition: 'transform 0.5s ease-in-out'
-                }}>
-                  🔄
-                </span>
+                
                 {isSavingTranscript ? 'Saving transcript…' : isReevaluating ? 'Re-evaluating Call…' : 'Save & Re-evaluate Call'}
               </button>
             )}
@@ -960,7 +954,7 @@ export default function CallEvalPanel({
                       fontWeight: 500,
                     }}
                   >
-                    <span>💬</span> Chat #{effectiveChatId}
+                    Chat #{effectiveChatId}
                   </span>
                 )}
               </div>
@@ -1010,7 +1004,7 @@ export default function CallEvalPanel({
                 flexWrap: 'wrap'
               }}>
                 <span style={{ fontSize: 12, color: 'var(--qa-text)', fontWeight: 500 }}>
-                  ⚠️ Diarization / speakers modified. Click below to save and re-run quality scoring.
+                  Diarization / speakers modified. Click below to save and re-run quality scoring.
                 </span>
                 <button
                   onClick={handleSaveTranscriptAndReevaluate}
@@ -1064,14 +1058,14 @@ export default function CallEvalPanel({
                   if (seg.type === 'interruption') {
                     return (
                       <div key={idx} style={{ padding: '6px 12px', background: 'var(--fail-soft)', color: 'var(--fail)', borderRadius: 8, fontSize: 12, border: '1px solid var(--fail-soft)' }}>
-                        ⚡ <b>{seg.interrupted_speaker || 'IR EXECUTIVE'}</b> interrupted by <b>{seg.interrupted_by || 'INVESTOR'}</b>
+                        <b>{seg.interrupted_speaker || 'IR EXECUTIVE'}</b> interrupted by <b>{seg.interrupted_by || 'INVESTOR'}</b>
                       </div>
                     );
                   }
                   if (seg.type === 'dead_air') {
                     return (
                       <div key={idx} style={{ padding: '6px 12px', background: 'var(--qa-gray-50)', color: 'var(--qa-text-2)', borderRadius: 8, fontSize: 12, border: '1px solid var(--qa-fill-light)' }}>
-                        ⏸ Dead air: {seg.duration || '2+ seconds'}
+                        Dead air: {seg.duration || '2+ seconds'}
                       </div>
                     );
                   }
@@ -1084,7 +1078,7 @@ export default function CallEvalPanel({
                     <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignSelf: isIR ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2, alignSelf: isIR ? 'flex-end' : 'flex-start' }}>
                         <span style={{ fontSize: 10, color: 'var(--qa-text-3)' }}>
-                          {isIR ? '🟡 IR EXECUTIVE' : '🟢 INVESTOR'} · {seg.ts || seg.timestamp || ''}
+                          {isIR ? 'IR EXECUTIVE' : 'INVESTOR'} · {seg.ts || seg.timestamp || ''}
                         </span>
                         {allowReevaluate && !hasReevaluated && (
                           <button

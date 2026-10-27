@@ -392,7 +392,7 @@ export default function MemberAnalyticsDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <SectionTitle>Performance by Category</SectionTitle>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-            {periodLabel} · click a row to expand subcategories
+            {periodLabel}
           </span>
         </div>
         <Panel>
@@ -502,7 +502,6 @@ export default function MemberAnalyticsDashboard() {
       <section style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <SectionTitle>Week-on-Week Performance</SectionTitle>
-          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>Trailing 5 weeks · week beginning – ending</span>
         </div>
         <Panel>
           <div style={{ padding: '0 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--qa-border)' }}>
@@ -724,9 +723,6 @@ export default function MemberAnalyticsDashboard() {
                   </div>
                 ))}
               </div>
-              <p style={{ marginTop: 14, fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-                Generated from {agentInitials(selectedAgent)} {selectedAgent}'s evaluated {aiChannel} · {periodLabel}
-              </p>
             </div>
           )}
         </div>

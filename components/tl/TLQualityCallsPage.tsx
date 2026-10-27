@@ -342,9 +342,6 @@ export default function TLQualityCallsPage() {
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>
           Team Lead — Quality Calls
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, var(--qa-text-2))', margin: 0 }}>
-          View team members' call evaluations, manage raised call disputes, post thread comments, resolve disputes, or forward to QA.
-        </p>
       </div>
 
       {actionError && (

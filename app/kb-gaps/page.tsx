@@ -48,7 +48,7 @@ export default function KBGapsPage() {
 
   const handleRunAnalysis = async () => {
     setRunningAnalysis(true);
-    setToastMessage('🤖 Running Gemini 3.5 end-to-end transcript analysis over past 14 days...');
+    setToastMessage('Running Gemini 3.5 end-to-end transcript analysis over past 14 days...');
     try {
       const res = await fetch('/api/admin/run-kb-analysis', {
         method: 'POST',
@@ -57,13 +57,13 @@ export default function KBGapsPage() {
       });
       const json = await res.json();
       if (json.success) {
-        setToastMessage(`✅ Analysis started! Rows will populate in real-time.`);
+        setToastMessage(`Analysis started! Rows will populate in real-time.`);
         fetchRows();
       } else {
-        setToastMessage(`❌ Analysis error: ${json.error || 'Failed to process'}`);
+        setToastMessage(`Analysis error: ${json.error || 'Failed to process'}`);
       }
     } catch (err: any) {
-      setToastMessage(`❌ Error triggering analysis: ${err.message}`);
+      setToastMessage(`Error triggering analysis: ${err.message}`);
     } finally {
       setRunningAnalysis(false);
       setTimeout(() => setToastMessage(null), 5000);
@@ -118,8 +118,8 @@ export default function KBGapsPage() {
             }}
           >
             <option value="all">All Chat Types</option>
-            <option value="Bot Handled">🤖 Bot Handled</option>
-            <option value="Transferred to Agent">👨‍💼 Transferred to Agent</option>
+            <option value="Bot Handled">Bot Handled</option>
+            <option value="Transferred to Agent">Transferred to Agent</option>
           </select>
 
           {/* Category Filter */}
@@ -167,9 +167,9 @@ export default function KBGapsPage() {
             }}
           >
             {runningAnalysis ? (
-              <>⏳ Processing Transcripts...</>
+              <>Processing Transcripts...</>
             ) : (
-              <>⚡ Run Instant Test Analysis</>
+              <>Run Instant Test Analysis</>
             )}
           </button>
         </div>
@@ -191,13 +191,13 @@ export default function KBGapsPage() {
         </div>
 
         <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>🤖 BOT HANDLED CHATS</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>BOT HANDLED CHATS</div>
           <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--qa-text)', marginTop: 4 }}>{botHandledCount}</div>
           <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>Answered by Bot without agent transfer</div>
         </div>
 
         <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>👨‍💼 TRANSFERRED TO AGENTS</div>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>TRANSFERRED TO AGENTS</div>
           <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--qa-text-2)', marginTop: 4 }}>{transferredCount}</div>
           <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>Escalated to human IR support agents</div>
         </div>
@@ -218,7 +218,7 @@ export default function KBGapsPage() {
             color: activeTab === 'Educational' ? 'var(--pass)' : 'var(--qa-text-2)',
           }}
         >
-          🟢 Educational Drafts ({educationalCount})
+          Educational Drafts ({educationalCount})
         </button>
 
         <button
@@ -234,7 +234,7 @@ export default function KBGapsPage() {
             color: activeTab === 'Non-Educational' ? '#D97706' : 'var(--qa-text-2)',
           }}
         >
-          🟠 Non-Educational ({rows.length - educationalCount})
+          Non-Educational ({rows.length - educationalCount})
         </button>
       </div>
 
@@ -244,7 +244,7 @@ export default function KBGapsPage() {
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--qa-text-2)', fontSize: 14 }}>Loading database entries...</div>
         ) : rows.length === 0 ? (
           <div style={{ padding: 40, textAlign: 'center', color: 'var(--qa-text-2)', fontSize: 14 }}>
-            No draft suggestions found. Click <strong>⚡ Run Instant Test Analysis</strong> above to generate test entries!
+            No draft suggestions found. Click <strong>Run Instant Test Analysis</strong> above to generate test entries!
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -287,7 +287,7 @@ export default function KBGapsPage() {
                             border: `1px solid ${isBot ? 'var(--line-strong)' : 'var(--line-strong)'}`,
                           }}
                         >
-                          {isBot ? '🤖 Bot Handled' : '👨‍💼 Transferred'}
+                          {isBot ? 'Bot Handled' : 'Transferred'}
                         </span>
                       </td>
 
@@ -334,7 +334,7 @@ export default function KBGapsPage() {
                             transition: 'all 0.15s ease',
                           }}
                         >
-                          {copiedKey === itemKey ? 'Copied! ✅' : '📋 Copy'}
+                          {copiedKey === itemKey ? 'Copied!' : 'Copy'}
                         </button>
                       </td>
                     </tr>

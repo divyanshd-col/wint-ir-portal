@@ -427,9 +427,6 @@ export default function MyQualityChatsPage({ agentName }: Props) {
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
           My Quality Chats
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, var(--qa-text-2))', margin: '4px 0 0' }}>
-          View evaluated chats, raise disputes to your Team Lead, and track raised and reviewed disputes.
-        </p>
       </div>
 
       {/* Tabs & Interaction Filter Row */}

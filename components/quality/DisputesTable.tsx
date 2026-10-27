@@ -386,7 +386,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                         display: 'inline-flex', alignItems: 'center', gap: 4,
                       }}
                     >
-                      💬 Comment
+                      Comment
                     </button>
                     <button
                       onClick={() => toggleExpand(rowKey)}

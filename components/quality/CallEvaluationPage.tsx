@@ -123,10 +123,6 @@ function CallEvaluationContent() {
           initialMobile={targetMobile}
         />
       </div>
-
-      <p style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic', marginTop: 16 }}>
-        Data from live DB · scoped to your assigned dispositions
-      </p>
     </div>
   );
 }

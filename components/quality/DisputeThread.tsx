@@ -200,7 +200,7 @@ export function DisputeThread({
           alignItems: 'center',
           gap: 6,
         }}>
-          <span>💬</span> Dispute Activity & Comments
+          Dispute Activity & Comments
         </div>
         <span style={{ fontSize: 11, color: 'var(--qa-text-3, var(--qa-text-2))' }}>
           {comments.length + (agentNote ? 1 : 0)} messages

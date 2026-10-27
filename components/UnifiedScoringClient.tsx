@@ -94,7 +94,7 @@ function ParamPanel({
                       <p className="text-[11px] text-slate-500 leading-relaxed">{reason}</p>
                       {isTechParam && kbCitation && (
                         <p className="text-[10px] text-indigo-600 bg-indigo-50 rounded px-2 py-1 font-medium">
-                          📖 Source: {kbCitation}
+                          Source: {kbCitation}
                         </p>
                       )}
                     </div>
@@ -140,7 +140,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
             <span className="text-[9px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">CALL</span>
           </div>
           <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded bg-red-50 border border-red-100">
-            <span className="text-red-500">⚡</span>
+            
             <span className="text-xs text-red-700">
               <strong>{data.interrupted_speaker}</strong> interrupted by <strong>{data.interrupted_by}</strong>
               {data.words_spoken != null ? ` — ${data.words_spoken} words` : ''}
@@ -156,7 +156,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
             <span className="text-[9px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">CALL</span>
           </div>
           <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded bg-slate-50 border border-slate-200">
-            <span className="text-slate-400">⏸</span>
+            
             <span className="text-xs text-slate-500">
               Dead air{data.duration ? ` — ${data.duration}` : ''}{data.resumed_by ? ` — resumed by ${data.resumed_by}` : ''}
             </span>
@@ -171,7 +171,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
             <span className="text-[9px] font-bold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded">CALL</span>
           </div>
           <div className="flex-1 flex items-center gap-2 px-3 py-1.5 rounded bg-orange-50 border border-orange-200">
-            <span>🔁</span>
+            
             <span className="text-xs text-orange-700 font-medium">Active Listening flag{data.phrase ? ` — "${data.phrase}"` : ''}</span>
           </div>
         </div>
@@ -187,12 +187,12 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold mb-1 ${
             isIR ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
           }`}>
-            {isIR ? '🟡' : '🟢'} {data.speaker}
+            {data.speaker}
           </span>
           <p className="text-sm text-slate-700 leading-relaxed">
             {data.text}
             {data.translated && (
-              <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-500">🌐</span>
+              <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-500">translated</span>
             )}
           </p>
         </div>
@@ -218,7 +218,7 @@ function TimelineItem({ item }: { item: { source: 'call' | 'chat' | 'call-bounda
           : role === 'bot'   ? 'bg-purple-50 text-purple-600'
           :                    'bg-slate-100 text-slate-600'
         }`}>
-          {role === 'customer' ? '🟢 Customer' : role === 'bot' ? '🤖 Bot' : '🔵 Agent'}
+          {role === 'customer' ? 'Customer' : role === 'bot' ? 'Bot' : 'Agent'}
         </span>
         <p className="text-sm text-slate-700 leading-relaxed">{content}</p>
       </div>
@@ -364,13 +364,13 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
               {result.callSummary && <p className="text-xs text-slate-500"><span className="font-medium text-slate-600">Call:</span> {result.callSummary}</p>}
             </div>
             <div className="flex flex-wrap gap-3 text-xs text-slate-500 shrink-0">
-              {result.language && <span>🌐 {result.language}</span>}
-              {result.hasCallRecording && <span>⚡ {result.interruptionCount}</span>}
-              {result.hasCallRecording && <span>⏸ {result.deadAirCount}</span>}
+              {result.language && <span>{result.language}</span>}
+              {result.hasCallRecording && <span>Interruptions {result.interruptionCount}</span>}
+              {result.hasCallRecording && <span>Dead air {result.deadAirCount}</span>}
               {result.callRecordingCount > 1 && (
-                <span className="text-blue-500 font-medium">📞 {result.callRecordingCount} calls merged</span>
+                <span className="text-blue-500 font-medium">{result.callRecordingCount} calls merged</span>
               )}
-              {result.callDisposition && <span className="text-slate-400">📞 {result.callDisposition}</span>}
+              {result.callDisposition && <span className="text-slate-400">{result.callDisposition}</span>}
             </div>
           </div>
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap gap-4 text-xs text-slate-400">
@@ -453,7 +453,7 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
             onClick={reset}
             className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition-colors"
           >
-            🔄 Score another
+            Score another
           </button>
         </div>
       </div>
@@ -465,7 +465,7 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
   return (
     <div className="max-w-xl mx-auto px-4 py-8">
       <div className="text-center mb-8">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-violet-100 text-3xl mb-4">⚡</div>
+        
         <h1 className="text-2xl font-bold text-slate-800">Unified Quality Score</h1>
         <p className="text-slate-500 mt-1.5 text-sm">
           Enter a Chat ID to score both the WhatsApp chat and any linked call recording.<br />
@@ -491,7 +491,7 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
 
           {stage === 'error' && (
             <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700">
-              ❌ {error}
+              {error}
             </div>
           )}
 
@@ -500,7 +500,7 @@ export default function UnifiedScoringClient({ initialChatId }: { initialChatId?
             disabled={!chatId.trim()}
             className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-sm transition-colors"
           >
-            ⚡ Run Unified Scoring
+            Run Unified Scoring
           </button>
 
           <p className="text-xs text-slate-400 text-center">

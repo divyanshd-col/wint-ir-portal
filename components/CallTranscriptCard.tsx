@@ -46,7 +46,7 @@ export function CallTranscriptCard({
         className="w-full px-5 py-3 flex items-center gap-3 bg-amber-50/60 hover:bg-amber-50 transition text-left"
         onClick={() => setOpen(o => !o)}
       >
-        <span className="text-amber-600 font-bold text-sm">📞 {rec.label}</span>
+        <span className="text-amber-600 font-bold text-sm">{rec.label}</span>
         {callDate && <span className="text-xs text-slate-500">{callDate}</span>}
         {Boolean(rec.durationSeconds) && (
           <span className="text-xs text-slate-400">{Math.round(rec.durationSeconds! / 60)}m {rec.durationSeconds! % 60}s</span>
@@ -89,7 +89,7 @@ export function CallTranscriptCard({
           <div className="flex items-center gap-3 px-4 py-2">
             <div className="flex-1 h-px bg-amber-200" />
             <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-0.5 rounded-full whitespace-nowrap">
-              📞 {rec.label} started{callDate ? ` · ${callDate}` : ''}
+              {rec.label} started{callDate ? ` · ${callDate}` : ''}
             </span>
             <div className="flex-1 h-px bg-amber-200" />
           </div>
@@ -101,7 +101,7 @@ export function CallTranscriptCard({
                 return (
                   <div key={i} className="flex justify-center my-2">
                     <span className="text-[11px] text-red-500 bg-red-50 border border-red-100 rounded-full px-3 py-1 font-sans italic text-center">
-                      ⚡ <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` — ${seg.words_spoken} words` : ''}
+                      <strong>{seg.interrupted_speaker}</strong> interrupted by <strong>{seg.interrupted_by}</strong>{seg.words_spoken != null ? ` — ${seg.words_spoken} words` : ''}
                     </span>
                   </div>
                 );
@@ -111,7 +111,7 @@ export function CallTranscriptCard({
                 return (
                   <div key={i} className="flex justify-center my-2">
                     <span className="text-[11px] text-slate-400 bg-slate-100 border border-slate-200 rounded-full px-3 py-1 font-sans italic text-center">
-                      ⏸ Dead air — {seg.duration || ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}
+                      Dead air — {seg.duration || ''}{seg.resumed_by ? ` — resumed by ${seg.resumed_by}` : ''}
                     </span>
                   </div>
                 );
@@ -121,7 +121,7 @@ export function CallTranscriptCard({
                 return (
                   <div key={i} className="flex justify-center my-2">
                     <span className="text-[11px] text-orange-600 bg-orange-50 border border-orange-100 rounded-full px-3 py-1 font-sans italic text-center">
-                      👂 Poor listening{seg.phrase ? `: "${seg.phrase}"` : ''}
+                      Poor listening{seg.phrase ? `: "${seg.phrase}"` : ''}
                     </span>
                   </div>
                 );
@@ -148,7 +148,7 @@ export function CallTranscriptCard({
                         {textContent}
                         {seg.translated && (
                           <span className="ml-2 inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-blue-50 text-blue-500 border border-blue-100">
-                            🌐 translated
+                            translated
                           </span>
                         )}
                       </div>
@@ -168,7 +168,7 @@ export function CallTranscriptCard({
                       {textContent}
                       {seg.translated && (
                         <span className="ml-2 inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-semibold bg-white/10 text-white/90 border border-white/10">
-                          🌐 translated
+                          translated
                         </span>
                       )}
                     </div>
@@ -182,7 +182,7 @@ export function CallTranscriptCard({
           <div className="flex items-center gap-3 px-4 py-2 border-t border-slate-100 bg-slate-50/50">
             <div className="flex-1 h-px bg-slate-200" />
             <span className="text-[10px] font-bold text-slate-500 bg-slate-50 border border-slate-200 px-3 py-0.5 rounded-full whitespace-nowrap">
-              📞 {rec.label} ended
+              {rec.label} ended
             </span>
             <div className="flex-1 h-px bg-slate-200" />
           </div>
