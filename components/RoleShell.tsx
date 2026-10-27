@@ -48,11 +48,22 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
 export default function RoleShell({ role, skills: propSkills, children, navItems, roleLabel, mainStyle }: RoleShellProps) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const { data: session } = useSession();
 
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem('wint_sidebar');
+      setCollapsed(saved ? saved === 'collapsed' : window.innerWidth <= 1100);
+    } catch { /* storage blocked: keep the expanded default */ }
     setMounted(true);
   }, []);
+
+  const toggleSidebar = () => setCollapsed(prev => {
+    const next = !prev;
+    try { localStorage.setItem('wint_sidebar', next ? 'collapsed' : 'expanded'); } catch { /* ignore */ }
+    return next;
+  });
 
   if (!mounted) {
     return <div className="quality-shell-container" />;
@@ -83,9 +94,16 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
     <div className="quality-shell-container">
       <div className="quality-shell-body">
         {/* Sidebar */}
-        <aside className="quality-shell-sidebar">
-          <div className="quality-shell-sidebar-title">
-            {displayRoleLabel}
+        <aside className={`quality-shell-sidebar${collapsed ? ' collapsed' : ''}`}>
+          <div className="quality-shell-sidebar-head">
+            <div className="quality-shell-sidebar-title">{displayRoleLabel}</div>
+            <button
+              type="button" className="quality-shell-sidebar-toggle" onClick={toggleSidebar}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}
+              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" /></svg>
+            </button>
           </div>
 
           {filteredNav.map((item, i) => {
