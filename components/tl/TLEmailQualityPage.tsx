@@ -19,6 +19,8 @@ import EmailMessageView, {
 } from '@/components/quality/EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import UISelect from '@/components/quality/UISelect';
+import EmailSplit from '@/components/quality/EmailSplit';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 
 interface AgentBreakdown {
@@ -180,7 +182,9 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const shown = rows.filter(r =>
     (!agentFilter || r.agent_name === agentFilter) &&
     (!outcomeFilter || r.dispute_status === outcomeFilter));
-  const paging = usePaging(shown, `${queue}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
+  const [sort, toggleSort] = useSort();
+  const sortedSrc = sortRows(shown, sort, { agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
+  const paging = usePaging(sortedSrc, `${queue}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
   const colCount = 7;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
 
@@ -318,8 +322,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
         <thead>
           <tr>
             <th style={th}>Ticket ID</th>
-            <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS</th>
+            <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
             <th style={th}>CSAT</th>
             <th style={th}>{pending ? 'Raised' : 'Updated'}</th>
             <th style={th}>{pending ? 'Status' : 'Outcome'}</th>
@@ -369,9 +373,60 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                   </td>
                 </tr>
                 {isOpen && (
-                  <tr>
-                    <td colSpan={colCount} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
-                      <div style={{ background: 'var(--qa-gray-50)', borderTop: '1px solid var(--qa-border-sub)', padding: '20px 24px', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 24 }}>
+                  <tr className="eval-panel-row">
+                    <td colSpan={colCount} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+                      <EmailSplit
+                        conversation={<>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                          {/* 1. Customer Core Query (Separate & prominent) */}
+                          <CustomerCoreQueryCard
+                            threadSummary={item.thread_summary}
+                            customerMessage={item.customer_message}
+                            subjectLine={item.subject_line}
+                            customerEmail={item.customer_email}
+                            parameterScores={item.parameter_scores}
+                          />
+
+                          {/* 2. Customer Inbound Email Thread */}
+                          {item.customer_message && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                  Customer Inbound Email Thread
+                                </div>
+                                {item.customer_email && (
+                                  <span
+                                    style={{
+                                      fontSize: 11,
+                                      color: '#1d4ed8',
+                                      background: '#eff6ff',
+                                      border: '1px solid #bfdbfe',
+                                      padding: '1px 7px',
+                                      borderRadius: 4,
+                                      fontWeight: 500,
+                                      fontFamily: MONO,
+                                    }}
+                                    title={`User Email: ${item.customer_email}`}
+                                  >
+                                    {item.customer_email}
+                                  </span>
+                                )}
+                              </div>
+                              <CustomerEmailThreadCard
+                                customerMessage={item.customer_message}
+                                subjectLine={item.subject_line}
+                                customerEmail={item.customer_email}
+                              />
+                            </div>
+                          )}
+
+                          {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                          {item.internal_notes && item.internal_notes.length > 0 && (
+                            <InternalNotesBlock notes={item.internal_notes} />
+                          )}
+                        </div>
+                        </>}
+                        scoring={<>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
@@ -431,55 +486,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                             </div>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                          {/* 1. Customer Core Query (Separate & prominent) */}
-                          <CustomerCoreQueryCard
-                            threadSummary={item.thread_summary}
-                            customerMessage={item.customer_message}
-                            subjectLine={item.subject_line}
-                            customerEmail={item.customer_email}
-                            parameterScores={item.parameter_scores}
-                          />
-
-                          {/* 2. Customer Inbound Email Thread */}
-                          {item.customer_message && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                  Customer Inbound Email Thread
-                                </div>
-                                {item.customer_email && (
-                                  <span
-                                    style={{
-                                      fontSize: 11,
-                                      color: '#1d4ed8',
-                                      background: '#eff6ff',
-                                      border: '1px solid #bfdbfe',
-                                      padding: '1px 7px',
-                                      borderRadius: 4,
-                                      fontWeight: 500,
-                                      fontFamily: MONO,
-                                    }}
-                                    title={`User Email: ${item.customer_email}`}
-                                  >
-                                    {item.customer_email}
-                                  </span>
-                                )}
-                              </div>
-                              <CustomerEmailThreadCard
-                                customerMessage={item.customer_message}
-                                subjectLine={item.subject_line}
-                                customerEmail={item.customer_email}
-                              />
-                            </div>
-                          )}
-
-                          {/* Internal Working Notes (highlighted amber, matching chat style) */}
-                          {item.internal_notes && item.internal_notes.length > 0 && (
-                            <InternalNotesBlock notes={item.internal_notes} />
-                          )}
-                        </div>
-                      </div>
+                        </>}
+                      />
                     </td>
                   </tr>
                 )}
@@ -544,7 +552,9 @@ export default function TLEmailQualityPage() {
     ? Math.round(agents.reduce((acc, a) => acc + Number(a.avg_score || 0), 0) / agents.length)
     : 0;
 
-  const paging = usePaging(replies, `${selectedAgent}|${period.period}|${period.customFrom}|${period.customTo}`);
+  const [sortR, toggleSortR] = useSort();
+  const sortedReplies = sortRows(replies, sortR, { agent: r => r.agent_name, intent: r => r.intent_l1, iqs: r => r.effective_score ?? r.quality_score });
+  const paging = usePaging(sortedReplies, `${selectedAgent}|${period.period}|${period.customFrom}|${period.customTo}`);
 
   return (
     <div>
@@ -772,19 +782,19 @@ export default function TLEmailQualityPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 130 }} />
-              <col />
-              <col style={{ width: 220 }} />
-              <col style={{ width: 90 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 90 }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '25.4%' }} />
+              <col style={{ width: '14.2%' }} />
+              <col style={{ width: '14.2%' }} />
+              <col style={{ width: '14.2%' }} />
             </colgroup>
             <thead>
               <tr>
                 <th style={th}>Ticket ID</th>
-                <th style={th}>Agent</th>
-                <th style={th}>Intent</th>
-                <th style={{ ...th, textAlign: 'right' }}>IQS</th>
+                <SortTh k="agent" sort={sortR} onSort={toggleSortR} style={th}>Agent</SortTh>
+                <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Intent</SortTh>
+                <SortTh k="iqs" sort={sortR} onSort={toggleSortR} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
                 <th style={th}>CSAT</th>
                 <th style={{ ...th, textAlign: 'right' }}>Action</th>
               </tr>
@@ -838,64 +848,10 @@ export default function TLEmailQualityPage() {
                       </tr>
 
                       {isExpanded && (
-                        <tr>
-                          <td colSpan={6} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
-                            <div style={{
-                              background: 'var(--qa-gray-50)',
-                              borderTop: '1px solid var(--qa-border-sub)',
-                              padding: '20px 24px',
-                              display: 'grid',
-                              gridTemplateColumns: '1fr 1.2fr',
-                              gap: 24,
-                            }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
-                                </div>
-                                <div style={{
-                                  border: '1px solid var(--qa-border)',
-                                  borderRadius: 8,
-                                  background: 'var(--qa-card)',
-                                  overflow: 'hidden',
-                                }}>
-                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
-                                    <ScoreRing score={reply.effective_score ?? reply.quality_score} />
-                                    <div>
-                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
-                                        <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
-                                        {' · '}
-                                        {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
-                                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                      {reply.compliance_issues && reply.compliance_issues.length > 0 && (
-                                        <div style={{ color: '#b91c1c', fontWeight: 600 }}>Breaches: {reply.compliance_issues.join(', ')}</div>
-                                      )}
-                                      {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
-                                    </div>
-                                  )}
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
-                                    const scores = reply.parameter_scores;
-                                    const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
-                                    return (
-                                      <ParamScoreRow
-                                        key={def.key}
-                                        name={def.name}
-                                        description={def.description}
-                                        value={val}
-                                        allowNA={def.allowNA}
-                                        weight={def.defaultWeight}
-                                        reason={scores?.__reasoning?.[def.key]}
-                                        last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
+                        <tr className="eval-panel-row">
+                          <td colSpan={6} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+                            <EmailSplit
+                              conversation={<>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                                 <div>
                                   {/* 1. Customer Core Query (Separate & prominent) */}
@@ -1001,7 +957,58 @@ export default function TLEmailQualityPage() {
                                   </div>
                                 </div>
                               </div>
-                            </div>
+                              </>}
+                              scoring={<>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                  Evaluator Feedback &amp; Parameters ({DEFAULT_EMAIL_PARAMETERS.length})
+                                </div>
+                                <div style={{
+                                  border: '1px solid var(--qa-border)',
+                                  borderRadius: 8,
+                                  background: 'var(--qa-card)',
+                                  overflow: 'hidden',
+                                }}>
+                                  <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid var(--qa-border-sub)' }}>
+                                    <ScoreRing score={reply.effective_score ?? reply.quality_score} />
+                                    <div>
+                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>{reply.agent_name || 'Unassigned'}</div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
+                                        <span style={{ fontFamily: MONO }}>{reply.chat_id ?? reply.ticket_id}</span>
+                                        {' · '}
+                                        {new Date(reply.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {((reply.compliance_issues && reply.compliance_issues.length > 0) || reply.qa_notes) && (
+                                    <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--qa-border-sub)', fontSize: 12, lineHeight: 1.5, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {reply.compliance_issues && reply.compliance_issues.length > 0 && (
+                                        <div style={{ color: '#b91c1c', fontWeight: 600 }}>Breaches: {reply.compliance_issues.join(', ')}</div>
+                                      )}
+                                      {reply.qa_notes && <div style={{ color: 'var(--qa-text-2)' }}>{reply.qa_notes}</div>}
+                                    </div>
+                                  )}
+                                  {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
+                                    const scores = reply.parameter_scores;
+                                    const val = [def.key, ...(def.aliases ?? [])].map(k => scores?.[k]).find(v => v !== undefined);
+                                    return (
+                                      <ParamScoreRow
+                                        key={def.key}
+                                        name={def.name}
+                                        description={def.description}
+                                        value={val}
+                                        allowNA={def.allowNA}
+                                        weight={def.defaultWeight}
+                                        reason={scores?.__reasoning?.[def.key]}
+                                        last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                      />
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              </>}
+                            />
                           </td>
                         </tr>
                       )}

@@ -13,6 +13,7 @@ import AgentFilterSelect from '@/components/quality/AgentFilterSelect';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill } from '@/components/quality/csat';
 import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 // ─── Shared UI Tokens & Styles ────────────────────────────────────────────────
 
@@ -389,6 +390,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
     outline: 'none',
   };
 
+  const [sort, toggleSort] = useSort();
+  const sortedEntries = sortRows(entries, sort, { agent: e => e.agentName, iqs: e => e.iqs, call: e => e.callIqsScore, csat: e => e.csat, date: e => e.scoredAt ?? e.date });
+
   return (
     <div style={{ fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* Header */}
@@ -627,11 +631,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <thead>
               <tr>
                 <th style={TH_BASE}>Chat ID</th>
-                <th style={TH_BASE}>Agent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                <th style={TH_BASE}>CSAT</th>
-                <th style={TH_BASE}>Date</th>
+                <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
+                <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS (Agent)</SortTh>
+                <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
+                <SortTh k="csat" sort={sort} onSort={toggleSort} style={TH_BASE}>CSAT</SortTh>
+                <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date</SortTh>
                 <th style={TH_BASE}>Dispute</th>
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
               </tr>
@@ -650,7 +654,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   </td>
                 </tr>
               ) : (
-                entries.map((e, idx) => {
+                sortedEntries.map((e, idx) => {
                   const isOpen = expandedEvalId === e.id;
                   const isLast = idx === entries.length - 1 && !isOpen;
                   const pendingFlag = pendingChatIdMap.get(e.chatId);

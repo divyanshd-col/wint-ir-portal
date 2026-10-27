@@ -24,6 +24,7 @@ import EmailMessageView, {
 } from './EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import UISelect from '@/components/quality/UISelect';
+import AutoTextarea from './AutoTextarea';
 
 type Tab = 'pending' | 'reviewed' | 'disputes' | 'unscored';
 
@@ -217,8 +218,16 @@ const TAB_COLS: Record<Tab, Col[]> = {
 };
 const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', agent: 'Agent', intent: 'Intent', iqs: 'IQS', csat: 'CSAT', dispute: 'Dispute', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
 const COL_WIDTH: Partial<Record<Col, number>> = { ticket: 130, agent: 170, iqs: 90, csat: 80, dispute: 120, reviewedBy: 170, reviewedAt: 130, action: 90 };
+// Column widths (%) put the ID + agent columns on the left of the panel split (57.4%), scores + action on the right.
+const TAB_WIDTHS: Record<Tab, number[]> = {
+  pending:  [14, 20, 23.4, 14.2, 14.2, 14.2],
+  reviewed: [12, 18, 27.4, 9, 9, 12, 11, 10.6],
+  disputes: [13, 18, 26.4, 10, 10, 12, 10.6],
+  unscored: [14, 22, 44, 20],
+};
 const RIGHT: Col[] = ['iqs', 'action'];
-type SortCol = 'ticket' | 'agent' | 'iqs';
+type SortCol = 'agent' | 'intent' | 'iqs' | 'dispute' | 'reviewedBy' | 'reviewedAt';
+const SORTABLE: Col[] = ['agent', 'intent', 'iqs', 'dispute', 'reviewedBy', 'reviewedAt']; // e-mail has no CSAT to sort by; // IDs and Action are not sortable
 
 export default function EmailEvaluationPage() {
   const { data: session } = useSession();
@@ -569,10 +578,19 @@ export default function EmailEvaluationPage() {
   const hasFilters = Boolean(search || agentFilter || dispositionFilter || period.period !== 'all');
   const cols = TAB_COLS[tab];
   const iqsOf = (i: EvaluationItem) => Number(i.effective_score ?? i.quality_score ?? -1);
+  const sortKey = (i: EvaluationItem, col: SortCol): string | number => {
+    switch (col) {
+      case 'iqs': return iqsOf(i);
+      case 'agent': return i.agent_name ?? '';
+      case 'intent': return i.intent_l1 ?? '';
+      case 'dispute': return i.dispute_status ?? '';
+      case 'reviewedBy': return i.reviewed_by ?? '';
+      default: return i.reviewed_at ?? '';
+    }
+  };
   const sortedItems = !sort ? items : [...items].sort((a, b) => {
-    const cmp = sort.col === 'iqs' ? iqsOf(a) - iqsOf(b)
-      : sort.col === 'agent' ? (a.agent_name ?? '').localeCompare(b.agent_name ?? '')
-        : String(a.chat_id ?? a.ticket_id).localeCompare(String(b.chat_id ?? b.ticket_id), undefined, { numeric: true });
+    const x = sortKey(a, sort.col), y = sortKey(b, sort.col);
+    const cmp = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), undefined, { numeric: true, sensitivity: 'base' });
     return sort.dir === 'asc' ? cmp : -cmp;
   });
 
@@ -838,18 +856,18 @@ export default function EmailEvaluationPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              {cols.map(c => <col key={c} style={COL_WIDTH[c] ? { width: COL_WIDTH[c] } : undefined} />)}
+              {cols.map((c, i) => <col key={c} style={{ width: `${TAB_WIDTHS[tab][i]}%` }} />)}
             </colgroup>
             <thead>
               <tr>
                 {cols.map(c => {
-                  const sortable = c === 'ticket' || c === 'agent' || c === 'iqs';
+                  const sortable = SORTABLE.includes(c);
                   return (
                     <th key={c} style={{ ...th, textAlign: RIGHT.includes(c) ? 'right' : 'left' }}>
                       {sortable ? (
                         <button
                           type="button"
-                          onClick={() => setSort(prev => prev?.col === c ? { col: c as SortCol, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col: c as SortCol, dir: 'desc' })}
+                          onClick={() => setSort(prev => prev?.col === c ? { col: c as SortCol, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col: c as SortCol, dir: 'asc' })}
                           style={{ all: 'inherit', cursor: 'pointer', padding: 0, height: 'auto', background: 'none', border: 'none', display: 'inline-flex', gap: 4 }}
                         >
                           {COL_LABEL[c]} <span style={{ opacity: sort?.col === c ? 1 : 0.3 }}>{sort?.col === c ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}</span>
@@ -1103,7 +1121,7 @@ export default function EmailEvaluationPage() {
                                       </div>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         {issues.map((iss, idx) => (
-                                          <textarea
+                                          <AutoTextarea
                                             key={idx}
                                             value={iss}
                                             onChange={e => handleComplianceIssueChange(item.message_id, idx, e.target.value)}

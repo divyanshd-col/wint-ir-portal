@@ -9,6 +9,7 @@ import { DisputeThread } from './DisputeThread';
 import { rowClick } from './rowClick';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill } from './csat';
+import { useSort, sortRows, SortTh } from './sort';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -126,6 +127,9 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
 
   const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
   const pagedDisputes = visibleDisputes.slice((page - 1) * pageSize, page * pageSize);
+
+  const [sort, toggleSort] = useSort();
+  const sortedRows = sortRows(pagedDisputes, sort, { mobile: d => d.mobileNumber, date: d => d.closedAt, disp: d => d.disposition, agent: d => d.agentName, iqs: d => d.iqsScore, csat: d => d.csatScore });
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -280,12 +284,12 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
         <thead>
           <tr>
             <th style={th}>{isCallsOnly ? 'Call ID' : 'Chat ID'}</th>
-            <th style={th}>Mobile</th>
-            <th style={th}>Date & Time</th>
-            <th style={th}>Disposition</th>
-            <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS Score</th>
-            <th style={th}>CSAT</th>
+            <SortTh k="mobile" sort={sort} onSort={toggleSort} style={th}>Mobile</SortTh>
+            <SortTh k="date" sort={sort} onSort={toggleSort} style={th}>Date & Time</SortTh>
+            <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
+            <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS Score</SortTh>
+            <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
@@ -307,7 +311,7 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
             </td>
           </tr>
         ) : (
-          pagedDisputes.map(d => {
+          sortedRows.map(d => {
             const isCallDispute = isCallsOnly || (!isChatsOnly && Boolean(
               d.callId ||
               d.challengedParams?.some(p => /^P\d+/i.test(p.param.replace(/^(call|agent|bot):/, '')))

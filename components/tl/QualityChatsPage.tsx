@@ -11,6 +11,7 @@ import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill, csatLabel } from '@/components/quality/csat';
 import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -189,6 +190,9 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
     fontSize: 12, fontFamily: 'inherit', background: 'var(--qa-card)', color: 'var(--qa-text)', outline: 'none',
   };
 
+  const [sort, toggleSort] = useSort();
+  const sorted1 = sortRows(chats, sort, { agent: c => c.agentName, iqs: c => c.iqsScore, call: c => c.callIqsScore, csat: c => c.csatScore });
+
   return (
     <div>
       {/* Filters */}
@@ -283,20 +287,20 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
 
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
-          <col style={{ width: '16%' }} />
-          <col style={{ width: '28%' }} />
-          <col style={{ width: '13%' }} />
-          <col style={{ width: '13%' }} />
-          <col style={{ width: '18%' }} />
-          <col style={{ width: '12%' }} />
-        </colgroup>
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '41.4%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '11%' }} />
+              <col style={{ width: '12.6%' }} />
+              <col style={{ width: '8%' }} />
+</colgroup>
         <thead>
           <tr>
             <th style={th}>Chat ID</th>
-            <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>Agent IQS</th>
-            <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
-            <th style={{ ...th, paddingLeft: 32 }}>CSAT</th>
+            <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Agent IQS</SortTh>
+            <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
+            <SortTh k="csat" sort={sort} onSort={toggleSort} style={{ ...th, paddingLeft: 32 }}>CSAT</SortTh>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
@@ -318,7 +322,7 @@ function EvaluatedChatsSection({ onTotalChange }: { onTotalChange?: (count: numb
               </td>
             </tr>
           ) : (
-            chats.map(chat => (
+            sorted1.map(chat => (
               <React.Fragment key={chat.chatId}>
                 <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
                   style={{ background: expandedId === chat.chatId ? 'var(--accent-weak)' : undefined }}
@@ -543,6 +547,9 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     }
   }
 
+  const [sort, toggleSort] = useSort();
+  const sorted1 = sortRows(pagedDisputes, sort, { agent: d => d.agentName, by: d => d.raisedByName, iqs: d => d.iqsScore, call: d => d.callIqsScore, csat: d => d.csatScore, raised: d => d.raisedAt });
+
   return (
     <>
     {actionError && (
@@ -578,7 +585,6 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
           </>
         )}
       </UISelect>
-
 
       <DateRangeChip from={fromFilter} to={toFilter} onChange={(f, t) => { setFromFilter(f); setToFilter(t); setPage(1); }} />
       <button type="button" className="qf-chip" disabled={!(agentFilter || outcomeFilter || fromFilter || toFilter)}
@@ -658,12 +664,12 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
-          <th style={th}>Agent</th>
-          <th style={th}>Raised By</th>
-          <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
-          <th style={{ ...th, textAlign: 'right' }}>Call IQS</th>
-          <th style={th}>CSAT</th>
-          <th style={th}>Raised</th>
+          <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+          <SortTh k="by" sort={sort} onSort={toggleSort} style={th}>Raised By</SortTh>
+          <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS (Agent)</SortTh>
+          <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
+          <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
+          <SortTh k="raised" sort={sort} onSort={toggleSort} style={th}>Raised</SortTh>
           <th style={th}>{status === 'pending' ? 'Status' : 'Outcome'}</th>
           <th style={{ ...th, textAlign: 'right' }}>Action</th>
         </tr>
@@ -686,7 +692,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
             </td>
           </tr>
         ) : (
-          pagedDisputes.map(d => {
+          sorted1.map(d => {
             const targetInfo = getDisputeClassification(d.challengedParams, d.conversationType);
             return (
             <React.Fragment key={d.flagId}>

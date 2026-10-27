@@ -5,6 +5,7 @@ import { normalizeScore } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
 import ScoreRing from './ScoreRing';
 import TicketLinkButton from './TicketLinkButton';
+import AutoTextarea from './AutoTextarea';
 
 // Parameter weights for call IQS (v3.1 Spec)
 const CALL_IQS_WEIGHTS: Record<string, number> = {
@@ -833,7 +834,7 @@ export default function CallEvalPanel({
                   );
                 })}
               </div>
-              <textarea
+              <AutoTextarea
                 placeholder="Overall explanation note…"
                 value={agentDisputeNote}
                 onChange={e => setAgentDisputeNote(e.target.value)}
@@ -1115,7 +1116,7 @@ export default function CallEvalPanel({
                       ) : (
                         <div className="eval-gate-extra">
                           <div className="eval-reason-label">Reason for Breach:</div>
-                          <textarea
+                          <AutoTextarea
                             className="eval-reason-input"
                             value={gItem.reasoning}
                             onChange={e => handleGateReasoningChange(g.key, e.target.value)}
@@ -1188,7 +1189,7 @@ export default function CallEvalPanel({
                         <div style={{ fontSize: 11, color: 'var(--qa-text-2)', marginTop: 4 }}>{item.reasoning}</div>
                       ) : null
                     ) : (
-                      <textarea
+                      <AutoTextarea
                         value={item.reasoning}
                         onChange={e => handleReasoningChange(p, e.target.value)}
                         placeholder="Reasoning for this parameter score…"

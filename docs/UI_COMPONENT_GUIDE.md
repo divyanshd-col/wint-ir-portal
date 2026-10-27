@@ -298,6 +298,11 @@ Source of truth: `Chat Evaluation Redesign.html`. Classes live in the "Evaluatio
 - **Dropdowns**: never a native `<select>` in the UI; use `UISelect` (`components/quality/UISelect.tsx`), a drop-in with the same `<option>` children and `value` / `onChange(e.target.value)`. It opens a themed popover; anything other than the first ("all") option shows as an active ink chip.
 - **CSAT**: render `CsatPill` (`components/quality/csat.tsx`); labels are Robylon's own: Good (5), Could be better (3), Bad (1). Green / neutral / red, sans font, no mono.
 - **Message markers**: `[Attachment: name - url]` and `[Image: url]` become `.attachment-chip` links via `components/quality/attachments.tsx` (chat transcripts and e-mail bodies).
+- **Sorting**: every list column except IDs and Action sorts on click (`SortTh`, `useSort`, `sortRows` in `components/quality/sort.tsx`): ascending (A-Z, low to high), descending, off. It sorts the rows loaded on the page.
+- **Column / split alignment**: in lists that open the evaluation panel, column widths are percentages that put ID + agent on the left of the panel split (57.4%, the `1.35fr : 1fr` ratio) and the scores + action on the right, so the row header lines up with the panes below it.
+- **No scroll inside a scroll**: free-text boxes in panels use `AutoTextarea` (grows with its text). Panels scroll per pane only.
+- **Transcript events**: "Claimed by …", "Assigned by …", "Waiting to assign …" are events, not messages (`transcript-events.ts`); they render as centred system lines whatever the sender field says.
+- **E-mail bodies**: quoted history ("On … wrote:") is collapsed behind a "•••" pill; `isHtml` only counts real tags, so "Name <name@mail.com>" stays plain text.
 - **Cards**: a filter bar that opens a table is the top of the same card (`.qfilters` first child), not a separate box with a gap.
 - **Copy**: no emoji, no em dashes (use a period, colon or middle dot) and no helper sentences under titles or tables ("click a row to expand", "data from live DB"). Section headers carry at most the period label.
 

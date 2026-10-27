@@ -231,7 +231,7 @@ body {
   flex: 1;
   padding: 32px 48px;
   min-width: 0;
-  max-width: 1400px;
+  max-width: none; /* use the whole screen, especially with the sidebar collapsed */
 }
 
 /* The label keeps the link's own colour; only the icon span is tinted. */
@@ -292,7 +292,7 @@ body {
 /* ── Evaluation panel (Chat Evaluation reference) ─────────────────────────────
    Transcript left (wider, full height), scoring right. Both stack below 980px; gate rows go single-column below 560px.
    Green = pass, red = breach, blue only for focus. Colours come from the shared tokens, so both themes follow. */
-.eval-wrap { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); height: clamp(560px, calc(100vh - 160px), 760px); overflow: hidden; }
+.eval-wrap { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); height: clamp(560px, calc(100vh - 140px), 1000px); overflow: hidden; }
 .eval-pane { min-width: 0; display: flex; flex-direction: column; overflow: hidden; container-type: inline-size; }
 .eval-pane + .eval-pane { border-left: 1px solid var(--line); }
 
@@ -426,3 +426,11 @@ tr[style*="--accent-weak"] > td:first-child { box-shadow: inset 3px 0 0 var(--ac
 .ui-select-check { width: 12px; font-size: 11px; text-align: center; color: var(--accent); }
 /* A filter bar that opens a card sits flush with the card's rounded top. */
 .qfilters:first-child { border-radius: 7px 7px 0 0; }
+
+/* Quoted reply history in e-mail bodies: collapsed behind a pill, like the CRM. */
+.email-quote-toggle { display: inline-flex; align-items: center; justify-content: center; height: 16px; margin-top: 8px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--sunk); color: var(--qa-text-2); font-size: 11px; line-height: 1; letter-spacing: .12em; cursor: pointer; }
+.email-quote-toggle:hover { background: var(--qa-fill-light); }
+.email-quoted { margin-top: 8px; padding: 6px 12px; border-left: 2px solid var(--line-strong); color: var(--qa-text-2); font-size: 12.5px; white-space: pre-wrap; }
+
+/* Sidebar tooltip: shown immediately (native title tooltips wait about a second). */
+.sb-tip { position: fixed; z-index: 300; transform: translateY(-50%); padding: 6px 10px; border-radius: 8px; background: var(--ink); color: var(--ink-fg); font-size: 12.5px; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); }

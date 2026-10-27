@@ -58,7 +58,7 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
   return m;
 }
 
-type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'botIqsScore';
+type SortCol = 'agentName' | 'iqsScore' | 'botIqsScore' | 'callTx' | 'status';
 type SortDir = 'asc' | 'desc';
 
 export default function ChatEvalTable({ leadingFilter, dispositions, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId, onChatNotFound }: Props) {
@@ -184,10 +184,11 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
   const sortedChats = [...chats].sort((a, b) => {
     if (!sortCol) return 0;
     let cmp = 0;
-    if (sortCol === 'chatId')    cmp = a.chatId.localeCompare(b.chatId);
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
     if (sortCol === 'iqsScore')  cmp = (a.iqsScore ?? 0) - (b.iqsScore ?? 0);
     if (sortCol === 'botIqsScore')  cmp = (a.botIqsScore ?? 0) - (b.botIqsScore ?? 0);
+    if (sortCol === 'callTx')    cmp = String(a.callTranscriptStatus ?? '').localeCompare(String(b.callTranscriptStatus ?? ''));
+    if (sortCol === 'status')    cmp = String(a.status ?? '').localeCompare(String(b.status ?? ''));
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
@@ -488,21 +489,18 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
       <div style={{ overflowX: 'auto', borderRadius: '0 0 8px 8px' }}>
         <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: 110 }} />
-            <col />
-            <col style={{ width: 118 }} />
-            <col style={{ width: 104 }} />
-            <col style={{ width: 120 }} />
-            {showStatus && <col style={{ width: 95 }} />}
-            <col style={{ width: 90 }} />
+            {/* left of the split (as in the panel's transcript): ID + agent; right (scoring): scores + action */}
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '41.4%' }} />
+            <col style={{ width: showStatus ? '10%' : '12%' }} />
+            <col style={{ width: showStatus ? '8%' : '10%' }} />
+            <col style={{ width: showStatus ? '9%' : '12.6%' }} />
+            {showStatus && <col style={{ width: '8%' }} />}
+            <col style={{ width: showStatus ? '7.6%' : '8%' }} />
           </colgroup>
           <thead>
             <tr>
-              <th style={th}>
-                <button style={thBtn} onClick={() => toggleSort('chatId')}>
-                  Chat ID <SortIcon col="chatId" />
-                </button>
-              </th>
+              <th style={th}>Chat ID</th>
               <th style={th}>
                 <button style={thBtn} onClick={() => toggleSort('agentName')}>
                   Agent <SortIcon col="agentName" />
@@ -518,8 +516,8 @@ export default function ChatEvalTable({ leadingFilter, dispositions, onCountChan
                   <SortIcon col="botIqsScore" /> Bot IQS
                 </button>
               </th>
-              <th style={th}>Call Transcript</th>
-              {showStatus && <th style={th}>Status</th>}
+              <th style={th}><button style={thBtn} onClick={() => toggleSort('callTx')}>Call Transcript <SortIcon col="callTx" /></button></th>
+              {showStatus && <th style={th}><button style={thBtn} onClick={() => toggleSort('status')}>Status <SortIcon col="status" /></button></th>}
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>

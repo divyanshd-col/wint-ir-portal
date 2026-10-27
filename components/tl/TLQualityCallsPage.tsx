@@ -9,6 +9,7 @@ import { DisputeStatusPill, getDisputeOutcomeKey } from './QualityChatsPage';
 import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -338,6 +339,11 @@ export default function TLQualityCallsPage() {
     outline: 'none',
   };
 
+  const [sort, toggleSort] = useSort();
+  const sorted1 = sortRows(entries, sort, { agent: c => c.agentName, mobile: c => c.mobileNumber, date: c => c.calledAt ?? c.date, disp: c => c.disposition, iqs: c => c.iqs });
+  const sorted2 = sortRows(pagedPending, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, by: d => d.raisedByName, iqs: d => d.callIqsScore, disp: d => d.disposition, status: d => d.status });
+  const sorted3 = sortRows(pagedReviewed, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, by: d => d.raisedByName, iqs: d => d.callIqsScore, status: d => d.status, raised: d => d.raisedAt });
+
   return (
     <div style={{ fontFamily: SANS }}>
       {/* Header */}
@@ -449,16 +455,26 @@ export default function TLQualityCallsPage() {
 
           {/* Table */}
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
+              <colgroup>
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12.4%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12.6%' }} />
+            </colgroup>
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Agent Name</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Date / Time</th>
-                  <th style={TH_BASE}>Disposition</th>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</th>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
@@ -476,7 +492,7 @@ export default function TLQualityCallsPage() {
                     </td>
                   </tr>
                 ) : (
-                  entries.map(call => {
+                  sorted1.map(call => {
                     const isExpanded = expandedCallId === call.callId;
                     return (
                       <Fragment key={call.callId}>
@@ -646,13 +662,13 @@ export default function TLQualityCallsPage() {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Agent Name</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Raised By</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                  <th style={TH_BASE}>Disposition</th>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="by" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised By</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={TH_BASE}>Status</th>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -670,7 +686,7 @@ export default function TLQualityCallsPage() {
                     </td>
                   </tr>
                 ) : (
-                  pagedPending.map(dispute => {
+                  sorted2.map(dispute => {
                     const isOpen = expandedDisputeId === dispute.flagId;
                     const callKey = dispute.callId || dispute.chatId;
 
@@ -874,13 +890,13 @@ export default function TLQualityCallsPage() {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Agent Name</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Raised By</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="by" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised By</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={TH_BASE}>Status</th>
-                  <th style={TH_BASE}>Date Raised</th>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
+                  <SortTh k="raised" sort={sort} onSort={toggleSort} style={TH_BASE}>Date Raised</SortTh>
                 </tr>
               </thead>
               <tbody>
@@ -897,7 +913,7 @@ export default function TLQualityCallsPage() {
                     </td>
                   </tr>
                 ) : (
-                  pagedReviewed.map(dispute => {
+                  sorted3.map(dispute => {
                     const isOpen = expandedDisputeId === dispute.flagId;
                     const callKey = dispute.callId || dispute.chatId;
 

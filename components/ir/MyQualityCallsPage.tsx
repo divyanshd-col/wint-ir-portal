@@ -8,6 +8,7 @@ import { DisputeStatusPill, getDisputeOutcomeKey } from '@/components/tl/Quality
 import { DateRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
@@ -419,6 +420,11 @@ export default function MyQualityCallsPage({ agentName }: Props) {
     outline: 'none',
   };
 
+  const [sort, toggleSort] = useSort();
+  const sorted1 = sortRows(entries, sort, { mobile: c => c.mobileNumber, date: c => c.calledAt ?? c.date, disp: c => c.disposition, iqs: c => c.iqs });
+  const sorted2 = sortRows(pagedPending, sort, { mobile: d => d.mobileNumber, date: d => d.closedAt, disp: d => d.disposition, iqs: d => d.callIqsScore, status: d => d.status });
+  const sorted3 = sortRows(pagedReviewed, sort, { mobile: d => d.mobileNumber, date: d => d.closedAt, disp: d => d.disposition, iqs: d => d.callIqsScore, status: d => d.status, rev: d => d.reviewedAt });
+
   return (
     <div style={{ fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* Header */}
@@ -543,11 +549,11 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Date / Time</th>
-                  <th style={TH_BASE}>Disposition</th>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</th>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'center' }}>Dispute Action</th>
                 </tr>
               </thead>
@@ -565,7 +571,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                     </td>
                   </tr>
                 ) : (
-                  entries.map((call) => {
+                  sorted1.map((call) => {
                     const isExpanded = expandedCallId === call.callId;
                     const pendingDispute = pendingCallIdMap.get(call.callId) || (call.chatId ? pendingCallIdMap.get(call.chatId) : undefined);
                     const reviewedDispute = reviewedCallIdMap.get(call.callId) || (call.chatId ? reviewedCallIdMap.get(call.chatId) : undefined);
@@ -873,12 +879,12 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Date / Time</th>
-                  <th style={TH_BASE}>Disposition</th>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                  <th style={TH_BASE}>Status</th>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
@@ -896,7 +902,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                     </td>
                   </tr>
                 ) : (
-                  pagedPending.map((dispute) => {
+                  sorted2.map((dispute) => {
                     const isOpen = expandedDisputeId === dispute.flagId;
                     const callKey = dispute.callId || dispute.chatId;
 
@@ -1074,13 +1080,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Date / Time</th>
-                  <th style={TH_BASE}>Disposition</th>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                  <th style={TH_BASE}>Status</th>
-                  <th style={TH_BASE}>Reviewed At</th>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
+                  <SortTh k="rev" sort={sort} onSort={toggleSort} style={TH_BASE}>Reviewed At</SortTh>
                 </tr>
               </thead>
               <tbody>
@@ -1097,7 +1103,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                     </td>
                   </tr>
                 ) : (
-                  pagedReviewed.map((dispute) => {
+                  sorted3.map((dispute) => {
                     const isOpen = expandedDisputeId === dispute.flagId;
                     const callKey = dispute.callId || dispute.chatId;
 

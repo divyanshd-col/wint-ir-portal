@@ -4,6 +4,7 @@ import CallEvalPanel from './CallEvalPanel';
 import DateRangePicker from './DateRangePicker';
 import type { CallToReviewRow } from '@/app/api/cx/qa/calls-to-review/route';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { useSort, sortRows, SortTh } from './sort';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -214,14 +215,8 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
     setExpandedId(null);
   }, []);
 
-  const sortedCalls = [...calls].sort((a, b) => {
-    if (!sortCol) return 0;
-    let cmp = 0;
-    if (sortCol === 'callId') cmp = a.callId.localeCompare(b.callId);
-    if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
-    if (sortCol === 'iqsScore') cmp = (a.iqsScore ?? 0) - (b.iqsScore ?? 0);
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
+  const [sort, toggleSort] = useSort();
+  const sortedCalls = sortRows(calls, sort, { agent: c => c.agentName, mobile: c => c.mobileNumber, disp: c => c.disposition, iqs: c => c.iqsScore, by: c => c.reviewedBy });
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -367,12 +362,12 @@ export default function ReviewedCallsTable({ leadingFilter, dispositions, agentF
           <thead>
             <tr>
               <th style={th}>Call ID</th>
-              <th style={th}>Agent</th>
-              <th style={th}>Mobile</th>
-              <th style={th}>Disposition</th>
+              <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+              <SortTh k="mobile" sort={sort} onSort={toggleSort} style={th}>Mobile</SortTh>
+              <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
               <th style={th}>Linked Chat</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS</th>
-              <th style={th}>Reviewed By</th>
+              <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
+              <SortTh k="by" sort={sort} onSort={toggleSort} style={th}>Reviewed By</SortTh>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>

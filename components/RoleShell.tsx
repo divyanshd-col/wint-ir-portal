@@ -49,6 +49,7 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [tip, setTip] = useState<{ label: string; top: number; left: number } | null>(null);
   const { data: session } = useSession();
 
   useEffect(() => {
@@ -100,7 +101,8 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
             <button
               type="button" className="quality-shell-sidebar-toggle" onClick={toggleSidebar}
               aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} aria-expanded={!collapsed}
-              title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              onMouseEnter={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: 'Expand sidebar', top: r.top + r.height / 2, left: r.right + 10 }); } }}
+              onMouseLeave={() => setTip(null)}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="11 17 6 12 11 7" /><polyline points="18 17 13 12 18 7" /></svg>
             </button>
@@ -117,8 +119,12 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
                 <Link
                   href={item.href}
                   className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
-                  title={item.label}
+                  aria-label={item.label}
                   aria-current={active ? 'page' : undefined}
+                  onMouseEnter={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: item.label, top: r.top + r.height / 2, left: r.right + 10 }); } }}
+                  onMouseLeave={() => setTip(null)}
+                  onFocus={e => { if (collapsed) { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: item.label, top: r.top + r.height / 2, left: r.right + 10 }); } }}
+                  onBlur={() => setTip(null)}
                 >
                   <span>
                     <Icon />
@@ -129,6 +135,7 @@ export default function RoleShell({ role, skills: propSkills, children, navItems
             );
           })}
         </aside>
+        {collapsed && tip && <div className="sb-tip" style={{ top: tip.top, left: tip.left }} role="tooltip">{tip.label}</div>}
 
         {/* Main content */}
         <main className="quality-shell-main" style={mainStyle}>

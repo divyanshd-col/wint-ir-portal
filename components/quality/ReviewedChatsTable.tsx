@@ -7,6 +7,7 @@ import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
 import { rowClick } from './rowClick';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { CsatPill } from './csat';
+import { useSort, sortRows, SortTh } from './sort';
 
 interface Props {
   leadingFilter?: React.ReactNode;
@@ -86,6 +87,9 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
   }, [chatIdSearch, agentSearch, callsFilter, customFrom, customTo, pageSize, agentFilter]);
 
   useEffect(() => { fetchData(1); }, [fetchData]);
+
+  const [sort, toggleSort] = useSort();
+  const sortedRows = sortRows(chats, sort, { agent: c => c.agentName, iqs: c => c.iqsScore, bot: c => c.botIqsScore, callTx: c => c.callTranscriptStatus, csat: c => c.csatScore, disp: c => c.disposition, by: c => c.reviewedBy, at: c => c.reviewedAt });
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -238,14 +242,14 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
           <thead>
             <tr>
               <th style={th}>Chat ID</th>
-              <th style={th}>Agent</th>
-              <th style={{ ...th, textAlign: 'right' }}>Agent IQS</th>
-              <th style={{ ...th, textAlign: 'right' }}>Bot IQS</th>
-              <th style={th}>Call Transcript</th>
-              <th style={th}>CSAT</th>
-              <th style={th}>Disposition</th>
-              <th style={th}>Reviewed By</th>
-              <th style={th}>Reviewed At</th>
+              <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+              <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Agent IQS</SortTh>
+              <SortTh k="bot" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Bot IQS</SortTh>
+              <SortTh k="callTx" sort={sort} onSort={toggleSort} style={th}>Call Transcript</SortTh>
+              <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
+              <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
+              <SortTh k="by" sort={sort} onSort={toggleSort} style={th}>Reviewed By</SortTh>
+              <SortTh k="at" sort={sort} onSort={toggleSort} style={th}>Reviewed At</SortTh>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
@@ -267,7 +271,7 @@ export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human
                 </td>
               </tr>
             ) : (
-              chats.map(chat => (
+              sortedRows.map(chat => (
                 <React.Fragment key={chat.chatId}>
                   <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
                     style={{ background: expandedId === chat.chatId ? 'var(--accent-weak)' : undefined }}

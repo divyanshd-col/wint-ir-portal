@@ -21,6 +21,7 @@ import EmailMessageView, {
 import { DisputeThread } from '@/components/quality/DisputeThread';
 import { rowClick } from '@/components/quality/rowClick';
 import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 interface EvaluationItem {
   id: number;
@@ -309,7 +310,9 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
     });
   }, [activeTab, evaluatedItems, disputesRaisedItems, reviewedDisputesItems, search, complianceFilter]);
 
-  const paging = usePaging(currentTabItems, `${activeTab}|${search}|${complianceFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
+  const [sort, toggleSort] = useSort();
+  const sortedItems = sortRows(currentTabItems, sort, { agent: r => r.agent_name, intent: r => r.intent_l1, iqs: r => r.effective_score ?? r.quality_score });
+  const paging = usePaging(sortedItems, `${activeTab}|${search}|${complianceFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
   const hasFilters = Boolean(search || complianceFilter);
   const clearFilters = () => {
     setSearch('');
@@ -517,20 +520,14 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 130 }} />
-              <col style={{ width: 170 }} />
-              <col />
-              <col style={{ width: 95 }} />
-              <col style={{ width: 80 }} />
-              {activeTab !== 'evaluated' && <col style={{ width: 150 }} />}
-              <col style={{ width: 90 }} />
+              {(activeTab === 'evaluated' ? [14, 20, 23.4, 14.2, 14.2, 14.2] : [13, 18, 26.4, 10, 10, 12, 10.6]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
             </colgroup>
             <thead>
               <tr>
                 <th style={TH_BASE}>Ticket ID</th>
-                <th style={TH_BASE}>Agent</th>
-                <th style={TH_BASE}>Intent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
+                <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
+                <SortTh k="intent" sort={sort} onSort={toggleSort} style={TH_BASE}>Intent</SortTh>
+                <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
                 <th style={TH_BASE}>CSAT</th>
                 {activeTab !== 'evaluated' && <th style={TH_BASE}>{activeTab === 'reviewed' ? 'Outcome' : 'Dispute'}</th>}
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
@@ -630,113 +627,6 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                 minHeight: 460,
                               }}
                             >
-                              {/* ── Left Pane: Score Ring, Parameters, & QA Notes ── */}
-                              <div
-                                style={{
-                                  width: 480,
-                                  minWidth: 400,
-                                  flexShrink: 0,
-                                  borderRight: '1px solid var(--qa-border)',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                }}
-                              >
-                                {/* Header */}
-                                <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                                    <ScoreRing score={score} />
-                                    <div>
-                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
-                                        {item.agent_name || agentName}
-                                      </div>
-                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
-                                        <span style={{ fontFamily: MONO }}>{item.ticket_id}</span>
-                                        {' · '}
-                                        {new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                      </div>
-                                      {isOverridden && (
-                                        <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600, marginTop: 4 }}>
-                                          Adjusted from {Math.round(Number(item.quality_score))}%
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Section Header */}
-                                <div
-                                  style={{
-                                    padding: '10px 16px',
-                                    borderBottom: '1px solid var(--qa-border)',
-                                    background: 'var(--qa-gray-50)',
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.08em',
-                                    color: 'var(--qa-text-2, var(--qa-text-2))',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                  }}
-                                >
-                                  <span>Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})</span>
-                                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--qa-text-3)' }}>IQS Breakdown</span>
-                                </div>
-
-                                {/* Parameters List */}
-                                <div style={{ flex: 1, overflowY: 'auto' }}>
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, pIdx) => {
-                                    const val = [def.key, ...(def.aliases ?? [])].map(k => item.parameter_scores?.[k]).find(v => v !== undefined);
-                                    const isChallenged = item.challenged_params?.some(cp => cp.param === def.key);
-                                    const isPicked = disputingId === item.message_id && selectedParams.has(def.key);
-
-                                    return (
-                                      <div
-                                        key={def.key}
-                                        onClick={disputingId === item.message_id ? () => toggleParamPick(def.key) : undefined}
-                                        style={{
-                                          cursor: disputingId === item.message_id ? 'pointer' : 'default',
-                                          background: isPicked ? 'var(--qa-fill-light, var(--qa-gray-50))' : 'transparent',
-                                          boxShadow: isPicked ? 'inset 3px 0 0 var(--qa-gray-700, #111111)' : 'none',
-                                          transition: 'background 0.1s',
-                                        }}
-                                      >
-                                        <div style={{ display: 'flex', alignItems: 'center', padding: '6px 16px 0', gap: 6 }}>
-                                          {disputingId === item.message_id && (
-                                            <input
-                                              type="checkbox"
-                                              checked={isPicked}
-                                              onChange={() => toggleParamPick(def.key)}
-                                              onClick={e => e.stopPropagation()}
-                                              style={{ cursor: 'pointer', width: 15, height: 15, accentColor: '#111111' }}
-                                            />
-                                          )}
-                                          {isChallenged && (
-                                            <span style={{
-                                              height: 18, padding: '0 7px', borderRadius: 999,
-                                              background: 'var(--qa-gray-700, #2D2D31)', color: '#fff',
-                                              fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                              display: 'inline-flex', alignItems: 'center',
-                                            }}>
-                                              Disputed
-                                            </span>
-                                          )}
-                                        </div>
-                                        <ParamScoreRow
-                                          name={def.name}
-                                          description={def.description}
-                                          value={val}
-                                          allowNA={def.allowNA}
-                                          weight={def.defaultWeight}
-                                          reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
-                                          last={pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1}
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
                               {/* ── Right Pane: Customer Email, Agent Reply & Dispute Box ── */}
                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                 {/* Header */}
@@ -1179,6 +1069,113 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                 </div>
                               )}
                               </div>
+                              {/* ── Left Pane: Score Ring, Parameters, & QA Notes ── */}
+                              <div
+                                style={{
+                                  width: '42.6%',
+                                  minWidth: 360,
+                                  flexShrink: 0,
+                                  borderLeft: '1px solid var(--qa-border)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                }}
+                              >
+                                {/* Header */}
+                                <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                    <ScoreRing score={score} />
+                                    <div>
+                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                        {item.agent_name || agentName}
+                                      </div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
+                                        <span style={{ fontFamily: MONO }}>{item.ticket_id}</span>
+                                        {' · '}
+                                        {new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                      </div>
+                                      {isOverridden && (
+                                        <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600, marginTop: 4 }}>
+                                          Adjusted from {Math.round(Number(item.quality_score))}%
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Section Header */}
+                                <div
+                                  style={{
+                                    padding: '10px 16px',
+                                    borderBottom: '1px solid var(--qa-border)',
+                                    background: 'var(--qa-gray-50)',
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.08em',
+                                    color: 'var(--qa-text-2, var(--qa-text-2))',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <span>Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})</span>
+                                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--qa-text-3)' }}>IQS Breakdown</span>
+                                </div>
+
+                                {/* Parameters List */}
+                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                  {DEFAULT_EMAIL_PARAMETERS.map((def, pIdx) => {
+                                    const val = [def.key, ...(def.aliases ?? [])].map(k => item.parameter_scores?.[k]).find(v => v !== undefined);
+                                    const isChallenged = item.challenged_params?.some(cp => cp.param === def.key);
+                                    const isPicked = disputingId === item.message_id && selectedParams.has(def.key);
+
+                                    return (
+                                      <div
+                                        key={def.key}
+                                        onClick={disputingId === item.message_id ? () => toggleParamPick(def.key) : undefined}
+                                        style={{
+                                          cursor: disputingId === item.message_id ? 'pointer' : 'default',
+                                          background: isPicked ? 'var(--qa-fill-light, var(--qa-gray-50))' : 'transparent',
+                                          boxShadow: isPicked ? 'inset 3px 0 0 var(--qa-gray-700, #111111)' : 'none',
+                                          transition: 'background 0.1s',
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', padding: '6px 16px 0', gap: 6 }}>
+                                          {disputingId === item.message_id && (
+                                            <input
+                                              type="checkbox"
+                                              checked={isPicked}
+                                              onChange={() => toggleParamPick(def.key)}
+                                              onClick={e => e.stopPropagation()}
+                                              style={{ cursor: 'pointer', width: 15, height: 15, accentColor: '#111111' }}
+                                            />
+                                          )}
+                                          {isChallenged && (
+                                            <span style={{
+                                              height: 18, padding: '0 7px', borderRadius: 999,
+                                              background: 'var(--qa-gray-700, #2D2D31)', color: '#fff',
+                                              fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                              display: 'inline-flex', alignItems: 'center',
+                                            }}>
+                                              Disputed
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ParamScoreRow
+                                          name={def.name}
+                                          description={def.description}
+                                          value={val}
+                                          allowNA={def.allowNA}
+                                          weight={def.defaultWeight}
+                                          reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
+                                          last={pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
                             </div>
                           </td>
                         </tr>
