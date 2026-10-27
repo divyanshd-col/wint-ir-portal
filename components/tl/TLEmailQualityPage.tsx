@@ -214,7 +214,7 @@ function EmailDisputesSection({ queue, period, onChanged }: { queue: 'tl_pending
                   const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
                   return (
                     <span key={cp.param} style={{
-                      fontSize: 11, fontWeight: 600, background: 'var(--qa-fill-light, #F4F4F5)', border: '1px solid var(--qa-border)',
+                      fontSize: 11, fontWeight: 600, background: 'var(--qa-fill-light, var(--qa-fill-light))', border: '1px solid var(--qa-border)',
                       borderRadius: 4, padding: '2px 8px', color: 'var(--qa-text-2)',
                     }}>
                       {def?.name || cp.param}

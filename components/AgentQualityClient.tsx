@@ -914,8 +914,8 @@ export default function AgentQualityClient({ userEmail, selfAgentName }: Props) 
                           const benchPass = top3Rates[p] ?? null;
                           const myFail   = passRate != null ? 100 - passRate : null;
                           const benchFail = benchPass != null ? 100 - benchPass : null;
-                          const barColor = myFail == null ? '#e5e7eb' : myFail === 0 ? '#22c55e' : myFail <= 20 ? '#f59e0b' : '#ef4444';
-                          const textColor = myFail == null ? '#9ca3af' : myFail === 0 ? '#15803d' : myFail <= 20 ? '#92400e' : '#b91c1c';
+                          const barColor = myFail == null ? 'var(--qa-border)' : myFail === 0 ? '#22c55e' : myFail <= 20 ? '#f59e0b' : '#ef4444';
+                          const textColor = myFail == null ? 'var(--qa-text-3)' : myFail === 0 ? '#15803d' : myFail <= 20 ? '#92400e' : '#b91c1c';
                           return (
                             <div key={p}>
                               <div className="flex items-center justify-between mb-1">

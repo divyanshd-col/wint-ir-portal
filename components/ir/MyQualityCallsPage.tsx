@@ -11,12 +11,12 @@ const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Aria
 
 const TH_BASE: CSSProperties = {
   height: 40,
-  background: 'var(--qa-gray-50, #FAFAFB)',
-  borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+  background: 'var(--qa-gray-50, var(--qa-gray-50))',
+  borderBottom: '1px solid var(--qa-border, var(--qa-border))',
   fontSize: 12,
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
   fontWeight: 500,
   padding: '0 16px',
   textAlign: 'left',
@@ -26,7 +26,7 @@ const TH_BASE: CSSProperties = {
 const TD_BASE: CSSProperties = {
   height: 52,
   padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+  borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
   fontSize: 14,
   color: 'var(--qa-text, #111111)',
   verticalAlign: 'middle',
@@ -36,7 +36,7 @@ const TD_MONO: CSSProperties = {
   ...TD_BASE,
   fontFamily: MONO,
   fontSize: 13,
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
 };
 
 const TD_NUM: CSSProperties = {
@@ -47,7 +47,7 @@ const TD_NUM: CSSProperties = {
 };
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
   const bg = score >= 85 ? '#f0fdf4' : score >= 70 ? '#fefce8' : '#fef2f2';
   const color = score >= 85 ? '#166534' : score >= 70 ? '#854d0e' : '#991b1b';
   const border = score >= 85 ? '#bbf7d0' : score >= 70 ? '#fef08a' : '#fecaca';
@@ -82,8 +82,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
         borderRadius: 10,
         fontWeight: 600,
         lineHeight: '18px',
-        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, #F4F4F5)',
-        color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, var(--qa-fill-light))',
+        color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
       }}
     >
       {count}
@@ -401,7 +401,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
     border: 'none',
     borderRadius: 8,
     background: active ? 'var(--qa-gray-700, #27272A)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+    color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
     fontFamily: SANS,
     fontSize: 13,
     fontWeight: active ? 600 : 400,
@@ -414,7 +414,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
   const chipInputStyle: CSSProperties = {
     height: 32,
     padding: '0 10px',
-    border: '1px solid var(--qa-border, #E4E4E7)',
+    border: '1px solid var(--qa-border, var(--qa-border))',
     borderRadius: 8,
     fontSize: 13,
     fontFamily: SANS,
@@ -430,13 +430,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
           My Quality Calls
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: '4px 0 0' }}>
+        <p style={{ fontSize: 13, color: 'var(--qa-text-2, var(--qa-text-2))', margin: '4px 0 0' }}>
           View evaluated calls, raise disputes to your Team Lead, and track raised and reviewed disputes.
         </p>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', padding: 4, borderRadius: 10, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', padding: 4, borderRadius: 10, width: 'fit-content' }}>
         <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
           Evaluated Calls
           <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
@@ -546,7 +546,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                       <div
                         key={n}
                         onClick={() => { setLimit(n); setPage(0); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: limit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: limit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -596,13 +596,13 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                         <tr
                           onClick={() => setExpandedCallId(isExpanded ? null : call.callId)}
                           style={{
-                            background: isExpanded ? 'var(--qa-gray-50, #FAFAFB)' : undefined,
+                            background: isExpanded ? 'var(--qa-gray-50, var(--qa-gray-50))' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
                         >
                           <td style={TD_MONO}>{call.callId}</td>
-                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
                           </td>
@@ -621,7 +621,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                   fontSize: 12,
                                   fontWeight: 500,
                                   borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  border: '1px solid var(--qa-border, var(--qa-border))',
                                   background: '#fff',
                                   color: '#2563eb',
                                   textDecoration: 'none',
@@ -632,7 +632,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                 Show chat ↗
                               </a>
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_NUM}>
@@ -711,7 +711,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                         style={{
                                           padding: 10,
                                           background: '#fff',
-                                          border: `1px solid ${isChecked ? '#eab308' : '#e5e7eb'}`,
+                                          border: `1px solid ${isChecked ? '#eab308' : 'var(--qa-border)'}`,
                                           borderRadius: 8,
                                         }}
                                       >
@@ -730,7 +730,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                             />
                                             {CALL_PARAM_NAMES[pKey]}
                                           </span>
-                                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: '#f3f4f6', color: '#374151' }}>
+                                          <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: 'var(--qa-fill-light)', color: 'var(--qa-gray-700)' }}>
                                             Score: {scoreVal}
                                           </span>
                                         </label>
@@ -914,7 +914,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                       <div
                         key={n}
                         onClick={() => { setPendingLimit(n); setPendingPage(1); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: pendingLimit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: pendingLimit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -962,7 +962,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                         <tr
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
                           style={{
-                            background: isOpen ? 'var(--qa-gray-50, #FAFAFB)' : undefined,
+                            background: isOpen ? 'var(--qa-gray-50, var(--qa-gray-50))' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
@@ -974,7 +974,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: '#C7C7CC', fontFamily: MONO, fontSize: 13 }}
+                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: 'var(--qa-text-4)', fontFamily: MONO, fontSize: 13 }}
                               >
                                 {callKey}
                               </a>
@@ -982,7 +982,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                               callKey
                             )}
                           </td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>
@@ -1001,7 +1001,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                   fontSize: 12,
                                   fontWeight: 500,
                                   borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  border: '1px solid var(--qa-border, var(--qa-border))',
                                   background: '#fff',
                                   color: '#2563eb',
                                   textDecoration: 'none',
@@ -1012,7 +1012,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                 Show chat ↗
                               </a>
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_NUM}>
@@ -1160,7 +1160,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                       <div
                         key={n}
                         onClick={() => { setReviewedLimit(n); setReviewedPage(1); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: reviewedLimit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: reviewedLimit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -1208,7 +1208,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                         <tr
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
                           style={{
-                            background: isOpen ? 'var(--qa-gray-50, #FAFAFB)' : undefined,
+                            background: isOpen ? 'var(--qa-gray-50, var(--qa-gray-50))' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
@@ -1220,7 +1220,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: '#C7C7CC', fontFamily: MONO, fontSize: 13 }}
+                                style={{ color: 'var(--qa-text, #111111)', textDecoration: 'underline', textDecorationColor: 'var(--qa-text-4)', fontFamily: MONO, fontSize: 13 }}
                               >
                                 {callKey}
                               </a>
@@ -1228,7 +1228,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                               callKey
                             )}
                           </td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {dispute.closedAt ? new Date(dispute.closedAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '—'}
                           </td>
@@ -1247,7 +1247,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                   fontSize: 12,
                                   fontWeight: 500,
                                   borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  border: '1px solid var(--qa-border, var(--qa-border))',
                                   background: '#fff',
                                   color: '#2563eb',
                                   textDecoration: 'none',
@@ -1258,7 +1258,7 @@ export default function MyQualityCallsPage({ agentName }: Props) {
                                 Show chat ↗
                               </a>
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_NUM}>

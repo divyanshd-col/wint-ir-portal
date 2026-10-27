@@ -763,7 +763,7 @@ export default function CallEvalPanel({
                   fontSize: 12,
                   fontWeight: 600,
                   borderRadius: 6,
-                  border: '1px solid var(--qa-border, #E4E4E7)',
+                  border: '1px solid var(--qa-border, var(--qa-border))',
                   background: '#fff',
                   color: 'var(--qa-text, #111111)',
                   textDecoration: 'none',
@@ -834,7 +834,7 @@ export default function CallEvalPanel({
         {/* Disputed Params banner */}
         {dispute?.challengedParams && dispute.challengedParams.length > 0 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>
+            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)' }}>
               Disputed Params:
             </span>
             {dispute.challengedParams.map((cp: any) => (
@@ -845,8 +845,8 @@ export default function CallEvalPanel({
                   fontSize: 11,
                   fontWeight: 600,
                   letterSpacing: '0.02em',
-                  background: '#F4F4F5',
-                  border: '1px solid #E4E4E7',
+                  background: 'var(--qa-fill-light)',
+                  border: '1px solid var(--qa-border)',
                   borderRadius: 4,
                   padding: '2px 8px',
                   color: '#52525B',
@@ -890,7 +890,7 @@ export default function CallEvalPanel({
               {Object.keys(PARAM_NAMES).map(pKey => {
                 const isChecked = Boolean(disputeSelectedParams[pKey]);
                 return (
-                  <div key={pKey} style={{ padding: 8, background: '#fff', border: `1px solid ${isChecked ? '#eab308' : '#e5e7eb'}`, borderRadius: 6 }}>
+                  <div key={pKey} style={{ padding: 8, background: '#fff', border: `1px solid ${isChecked ? '#eab308' : 'var(--qa-border)'}`, borderRadius: 6 }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                       <input
                         type="checkbox"
@@ -905,7 +905,7 @@ export default function CallEvalPanel({
                         placeholder="Reason for challenge…"
                         value={disputeParamNotes[pKey] || ''}
                         onChange={e => setDisputeParamNotes(prev => ({ ...prev, [pKey]: e.target.value }))}
-                        style={{ width: '100%', marginTop: 6, padding: '4px 6px', fontSize: 11, border: '1px solid #e5e7eb', borderRadius: 4 }}
+                        style={{ width: '100%', marginTop: 6, padding: '4px 6px', fontSize: 11, border: '1px solid var(--qa-border)', borderRadius: 4 }}
                       />
                     )}
                   </div>
@@ -916,7 +916,7 @@ export default function CallEvalPanel({
               placeholder="Overall explanation note…"
               value={agentDisputeNote}
               onChange={e => setAgentDisputeNote(e.target.value)}
-              style={{ width: '100%', height: 48, padding: 8, fontSize: 12, border: '1px solid #e5e7eb', borderRadius: 6, marginBottom: 10 }}
+              style={{ width: '100%', height: 48, padding: 8, fontSize: 12, border: '1px solid var(--qa-border)', borderRadius: 6, marginBottom: 10 }}
             />
             <div style={{ display: 'flex', gap: 8 }}>
               <button
@@ -928,7 +928,7 @@ export default function CallEvalPanel({
               </button>
               <button
                 onClick={() => setRaisingDispute(false)}
-                style={{ padding: '6px 14px', fontSize: 12, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, cursor: 'pointer' }}
+                style={{ padding: '6px 14px', fontSize: 12, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 6, cursor: 'pointer' }}
               >
                 Cancel
               </button>
@@ -1321,8 +1321,8 @@ export default function CallEvalPanel({
                     key={p}
                     style={{
                       padding: 10,
-                      background: isChallenged ? '#fffbeb' : '#fafafa',
-                      border: `1px solid ${isChallenged ? '#fde047' : '#f0f0f2'}`,
+                      background: isChallenged ? '#fffbeb' : 'var(--qa-gray-50)',
+                      border: `1px solid ${isChallenged ? '#fde047' : 'var(--qa-border-sub)'}`,
                       borderRadius: 8
                     }}
                   >

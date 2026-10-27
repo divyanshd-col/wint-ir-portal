@@ -379,7 +379,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                           style={{
                             background: 'none', border: 0, padding: 0,
                             fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                            color: reopeningId === chat.chatId ? 'var(--qa-text-3, #a1a1aa)' : 'var(--qa-active-blue, #2563eb)',
+                            color: reopeningId === chat.chatId ? 'var(--qa-text-3, var(--qa-text-3))' : 'var(--qa-active-blue, #2563eb)',
                             cursor: reopeningId === chat.chatId ? 'not-allowed' : 'pointer',
                           }}
                         >

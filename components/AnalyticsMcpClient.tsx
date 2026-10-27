@@ -24,7 +24,7 @@ interface Props {
 
 const cardCls = 'bg-white border border-gray-200 rounded-2xl p-6 shadow-sm';
 const btnCls =
-  'inline-flex items-center gap-2 rounded-xl bg-[#2d9e4f] px-4 py-2 text-sm font-medium text-white hover:bg-[#268544] disabled:opacity-50 transition-colors';
+  'inline-flex items-center gap-2 rounded-xl bg-[#1f7a4d] px-4 py-2 text-sm font-medium text-white hover:bg-[#268544] disabled:opacity-50 transition-colors';
 
 function fmtDate(s: string | null): string {
   if (!s) return '—';
@@ -76,7 +76,7 @@ function ConnectInstructions({ mcpUrl }: { mcpUrl: string }) {
 
   const step = (n: number, content: ReactNode) => (
     <li className="flex gap-3">
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#2d9e4f]/10 text-xs font-semibold text-[#2d9e4f]">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#1f7a4d]/10 text-xs font-semibold text-[#1f7a4d]">
         {n}
       </span>
       <div className="min-w-0 flex-1">{content}</div>

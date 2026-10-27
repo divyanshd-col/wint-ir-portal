@@ -12,12 +12,12 @@ const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Aria
 
 const TH_BASE: CSSProperties = {
   height: 40,
-  background: 'var(--qa-gray-50, #FAFAFB)',
-  borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+  background: 'var(--qa-gray-50, var(--qa-gray-50))',
+  borderBottom: '1px solid var(--qa-border, var(--qa-border))',
   fontSize: 12,
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
   fontWeight: 500,
   padding: '0 16px',
   textAlign: 'left',
@@ -27,7 +27,7 @@ const TH_BASE: CSSProperties = {
 const TD_BASE: CSSProperties = {
   height: 52,
   padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+  borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
   fontSize: 14,
   color: 'var(--qa-text, #111111)',
   verticalAlign: 'middle',
@@ -37,7 +37,7 @@ const TD_MONO: CSSProperties = {
   ...TD_BASE,
   fontFamily: MONO,
   fontSize: 13,
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
 };
 
 const TD_NUM: CSSProperties = {
@@ -48,7 +48,7 @@ const TD_NUM: CSSProperties = {
 };
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
   return <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111111)' }}>{score}</span>;
 }
 
@@ -61,8 +61,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
         borderRadius: 10,
         fontWeight: 600,
         lineHeight: '18px',
-        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, #F4F4F5)',
-        color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, var(--qa-fill-light))',
+        color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
       }}
     >
       {count}
@@ -320,7 +320,7 @@ export default function TLQualityCallsPage() {
     border: 'none',
     borderRadius: 8,
     background: active ? 'var(--qa-gray-700, #27272A)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+    color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
     fontSize: 13,
     fontWeight: active ? 500 : 400,
     cursor: 'pointer',
@@ -332,7 +332,7 @@ export default function TLQualityCallsPage() {
   const chipInputStyle: CSSProperties = {
     height: 32,
     padding: '0 10px',
-    border: '1px solid var(--qa-border, #E4E4E7)',
+    border: '1px solid var(--qa-border, var(--qa-border))',
     borderRadius: 8,
     fontSize: 13,
     fontFamily: SANS,
@@ -348,7 +348,7 @@ export default function TLQualityCallsPage() {
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>
           Team Lead — Quality Calls
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: 0 }}>
+        <p style={{ fontSize: 13, color: 'var(--qa-text-2, var(--qa-text-2))', margin: 0 }}>
           View team members' call evaluations, manage raised call disputes, post thread comments, resolve disputes, or forward to QA.
         </p>
       </div>
@@ -360,7 +360,7 @@ export default function TLQualityCallsPage() {
       )}
 
       {/* Tabs Bar */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', padding: 4, borderRadius: 10, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', padding: 4, borderRadius: 10, width: 'fit-content' }}>
         <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
           Evaluated Calls
           <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
@@ -455,7 +455,7 @@ export default function TLQualityCallsPage() {
                       <div
                         key={n}
                         onClick={() => { setLimit(n); setPage(0); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: limit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: limit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -502,14 +502,14 @@ export default function TLQualityCallsPage() {
                         <tr
                           onClick={() => setExpandedCallId(isExpanded ? null : call.callId)}
                           style={{
-                            background: isExpanded ? 'var(--qa-gray-50, #FAFAFB)' : undefined,
+                            background: isExpanded ? 'var(--qa-gray-50, var(--qa-gray-50))' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
                         >
                           <td style={TD_MONO}>{call.callId}</td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{call.agentName}</td>
-                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
                           </td>
@@ -528,7 +528,7 @@ export default function TLQualityCallsPage() {
                                   fontSize: 12,
                                   fontWeight: 500,
                                   borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  border: '1px solid var(--qa-border, var(--qa-border))',
                                   background: '#fff',
                                   color: '#2563eb',
                                   textDecoration: 'none',
@@ -539,7 +539,7 @@ export default function TLQualityCallsPage() {
                                 Show chat ↗
                               </a>
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_NUM}>
@@ -686,7 +686,7 @@ export default function TLQualityCallsPage() {
                       <div
                         key={n}
                         onClick={() => { setPendingLimit(n); setPendingPage(1); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: pendingLimit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: pendingLimit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -743,7 +743,7 @@ export default function TLQualityCallsPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text-2, #6B6B6B)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                                style={{ color: 'var(--qa-text-2, var(--qa-text-2))', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
                                 onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
                                 onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
                               >
@@ -754,7 +754,7 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
@@ -774,7 +774,7 @@ export default function TLQualityCallsPage() {
                                   fontSize: 12,
                                   fontWeight: 500,
                                   borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  border: '1px solid var(--qa-border, var(--qa-border))',
                                   background: '#fff',
                                   color: '#2563eb',
                                   textDecoration: 'none',
@@ -785,7 +785,7 @@ export default function TLQualityCallsPage() {
                                 Show chat ↗
                               </a>
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_BASE}>
@@ -961,7 +961,7 @@ export default function TLQualityCallsPage() {
                       <div
                         key={n}
                         onClick={() => { setReviewedLimit(n); setReviewedPage(1); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: reviewedLimit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: reviewedLimit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -1017,7 +1017,7 @@ export default function TLQualityCallsPage() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text-2, #6B6B6B)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
+                                style={{ color: 'var(--qa-text-2, var(--qa-text-2))', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
                                 onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
                                 onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
                               >
@@ -1028,7 +1028,7 @@ export default function TLQualityCallsPage() {
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
@@ -1047,7 +1047,7 @@ export default function TLQualityCallsPage() {
                                   fontSize: 12,
                                   fontWeight: 500,
                                   borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
+                                  border: '1px solid var(--qa-border, var(--qa-border))',
                                   background: '#fff',
                                   color: '#2563eb',
                                   textDecoration: 'none',
@@ -1058,7 +1058,7 @@ export default function TLQualityCallsPage() {
                                 Show chat ↗
                               </a>
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_BASE}>

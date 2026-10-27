@@ -553,7 +553,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               <div className="flex rounded-xl overflow-hidden border border-gray-200 w-fit">
                 {(['gemini', 'claude'] as const).map(p => (
                   <button key={p} onClick={() => switchProvider(p)}
-                    className={`px-6 py-2 text-sm font-semibold transition ${llmProvider === p ? 'bg-[#2d9e4f] text-white' : 'bg-white text-gray-500 hover:text-gray-800'}`}>
+                    className={`px-6 py-2 text-sm font-semibold transition ${llmProvider === p ? 'bg-[#1f7a4d] text-white' : 'bg-white text-gray-500 hover:text-gray-800'}`}>
                     {p === 'gemini' ? 'Gemini' : 'Claude'}
                   </button>
                 ))}
@@ -564,7 +564,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   <div>
                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Routing Model</label>
                     <select value={geminiModel} onChange={e => switchGeminiModel(e.target.value)}
-                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 min-w-[240px]">
+                      className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 min-w-[240px]">
                       <optgroup label="Gemini 3">
                         <option value="gemini-3-flash-preview">3 Flash (default)</option>
                       </optgroup>
@@ -585,7 +585,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     <div className="flex rounded-xl overflow-hidden border border-gray-200 w-fit">
                       {([1, 2, 3, 4, 5] as const).map(k => (
                         <button key={k} onClick={() => switchGeminiKey(k)}
-                          className={`w-10 py-2 text-sm font-semibold transition ${activeGeminiKey === k ? 'bg-[#2d9e4f] text-white' : geminiKeysSet[k] ? 'bg-white text-gray-700 hover:bg-gray-50' : 'bg-white text-gray-300 hover:bg-gray-50'}`}
+                          className={`w-10 py-2 text-sm font-semibold transition ${activeGeminiKey === k ? 'bg-[#1f7a4d] text-white' : geminiKeysSet[k] ? 'bg-white text-gray-700 hover:bg-gray-50' : 'bg-white text-gray-300 hover:bg-gray-50'}`}
                           title={geminiKeysSet[k] ? `Key ${k} (set)` : `Key ${k} (not set)`}>
                           {k}
                         </button>
@@ -594,15 +594,15 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     <p className="text-xs text-gray-400 mt-1">{geminiKeysSet[activeGeminiKey] ? `✓ Key ${activeGeminiKey} configured` : `Key ${activeGeminiKey} not set`}</p>
                     {editingKeySlot !== activeGeminiKey ? (
                       <button onClick={() => setEditingKeySlot(activeGeminiKey)}
-                        className="mt-2 text-xs text-[#2d9e4f] font-semibold hover:underline">
+                        className="mt-2 text-xs text-[#1f7a4d] font-semibold hover:underline">
                         {geminiKeysSet[activeGeminiKey] ? `Replace Key ${activeGeminiKey}` : `+ Set Key ${activeGeminiKey}`}
                       </button>
                     ) : (
                       <div className="mt-2 flex gap-2 max-w-sm">
                         <input type="password" value={newKeyInput} onChange={e => setNewKeyInput(e.target.value)} placeholder="AIza..."
-                          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                          className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                         <button onClick={() => saveNewKey(activeGeminiKey)} disabled={savingNewKey || !newKeyInput.trim()}
-                          className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                          className="px-4 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                           {savingNewKey ? 'Saving…' : 'Save'}
                         </button>
                         <button onClick={() => { setEditingKeySlot(null); setNewKeyInput(''); }}
@@ -626,9 +626,9 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   ) : (
                     <div className="flex gap-2 max-w-sm">
                       <input type="password" value={anthropicKey} onChange={e => setAnthropicKey(e.target.value)} placeholder="sk-ant-..."
-                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                       <button onClick={saveAnthropicKey} disabled={savingAnthropicKey || !anthropicKey.trim()}
-                        className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                        className="px-4 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                         {savingAnthropicKey ? 'Saving…' : 'Save'}
                       </button>
                     </div>
@@ -653,7 +653,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     </div>
                   ) : (
                     <input type="password" value={iqsGeminiKey} onChange={e => setIqsGeminiKey(e.target.value)} placeholder="AIza..."
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                   )}
                 </div>
                 <div>
@@ -665,13 +665,13 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     </div>
                   ) : (
                     <input type="password" value={iqsAnthropicKey} onChange={e => setIqsAnthropicKey(e.target.value)} placeholder="sk-ant-..."
-                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                   )}
                 </div>
               </div>
               {(iqsGeminiKey.trim() || iqsAnthropicKey.trim()) && (
                 <button onClick={saveIqsKeys} disabled={savingIqsKeys}
-                  className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                  className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                   {savingIqsKeys ? 'Saving…' : 'Save IQS Keys'}
                 </button>
               )}
@@ -686,7 +686,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 </div>
                 <button
                   onClick={toggleHistory}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${historyEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${historyEnabled ? 'bg-[#1f7a4d]' : 'bg-gray-200'}`}
                 >
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${historyEnabled ? 'left-7' : 'left-1'}`} />
                 </button>
@@ -702,7 +702,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 </div>
                 <button
                   onClick={toggleCallAnalysis}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${callAnalysisEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${callAnalysisEnabled ? 'bg-[#1f7a4d]' : 'bg-gray-200'}`}
                 >
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${callAnalysisEnabled ? 'left-7' : 'left-1'}`} />
                 </button>
@@ -718,7 +718,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 </div>
                 <button
                   onClick={toggleCxDashboard}
-                  className={`relative w-12 h-6 rounded-full transition-colors ${cxDashboardEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'}`}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${cxDashboardEnabled ? 'bg-[#1f7a4d]' : 'bg-gray-200'}`}
                 >
                   <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${cxDashboardEnabled ? 'left-7' : 'left-1'}`} />
                 </button>
@@ -767,9 +767,9 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                               onKeyDown={e => { if (e.key === 'Enter') saveDocName(url); if (e.key === 'Escape') setEditingDocId(null); }}
                               placeholder="Document name…"
                               autoFocus
-                              className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                              className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
                             />
-                            <button onClick={() => saveDocName(url)} className="text-xs px-2 py-1 bg-[#2d9e4f] text-white rounded-lg font-semibold hover:bg-[#25883f] transition">Save</button>
+                            <button onClick={() => saveDocName(url)} className="text-xs px-2 py-1 bg-[#1f7a4d] text-white rounded-lg font-semibold hover:bg-[#1a6a42] transition">Save</button>
                             <button onClick={() => setEditingDocId(null)} className="text-xs px-2 py-1 border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-100 transition">Cancel</button>
                           </div>
                         ) : (
@@ -777,7 +777,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                             <span className="text-sm font-medium text-gray-800 truncate" title={url}>{docDisplayName(url)}</span>
                             <button
                               onClick={() => { setEditingDocId(driveId); setEditingDocName(docNames[driveId] || ''); }}
-                              className="text-[10px] text-gray-400 hover:text-[#2d9e4f] opacity-0 group-hover:opacity-100 transition shrink-0"
+                              className="text-[10px] text-gray-400 hover:text-[#1f7a4d] opacity-0 group-hover:opacity-100 transition shrink-0"
                               title="Rename"
                             >
                               ✏️
@@ -789,7 +789,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0 opacity-0 group-hover:opacity-100 transition">
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2d9e4f] hover:underline">Open</a>
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-xs text-[#1f7a4d] hover:underline">Open</a>
                         <button onClick={() => removeDoc(url)} className="text-gray-400 hover:text-red-500 transition" title="Remove">
                           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 4h12M5 4V2h6v2M6 7v6M10 7v6M3 4l1 10h8l1-10" /></svg>
                         </button>
@@ -804,15 +804,15 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                 <div className="flex gap-2">
                   <input type="url" value={newUrl} onChange={e => setNewUrl(e.target.value)}
                     placeholder="https://docs.google.com/document/d/..."
-                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                 </div>
                 <div className="flex gap-2">
                   <input type="text" value={newDocName} onChange={e => setNewDocName(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && addDoc()}
                     placeholder="Display name (e.g. KYC Process Guide)"
-                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                   <button onClick={addDoc} disabled={addingDoc || !newUrl.trim()}
-                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                     {addingDoc ? 'Adding…' : '+ Add'}
                   </button>
                 </div>
@@ -863,11 +863,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   value={systemPrompt}
                   onChange={e => setSystemPrompt(e.target.value)}
                   rows={22}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 resize-y font-mono leading-relaxed"
                 />
                 <div className="flex items-center gap-3">
                   <button onClick={saveSystemPrompt} disabled={savingPrompt}
-                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    className="px-6 py-2.5 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                     {savingPrompt ? 'Saving…' : promptSaved ? '✓ Saved' : 'Save Changes'}
                   </button>
                   {systemPromptIsCustom && (
@@ -895,11 +895,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   value={iqsScoringPrompt}
                   onChange={e => setIqsScoringPrompt(e.target.value)}
                   rows={22}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 resize-y font-mono leading-relaxed"
                 />
                 <div className="flex items-center gap-3">
                   <button onClick={saveIqsScoringPrompt} disabled={savingIqsPrompt}
-                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    className="px-6 py-2.5 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                     {savingIqsPrompt ? 'Saving…' : iqsPromptSaved ? '✓ Saved' : 'Save Changes'}
                   </button>
                   {iqsPromptIsCustom && (
@@ -927,11 +927,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   value={analyticsPlannerPrompt}
                   onChange={e => setAnalyticsPlannerPrompt(e.target.value)}
                   rows={22}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 resize-y font-mono leading-relaxed"
                 />
                 <div className="flex items-center gap-3">
                   <button onClick={saveAnalyticsPlannerPrompt} disabled={savingPlannerPrompt}
-                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    className="px-6 py-2.5 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                     {savingPlannerPrompt ? 'Saving…' : plannerPromptSaved ? '✓ Saved' : 'Save Changes'}
                   </button>
                   {plannerPromptIsCustom && (
@@ -959,11 +959,11 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                   value={analyticsSynthesizerPrompt}
                   onChange={e => setAnalyticsSynthesizerPrompt(e.target.value)}
                   rows={22}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 resize-y font-mono leading-relaxed"
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 resize-y font-mono leading-relaxed"
                 />
                 <div className="flex items-center gap-3">
                   <button onClick={saveAnalyticsSynthesizerPrompt} disabled={savingSynthesizerPrompt}
-                    className="px-6 py-2.5 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    className="px-6 py-2.5 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                     {savingSynthesizerPrompt ? 'Saving…' : synthesizerPromptSaved ? '✓ Saved' : 'Save Changes'}
                   </button>
                   {synthesizerPromptIsCustom && (
@@ -1003,7 +1003,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               </div>
               <a
                 href="/tokens"
-                className="px-4 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] transition inline-flex items-center gap-2 shadow-xs"
+                className="px-4 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] transition inline-flex items-center gap-2 shadow-xs"
               >
                 <span>Open Full Dashboard</span>
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1020,7 +1020,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               <div className="pt-2">
                 <a
                   href="/tokens"
-                  className="inline-flex items-center gap-2 text-sm font-semibold text-[#2d9e4f] hover:underline"
+                  className="inline-flex items-center gap-2 text-sm font-semibold text-[#1f7a4d] hover:underline"
                 >
                   View Model Breakdown, Cost Calculations &amp; Charts →
                 </a>
@@ -1049,9 +1049,9 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               ) : (
                 <div className="flex gap-2 max-w-sm">
                   <input type="password" value={slackToken} onChange={e => setSlackToken(e.target.value)} placeholder="xoxp-... user token"
-                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                   <button onClick={saveSlackToken} disabled={savingSlack || !slackToken.trim()}
-                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                     {savingSlack ? 'Saving…' : slackSaved ? '✓' : 'Save'}
                   </button>
                 </div>
@@ -1074,9 +1074,9 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               ) : (
                 <div className="flex gap-2 max-w-sm">
                   <input type="password" value={pyannoteKey} onChange={e => setPyannoteKey(e.target.value)} placeholder="API key"
-                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30" />
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30" />
                   <button onClick={savePyannoteKey} disabled={savingPyannote || !pyannoteKey.trim()}
-                    className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition">
+                    className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition">
                     {savingPyannote ? 'Saving…' : pyannoteSaved ? '✓' : 'Save'}
                   </button>
                 </div>
@@ -1110,13 +1110,13 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     value={qualitySheetUrl}
                     onChange={e => setQualitySheetUrl(e.target.value)}
                     placeholder="https://script.google.com/macros/s/.../exec"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 font-mono"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 font-mono"
                   />
                 </div>
                 <button
                   onClick={saveQualitySheet}
                   disabled={savingSheet || !qualitySheetUrl.trim()}
-                  className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
+                  className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition"
                 >
                   {savingSheet ? 'Saving…' : sheetSaved ? '✓ Saved' : 'Save'}
                 </button>
@@ -1143,7 +1143,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     type="password"
                     value={currentPassword}
                     onChange={e => setCurrentPassword(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
                     placeholder="Enter current password"
                   />
                 </div>
@@ -1153,7 +1153,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     type="password"
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
                     placeholder="At least 8 characters"
                   />
                 </div>
@@ -1163,7 +1163,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
                     type="password"
                     value={confirmPassword}
                     onChange={e => setConfirmPassword(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
                     placeholder="Repeat new password"
                   />
                 </div>
@@ -1176,7 +1176,7 @@ export default function SettingsClient({ config, isAdmin = false }: { config: Sa
               <button
                 onClick={changePassword}
                 disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
-                className="px-5 py-2 bg-[#2d9e4f] text-white rounded-xl text-sm font-semibold hover:bg-[#25883f] disabled:opacity-50 transition"
+                className="px-5 py-2 bg-[#1f7a4d] text-white rounded-xl text-sm font-semibold hover:bg-[#1a6a42] disabled:opacity-50 transition"
               >
                 {changingPassword ? 'Saving…' : 'Update Password'}
               </button>

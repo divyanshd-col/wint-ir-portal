@@ -81,7 +81,7 @@ export default function KBGapsPage() {
   const transferredCount = rows.filter((r) => r.chat_type === 'Transferred to Agent').length;
 
   return (
-    <div style={{ minHeight: '100vh', background: '#F9FAFB', color: '#111827', padding: '24px 32px' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--qa-gray-50)', color: 'var(--qa-text)', padding: '24px 32px' }}>
       
       {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
@@ -94,7 +94,7 @@ export default function KBGapsPage() {
               Gemini 3.5 End-to-End Analysis
             </span>
           </div>
-          <p style={{ margin: 0, fontSize: 14, color: '#6B7280' }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--qa-text-2)' }}>
             Automated pipeline reading full transcripts to detect KB gaps, extract agent answers, draft KB articles, and categorize chat handling types.
           </p>
         </div>
@@ -109,10 +109,10 @@ export default function KBGapsPage() {
             style={{
               padding: '8px 12px',
               borderRadius: 8,
-              border: '1px solid #E5E7EB',
+              border: '1px solid var(--qa-border)',
               background: '#FFFFFF',
               fontSize: 13,
-              color: '#374151',
+              color: 'var(--qa-gray-700)',
               cursor: 'pointer',
               fontWeight: 500,
             }}
@@ -129,10 +129,10 @@ export default function KBGapsPage() {
             style={{
               padding: '8px 12px',
               borderRadius: 8,
-              border: '1px solid #E5E7EB',
+              border: '1px solid var(--qa-border)',
               background: '#FFFFFF',
               fontSize: 13,
-              color: '#374151',
+              color: 'var(--qa-gray-700)',
               cursor: 'pointer',
               fontWeight: 500,
             }}
@@ -157,7 +157,7 @@ export default function KBGapsPage() {
               padding: '9px 16px',
               borderRadius: 8,
               border: 'none',
-              background: runningAnalysis ? '#9CA3AF' : '#10B981',
+              background: runningAnalysis ? 'var(--qa-text-3)' : '#10B981',
               color: '#FFFFFF',
               fontSize: 13,
               fontWeight: 600,
@@ -184,27 +184,27 @@ export default function KBGapsPage() {
 
       {/* Summary Metric Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' }}>TOTAL DRAFTED SUGGESTIONS</div>
-          <div style={{ fontSize: 28, fontWeight: 700, color: '#111827', marginTop: 4 }}>{rows.length}</div>
+        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>TOTAL DRAFTED SUGGESTIONS</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--qa-text)', marginTop: 4 }}>{rows.length}</div>
           <div style={{ fontSize: 12, color: '#059669', marginTop: 2 }}>Stored in table `kb_draft_suggestions`</div>
         </div>
 
-        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' }}>🤖 BOT HANDLED CHATS</div>
+        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>🤖 BOT HANDLED CHATS</div>
           <div style={{ fontSize: 28, fontWeight: 700, color: '#1D4ED8', marginTop: 4 }}>{botHandledCount}</div>
-          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Answered by Bot without agent transfer</div>
+          <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>Answered by Bot without agent transfer</div>
         </div>
 
-        <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 10, padding: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase' }}>👨‍💼 TRANSFERRED TO AGENTS</div>
+        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 10, padding: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', textTransform: 'uppercase' }}>👨‍💼 TRANSFERRED TO AGENTS</div>
           <div style={{ fontSize: 28, fontWeight: 700, color: '#6B21A8', marginTop: 4 }}>{transferredCount}</div>
-          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>Escalated to human IR support agents</div>
+          <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginTop: 2 }}>Escalated to human IR support agents</div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid #E5E7EB', marginBottom: 20 }}>
+      <div style={{ display: 'flex', gap: 8, borderBottom: '1px solid var(--qa-border)', marginBottom: 20 }}>
         <button
           onClick={() => setActiveTab('Educational')}
           style={{
@@ -215,7 +215,7 @@ export default function KBGapsPage() {
             fontWeight: 600,
             cursor: 'pointer',
             borderBottom: activeTab === 'Educational' ? '2px solid #059669' : '2px solid transparent',
-            color: activeTab === 'Educational' ? '#059669' : '#6B7280',
+            color: activeTab === 'Educational' ? '#059669' : 'var(--qa-text-2)',
           }}
         >
           🟢 Educational Drafts ({educationalCount})
@@ -231,7 +231,7 @@ export default function KBGapsPage() {
             fontWeight: 600,
             cursor: 'pointer',
             borderBottom: activeTab === 'Non-Educational' ? '2px solid #D97706' : '2px solid transparent',
-            color: activeTab === 'Non-Educational' ? '#D97706' : '#6B7280',
+            color: activeTab === 'Non-Educational' ? '#D97706' : 'var(--qa-text-2)',
           }}
         >
           🟠 Non-Educational ({rows.length - educationalCount})
@@ -239,18 +239,18 @@ export default function KBGapsPage() {
       </div>
 
       {/* Main Data Table */}
-      <div style={{ background: '#FFFFFF', border: '1px solid #E5E7EB', borderRadius: 12, padding: 20 }}>
+      <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border)', borderRadius: 12, padding: 20 }}>
         {loading ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#6B7280', fontSize: 14 }}>Loading database entries...</div>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--qa-text-2)', fontSize: 14 }}>Loading database entries...</div>
         ) : rows.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', color: '#6B7280', fontSize: 14 }}>
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--qa-text-2)', fontSize: 14 }}>
             No draft suggestions found. Click <strong>⚡ Run Instant Test Analysis</strong> above to generate test entries!
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', textTransform: 'uppercase', fontSize: 11, color: '#6B7280', letterSpacing: '0.05em' }}>
+                <tr style={{ background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', textTransform: 'uppercase', fontSize: 11, color: 'var(--qa-text-2)', letterSpacing: '0.05em' }}>
                   <th style={{ padding: '10px 12px', textAlign: 'left' }}>Week & Category</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', width: '13%' }}>Chat Type</th>
                   <th style={{ padding: '10px 12px', textAlign: 'left', width: '20%' }}>Investor Question</th>
@@ -266,10 +266,10 @@ export default function KBGapsPage() {
                   const itemKey = `${r.created_at || idx}_${r.question.slice(0, 10)}`;
                   const isBot = r.chat_type === 'Bot Handled';
                   return (
-                    <tr key={itemKey} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                    <tr key={itemKey} style={{ borderBottom: '1px solid var(--qa-fill-light)' }}>
                       <td style={{ padding: '12px' }}>
-                        <div style={{ fontWeight: 600, color: '#111827' }}>{r.category}</div>
-                        <div style={{ fontSize: 11, color: '#6B7280', fontFamily: MONO, marginTop: 2 }}>{r.week_number}</div>
+                        <div style={{ fontWeight: 600, color: 'var(--qa-text)' }}>{r.category}</div>
+                        <div style={{ fontSize: 11, color: 'var(--qa-text-2)', fontFamily: MONO, marginTop: 2 }}>{r.week_number}</div>
                       </td>
 
                       <td style={{ padding: '12px' }}>
@@ -291,14 +291,14 @@ export default function KBGapsPage() {
                         </span>
                       </td>
 
-                      <td style={{ padding: '12px', fontWeight: 600, color: '#111827' }}>
+                      <td style={{ padding: '12px', fontWeight: 600, color: 'var(--qa-text)' }}>
                         {r.question}
                       </td>
 
                       <td style={{ padding: '12px' }}>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                           {r.chat_ids?.map((cid) => (
-                            <span key={cid} style={{ background: '#F3F4F6', color: '#374151', fontSize: 11, padding: '2px 6px', borderRadius: 4, fontFamily: MONO }}>
+                            <span key={cid} style={{ background: 'var(--qa-fill-light)', color: 'var(--qa-gray-700)', fontSize: 11, padding: '2px 6px', borderRadius: 4, fontFamily: MONO }}>
                               {cid}
                             </span>
                           ))}
@@ -313,8 +313,8 @@ export default function KBGapsPage() {
                         {r.suggested_kb_content}
                       </td>
 
-                      <td style={{ padding: '12px', fontSize: 11, color: '#6B7280', fontWeight: 500 }}>
-                        <span style={{ background: '#F3F4F6', padding: '3px 8px', borderRadius: 6 }}>
+                      <td style={{ padding: '12px', fontSize: 11, color: 'var(--qa-text-2)', fontWeight: 500 }}>
+                        <span style={{ background: 'var(--qa-fill-light)', padding: '3px 8px', borderRadius: 6 }}>
                           {r.target_kb}
                         </span>
                       </td>

@@ -436,7 +436,7 @@ export function CustomerEmailThreadCard({
             padding: 0,
             fontSize: 11,
             fontWeight: 500,
-            color: 'var(--accent, #2d9e4f)',
+            color: 'var(--accent, #1f7a4d)',
             cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',

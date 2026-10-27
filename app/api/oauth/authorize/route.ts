@@ -23,7 +23,7 @@ import { MCP_ALLOWED_ROLES } from '@/lib/mcp/tokens';
 //        redirect back to the (registered, allowlisted) redirect_uri.
 export const runtime = 'nodejs';
 
-const BRAND = '#2d9e4f';
+const BRAND = '#1f7a4d';
 
 function esc(s: string): string {
   return s

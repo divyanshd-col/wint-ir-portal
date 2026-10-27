@@ -187,23 +187,23 @@
 [data-theme="dark"] [style*="color:#9CA3AF" i], [data-theme="dark"] [style*="color:#A1A1AA" i] { color: var(--color-text-tertiary) !important; }
 [data-theme="dark"] [style*="#E5E7EB" i], [data-theme="dark"] [style*="#E4E4E7" i], [data-theme="dark"] [style*="#F3F4F6" i] { border-color: var(--color-border-tertiary) !important; }
 
-/* ---- brand green: pages that hard-code the old green (#2d9e4f) as Tailwind classes follow the dark accent ---- */
-[data-theme="dark"] .bg-\[\#2d9e4f\] { background-color: var(--accent); color: var(--accent-on); }
-[data-theme="dark"] .hover\:bg-\[\#25883f\]:hover, [data-theme="dark"] .hover\:bg-\[\#27883f\]:hover { background-color: var(--accent-hover); }
-[data-theme="dark"] .text-\[\#2d9e4f\], [data-theme="dark"] .hover\:text-\[\#2d9e4f\]:hover { color: var(--accent-active); }
-[data-theme="dark"] .border-\[\#2d9e4f\] { border-color: var(--accent); }
-[data-theme="dark"] .accent-\[\#2d9e4f\] { accent-color: var(--accent); }
-[data-theme="dark"] .focus\:ring-\[\#2d9e4f\]:focus { --tw-ring-color: var(--accent); }
-[data-theme="dark"] .focus\:ring-\[\#2d9e4f\]\/30:focus { --tw-ring-color: rgba(5,165,75,.3); }
-[data-theme="dark"] .focus\:ring-\[\#2d9e4f\]\/40:focus { --tw-ring-color: rgba(5,165,75,.4); }
-[data-theme="dark"] .focus\:border-\[\#2d9e4f\]\/50:focus, [data-theme="dark"] .focus\:border-\[\#2d9e4f\]\/60:focus { border-color: rgba(5,165,75,.6); }
-[data-theme="dark"] .hover\:border-\[\#2d9e4f\]\/70:hover { border-color: rgba(5,165,75,.7); }
-[data-theme="dark"] .bg-\[\#2d9e4f\]\/10 { background-color: rgba(5,165,75,.10); }
-[data-theme="dark"] .bg-\[\#2d9e4f\]\/20 { background-color: rgba(5,165,75,.20); }
-[data-theme="dark"] .bg-\[\#2d9e4f\]\/40 { background-color: rgba(5,165,75,.40); }
-[data-theme="dark"] .bg-\[\#2d9e4f\]\/60 { background-color: rgba(5,165,75,.60); }
-[data-theme="dark"] .bg-\[\#2d9e4f\]\/80 { background-color: rgba(5,165,75,.80); }
-[data-theme="dark"] .hover\:bg-\[\#2d9e4f\]\/5:hover { background-color: rgba(5,165,75,.05); }
+/* ---- brand green: pages that hard-code the old green (#1f7a4d) as Tailwind classes follow the dark accent ---- */
+[data-theme="dark"] .bg-\[\#1f7a4d\] { background-color: var(--accent); color: var(--accent-on); }
+[data-theme="dark"] .hover\:bg-\[\#1a6a42\]:hover, [data-theme="dark"] .hover\:bg-\[\#27883f\]:hover { background-color: var(--accent-hover); }
+[data-theme="dark"] .text-\[\#1f7a4d\], [data-theme="dark"] .hover\:text-\[\#1f7a4d\]:hover { color: var(--accent-active); }
+[data-theme="dark"] .border-\[\#1f7a4d\] { border-color: var(--accent); }
+[data-theme="dark"] .accent-\[\#1f7a4d\] { accent-color: var(--accent); }
+[data-theme="dark"] .focus\:ring-\[\#1f7a4d\]:focus { --tw-ring-color: var(--accent); }
+[data-theme="dark"] .focus\:ring-\[\#1f7a4d\]\/30:focus { --tw-ring-color: rgba(76,194,135,.3); }
+[data-theme="dark"] .focus\:ring-\[\#1f7a4d\]\/40:focus { --tw-ring-color: rgba(76,194,135,.4); }
+[data-theme="dark"] .focus\:border-\[\#1f7a4d\]\/50:focus, [data-theme="dark"] .focus\:border-\[\#1f7a4d\]\/60:focus { border-color: rgba(76,194,135,.6); }
+[data-theme="dark"] .hover\:border-\[\#1f7a4d\]\/70:hover { border-color: rgba(76,194,135,.7); }
+[data-theme="dark"] .bg-\[\#1f7a4d\]\/10 { background-color: rgba(76,194,135,.10); }
+[data-theme="dark"] .bg-\[\#1f7a4d\]\/20 { background-color: rgba(76,194,135,.20); }
+[data-theme="dark"] .bg-\[\#1f7a4d\]\/40 { background-color: rgba(76,194,135,.40); }
+[data-theme="dark"] .bg-\[\#1f7a4d\]\/60 { background-color: rgba(76,194,135,.60); }
+[data-theme="dark"] .bg-\[\#1f7a4d\]\/80 { background-color: rgba(76,194,135,.80); }
+[data-theme="dark"] .hover\:bg-\[\#1f7a4d\]\/5:hover { background-color: rgba(76,194,135,.05); }
 
 /* ---- inline styles, rgb() form: once React updates an element the browser rewrites hex colours as rgb(r, g, b), which the hex rules above no longer match ---- */
 [data-theme="dark"] [style*="background: rgb(255, 255, 255)"],

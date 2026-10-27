@@ -15,12 +15,12 @@ const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Aria
 
 const TH_BASE: CSSProperties = {
   height: 40,
-  background: 'var(--qa-gray-50, #FAFAFB)',
-  borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+  background: 'var(--qa-gray-50, var(--qa-gray-50))',
+  borderBottom: '1px solid var(--qa-border, var(--qa-border))',
   fontSize: 12,
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
   fontWeight: 500,
   padding: '0 16px',
   textAlign: 'left',
@@ -30,7 +30,7 @@ const TH_BASE: CSSProperties = {
 const TD_BASE: CSSProperties = {
   height: 52,
   padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+  borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
   fontSize: 14,
   color: 'var(--qa-text, #111111)',
   verticalAlign: 'middle',
@@ -40,7 +40,7 @@ const TD_MONO: CSSProperties = {
   ...TD_BASE,
   fontFamily: MONO,
   fontSize: 13,
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
 };
 
 const TD_NUM: CSSProperties = {
@@ -53,7 +53,7 @@ const TD_NUM: CSSProperties = {
 // ─── Badges ──────────────────────────────────────────────────────────────────
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   const bg = score >= 85 ? '#f0fdf4' : score >= 70 ? '#fefce8' : '#fef2f2';
   const color = score >= 85 ? '#166534' : score >= 70 ? '#854d0e' : '#991b1b';
   const border = score >= 85 ? '#bbf7d0' : score >= 70 ? '#fef08a' : '#fecaca';
@@ -80,7 +80,7 @@ function IQSBadge({ score }: { score: number | null }) {
 }
 
 function CSATBadge({ score }: { score: string | number | null }) {
-  if (!score) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>;
+  if (!score) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
   const s = String(score);
   const label = s === '5' ? 'Good' : s === '3' ? 'Neutral' : s === '1' ? 'Bad' : s;
   const bg = s === '5' ? '#f0fdf4' : s === '3' ? '#fefce8' : '#fef2f2';
@@ -120,7 +120,7 @@ function ChatIdCell({ chatId }: { chatId: string }) {
         style={{
           color: 'var(--qa-text, #111111)',
           textDecoration: 'underline',
-          textDecorationColor: '#C7C7CC',
+          textDecorationColor: 'var(--qa-text-4)',
           fontFamily: MONO,
           fontSize: 13,
         }}
@@ -129,7 +129,7 @@ function ChatIdCell({ chatId }: { chatId: string }) {
       </a>
     );
   }
-  return <span style={{ color: 'var(--qa-text-2, #6B6B6B)', fontFamily: MONO, fontSize: 13 }}>{display}</span>;
+  return <span style={{ color: 'var(--qa-text-2, var(--qa-text-2))', fontFamily: MONO, fontSize: 13 }}>{display}</span>;
 }
 
 function CountBadge({ count, active }: { count: number; active: boolean }) {
@@ -141,8 +141,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
         borderRadius: 10,
         fontWeight: 600,
         lineHeight: '18px',
-        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, #F4F4F5)',
-        color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, var(--qa-fill-light))',
+        color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
       }}
     >
       {count}
@@ -405,7 +405,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
     border: 'none',
     borderRadius: 8,
     background: active ? 'var(--qa-gray-700, #111111)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+    color: active ? '#fff' : 'var(--qa-text-2, var(--qa-text-2))',
     fontFamily: SANS,
     fontSize: 13,
     fontWeight: active ? 600 : 400,
@@ -418,7 +418,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
   const chipInputStyle: CSSProperties = {
     height: 32,
     padding: '0 10px',
-    border: '1px solid var(--qa-border, #E4E4E7)',
+    border: '1px solid var(--qa-border, var(--qa-border))',
     borderRadius: 8,
     fontSize: 13,
     fontFamily: SANS,
@@ -434,7 +434,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
           My Quality Chats
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: '4px 0 0' }}>
+        <p style={{ fontSize: 13, color: 'var(--qa-text-2, var(--qa-text-2))', margin: '4px 0 0' }}>
           View evaluated chats, raise disputes to your Team Lead, and track raised and reviewed disputes.
         </p>
       </div>
@@ -456,7 +456,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             display: 'flex',
             gap: 4,
             background: 'var(--qa-card, #FFFFFF)',
-            border: '1px solid var(--qa-border, #E4E4E7)',
+            border: '1px solid var(--qa-border, var(--qa-border))',
             borderRadius: 10,
             padding: 4,
             width: 'fit-content',
@@ -478,7 +478,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
         {/* Agent / Interaction Filter Dropdown */}
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, color: 'var(--qa-text-2, #6B6B6B)', fontWeight: 500 }}>Interaction:</span>
+          <span style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', fontWeight: 500 }}>Interaction:</span>
           <select
             value={agentFilter}
             onChange={(e) => {
@@ -488,7 +488,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             style={{
               height: 36,
               padding: '0 28px 0 12px',
-              border: '1px solid var(--qa-border, #E4E4E7)',
+              border: '1px solid var(--qa-border, var(--qa-border))',
               borderRadius: 8,
               background: 'var(--qa-card, #FFFFFF)',
               color: 'var(--qa-text, #111111)',
@@ -513,13 +513,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
       {/* ── TAB 1: EVALUATED CHATS ──────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
-        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
           {/* Single-line Filter & Pagination Bar */}
           <div
             style={{
               minHeight: 52,
               background: '#FFFFFF',
-              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              borderBottom: '1px solid var(--qa-border, var(--qa-border))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -583,7 +583,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 style={{ ...chipInputStyle, width: 120 }}
                 title="From Date"
               />
-              <span style={{ fontSize: 12, color: '#A1A1AA' }}>→</span>
+              <span style={{ fontSize: 12, color: 'var(--qa-text-3)' }}>→</span>
               <input
                 type="date"
                 value={dateTo}
@@ -633,9 +633,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 28,
                     padding: '0 10px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
-                    color: '#6B6B6B',
+                    color: 'var(--qa-text-2)',
                     fontSize: 12,
                     fontFamily: SANS,
                     cursor: 'pointer',
@@ -648,7 +648,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
-              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
                 Showing {totalEntries === 0 ? 0 : `${page * pageSize + 1}–${Math.min((page + 1) * pageSize, totalEntries)}`} of {totalEntries}
               </span>
               <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
@@ -658,10 +658,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   style={{
                     width: 28,
                     height: 28,
-                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    border: '1px solid var(--qa-border, var(--qa-border))',
                     borderRadius: 6,
                     background: 'var(--qa-card, #FFFFFF)',
-                    color: 'var(--qa-text-2, #6B6B6B)',
+                    color: 'var(--qa-text-2, var(--qa-text-2))',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -686,7 +686,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       marginTop: 4,
                       zIndex: 50,
                       background: 'var(--qa-card, #FFFFFF)',
-                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      border: '1px solid var(--qa-border, var(--qa-border))',
                       borderRadius: 8,
                       boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
                       minWidth: 130,
@@ -694,7 +694,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)' }}>
+                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))' }}>
                       Rows per page
                     </div>
                     {[20, 50, 100].map((n) => (
@@ -709,7 +709,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           padding: '8px 14px',
                           fontSize: 13,
                           cursor: 'pointer',
-                          background: pageSize === n ? 'var(--qa-gray-100, #F4F4F5)' : 'transparent',
+                          background: pageSize === n ? 'var(--qa-gray-100, var(--qa-fill-light))' : 'transparent',
                           color: 'var(--qa-text, #111111)',
                           fontWeight: pageSize === n ? 600 : 400,
                           display: 'flex',
@@ -753,13 +753,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingEntries ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     Loading evaluated chats…
                   </td>
                 </tr>
               ) : entries.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     No evaluated chats found
                   </td>
                 </tr>
@@ -775,26 +775,26 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={e.id}>
-                      <tr style={{ background: isOpen ? '#FAFAFB' : '#FFFFFF' }}>
-                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                      <tr style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={e.chatId} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontWeight: 500 }}>
                           {e.agentName || agentName}
                         </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={e.iqs ?? null} />
                         </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={e.callIqsScore ?? null} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <CSATBadge score={e.csat ?? null} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 13 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 13 }}>
                           {e.date || '—'}
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 12 }}>
                           {isPending ? (
                             <span
                               style={{
@@ -820,17 +820,17 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                               Reviewed
                             </span>
                           ) : (
-                            <span style={{ color: '#A1A1AA' }}>—</span>
+                            <span style={{ color: 'var(--qa-text-3)' }}>—</span>
                           )}
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', textAlign: 'right' }}>
                           <button
                             onClick={() => setExpandedEvalId(isOpen ? null : e.id)}
                             style={{
                               background: 'none',
                               border: 0,
                               fontSize: 13,
-                              color: '#111111',
+                              color: 'var(--qa-text)',
                               fontWeight: 500,
                               cursor: 'pointer',
                               display: 'inline-flex',
@@ -842,7 +842,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             {isOpen ? 'Close' : 'View'}
                             <span
                               style={{
-                                color: '#6B6B6B',
+                                color: 'var(--qa-text-2)',
                                 fontSize: 11,
                                 transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                                 transition: 'transform 0.15s',
@@ -893,10 +893,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '12px 16px',
-                borderTop: '1px solid var(--qa-border, #E4E4E7)',
+                borderTop: '1px solid var(--qa-border, var(--qa-border))',
               }}
             >
-              <div style={{ fontSize: 13, color: '#6B6B6B' }}>
+              <div style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>
                 Page {page + 1} of {Math.ceil(totalEntries / pageSize)}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -907,7 +907,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 30,
                     padding: '0 12px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
                     cursor: page === 0 ? 'default' : 'pointer',
                     opacity: page === 0 ? 0.4 : 1,
@@ -923,7 +923,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 30,
                     padding: '0 12px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
                     cursor: (page + 1) * pageSize >= totalEntries ? 'default' : 'pointer',
                     opacity: (page + 1) * pageSize >= totalEntries ? 0.4 : 1,
@@ -940,13 +940,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
       {/* ── TAB 2: DISPUTES RAISED (PENDING) ────────────────────────────────── */}
       {activeTab === 'disputes' && (
-        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
           {/* Single-line Filter & Pagination Bar */}
           <div
             style={{
               minHeight: 52,
               background: '#FFFFFF',
-              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              borderBottom: '1px solid var(--qa-border, var(--qa-border))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -1002,9 +1002,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 28,
                     padding: '0 10px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
-                    color: '#6B6B6B',
+                    color: 'var(--qa-text-2)',
                     fontSize: 12,
                     fontFamily: SANS,
                     cursor: 'pointer',
@@ -1017,7 +1017,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
-              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
                 Showing {filteredPendingDisputes.length === 0 ? 0 : `${pendingPage * pendingPageSize + 1}–${Math.min((pendingPage + 1) * pendingPageSize, filteredPendingDisputes.length)}`} of {filteredPendingDisputes.length}
               </span>
               <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
@@ -1027,10 +1027,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   style={{
                     width: 28,
                     height: 28,
-                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    border: '1px solid var(--qa-border, var(--qa-border))',
                     borderRadius: 6,
                     background: 'var(--qa-card, #FFFFFF)',
-                    color: 'var(--qa-text-2, #6B6B6B)',
+                    color: 'var(--qa-text-2, var(--qa-text-2))',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1055,7 +1055,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       marginTop: 4,
                       zIndex: 50,
                       background: 'var(--qa-card, #FFFFFF)',
-                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      border: '1px solid var(--qa-border, var(--qa-border))',
                       borderRadius: 8,
                       boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
                       minWidth: 130,
@@ -1063,7 +1063,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)' }}>
+                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))' }}>
                       Rows per page
                     </div>
                     {[20, 50, 100].map((n) => (
@@ -1078,7 +1078,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           padding: '8px 14px',
                           fontSize: 13,
                           cursor: 'pointer',
-                          background: pendingPageSize === n ? 'var(--qa-gray-100, #F4F4F5)' : 'transparent',
+                          background: pendingPageSize === n ? 'var(--qa-gray-100, var(--qa-fill-light))' : 'transparent',
                           color: 'var(--qa-text, #111111)',
                           fontWeight: pendingPageSize === n ? 600 : 400,
                           display: 'flex',
@@ -1121,13 +1121,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingPending ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     Loading raised disputes…
                   </td>
                 </tr>
               ) : filteredPendingDisputes.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={8} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     No pending disputes raised
                   </td>
                 </tr>
@@ -1145,26 +1145,26 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={row.flagId}>
-                      <tr style={{ background: isOpen ? '#FAFAFB' : '#FFFFFF' }}>
-                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                      <tr style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={row.chatId} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontWeight: 500 }}>
                           {agentName}
                         </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={row.iqsScore} />
                         </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={row.callIqsScore ?? null} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <CSATBadge score={row.csatScore ?? null} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 12 }}>
                           {dateStr}
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 12 }}>
                           <DisputeStatusPill
                             status={row.status}
                             raisedByRole={row.raisedByRole}
@@ -1172,7 +1172,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             parameters={row.parameters}
                           />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', textAlign: 'right' }}>
                           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                             {(row.status === 'pending' || row.status === 'ir_pending_tl') && (
                               <button
@@ -1185,8 +1185,8 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                                   fontSize: 12,
                                   fontWeight: 500,
                                   background: '#FFFFFF',
-                                  border: '1px solid #E4E4E7',
-                                  color: '#111111',
+                                  border: '1px solid var(--qa-border)',
+                                  color: 'var(--qa-text)',
                                   cursor: cancellingId === row.flagId ? 'default' : 'pointer',
                                   fontFamily: SANS,
                                   opacity: cancellingId === row.flagId ? 0.5 : 1,
@@ -1201,7 +1201,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                                 background: 'none',
                                 border: 0,
                                 fontSize: 13,
-                                color: '#111111',
+                                color: 'var(--qa-text)',
                                 fontWeight: 500,
                                 cursor: 'pointer',
                                 display: 'inline-flex',
@@ -1213,7 +1213,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                               {isOpen ? 'Close' : 'View'}
                               <span
                                 style={{
-                                  color: '#6B6B6B',
+                                  color: 'var(--qa-text-2)',
                                   fontSize: 11,
                                   transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                                   transition: 'transform 0.15s',
@@ -1228,7 +1228,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       {isOpen && (
                         <>
                           <tr>
-                            <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                            <td colSpan={8} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
                               {row.challengedParams.length > 0 && (() => {
                                 const targetInfo = getDisputeClassification(row.challengedParams);
                                 return (
@@ -1241,11 +1241,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                                     }}>
                                       Target: {targetInfo.label}
                                     </span>
-                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>Disputed Params</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)' }}>Disputed Params</span>
                                     {row.challengedParams.map(cp => (
                                       <span key={cp.param} title={cp.note} style={{
                                         fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                        background: '#F4F4F5', border: '1px solid #E4E4E7',
+                                        background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
                                         borderRadius: 4, padding: '2px 6px', color: '#52525B', cursor: cp.note ? 'help' : 'default',
                                       }}>{formatParamLabel(cp.param)}</span>
                                     ))}
@@ -1302,10 +1302,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '12px 16px',
-                borderTop: '1px solid var(--qa-border, #E4E4E7)',
+                borderTop: '1px solid var(--qa-border, var(--qa-border))',
               }}
             >
-              <div style={{ fontSize: 13, color: '#6B6B6B' }}>
+              <div style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>
                 Page {pendingPage + 1} of {Math.max(1, Math.ceil(filteredPendingDisputes.length / pendingPageSize))}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -1316,7 +1316,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 30,
                     padding: '0 12px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
                     cursor: pendingPage === 0 ? 'default' : 'pointer',
                     opacity: pendingPage === 0 ? 0.4 : 1,
@@ -1332,7 +1332,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 30,
                     padding: '0 12px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
                     cursor: (pendingPage + 1) * pendingPageSize >= filteredPendingDisputes.length ? 'default' : 'pointer',
                     opacity: (pendingPage + 1) * pendingPageSize >= filteredPendingDisputes.length ? 0.4 : 1,
@@ -1349,13 +1349,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
-        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 8, overflow: 'hidden' }}>
           {/* Single-line Filter & Pagination Bar */}
           <div
             style={{
               minHeight: 52,
               background: '#FFFFFF',
-              borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+              borderBottom: '1px solid var(--qa-border, var(--qa-border))',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
@@ -1414,9 +1414,9 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 28,
                     padding: '0 10px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
-                    color: '#6B6B6B',
+                    color: 'var(--qa-text-2)',
                     fontSize: 12,
                     fontFamily: SANS,
                     cursor: 'pointer',
@@ -1429,7 +1429,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
             {/* Right Side: Page size icon dropdown + Range in single line */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, marginLeft: 'auto' }}>
-              <span style={{ fontSize: 13, color: '#A1A1AA', whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 13, color: 'var(--qa-text-3)', whiteSpace: 'nowrap' }}>
                 Showing {filteredReviewedDisputes.length === 0 ? 0 : `${reviewedPage * reviewedPageSize + 1}–${Math.min((reviewedPage + 1) * reviewedPageSize, filteredReviewedDisputes.length)}`} of {filteredReviewedDisputes.length}
               </span>
               <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
@@ -1439,10 +1439,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                   style={{
                     width: 28,
                     height: 28,
-                    border: '1px solid var(--qa-border, #E4E4E7)',
+                    border: '1px solid var(--qa-border, var(--qa-border))',
                     borderRadius: 6,
                     background: 'var(--qa-card, #FFFFFF)',
-                    color: 'var(--qa-text-2, #6B6B6B)',
+                    color: 'var(--qa-text-2, var(--qa-text-2))',
                     cursor: 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -1467,7 +1467,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       marginTop: 4,
                       zIndex: 50,
                       background: 'var(--qa-card, #FFFFFF)',
-                      border: '1px solid var(--qa-border, #E4E4E7)',
+                      border: '1px solid var(--qa-border, var(--qa-border))',
                       borderRadius: 8,
                       boxShadow: '0 4px 16px rgba(0,0,0,0.08)',
                       minWidth: 130,
@@ -1475,7 +1475,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     }}
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)' }}>
+                    <div style={{ padding: '6px 14px 4px', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))' }}>
                       Rows per page
                     </div>
                     {[20, 50, 100].map((n) => (
@@ -1490,7 +1490,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           padding: '8px 14px',
                           fontSize: 13,
                           cursor: 'pointer',
-                          background: reviewedPageSize === n ? 'var(--qa-gray-100, #F4F4F5)' : 'transparent',
+                          background: reviewedPageSize === n ? 'var(--qa-gray-100, var(--qa-fill-light))' : 'transparent',
                           color: 'var(--qa-text, #111111)',
                           fontWeight: reviewedPageSize === n ? 600 : 400,
                           display: 'flex',
@@ -1535,13 +1535,13 @@ export default function MyQualityChatsPage({ agentName }: Props) {
             <tbody>
               {loadingReviewed ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     Loading reviewed disputes…
                   </td>
                 </tr>
               ) : filteredReviewedDisputes.length === 0 ? (
                 <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={9} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     No reviewed disputes found
                   </td>
                 </tr>
@@ -1561,29 +1561,29 @@ export default function MyQualityChatsPage({ agentName }: Props) {
 
                   return (
                     <Fragment key={row.flagId}>
-                      <tr style={{ background: isOpen ? '#FAFAFB' : '#FFFFFF' }}>
-                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                      <tr style={{ background: isOpen ? 'var(--qa-gray-50)' : '#FFFFFF' }}>
+                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <ChatIdCell chatId={row.chatId} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontWeight: 500 }}>
                           {agentName}
                         </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={row.iqsScore} />
                         </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={row.callIqsScore ?? null} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <CSATBadge score={row.csatScore ?? null} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 12 }}>
                           {dateStr}
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 12 }}>
                           {row.reviewedBy || 'QA'}
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 12 }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 12 }}>
                           <DisputeStatusPill
                             status={row.status}
                             raisedByRole={row.raisedByRole}
@@ -1591,14 +1591,14 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             parameters={row.parameters}
                           />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', textAlign: 'right' }}>
                           <button
                             onClick={() => setExpandedDisputeId(isOpen ? null : row.flagId)}
                             style={{
                               background: 'none',
                               border: 0,
                               fontSize: 13,
-                              color: '#111111',
+                              color: 'var(--qa-text)',
                               fontWeight: 500,
                               cursor: 'pointer',
                               display: 'inline-flex',
@@ -1610,7 +1610,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             {isOpen ? 'Close' : 'View'}
                             <span
                               style={{
-                                color: '#6B6B6B',
+                                color: 'var(--qa-text-2)',
                                 fontSize: 11,
                                 transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                                 transition: 'transform 0.15s',
@@ -1624,7 +1624,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                       {isOpen && (
                         <>
                           <tr>
-                            <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '1px solid #E4E4E7', background: '#FAFAFB' }}>
+                            <td colSpan={9} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)' }}>
                               {row.challengedParams.length > 0 && (() => {
                                 const targetInfo = getDisputeClassification(row.challengedParams);
                                 return (
@@ -1637,11 +1637,11 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                                     }}>
                                       Target: {targetInfo.label}
                                     </span>
-                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#71717A' }}>Disputed Params</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-2)' }}>Disputed Params</span>
                                     {row.challengedParams.map(cp => (
                                       <span key={cp.param} title={cp.note} style={{
                                         fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                        background: '#F4F4F5', border: '1px solid #E4E4E7',
+                                        background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
                                         borderRadius: 4, padding: '2px 6px', color: '#52525B', cursor: cp.note ? 'help' : 'default',
                                       }}>{formatParamLabel(cp.param)}</span>
                                     ))}
@@ -1700,10 +1700,10 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '12px 16px',
-                borderTop: '1px solid var(--qa-border, #E4E4E7)',
+                borderTop: '1px solid var(--qa-border, var(--qa-border))',
               }}
             >
-              <div style={{ fontSize: 13, color: '#6B6B6B' }}>
+              <div style={{ fontSize: 13, color: 'var(--qa-text-2)' }}>
                 Page {reviewedPage + 1} of {Math.max(1, Math.ceil(filteredReviewedDisputes.length / reviewedPageSize))}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -1714,7 +1714,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 30,
                     padding: '0 12px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
                     cursor: reviewedPage === 0 ? 'default' : 'pointer',
                     opacity: reviewedPage === 0 ? 0.4 : 1,
@@ -1730,7 +1730,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                     height: 30,
                     padding: '0 12px',
                     borderRadius: 6,
-                    border: '1px solid #E4E4E7',
+                    border: '1px solid var(--qa-border)',
                     background: '#FFFFFF',
                     cursor: (reviewedPage + 1) * reviewedPageSize >= filteredReviewedDisputes.length ? 'default' : 'pointer',
                     opacity: (reviewedPage + 1) * reviewedPageSize >= filteredReviewedDisputes.length ? 0.4 : 1,

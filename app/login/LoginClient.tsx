@@ -57,9 +57,9 @@ function LoginForm() {
           <div className="bg-[#1a1a1a] px-8 py-8 flex flex-col items-center">
             <div className="flex items-center gap-3 mb-3">
               <svg width="40" height="32" viewBox="0 0 40 32" fill="none">
-                <rect x="0" y="12" width="12" height="20" fill="#2d9e4f" rx="1"/>
-                <rect x="14" y="6" width="12" height="26" fill="#2d9e4f" rx="1"/>
-                <rect x="28" y="0" width="12" height="32" fill="#2d9e4f" rx="1"/>
+                <rect x="0" y="12" width="12" height="20" fill="#1f7a4d" rx="1"/>
+                <rect x="14" y="6" width="12" height="26" fill="#1f7a4d" rx="1"/>
+                <rect x="28" y="0" width="12" height="32" fill="#1f7a4d" rx="1"/>
               </svg>
               <span className="text-white text-2xl font-bold tracking-tight">wint</span>
             </div>
@@ -83,7 +83,7 @@ function LoginForm() {
                   type="email"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent transition"
                   placeholder="you@wintwealth.com"
                   required
                   autoComplete="email"
@@ -96,7 +96,7 @@ function LoginForm() {
                   type="password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent transition"
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"
@@ -105,7 +105,7 @@ function LoginForm() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-[#2d9e4f] hover:bg-[#27883f] text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-60 text-sm"
+                className="w-full bg-[#1f7a4d] hover:bg-[#27883f] text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-60 text-sm"
               >
                 {loading ? 'Signing in…' : 'Sign In'}
               </button>
@@ -116,7 +116,7 @@ function LoginForm() {
             </p>
             <p className="mt-2 text-center text-xs text-gray-400">
               Need help?{' '}
-              <a href="mailto:ir@wintwealth.com" className="text-[#2d9e4f] hover:underline">
+              <a href="mailto:ir@wintwealth.com" className="text-[#1f7a4d] hover:underline">
                 ir@wintwealth.com
               </a>
             </p>

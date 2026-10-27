@@ -1701,7 +1701,7 @@ function fmtDurQ(secs: number | null | undefined): string {
 }
 
 function iqsColorQ(iqs: number | null) {
-  if (iqs === null) return { text: '#6b7280', bg: '#f3f4f6' };
+  if (iqs === null) return { text: 'var(--qa-text-2)', bg: 'var(--qa-fill-light)' };
   if (iqs >= 90) return { text: '#15803d', bg: '#dcfce7' };
   if (iqs >= 80) return { text: '#92400e', bg: '#fef3c7' };
   if (iqs >= 70) return { text: '#c2410c', bg: '#ffedd5' };
@@ -4108,7 +4108,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                   </div>
                   <div className="grid grid-cols-4 gap-3">
                     {[
-                      { label: 'Scored', value: batchResults.length, color: '#111827' },
+                      { label: 'Scored', value: batchResults.length, color: 'var(--qa-text)' },
                       { label: 'Avg IQS', value: `${avgIqs}%`, color: iqsTheme(avgIqs).text },
                       { label: 'Below 70%', value: batchResults.filter(e => e.iqs < 70).length, color: '#dc2626' },
                       { label: '≥ 90%', value: batchResults.filter(e => e.iqs >= 90).length, color: '#15803d' },

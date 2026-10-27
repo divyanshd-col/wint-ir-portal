@@ -62,9 +62,9 @@ export default function SetPasswordPage() {
           <div className="bg-[#1a1a1a] px-8 py-8 flex flex-col items-center">
             <div className="flex items-center gap-3 mb-3">
               <svg width="40" height="32" viewBox="0 0 40 32" fill="none">
-                <rect x="0" y="12" width="12" height="20" fill="#2d9e4f" rx="1"/>
-                <rect x="14" y="6" width="12" height="26" fill="#2d9e4f" rx="1"/>
-                <rect x="28" y="0" width="12" height="32" fill="#2d9e4f" rx="1"/>
+                <rect x="0" y="12" width="12" height="20" fill="#1f7a4d" rx="1"/>
+                <rect x="14" y="6" width="12" height="26" fill="#1f7a4d" rx="1"/>
+                <rect x="28" y="0" width="12" height="32" fill="#1f7a4d" rx="1"/>
               </svg>
               <span className="text-white text-2xl font-bold tracking-tight">wint</span>
             </div>
@@ -75,7 +75,7 @@ export default function SetPasswordPage() {
             {done ? (
               <div className="text-center py-4">
                 <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2d9e4f" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1f7a4d" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
@@ -88,7 +88,7 @@ export default function SetPasswordPage() {
                 <p className="text-gray-500 text-sm">
                   This page needs a valid signup link. Ask your admin to send (or resend) your invite.
                 </p>
-                <a href="/login" className="inline-block mt-4 text-[#2d9e4f] hover:underline font-medium text-sm">Back to sign in</a>
+                <a href="/login" className="inline-block mt-4 text-[#1f7a4d] hover:underline font-medium text-sm">Back to sign in</a>
               </div>
             ) : (
               <>
@@ -108,7 +108,7 @@ export default function SetPasswordPage() {
                       type="password"
                       value={password}
                       onChange={e => setPassword(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent transition"
                       placeholder="Min. 8 characters"
                       required
                       autoComplete="new-password"
@@ -121,7 +121,7 @@ export default function SetPasswordPage() {
                       type="password"
                       value={confirm}
                       onChange={e => setConfirm(e.target.value)}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#2d9e4f] focus:border-transparent transition"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#1f7a4d] focus:border-transparent transition"
                       placeholder="Re-enter your password"
                       required
                       autoComplete="new-password"
@@ -130,7 +130,7 @@ export default function SetPasswordPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full bg-[#2d9e4f] hover:bg-[#27883f] text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-60 text-sm"
+                    className="w-full bg-[#1f7a4d] hover:bg-[#27883f] text-white font-semibold py-2.5 rounded-lg transition disabled:opacity-60 text-sm"
                   >
                     {loading ? 'Saving…' : 'Save Password'}
                   </button>
@@ -138,7 +138,7 @@ export default function SetPasswordPage() {
 
                 <p className="mt-5 text-center text-xs text-gray-400">
                   Already have a password?{' '}
-                  <a href="/login" className="text-[#2d9e4f] hover:underline font-medium">Sign in</a>
+                  <a href="/login" className="text-[#1f7a4d] hover:underline font-medium">Sign in</a>
                 </p>
               </>
             )}
