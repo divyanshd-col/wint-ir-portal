@@ -251,3 +251,83 @@ body {
   color: #92400e;
 }
 
+
+/* ── Evaluation panel (Chat Evaluation reference) ─────────────────────────────
+   Transcript left (wider, full height), scoring right. Both stack below 980px; gate rows go single-column below 560px.
+   Green = pass, red = breach, blue only for focus. Colours come from the shared tokens, so both themes follow. */
+.eval-wrap { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); height: clamp(560px, calc(100vh - 160px), 760px); overflow: hidden; }
+.eval-pane { min-width: 0; display: flex; flex-direction: column; overflow: hidden; container-type: inline-size; }
+.eval-pane + .eval-pane { border-left: 1px solid var(--line); }
+
+.eval-chip { font-size: 11px; font-weight: 700; letter-spacing: .08em; border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+.eval-chip.pass { background: var(--pass-soft); color: var(--pass); }
+.eval-chip.fail { background: var(--fail); color: var(--qa-card); }
+
+.eval-gates { margin: 12px 16px; border: 2px solid var(--line-strong); border-radius: 10px; padding: 14px; background: var(--qa-card); }
+.eval-gates.failed { border-color: var(--fail); background: var(--fail-soft); }
+.eval-ghead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.eval-gtitle { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--qa-text); white-space: nowrap; }
+.eval-gate { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.eval-gate b { display: block; font-size: 13.5px; color: var(--qa-text); }
+.eval-gate small { color: var(--qa-text-2); font-size: 12.5px; }
+.eval-gate-extra { grid-column: 1 / -1; }
+.eval-reason-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fail); margin-bottom: 4px; }
+.eval-reason { padding: 8px 10px; border-left: 3px solid var(--fail); border-radius: 6px; background: var(--qa-card); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; color: var(--qa-text); }
+.eval-reason-input { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid var(--fail); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12.5px; line-height: 1.5; background: var(--qa-card); color: var(--qa-text); }
+
+.eval-seg { display: inline-flex; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; background: var(--qa-card); }
+.eval-seg button { border: 0; border-left: 1px solid var(--line); background: none; padding: 6px 11px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--qa-text-2); cursor: pointer; }
+.eval-seg button:first-child { border-left: 0; }
+.eval-seg button:disabled { cursor: default; }
+.eval-seg button:disabled:not([aria-pressed="true"]) { opacity: .45; }
+.eval-seg button[aria-pressed="true"] { background: var(--ink); color: var(--ink-fg); }
+.eval-seg.gate button[data-v="pass"][aria-pressed="true"] { background: var(--pass); color: var(--qa-card); }
+.eval-seg.gate button[data-v="fail"][aria-pressed="true"] { background: var(--fail); color: var(--qa-card); }
+.eval-weight { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--faint); }
+
+.eval-rtab { border: 0; background: none; padding: 8px 10px; border-bottom: 2px solid transparent; font: inherit; font-size: 13px; font-weight: 500; color: var(--qa-text-2); cursor: pointer; }
+.eval-rtab[aria-selected="true"] { color: var(--qa-text); border-bottom-color: var(--qa-text); font-weight: 600; }
+
+/* Sticky commit footer: score, gate status, optional KB flag, submit. Red on any breach. */
+.eval-foot { position: sticky; bottom: 0; z-index: 2; flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--qa-card); }
+.eval-foot.failed { border-top-color: var(--fail); background: var(--fail-soft); }
+.eval-foot-err { flex-basis: 100%; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--sunk); font-size: 12px; color: var(--qa-text); }
+.eval-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin-right: auto; }
+.eval-big { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--qa-text); }
+.eval-small { font-size: 12px; color: var(--qa-text-2); }
+.eval-kb { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--qa-text-2); cursor: pointer; }
+.eval-kb input { accent-color: var(--accent); }
+.eval-kb-comment { height: 32px; width: 220px; max-width: 100%; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; font-size: 12px; background: var(--qa-card); color: var(--qa-text); }
+.eval-submit { height: 36px; padding: 0 16px; border: 1px solid var(--ink); border-radius: 8px; background: var(--ink); color: var(--ink-fg); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.eval-submit.danger { background: var(--fail); border-color: var(--fail); color: var(--qa-card); }
+.eval-submit:disabled { opacity: .6; cursor: not-allowed; }
+/* Narrow scoring pane: status + submit share row 1, the KB flag takes its own row. Wide pane: everything on one row. */
+.eval-foot .eval-kb { order: 3; flex-basis: 100%; }
+.eval-foot .eval-kb-comment { order: 4; flex-basis: 100%; }
+@container (min-width: 560px) {
+  .eval-foot .eval-kb, .eval-foot .eval-kb-comment { order: 0; flex-basis: auto; }
+}
+
+/* Internal notes: collapsed, neutral, secrets masked */
+.eval-note { align-self: stretch; margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk); font-size: 12.5px; color: var(--qa-text-2); }
+.eval-note summary { display: flex; align-items: center; gap: 10px; padding: 7px 12px; list-style: none; cursor: pointer; }
+.eval-note summary::-webkit-details-marker { display: none; }
+.eval-note summary::before { content: ""; flex-shrink: 0; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
+.eval-note[open] summary::before { transform: rotate(45deg); }
+.eval-note .preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--faint); }
+.eval-note pre { margin: 0; padding: 4px 12px 10px 28px; font-family: ui-monospace, monospace; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; color: var(--qa-text); }
+.eval-mask { padding: 0 4px; border-radius: 3px; background: var(--line); color: var(--qa-text-2); }
+
+@media (max-width: 980px) {
+  .eval-panel-cell { overflow: visible !important; }
+  .eval-wrap { grid-template-columns: minmax(0, 1fr); height: auto; overflow: visible; }
+  .eval-pane { overflow: visible; }
+  .eval-pane + .eval-pane { border-left: 0; border-top: 1px solid var(--line); }
+  .eval-scroll-t { max-height: 440px; }
+  .eval-scroll-r { overflow: visible !important; }
+}
+@media (max-width: 560px) {
+  .eval-gate { grid-template-columns: minmax(0, 1fr); }
+  .eval-foot { padding: 10px 12px; }
+  .eval-kb-comment { width: 100%; }
+}
