@@ -74,6 +74,9 @@
   --border-radius-lg: 12px;
 }
 
+/* Tailwind gray-400 text is 2.5:1 on white; send it through the AA "faint" tier. Dark mode has its own, more specific rules. */
+.text-gray-400, .text-slate-400, .text-zinc-400 { color: var(--qa-text-3); }
+
 /* Focus outlines are the one place blue appears in chrome (reference: blue = focus + change markers only). */
 :where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
   outline: 2px solid var(--marker);

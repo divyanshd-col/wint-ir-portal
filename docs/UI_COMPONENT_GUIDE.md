@@ -18,29 +18,30 @@ Defined in `app/globals.css` (light defaults) and `app/dark-theme.css` (shell to
 | Quality (`--qa-*`) | Quality / TL / agent pages and tables | `--qa-bg`, `--qa-card`, `--qa-border`, `--qa-border-sub`, `--qa-fill-light`, `--qa-fill-med`, `--qa-text`, `--qa-text-2`, `--qa-text-3`, `--qa-text-4`, `--qa-gray-50`, `--qa-gray-100`, `--qa-gray-700`, `--qa-on-text` |
 | Global (`--color-*`) | everything else, Tailwind-style pages, chat | `--color-background-primary/secondary/tertiary` (+ `-danger/-warning/-success/-info`), `--color-text-primary/secondary/tertiary` (+ status), `--color-border-tertiary/secondary` |
 
-Plus brand: `--accent` (#2d9e4f), `--accent-hover`, `--accent-active`, `--accent-weak`, `--accent-on`.
+Plus brand: `--accent` (light `#1f7a4d`, dark `#4cc287`), `--accent-hover`, `--accent-active`, `--accent-weak`, `--accent-on`.
 
-Light values: eggshell `#f5f3ee` for `--page-bg`, `--tb-bg`, `--sb-bg` (top bar, sidebar and page blend as one surface), white `--qa-card` / `--color-background-primary` for cards. Dark values live under `[data-theme="dark"]`.
+Semantic status tokens (Chat Evaluation reference, both themes): `--pass` / `--pass-soft`, `--fail` / `--fail-soft`, `--marker` / `--marker-fg` (blue: **focus outlines and change markers only**), `--ink` / `--ink-fg` (primary action and active chips: use this pair instead of `#fff` on a `--qa-gray-700` fill), `--sunk` (recessed filter bars and notes), `--line` / `--line-strong`, `--faint` (low-priority text).
 
-### Dark palette (Wint brand scheme)
-Dark mode is the brand black (`#000000`, from Brandfetch for wintwealth.com) with neutral surface steps and the brand green `#05a54b` as the accent. Values live in `[data-theme="dark"]` in `app/dark-theme.css`:
+Light values: muted gray-green `#f5f6f4` for `--page-bg`, `--tb-bg`, `--sb-bg` (top bar, sidebar and page blend as one surface), white `--qa-card` / `--color-background-primary` for cards. Muted / faint text are `#4f584f` / `#667066` (the reference's `#5f685f` / `#8a938a` measured 2.8-3.2:1 on white; these pass AA and stay three distinct tiers). Dark values live under `[data-theme="dark"]` (below).
+
+### Dark palette (Chat Evaluation reference)
+Dark mode is a deep green-black with green-tinted surface steps and a brighter green accent, taken from `Chat Evaluation Redesign.html`. Values live in `[data-theme="dark"]` in `app/dark-theme.css`. (This replaces the earlier brand-black scheme; green = pass, red = breach, blue = focus/markers.)
 
 | Role | Value | Notes |
 |---|---|---|
-| Page background (`--page-bg`, `--qa-bg`, `--background`) | `#0a0a0a` | darkest |
-| Sidebar (`--sb-bg`) | `#111111` | |
-| Card / top bar (`--qa-card`, `--color-background-primary`, `--tb-bg`) | `#141414` | |
-| Raised (`--qa-gray-50`) | `#181818` | table headers, drawers |
-| Fill (`--qa-fill-light`, `--qa-gray-100`, `--color-background-secondary`) | `#1c1c1c` | |
-| Hover (`--color-background-tertiary`) | `#242424` | |
-| Borders (`--qa-border`, `--color-border-tertiary`) / strong | `#2a2a2a` / `#3a3a3a` | |
-| Text / muted / faint | `#f4f4f5` / `#a1a1aa` / `#8b8b94` | 16.8 / 7.2 / 5.5 : 1 on a card (faint text was `#71717a`, 3.8:1, raised so timestamps stay readable on tinted cards). `--qa-text-4` (disabled) is `#666670` |
-| Accent (`--accent`) | `#05a54b` | 5.7:1 on a card |
-| Accent text/links (`--accent-active`) | `#34d27b` | 9.3:1 |
-| Accent hover (`--accent-hover`) / tint (`--accent-weak`) | `#06b852` / `#0a2616` | |
-| Text on green (`--accent-on`) | `#000000` | 6.5:1; white on this green is only 3.2:1 |
-
-Pages that hard-code the old green (`bg-[#2d9e4f]`, `text-[#2d9e4f]`, `focus:ring-[#2d9e4f]/30`, ...) are remapped to these tokens by the "brand green" block at the end of `dark-theme.css`: fills become the brand green with black text, green text becomes the lighter accent. Light mode keeps `#2d9e4f` (not yet aligned with the brand green).
+| Page background (`--page-bg`, `--qa-bg`, `--background`) | `#121512` | darkest |
+| Sunk / sidebar (`--sunk`, `--sb-bg`) | `#151815` | filter bars, internal notes |
+| Card / top bar (`--qa-card`, `--color-background-primary`, `--tb-bg`) | `#1a1e1a` | |
+| Raised (`--qa-gray-50`) | `#1e231e` | table headers, drawers |
+| Fill (`--qa-fill-light`, `--qa-gray-100`, `--color-background-secondary`) | `#222722` | |
+| Hover (`--color-background-tertiary`) | `#272d27` | |
+| Lines (`--line`, `--qa-border`) / strong (`--line-strong`) | `#2b312b` / `#3c443c` | |
+| Text / muted / faint | `#e7ebe6` / `#a3ada2` / `#818b80` | faint nudged from the reference `#7a8479` to stay >= 4.5:1 on a card. `--qa-text-4` (disabled) is `#5a645a`. |
+| Accent (`--accent`) / links (`--accent-active`) | `#4cc287` / `#7be0a8` | |
+| Accent hover / tint (`--accent-hover`, `--accent-weak`) | `#62cf98` / `#1c3326` | |
+| Text on green (`--accent-on`) | `#0b1a11` | |
+| Pass / fail (+ soft) | `#4cc287` `#1c3326` / `#f07167` `#3a1d1a` | |
+| Marker (blue) | `#7c94f5` | focus ring + change markers |
 
 ### Why old pages work in dark mode (what `dark-theme.css` covers)
 Most pages predate the tokens and hard-code light colours, so the dark layer catches them. Know what exists before adding more:
@@ -86,6 +87,7 @@ interface NavItem { label; href; icon; roles?: string[]; skill?: string; section
 ```
 - Visibility: admin sees every item; others need `roles` to include their role and, if set, the `skill`.
 - **Section headings (admin only):** when `role === 'admin'` and an item has `section`, a heading is rendered whenever the section changes between consecutive visible items. The sidebar title (`Admin`) covers the first group; headings are **QA**, **TL**, **IR Agent**. Keep items of one section contiguous in the array.
+- **Responsive:** <=1100px the sidebar is a 64px icon rail (labels stay in the DOM as `.quality-shell-sidebar-label`, visually hidden, plus a `title` tooltip); <=560px it becomes a scrolling icon strip above the content (the reference hides it; the strip keeps every page reachable).
 - CSS classes (in `app/globals.css`): `.quality-shell-sidebar`, `.quality-shell-sidebar-title` (also used for section headings), `.quality-shell-sidebar-link` (+ `.active`), `.quality-shell-main`.
 
 Shell wrappers and their layouts:
@@ -274,8 +276,21 @@ Behaviour changes worth knowing: QA's email Disputes tab no longer lists agent-r
 
 ---
 
+## 7a. Evaluation panel and queue pattern (`GO` branch)
+
+Source of truth: `Chat Evaluation Redesign.html`. Classes live in the "Evaluation panel" block of `app/globals.css`.
+
+- **Panel layout** (`EvalPanel.tsx`): `.eval-wrap` is a grid, transcript left (1.35fr) and scoring right (1fr), DOM order = visual order. Below 980px the panes stack (transcript capped at 440px) and `.eval-panel-cell` stops clipping so the footer can stick to the page. `CallEvalPanel.tsx` already had transcript-left and only adopts the gates/footer pattern.
+- **Gates**: `.eval-gates` (+ `.failed`), rows `.eval-gate`, control `.eval-seg.gate` with `Pass` / `Breach` / `NA` (values stay `pass` / `fail` / `not_applicable`). Any breach: card + footer turn red, chip reads `GATE BREACHED`, submit reads `Submit as failed`. In chat evaluation the displayed Agent IQS drops to 0 while editing (display only; the stored score is still the computed one).
+- **Graded parameters**: neutral `.eval-seg` (selected = `--ink`), weight as `.eval-weight`.
+- **Sticky footer**: `.eval-foot` at the bottom of the scoring pane: score + gate chip, optional "Mark for KB change", Submit. Close is the icon button in the scoring header, away from Submit.
+- **Internal notes**: `<details class="eval-note">`, collapsed, `--sunk`, secrets masked by `maskText` / `renderMasked` (`ck_live_...`, JWTs).
+- **Rubric tabs**: `.eval-rtab[aria-selected]` (underline uses `--qa-text`; the old `--qa-primary` was never defined, so no underline rendered).
+- **Queue pages**: tabs are underlined (`tabStyle` in each page, hairline tab bar, count chip on `--ink`); the interaction select is `AgentFilterSelect` rendered through each table's `leadingFilter` slot; filter bars sit on `--sunk`; chat tables show Agent IQS first (bold) and Bot IQS muted; the Status column only shows when a re-opened chat is listed.
+
 ## 8. Do / Don't (for AI assistants editing the UI)
 
+- **Do** use `var(--ink)` / `var(--ink-fg)` for filled neutral chips and buttons, `--pass` / `--fail` for status, and `--marker` only for focus and change markers.
 - **Do** use tokens, `TicketLinkButton`, `PeriodFilter`, `paramLabel`, `disputeLabel`, `intentLabel`; reuse the column/tab/drawer patterns above.
 - **Do** round numeric scores from the API (`numeric` arrives as a string).
 - **Do** keep `colSpan` and `<colgroup>` in step with the column list.
