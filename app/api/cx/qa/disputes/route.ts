@@ -303,7 +303,12 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       : (db?.agent_name || flag.agentName);
 
     // Scope-check: disputes should be sent to the QA who reviewed it; otherwise based on disposition
-    if (role === 'quality' || (role === 'admin' && dispositions.length > 0)) {
+    // The topic's owner decides: a dispute on a topic that some QA owns goes to that QA only (admins still see everything).
+    // Only when no QA owns the topic do the scorer / agent-assignment rules below apply.
+    const topicOwned = Boolean(effectiveDisposition) && ownedDispositions.has(effectiveDisposition);
+    if (topicOwned && role === 'quality' && !dispositions.includes(effectiveDisposition)) continue;
+
+    if ((role === 'quality' || (role === 'admin' && dispositions.length > 0)) && !topicOwned) {
       let isReviewedByQA = false;
       if (chatReviewer && role === 'quality') {
         const revLower = chatReviewer.toLowerCase();
