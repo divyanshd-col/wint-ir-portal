@@ -435,6 +435,8 @@ export function getDisputeOutcomeKey(d: TLDisputeRow): string {
 // decision by QA.
 function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resolved'; onTotalChange?: (count: number) => void }) {
   const [disputes,   setDisputes]   = useState<TLDisputeRow[]>([]);
+  const [definedTopics, setDefinedTopics] = useState<string[]>([]);
+  const [topicPick, setTopicPick] = useState<Record<string, string>>({});
   const [loading,    setLoading]    = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning,  setActioning]  = useState<string | null>(null);
@@ -459,6 +461,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
         if (!cancelled) {
           const list = data.disputes ?? [];
           setDisputes(list);
+          setDefinedTopics(data.definedDispositions ?? []);
           onTotalChange?.(list.length);
         }
       } finally {
@@ -495,16 +498,18 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     fontSize: 12, fontFamily: 'inherit', background: 'var(--qa-card)', color: 'var(--qa-text)', outline: 'none',
   };
 
-  async function forwardToQA(flagId: string) {
+  async function forwardToQA(flagId: string, disposition?: string) {
     setActioning(flagId);
     setActionError(null);
     try {
       const res = await fetch('/api/cx/tl/disputes/forward', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flagId }),
+        body: JSON.stringify({ flagId, disposition }),
       });
-      if (res.ok) {
+      if (res.status === 422) {
+        setActionError('Pick a topic for this chat first, so it goes to the QA responsible for it.');
+      } else if (res.ok) {
         setDisputes(prev => {
           const next = prev.filter(d => d.flagId !== flagId);
           onTotalChange?.(next.length);
@@ -651,15 +656,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
 
     <table style={{ width: '100%', minWidth: 1080, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
-        <col style={{ width: '11%' }} />
-        <col style={{ width: '14%' }} />
-        <col style={{ width: '13%' }} />
-        <col style={{ width: '10%' }} />
-        <col style={{ width: '8%' }} />
-        <col style={{ width: '13%' }} />
-        <col style={{ width: '11%' }} />
-        <col style={{ width: '14%' }} />
-        <col style={{ width: '6%' }} />
+        {(status === 'pending' ? [9, 12, 10, 8, 6, 10, 9, 12, 24] : [11, 14, 13, 10, 8, 13, 11, 14, 6]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
       </colgroup>
       <thead>
         <tr>
@@ -775,9 +772,15 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         >
                           Resolve
                         </button>
+                        {definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && (
+                          <UISelect aria-label="Topic" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ minWidth: 150 }}>
+                            <option value="">{d.disposition ? `Topic: ${d.disposition}` : 'Choose topic'}</option>
+                            {definedTopics.map(t => <option key={t} value={t}>{t}</option>)}
+                          </UISelect>
+                        )}
                         <button
-                          onClick={() => forwardToQA(d.flagId)}
-                          disabled={actioning === d.flagId}
+                          onClick={() => forwardToQA(d.flagId, topicPick[d.flagId])}
+                          disabled={actioning === d.flagId || (definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && !topicPick[d.flagId])}
                           style={{
                             height: 28, padding: '0 12px', borderRadius: 8,
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,

@@ -6,6 +6,8 @@ import type { IQSAuditEntry } from '@/lib/store';
 import { resolveQANameForChat } from '@/lib/qa-resolver';
 import { readConfig } from '@/lib/config';
 import { log } from '@/lib/log';
+import { getDefinedDispositions } from '@/lib/qa-topics';
+import { getConversation, updateConversationTags } from '@/lib/robylon/db';
 import { randomUUID } from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -18,21 +20,35 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let body: { flagId: string };
+  let body: { flagId: string; disposition?: string };
   try { body = await req.json(); } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
   }
-  const { flagId } = body;
+  const { flagId, disposition } = body;
   if (!flagId) return NextResponse.json({ error: 'flagId required' }, { status: 400 });
 
-  const updated = await storeUpdateIQSFlag(flagId, { status: 'tl_forwarded' });
-  if (!updated) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
-
-  // Lookup flag to resolve chatId & target QA
   const rawFlags = await storeGetIQSFlags();
   const flag = rawFlags
     .map(r => { try { return JSON.parse(r); } catch { return null; } })
     .find((f: any) => f && f.id === flagId);
+  if (!flag) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
+
+  // A chat with no topic (or one no QA owns) cannot be routed to the responsible QA. The TL must pick a defined topic;
+  // it is saved on the chat so the dispute reaches that topic's QA.
+  if (flag.chatId && !flag.callId) {
+    const defined = await getDefinedDispositions();
+    const conv = await getConversation(String(flag.chatId));
+    const current = String((conv?.tags as any)?.disposition ?? '').trim();
+    if (!current || !defined.includes(current)) {
+      if (!disposition || !defined.includes(disposition)) {
+        return NextResponse.json({ error: 'topic_required', definedDispositions: defined }, { status: 422 });
+      }
+      await updateConversationTags(String(flag.chatId), { disposition, sub_disposition: String((conv?.tags as any)?.sub_disposition ?? '') });
+    }
+  }
+
+  const updated = await storeUpdateIQSFlag(flagId, { status: 'tl_forwarded' });
+  if (!updated) return NextResponse.json({ error: 'Flag not found' }, { status: 404 });
 
   const chatId = flag?.chatId || '';
   const callId = flag?.callId;
