@@ -751,7 +751,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   <tr>
                     <td colSpan={colCount} style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border-sub)', background: 'var(--qa-gray-50)' }}>
                       <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ flex: '2 1 0', minWidth: 0, display: 'grid' }}>
                       <DisputeThread
                         flagId={d.flagId}
                         agentNote={d.agentNote}
@@ -768,9 +768,9 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                       />
                         </div>
                         {(d.challengedParams.length > 0 || status === 'pending') && (
-                          <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                          <>
                             {d.challengedParams.length > 0 && (
-                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                              <div style={{ flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                                 <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)' }}>Disputed Params</span>
                                 <span style={{
                                   fontSize: 10, fontWeight: 700,
@@ -790,7 +790,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                               </div>
                             )}
                             {status === 'pending' && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
                             {definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && (
                               <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
@@ -826,7 +826,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         </button>
                           </div>
                         )}
-                          </div>
+                          </>
                         )}
                       </div>
                     </td>
