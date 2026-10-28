@@ -60,7 +60,7 @@ function AnalyticsNav({ sessions, activeId, onSelect, onNew, onClose, streaming 
       >
         <Link href="/analytics" className="flex items-center gap-3 flex-1 min-w-0">
           {AnalyticsIcon}
-          Analytics
+          MCP
         </Link>
         <button
           type="button"
