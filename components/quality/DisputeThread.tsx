@@ -26,7 +26,6 @@ interface Props {
   reviewedAt?: string | null;
   compact?: boolean;
   flush?: boolean;
-  topSlot?: React.ReactNode;
 }
 
 function fmtDateTime(iso?: string | null) {
@@ -123,7 +122,6 @@ export function DisputeThread({
   reviewedAt,
   compact = false,
   flush = false,
-  topSlot,
 }: Props) {
   const [comments, setComments] = useState<IQSFlagComment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -210,8 +208,6 @@ export function DisputeThread({
           {comments.length + (agentNote ? 1 : 0)} messages
         </span>
       </div>
-
-      {topSlot}
 
       {/* Message History Container */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
