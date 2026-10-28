@@ -802,7 +802,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                             {status === 'pending' && (
                           <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
-                            {definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && (
+                            {definedTopics.length > 0 && !definedTopics.includes((d.disposition || '').trim()) && (
                               <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
                                 <option value="">{d.disposition ? `${d.disposition} (not assigned), choose` : 'Choose disposition'}</option>
                                 {definedTopics.map(t => <option key={t} value={t}>{t}</option>)}
@@ -823,7 +823,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         </button>
                         <button
                           onClick={() => forwardToQA(d.flagId, topicPick[d.flagId])}
-                          disabled={actioning === d.flagId || (definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && !topicPick[d.flagId])}
+                          disabled={actioning === d.flagId || (definedTopics.length > 0 && !definedTopics.includes((d.disposition || '').trim()) && !topicPick[d.flagId])}
                           style={{
                             width: '100%', height: 32, padding: '0 12px', borderRadius: 8,
                             fontFamily: 'inherit', fontSize: 12, fontWeight: 500,

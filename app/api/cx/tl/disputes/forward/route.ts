@@ -1,3 +1,4 @@
+import { query } from '@/lib/cx/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/auth';
@@ -46,6 +47,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'topic_required', definedDispositions: defined }, { status: 422 });
       }
       await updateConversationTags(String(flag.chatId), { disposition, sub_disposition: String((conv?.tags as any)?.sub_disposition ?? '') });
+    }
+  }
+
+  // Same rule for calls: the call's topic is call_recordings.call_disposition, the same topic list as chats.
+  if (flag.callId) {
+    const defined = await getDefinedDispositions();
+    const rows = await query<{ d: string | null }>(`SELECT call_disposition AS d FROM call_recordings WHERE id = $1`, [flag.callId]);
+    const current = String(rows[0]?.d ?? '').trim();
+    if (defined.length > 0 && (!current || !defined.includes(current))) {
+      if (!disposition || !defined.includes(disposition)) {
+        log.info('cx/tl/disputes/forward', 'topic_required', { flagId, callId: flag.callId, current, definedCount: defined.length });
+        return NextResponse.json({ error: 'topic_required', definedDispositions: defined }, { status: 422 });
+      }
+      await query(`UPDATE call_recordings SET call_disposition = $1 WHERE id = $2`, [disposition, flag.callId]);
     }
   }
 
