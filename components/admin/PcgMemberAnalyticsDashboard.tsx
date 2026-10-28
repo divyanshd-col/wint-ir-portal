@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import DateRangePicker from '@/components/quality/DateRangePicker';
 
 export type Period = '7' | '30' | 'custom';
@@ -142,33 +142,63 @@ export default function PcgMemberAnalyticsDashboard({
   const callsVol = rmScorecard?.totalCalls ?? (rmCalls.length > 0 ? rmCalls.length : 7);
   const callsIqs = rmAvgIqs;
 
+  // Canonical 11 PCG Call Quality Parameters across 3 Skill Groups (Process Skills 50%, Communication 30%, Customer Service 20%)
   const PCG_PARAMETERS = [
-    { key: 'pitch_clarity', label: 'Pitch Clarity & Senior Secured Debt Backing', weight: 25, deptScore: 95 },
-    { key: 'yield_framing', label: 'Indicative Yield Framing & Disclaimers', weight: 20, deptScore: 98 },
-    { key: 'secondary_liquidity', label: 'Secondary Liquidity Window Framing', weight: 20, deptScore: 88 },
-    { key: 'asset_allocation', label: 'Asset Allocation Need Discovery', weight: 10, deptScore: 90 },
-    { key: 'payout_timeline', label: 'Monthly Interest Payout Timeline Clarity', weight: 10, deptScore: 92 },
-    { key: 'active_listening', label: 'Active Listening & Objection Handling', weight: 5, deptScore: 90 },
-    { key: 'demat_linking', label: 'Demat Linking & Account Verification', weight: 5, deptScore: 94 },
-    { key: 'tds_compliance', label: 'TDS & Form 15G Compliance', weight: 3, deptScore: 96 },
-    { key: 'tone_pacing', label: 'Greeting, Pacing & Handover', weight: 2, deptScore: 93 },
-    { key: 'call_recap', label: 'Post-Call Recap & Follow-Through', weight: 5, deptScore: 78 },
+    { key: 'CallOpening', label: 'Call Opening', weight: 5, deptScore: 95 },
+    { key: 'CallClosing', label: 'Call Closing', weight: 5, deptScore: 93 },
+    { key: 'TechnicalLegal', label: 'Technically / Legally Correct', weight: 15, deptScore: 96 },
+    { key: 'AllQuestions', label: 'All Questions Addressed', weight: 10, deptScore: 94 },
+    { key: 'Expectation', label: 'Expectation Setting', weight: 10, deptScore: 92 },
+    { key: 'Process', label: 'Process / Pre-check', weight: 5, deptScore: 93 },
+    { key: 'Grammar', label: 'Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: 10, deptScore: 95 },
+    { key: 'Fillers', label: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: 10, deptScore: 91 },
+    { key: 'EnergyTone', label: 'Energy Level, Enthusiasm & Tone Modulation', weight: 10, deptScore: 93 },
+    { key: 'ActiveListening', label: 'Active Listening, Interruptions & Empathy', weight: 10, deptScore: 92 },
+    { key: 'Simplifying', label: 'Simplifying Answers', weight: 10, deptScore: 93 },
   ];
 
   const AGENT_PARAMETER_SCORES: Record<string, Record<string, number>> = {
-    'Yaashvi Arora': { pitch_clarity: 99, yield_framing: 100, secondary_liquidity: 91, asset_allocation: 96, payout_timeline: 98, active_listening: 96, demat_linking: 97, tds_compliance: 99, tone_pacing: 96, call_recap: 88 },
-    'Aditya R': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 90, asset_allocation: 95, payout_timeline: 97, active_listening: 96, demat_linking: 96, tds_compliance: 98, tone_pacing: 95, call_recap: 86 },
-    'Aahan Thaker': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 97, active_listening: 95, demat_linking: 96, tds_compliance: 98, tone_pacing: 94, call_recap: 83 },
-    'Aravind': { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 96, active_listening: 94, demat_linking: 95, tds_compliance: 98, tone_pacing: 94, call_recap: 82 },
-    'Dhanush': { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 92, call_recap: 81 },
-    'Sujal Dadwani': { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 93, call_recap: 80 },
-    'Samskriti Rao': { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 79 },
-    'Antara Chakrabarty': { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 78 },
-    'Swati Singh': { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 },
-    'Gaurav Nautiyal': { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 },
+    'Yaashvi Arora': { CallOpening: 98, CallClosing: 96, TechnicalLegal: 99, AllQuestions: 98, Expectation: 96, Process: 97, Grammar: 98, Fillers: 95, EnergyTone: 97, ActiveListening: 96, Simplifying: 97 },
+    'Aditya R': { CallOpening: 97, CallClosing: 95, TechnicalLegal: 98, AllQuestions: 97, Expectation: 95, Process: 96, Grammar: 97, Fillers: 94, EnergyTone: 96, ActiveListening: 95, Simplifying: 96 },
+    'Aahan Thaker': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 98, AllQuestions: 96, Expectation: 94, Process: 95, Grammar: 96, Fillers: 93, EnergyTone: 95, ActiveListening: 95, Simplifying: 95 },
+    'Aravind': { CallOpening: 96, CallClosing: 94, TechnicalLegal: 97, AllQuestions: 95, Expectation: 94, Process: 95, Grammar: 96, Fillers: 92, EnergyTone: 95, ActiveListening: 94, Simplifying: 94 },
+    'Dhanush': { CallOpening: 95, CallClosing: 93, TechnicalLegal: 96, AllQuestions: 94, Expectation: 92, Process: 94, Grammar: 95, Fillers: 91, EnergyTone: 93, ActiveListening: 93, Simplifying: 93 },
+    'Sujal Dadwani': { CallOpening: 95, CallClosing: 92, TechnicalLegal: 96, AllQuestions: 93, Expectation: 92, Process: 94, Grammar: 94, Fillers: 91, EnergyTone: 94, ActiveListening: 93, Simplifying: 92 },
+    'Samskriti Rao': { CallOpening: 94, CallClosing: 92, TechnicalLegal: 95, AllQuestions: 93, Expectation: 91, Process: 93, Grammar: 94, Fillers: 90, EnergyTone: 93, ActiveListening: 92, Simplifying: 92 },
+    'Antara Chakrabarty': { CallOpening: 94, CallClosing: 91, TechnicalLegal: 95, AllQuestions: 92, Expectation: 91, Process: 93, Grammar: 93, Fillers: 89, EnergyTone: 92, ActiveListening: 92, Simplifying: 91 },
+    'Swati Singh': { CallOpening: 92, CallClosing: 90, TechnicalLegal: 93, AllQuestions: 90, Expectation: 88, Process: 91, Grammar: 92, Fillers: 86, EnergyTone: 90, ActiveListening: 89, Simplifying: 89 },
+    'Gaurav Nautiyal': { CallOpening: 91, CallClosing: 89, TechnicalLegal: 92, AllQuestions: 89, Expectation: 87, Process: 90, Grammar: 91, Fillers: 85, EnergyTone: 89, ActiveListening: 88, Simplifying: 88 },
   };
 
+  // Derive live parameter scores from rmAnswered calls if available
+  const callParamAverages: Record<string, number> = useMemo(() => {
+    const averages: Record<string, number> = {};
+    if (rmAnswered.length > 0) {
+      const paramEarned: Record<string, number> = {};
+      const paramMax: Record<string, number> = {};
+      rmAnswered.forEach(c => {
+        if (Array.isArray((c as any).parameters)) {
+          (c as any).parameters.forEach((p: any) => {
+            if (p.id) {
+              paramEarned[p.id] = (paramEarned[p.id] || 0) + (p.earnedScore ?? 0);
+              paramMax[p.id] = (paramMax[p.id] || 0) + (p.maxScore ?? 0);
+            }
+          });
+        }
+      });
+      Object.keys(paramMax).forEach(k => {
+        if (paramMax[k] > 0) {
+          averages[k] = Math.round((paramEarned[k] / paramMax[k]) * 100);
+        }
+      });
+    }
+    return averages;
+  }, [rmAnswered]);
+
   const getAgentParamScore = (rm: string, key: string, fallbackBase: number) => {
+    if (callParamAverages[key] !== undefined) {
+      return callParamAverages[key];
+    }
     const scores = AGENT_PARAMETER_SCORES[rm];
     if (scores && scores[key] !== undefined) return scores[key];
     const delta = (callsIqs - 85) * 0.4;
@@ -212,51 +242,51 @@ export default function PcgMemberAnalyticsDashboard({
   const wowParameters: Array<{ name: string; vals: (number | null)[] }> = (() => {
     if (wowChannel !== 'calls') {
       return [
-        { name: 'Pitch Clarity & Product Benefits', vals: [null, null, null, null, null] },
-        { name: 'Return vs Risk Positioning', vals: [null, null, null, null, null] },
-        { name: 'Secondary Liquidity Disclaimer', vals: [null, null, null, null, null] },
-        { name: 'Active Listening & Objection Handling', vals: [null, null, null, null, null] },
-        { name: 'Compliance & No Return Guarantees', vals: [null, null, null, null, null] },
-        { name: 'Next Steps & Follow-up Timeline', vals: [null, null, null, null, null] },
+        { name: 'Technically / Legally Correct', vals: [null, null, null, null, null] },
+        { name: 'All Questions Addressed', vals: [null, null, null, null, null] },
+        { name: 'Expectation Setting', vals: [null, null, null, null, null] },
+        { name: 'Active Listening & Empathy', vals: [null, null, null, null, null] },
+        { name: 'Speech Clarity & Dead Air', vals: [null, null, null, null, null] },
+        { name: 'Call Opening & Closing', vals: [null, null, null, null, null] },
       ];
     }
     if (wowCategory === '13_pitching') {
       return [
-        { name: 'Pitch Clarity & Senior Secured Backing', vals: [96.0, 99.0, 95.0, 98.0, 98.5] },
-        { name: 'Indicative Yield & No Guarantees', vals: [100.0, 100.0, 100.0, 100.0, 100.0] },
-        { name: 'Secondary Liquidity Window Framing', vals: [86.0, 88.5, 84.0, 86.5, 87.0] },
-        { name: 'Investor Horizon & Due Diligence', vals: [92.0, 94.0, 90.0, 93.0, 92.5] },
-        { name: 'Objection Handling on P2P / Credit Risk', vals: [94.0, 96.0, 92.0, 95.0, 94.5] },
-        { name: 'Next Steps & Callback Commitment', vals: [90.0, 92.0, 88.0, 91.0, 90.5] },
+        { name: 'Technically / Legally Correct', vals: [96.0, 99.0, 95.0, 98.0, 98.5] },
+        { name: 'All Questions Addressed', vals: [95.0, 98.0, 93.0, 97.0, 96.5] },
+        { name: 'Expectation Setting', vals: [92.0, 94.0, 90.0, 93.0, 92.5] },
+        { name: 'Process / Pre-check', vals: [94.0, 96.0, 92.0, 95.0, 94.5] },
+        { name: 'Vocabulary & Grammar', vals: [96.0, 98.0, 95.0, 97.0, 97.0] },
+        { name: 'Speech Clarity & Dead Air', vals: [90.0, 92.0, 88.0, 91.0, 90.5] },
       ];
     }
     if (wowCategory === 'upselling') {
       return [
-        { name: 'Asset Allocation Need Discovery', vals: [92.0, 95.0, 90.0, 94.0, 94.0] },
-        { name: 'Reinvestment & Compounding Pitch', vals: [90.0, 93.0, 88.0, 92.0, 91.5] },
-        { name: 'Risk Profile Fit & Suitability', vals: [95.0, 98.0, 94.0, 97.0, 96.0] },
-        { name: 'Existing Portfolio Review', vals: [85.0, 88.0, 82.0, 86.0, 85.0] },
-        { name: 'Clear Value Proposition', vals: [91.0, 94.0, 89.0, 93.0, 92.0] },
-        { name: 'Next Investment Allocation Slot', vals: [88.0, 90.0, 86.0, 89.0, 88.5] },
+        { name: 'Technically / Legally Correct', vals: [95.0, 98.0, 94.0, 97.0, 96.0] },
+        { name: 'All Questions Addressed', vals: [92.0, 95.0, 90.0, 94.0, 94.0] },
+        { name: 'Expectation Setting', vals: [90.0, 93.0, 88.0, 92.0, 91.5] },
+        { name: 'Active Listening & Empathy', vals: [93.0, 96.0, 91.0, 94.0, 94.0] },
+        { name: 'Simplifying Answers', vals: [91.0, 94.0, 89.0, 93.0, 92.0] },
+        { name: 'Energy Level & Tone Modulation', vals: [88.0, 90.0, 86.0, 89.0, 88.5] },
       ];
     }
     if (wowCategory === 'support') {
       return [
-        { name: 'Monthly Interest Payout Timeline', vals: [95.0, 97.0, 94.0, 96.5, 96.0] },
-        { name: 'Form 15G / Tax Deduction Queries', vals: [86.0, 89.0, 85.0, 88.0, 88.0] },
-        { name: 'Account & Demat Linking Assistance', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
-        { name: 'TAT & Grievance Escalation Clarity', vals: [94.0, 96.0, 92.0, 95.0, 94.0] },
-        { name: 'Polite & Reassuring Tone', vals: [98.0, 100.0, 96.0, 99.0, 98.5] },
-        { name: 'Closure & Ticket Confirmation', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
+        { name: 'Technically / Legally Correct', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
+        { name: 'Expectation Setting', vals: [94.0, 96.0, 92.0, 95.0, 94.0] },
+        { name: 'Process / Pre-check', vals: [95.0, 97.0, 94.0, 96.5, 96.0] },
+        { name: 'Active Listening & Empathy', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
+        { name: 'Simplifying Answers', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
+        { name: 'Call Closing', vals: [94.0, 96.0, 92.0, 95.0, 94.0] },
       ];
     }
     return [
-      { name: 'Pitch Clarity & Product Benefits', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
-      { name: 'Return vs Risk Positioning', vals: [94.0, 97.0, 92.0, 96.0, 95.0] },
-      { name: 'Secondary Liquidity Disclaimer', vals: [88.0, 90.0, 84.0, 86.0, 85.5] },
-      { name: 'Active Listening & Objection Handling', vals: [95.0, 100.0, 94.0, 98.0, 96.0] },
-      { name: 'Compliance & No Return Guarantees', vals: [100.0, 100.0, 100.0, 100.0, 100.0] },
-      { name: 'Next Steps & Follow-up Timeline', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
+      { name: 'Technically / Legally Correct', vals: [96.0, 98.0, 95.0, 98.0, 97.5] },
+      { name: 'All Questions Addressed', vals: [94.0, 97.0, 92.0, 96.0, 95.0] },
+      { name: 'Expectation Setting', vals: [92.0, 95.0, 90.0, 94.0, 93.0] },
+      { name: 'Active Listening & Empathy', vals: [95.0, 98.0, 94.0, 97.0, 96.0] },
+      { name: 'Speech Clarity & Dead Air', vals: [91.0, 93.0, 89.0, 92.0, 91.5] },
+      { name: 'Simplifying Answers', vals: [93.0, 96.0, 91.0, 94.0, 94.0] },
     ];
   })();
 
@@ -576,13 +606,13 @@ export default function PcgMemberAnalyticsDashboard({
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <SectionTitle>IQS by Parameters</SectionTitle>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3, #A1A1AA)', fontStyle: 'italic' }}>
-            {periodLabel} · 10 voice quality parameters evaluated for {effectiveRm}
+            {periodLabel} · 11 voice quality parameters evaluated for {effectiveRm}
           </span>
         </div>
         <Panel>
           <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--qa-border, #E4E4E7)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--qa-text, #111111)' }}>
-              10 quality parameters · evaluated across calls
+              11 quality parameters · evaluated across calls
             </span>
           </div>
           <div style={{ overflowX: 'auto' }}>

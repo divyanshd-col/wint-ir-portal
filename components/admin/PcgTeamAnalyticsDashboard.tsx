@@ -95,7 +95,7 @@ const GOKUL_AGENTS: AgentData[] = [
     ini: 'YA',
     tl: 'Gokul',
     chats: { pickup_rate: 95.0, iqs: 96, volume: 45, params: { issue_resolution: 96, accuracy: 97, expectation: 97, dissatisfaction: 93, personalization: 96, empathy: 97, escalation: 97, readability: 97, greeting: 96, recap: 85 } },
-    calls: { pickup_rate: 94.0, iqs: 91, volume: 68, params: { pitch_clarity: 99, yield_framing: 100, secondary_liquidity: 91, asset_allocation: 96, payout_timeline: 98, active_listening: 96, demat_linking: 97, tds_compliance: 99, tone_pacing: 96, call_recap: 88 } },
+    calls: { pickup_rate: 94.0, iqs: 91, volume: 68, params: { CallOpening: 98, CallClosing: 96, TechnicalLegal: 99, AllQuestions: 98, Expectation: 96, Process: 97, Grammar: 98, Fillers: 95, EnergyTone: 97, ActiveListening: 96, Simplifying: 97 } },
     emails: null,
   },
   {
@@ -103,7 +103,7 @@ const GOKUL_AGENTS: AgentData[] = [
     ini: 'AT',
     tl: 'Gokul',
     chats: { pickup_rate: 92.5, iqs: 94, volume: 60, params: { issue_resolution: 94, accuracy: 95, expectation: 95, dissatisfaction: 89, personalization: 94, empathy: 95, escalation: 95, readability: 95, greeting: 94, recap: 80 } },
-    calls: { pickup_rate: 91.5, iqs: 88, volume: 74, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 97, active_listening: 95, demat_linking: 96, tds_compliance: 98, tone_pacing: 94, call_recap: 83 } },
+    calls: { pickup_rate: 91.5, iqs: 88, volume: 74, params: { CallOpening: 96, CallClosing: 94, TechnicalLegal: 98, AllQuestions: 96, Expectation: 94, Process: 95, Grammar: 96, Fillers: 93, EnergyTone: 95, ActiveListening: 95, Simplifying: 95 } },
     emails: null,
   },
   {
@@ -111,7 +111,7 @@ const GOKUL_AGENTS: AgentData[] = [
     ini: 'D',
     tl: 'Gokul',
     chats: { pickup_rate: 88.0, iqs: 90, volume: 50, params: { issue_resolution: 91, accuracy: 92, expectation: 91, dissatisfaction: 86, personalization: 91, empathy: 92, escalation: 92, readability: 92, greeting: 91, recap: 76 } },
-    calls: { pickup_rate: 87.0, iqs: 86, volume: 58, params: { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 92, call_recap: 81 } },
+    calls: { pickup_rate: 87.0, iqs: 86, volume: 58, params: { CallOpening: 95, CallClosing: 93, TechnicalLegal: 96, AllQuestions: 94, Expectation: 92, Process: 94, Grammar: 95, Fillers: 91, EnergyTone: 93, ActiveListening: 93, Simplifying: 93 } },
     emails: null,
   },
   {
@@ -119,7 +119,7 @@ const GOKUL_AGENTS: AgentData[] = [
     ini: 'SR',
     tl: 'Gokul',
     chats: { pickup_rate: 86.5, iqs: 88, volume: 40, params: { issue_resolution: 89, accuracy: 90, expectation: 90, dissatisfaction: 84, personalization: 89, empathy: 90, escalation: 90, readability: 90, greeting: 90, recap: 74 } },
-    calls: { pickup_rate: 85.0, iqs: 85, volume: 52, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 79 } },
+    calls: { pickup_rate: 85.0, iqs: 85, volume: 52, params: { CallOpening: 94, CallClosing: 92, TechnicalLegal: 95, AllQuestions: 93, Expectation: 91, Process: 93, Grammar: 94, Fillers: 90, EnergyTone: 93, ActiveListening: 92, Simplifying: 92 } },
     emails: null,
   },
   {
@@ -127,7 +127,7 @@ const GOKUL_AGENTS: AgentData[] = [
     ini: 'GN',
     tl: 'Gokul',
     chats: { pickup_rate: 84.0, iqs: 86, volume: 35, params: { issue_resolution: 87, accuracy: 88, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 88, escalation: 88, readability: 88, greeting: 88, recap: 72 } },
-    calls: { pickup_rate: 83.5, iqs: 83, volume: 44, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 } },
+    calls: { pickup_rate: 83.5, iqs: 83, volume: 44, params: { CallOpening: 91, CallClosing: 89, TechnicalLegal: 92, AllQuestions: 89, Expectation: 87, Process: 90, Grammar: 91, Fillers: 85, EnergyTone: 89, ActiveListening: 88, Simplifying: 88 } },
     emails: null,
   },
 ];
@@ -138,7 +138,7 @@ const VAISHNAVI_AGENTS: AgentData[] = [
     ini: 'AR',
     tl: 'Vaishnavi',
     chats: { pickup_rate: 91.0, iqs: 93, volume: 52, params: { issue_resolution: 93, accuracy: 94, expectation: 94, dissatisfaction: 88, personalization: 93, empathy: 94, escalation: 94, readability: 94, greeting: 93, recap: 79 } },
-    calls: { pickup_rate: 90.0, iqs: 88, volume: 62, params: { pitch_clarity: 98, yield_framing: 100, secondary_liquidity: 87, asset_allocation: 94, payout_timeline: 96, active_listening: 94, demat_linking: 95, tds_compliance: 98, tone_pacing: 94, call_recap: 82 } },
+    calls: { pickup_rate: 90.0, iqs: 88, volume: 62, params: { CallOpening: 96, CallClosing: 94, TechnicalLegal: 97, AllQuestions: 95, Expectation: 94, Process: 95, Grammar: 96, Fillers: 92, EnergyTone: 95, ActiveListening: 94, Simplifying: 94 } },
     emails: null,
   },
   {
@@ -146,7 +146,7 @@ const VAISHNAVI_AGENTS: AgentData[] = [
     ini: 'SD',
     tl: 'Vaishnavi',
     chats: { pickup_rate: 87.5, iqs: 90, volume: 48, params: { issue_resolution: 90, accuracy: 92, expectation: 91, dissatisfaction: 85, personalization: 90, empathy: 91, escalation: 91, readability: 92, greeting: 90, recap: 76 } },
-    calls: { pickup_rate: 86.5, iqs: 86, volume: 56, params: { pitch_clarity: 97, yield_framing: 100, secondary_liquidity: 85, asset_allocation: 92, payout_timeline: 95, active_listening: 93, demat_linking: 94, tds_compliance: 97, tone_pacing: 93, call_recap: 80 } },
+    calls: { pickup_rate: 86.5, iqs: 86, volume: 56, params: { CallOpening: 95, CallClosing: 92, TechnicalLegal: 96, AllQuestions: 93, Expectation: 92, Process: 94, Grammar: 94, Fillers: 91, EnergyTone: 94, ActiveListening: 93, Simplifying: 92 } },
     emails: null,
   },
   {
@@ -154,7 +154,7 @@ const VAISHNAVI_AGENTS: AgentData[] = [
     ini: 'AC',
     tl: 'Vaishnavi',
     chats: { pickup_rate: 85.0, iqs: 88, volume: 44, params: { issue_resolution: 88, accuracy: 90, expectation: 89, dissatisfaction: 83, personalization: 88, empathy: 90, escalation: 89, readability: 90, greeting: 89, recap: 74 } },
-    calls: { pickup_rate: 84.5, iqs: 84, volume: 50, params: { pitch_clarity: 96, yield_framing: 100, secondary_liquidity: 84, asset_allocation: 91, payout_timeline: 94, active_listening: 92, demat_linking: 93, tds_compliance: 96, tone_pacing: 92, call_recap: 78 } },
+    calls: { pickup_rate: 84.5, iqs: 84, volume: 50, params: { CallOpening: 94, CallClosing: 91, TechnicalLegal: 95, AllQuestions: 92, Expectation: 91, Process: 93, Grammar: 93, Fillers: 89, EnergyTone: 92, ActiveListening: 92, Simplifying: 91 } },
     emails: null,
   },
   {
@@ -162,7 +162,7 @@ const VAISHNAVI_AGENTS: AgentData[] = [
     ini: 'SS',
     tl: 'Vaishnavi',
     chats: { pickup_rate: 84.5, iqs: 87, volume: 46, params: { issue_resolution: 87, accuracy: 89, expectation: 88, dissatisfaction: 82, personalization: 87, empathy: 89, escalation: 88, readability: 89, greeting: 88, recap: 73 } },
-    calls: { pickup_rate: 84.0, iqs: 84, volume: 56, params: { pitch_clarity: 95, yield_framing: 100, secondary_liquidity: 83, asset_allocation: 90, payout_timeline: 93, active_listening: 91, demat_linking: 92, tds_compliance: 95, tone_pacing: 91, call_recap: 77 } },
+    calls: { pickup_rate: 84.0, iqs: 84, volume: 56, params: { CallOpening: 92, CallClosing: 90, TechnicalLegal: 93, AllQuestions: 90, Expectation: 88, Process: 91, Grammar: 92, Fillers: 86, EnergyTone: 90, ActiveListening: 89, Simplifying: 89 } },
     emails: null,
   },
 ];
@@ -181,16 +181,17 @@ const CHAT_PARAMS: ParamData[] = [
 ];
 
 const CALL_PARAMS: ParamData[] = [
-  { key: 'pitch_clarity', label: 'Pitch Clarity & Senior Secured Debt Backing', weight: 25, team_score: 97, cx_score: 95 },
-  { key: 'yield_framing', label: 'Indicative Yield Framing & Disclaimers', weight: 20, team_score: 100, cx_score: 98 },
-  { key: 'secondary_liquidity', label: 'Secondary Liquidity Window Framing', weight: 20, team_score: 87, cx_score: 88 },
-  { key: 'asset_allocation', label: 'Asset Allocation Need Discovery', weight: 10, team_score: 94, cx_score: 90 },
-  { key: 'payout_timeline', label: 'Monthly Interest Payout Timeline Clarity', weight: 10, team_score: 96, cx_score: 92 },
-  { key: 'active_listening', label: 'Active Listening & Objection Handling', weight: 5, team_score: 95, cx_score: 90 },
-  { key: 'demat_linking', label: 'Demat Linking & Account Verification', weight: 5, team_score: 96, cx_score: 94 },
-  { key: 'tds_compliance', label: 'TDS & Form 15G Compliance', weight: 3, team_score: 98, cx_score: 96 },
-  { key: 'tone_pacing', label: 'Greeting, Pacing & Handover', weight: 2, team_score: 94, cx_score: 93 },
-  { key: 'call_recap', label: 'Post-Call Recap & Follow-Through', weight: 5, team_score: 81, cx_score: 78 },
+  { key: 'CallOpening', label: 'Call Opening', weight: 5, team_score: 95, cx_score: 93 },
+  { key: 'CallClosing', label: 'Call Closing', weight: 5, team_score: 94, cx_score: 92 },
+  { key: 'TechnicalLegal', label: 'Technically / Legally Correct', weight: 15, team_score: 98, cx_score: 96 },
+  { key: 'AllQuestions', label: 'All Questions Addressed', weight: 10, team_score: 95, cx_score: 94 },
+  { key: 'Expectation', label: 'Expectation Setting', weight: 10, team_score: 93, cx_score: 92 },
+  { key: 'Process', label: 'Process / Pre-check', weight: 5, team_score: 94, cx_score: 93 },
+  { key: 'Grammar', label: 'Vocabulary / Sentence Structure / Grammar / Pronunciations', weight: 10, team_score: 96, cx_score: 95 },
+  { key: 'Fillers', label: 'Fillers, Fumbling & Stammering / Speech Clarity / Avoid Dead Air', weight: 10, team_score: 92, cx_score: 91 },
+  { key: 'EnergyTone', label: 'Energy Level, Enthusiasm & Tone Modulation', weight: 10, team_score: 94, cx_score: 93 },
+  { key: 'ActiveListening', label: 'Active Listening, Interruptions & Empathy', weight: 10, team_score: 93, cx_score: 92 },
+  { key: 'Simplifying', label: 'Simplifying Answers', weight: 10, team_score: 94, cx_score: 93 },
 ];
 
 // ── Sub-components ─────────────────────────────────────────────────────────────

@@ -25,8 +25,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 91.8,
     delta2Wk: 2.4,
     callsVolume: 68,
-    focusArea: 'Pitch Clarity & Senior Secured Debt Backing',
-    improvementDriver: '+4% in Senior Secured Backing pitch',
+    focusArea: 'Technically / Legally Correct',
+    improvementDriver: '+4% in Senior Secured debt backing & legal disclosures',
   },
   {
     id: 'rm-aditya',
@@ -37,7 +37,7 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 89.0,
     delta2Wk: 4.5,
     callsVolume: 72,
-    focusArea: 'Active Listening & Objection Handling',
+    focusArea: 'Active Listening, Interruptions & Empathy',
     improvementDriver: '+8% in Handling secondary liquidity objections',
   },
   {
@@ -49,8 +49,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 87.5,
     delta2Wk: 4.0,
     callsVolume: 74,
-    focusArea: 'Indicative Yield Framing & Disclaimers',
-    improvementDriver: '+7% in Indicative Yield disclaimers',
+    focusArea: 'Technically / Legally Correct',
+    improvementDriver: '+7% in Indicative yield disclaimers & risk warnings',
   },
   {
     id: 'rm-aravind',
@@ -61,8 +61,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 86.6,
     delta2Wk: 3.2,
     callsVolume: 62,
-    focusArea: 'Demat Linking & Account Verification',
-    improvementDriver: '+6% in Demat verification walkthrough',
+    focusArea: 'Process / Pre-check',
+    improvementDriver: '+6% in Demat verification & pre-check walkthrough',
   },
   {
     id: 'rm-dhanush',
@@ -73,8 +73,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 83.1,
     delta2Wk: 5.1,
     callsVolume: 58,
-    focusArea: 'Asset Allocation Need Discovery',
-    improvementDriver: '+9% in Asset allocation discovery questions',
+    focusArea: 'Expectation Setting',
+    improvementDriver: '+9% in Expectation setting & callback scheduling',
   },
   {
     id: 'rm-sujal',
@@ -85,8 +85,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 80.2,
     delta2Wk: 6.8,
     callsVolume: 56,
-    focusArea: 'Monthly Interest Payout Timeline Clarity',
-    improvementDriver: '+12% in Interest payout timeline disclosures',
+    focusArea: 'Simplifying Answers',
+    improvementDriver: '+12% in Simplifying monthly interest payout terms',
   },
   {
     id: 'rm-samskriti',
@@ -97,8 +97,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 79.6,
     delta2Wk: 5.8,
     callsVolume: 52,
-    focusArea: 'Secondary Liquidity Window Framing',
-    improvementDriver: '+11% in Secondary window liquidity framing',
+    focusArea: 'All Questions Addressed',
+    improvementDriver: '+11% in Addressing all customer questions thoroughly',
   },
   {
     id: 'rm-antara',
@@ -109,8 +109,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 82.4,
     delta2Wk: 1.8,
     callsVolume: 50,
-    focusArea: 'Post-Call Recap & Follow-Through',
-    improvementDriver: '+3% in Follow-up WhatsApp recap scheduling',
+    focusArea: 'Call Closing',
+    improvementDriver: '+3% in Polite sign-off & agreed follow-up recap',
   },
   {
     id: 'rm-swati',
@@ -121,8 +121,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 72.0,
     delta2Wk: -2.5,
     callsVolume: 56,
-    focusArea: 'Active Listening & Objection Handling',
-    improvementDriver: 'Needs coaching on demat linking objection handling',
+    focusArea: 'Active Listening, Interruptions & Empathy',
+    improvementDriver: 'Needs coaching on attentive listening without interruptions',
   },
   {
     id: 'rm-gaurav',
@@ -133,8 +133,8 @@ const ALL_RMS_PERFORMANCE: RmPerformanceItem[] = [
     prev2WkIqs: 71.5,
     delta2Wk: -3.5,
     callsVolume: 44,
-    focusArea: 'Post-Call Recap & Follow-Through',
-    improvementDriver: 'Needs coaching on explicit post-call WhatsApp summary',
+    focusArea: 'Expectation Setting',
+    improvementDriver: 'Needs coaching on explicit expectation setting & follow-through',
   },
 ];
 
