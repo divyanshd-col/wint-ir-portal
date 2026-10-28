@@ -8,15 +8,15 @@ const StarIcon = () => (
   </svg>
 );
 
-export interface ScorecardComment {
+export type ScorecardComment = {
   id: string;
   targetKey: string;
   text: string;
   highlighted: boolean;
   createdAt: string;
-}
+};
 
-export interface PcgWeeklyReport {
+export type PcgWeeklyReport = {
   id: string;
   rmName: string;
   tlName: string;
@@ -56,7 +56,7 @@ export interface PcgWeeklyReport {
     topic: string;
     summary: string;
   }>;
-}
+};
 
 // Sample PCG / IR Weekly Scorecards matching the exact schema and layout of CX scorecards
 const INITIAL_PCG_REPORTS: PcgWeeklyReport[] = [
