@@ -267,6 +267,21 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     return 'IR'; // agent / unknown → IR (Individual Representative)
   }
 
+  // A dispute nobody is responsible for (its topic is on no QA's list and its agent has no QA) must still reach the QA queue,
+  // otherwise it sits "forwarded" forever and no one sees it.
+  const ownedDispositions = new Set<string>();
+  for (const u of (config.users ?? []) as any[]) {
+    if (u.role === 'quality') for (const d of (u.assignedDispositions ?? [])) ownedDispositions.add(d);
+  }
+  for (const e of map) for (const d of (e.dispositions ?? [])) ownedDispositions.add(d);
+  const ownedAgents = new Set<string>();
+  try {
+    const owned = await query<{ name: string }>(`SELECT name FROM agents WHERE qa_name IS NOT NULL AND qa_name <> ''`, []);
+    for (const r of owned) ownedAgents.add((r.name || '').toLowerCase());
+  } catch { /* CX DB unavailable: treat as no agent ownership */ }
+  const isUnowned = (disposition: string, agentName: string) =>
+    !(disposition && ownedDispositions.has(disposition)) && !(agentName && ownedAgents.has(agentName.toLowerCase()));
+
   const disputes: DisputeRow[] = [];
   for (const flag of pendingFlags) {
     const isCall = Boolean(flag.callId);
@@ -290,7 +305,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     // Scope-check: disputes should be sent to the QA who reviewed it; otherwise based on disposition
     if (role === 'quality' || (role === 'admin' && dispositions.length > 0)) {
       let isReviewedByQA = false;
-      if (chatReviewer) {
+      if (chatReviewer && role === 'quality') {
         const revLower = chatReviewer.toLowerCase();
         const reviewerUser = config.users?.find((u: any) =>
           (u.email || u.username)?.toLowerCase() === revLower ||
@@ -321,7 +336,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
         const dispositionMatches = dispositions.length > 0 && effectiveDisposition && dispositions.includes(effectiveDisposition);
 
         const hasRestrictions = (myAgents && myAgents.size > 0) || dispositions.length > 0;
-        if (hasRestrictions && !agentMatches && !dispositionMatches) {
+        if (hasRestrictions && !agentMatches && !dispositionMatches && !isUnowned(effectiveDisposition, effectiveAgentName)) {
           continue;
         }
       }
