@@ -761,36 +761,36 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         raisedByName={d.raisedByName || d.agentName}
                         reviewedBy={(d as any).reviewedBy}
                         flush
-                        topSlot={
-                      d.challengedParams.length > 0 ? (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
-                          <span style={{
-                            fontSize: 10, fontWeight: 700,
-                            background: targetInfo.badgeBg, color: targetInfo.badgeText,
-                            border: `1px solid ${targetInfo.badgeBorder}`,
-                            borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase', marginRight: 4,
-                          }}>
-                            Target: {targetInfo.label}
-                          </span>
-                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>Disputed Params</span>
-                          {d.challengedParams.map(cp => (
-                            <span key={cp.param} title={cp.note} style={{
-                              fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                              background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
-                              borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
-                            }}>{formatParamLabel(cp.param)}</span>
-                          ))}
-                        </div>
-                      ) : null
-                        }
                         reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
                         flaggedAt={(d as any).flaggedAt || d.raisedAt}
                         reviewedAt={(d as any).reviewedAt}
                         compact
                       />
                         </div>
-                        {status === 'pending' && (
-                          <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                        {(d.challengedParams.length > 0 || status === 'pending') && (
+                          <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                            {d.challengedParams.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)' }}>Disputed Params</span>
+                                <span style={{
+                                  fontSize: 10, fontWeight: 700,
+                                  background: targetInfo.badgeBg, color: targetInfo.badgeText,
+                                  border: `1px solid ${targetInfo.badgeBorder}`,
+                                  borderRadius: 4, padding: '2px 8px', textTransform: 'uppercase',
+                                }}>
+                                  Target: {targetInfo.label}
+                                </span>
+                                {d.challengedParams.map(cp => (
+                                  <span key={cp.param} title={cp.note} style={{
+                                    fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                    background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                                    borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
+                                  }}>{formatParamLabel(cp.param)}</span>
+                                ))}
+                              </div>
+                            )}
+                            {status === 'pending' && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
                             {definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && (
                               <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
@@ -824,6 +824,8 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         >
                           {actioning === d.flagId ? '…' : 'Forward to QA'}
                         </button>
+                          </div>
+                        )}
                           </div>
                         )}
                       </div>
