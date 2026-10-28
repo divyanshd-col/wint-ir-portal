@@ -3107,10 +3107,14 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
             collapsed={!sidebarExpanded} onClick={() => switchTab('reports')} />
           <NavItem icon={icons.challenges} label="Chats Pending" active={tab === 'pending'}
             collapsed={!sidebarExpanded} badge={challengeCount} onClick={() => switchTab('pending')} />
-          <NavItem icon={icons.calls} label="Call Quality" active={tab === 'calls'}
-            collapsed={!sidebarExpanded} onClick={() => switchTab('calls')} />
-          <NavItem icon={icons.challenges} label="Call Queue" active={tab === 'call-queue'}
-            collapsed={!sidebarExpanded} onClick={() => switchTab('call-queue')} />
+          {userRole !== 'admin' && (
+            <NavItem icon={icons.calls} label="Call Quality" active={tab === 'calls'}
+              collapsed={!sidebarExpanded} onClick={() => switchTab('calls')} />
+          )}
+          {userRole !== 'admin' && (
+            <NavItem icon={icons.challenges} label="Call Queue" active={tab === 'call-queue'}
+              collapsed={!sidebarExpanded} onClick={() => switchTab('call-queue')} />
+          )}
           {!selfAgentName && (
             <NavItem icon={icons.callTest} label="Call Test" active={tab === 'call-test'}
               collapsed={!sidebarExpanded} onClick={() => switchTab('call-test')} />

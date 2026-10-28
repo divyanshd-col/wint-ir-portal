@@ -13,7 +13,7 @@ import { requireRole } from '@/lib/api-guard';
 import { query } from '@/lib/cx/db';
 
 export async function PATCH(req: NextRequest): Promise<NextResponse> {
-  const { session, response } = await requireRole(['admin', 'quality']);
+  const { session, response } = await requireRole(['admin', 'quality', 'tl']);
   if (response) return response;
 
   let body: { call_id?: string; segments?: any[] } = {};
@@ -45,7 +45,7 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
   const prevCount = isObj ? Number(existingTranscript.reevalCount || (existingTranscript.editedAt ? 1 : 0)) : 0;
 
   const role = (session.user as any)?.role;
-  if (role === 'quality' && prevCount >= 1) {
+  if ((role === 'quality' || role === 'tl') && prevCount >= 1) {
     return NextResponse.json({ error: 'Re-evaluation has already been performed once for this call.' }, { status: 403 });
   }
 
