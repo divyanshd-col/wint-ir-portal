@@ -119,6 +119,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actioning, setActioning] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ticketSearch, setTicketSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
   const pending = queue === 'tl_pending';
@@ -180,12 +181,13 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
 
   const agentsInRows = Array.from(new Set(rows.map(r => r.agent_name).filter(Boolean))).sort();
   const shown = rows.filter(r =>
+    (!ticketSearch.trim() || String(r.chat_id ?? r.ticket_id ?? '').toLowerCase().includes(ticketSearch.trim().toLowerCase())) &&
     (!agentFilter || r.agent_name === agentFilter) &&
     (!outcomeFilter || r.dispute_status === outcomeFilter));
   const [sort, toggleSort] = useSort();
   const sortedSrc = sortRows(shown, sort, { date: r => r.sent_at, agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
-  const paging = usePaging(sortedSrc, `${queue}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
-  const colCount = 8;
+  const paging = usePaging(sortedSrc, `${queue}|${ticketSearch}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
+  const colCount = pending ? 6 : 7;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
 
   return (
@@ -281,6 +283,10 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       )}
 
       <div className="qfilters">
+        <input
+          type="text" value={ticketSearch} onChange={e => setTicketSearch(e.target.value)}
+          placeholder="Search by Ticket ID…" style={{ ...field, width: 170, fontFamily: 'inherit', outline: 'none' }}
+        />
         {agentsInRows.length > 0 && (
           <UISelect value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={field}>
             <option value="">All Agents</option>
@@ -299,8 +305,8 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
         <PeriodRangeChip value={period} onChange={onPeriod} />
         <button
           type="button" className="qf-chip"
-          disabled={!(agentFilter || outcomeFilter || period.period !== 'all')}
-          onClick={() => { setAgentFilter(''); setOutcomeFilter(''); onPeriod(DEFAULT_PERIOD); }}
+          disabled={!(ticketSearch || agentFilter || outcomeFilter || period.period !== 'all')}
+          onClick={() => { setTicketSearch(''); setAgentFilter(''); setOutcomeFilter(''); onPeriod(DEFAULT_PERIOD); }}
         >
           Reset Filters
         </button>
@@ -317,8 +323,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
           <col style={{ width: 90 }} />
           <col style={{ width: 80 }} />
           <col style={{ width: 120 }} />
-          <col style={{ width: 150 }} />
-          <col style={{ width: pending ? 260 : 90 }} />
+          {!pending && <col style={{ width: 170 }} />}
         </colgroup>
         <thead>
           <tr>
@@ -328,8 +333,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
             <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
             <th style={th}>CSAT</th>
             <th style={th}>{pending ? 'Raised' : 'Updated'}</th>
-            <th style={th}>{pending ? 'Status' : 'Outcome'}</th>
-            <th style={{ ...th, textAlign: 'right' }}>Action</th>
+            {!pending && <th style={th}>Outcome</th>}
           </tr>
         </thead>
         <tbody>
@@ -370,26 +374,54 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                   </td>
                   <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>
                   <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>{dateOf(pending ? item.updated_at : (item.reviewed_at ?? item.updated_at))}</td>
-                  <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>
-                  <td style={{ ...td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      {pending && (
-                        <>
-                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => openResolveModal(item)}>Resolve</button>
-                          <button style={actionBtn} disabled={actioning === item.message_id} onClick={() => openForwardModal(item)}>
-                            {actioning === item.message_id ? '…' : 'Forward to QA'}
-                          </button>
-                        </>
-                      )}
-                      <button onClick={() => setExpandedId(isOpen ? null : item.message_id)} style={{ background: 'none', border: 0, fontSize: 12, color: 'var(--qa-text-2)', cursor: 'pointer' }}>
-                        {isOpen ? 'Hide ▲' : 'View ▼'}
-                      </button>
-                    </div>
-                  </td>
+                  {!pending && <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status)}</td>}
                 </tr>
                 {isOpen && (
                   <tr className="eval-panel-row">
                     <td colSpan={colCount} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+                      <div style={{ display: 'flex', gap: 16, alignItems: 'stretch', padding: '16px 20px 0' }}>
+                        <div style={{ flex: '2 1 0', minWidth: 0, display: 'grid' }}>
+                          <DisputeThread
+                            flagId={item.flag_id || item.message_id}
+                            agentNote={item.dispute_notes}
+                            agentName={item.agent_name}
+                            raisedByRole="agent"
+                            raisedByName={item.agent_name}
+                            reviewedBy={item.reviewed_by}
+                            qaName={(item as any).qa_name || item.reviewed_by}
+                            reviewerRole={item.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
+                            flaggedAt={item.sent_at}
+                            reviewedAt={item.reviewed_at}
+                            compact
+                            flush
+                          />
+                        </div>
+                        {item.challenged_params && item.challenged_params.length > 0 && (
+                          <div style={{ flex: '2 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)' }}>Disputed Params</span>
+                            {item.challenged_params.map(cp => {
+                              const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
+                              return (
+                                <span key={cp.param} title={cp.note} style={{
+                                  fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                  background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)',
+                                  borderRadius: 4, padding: '2px 6px', color: 'var(--qa-text-2)', cursor: cp.note ? 'help' : 'default',
+                                }}>{def?.name || cp.param}</span>
+                              );
+                            })}
+                          </div>
+                        )}
+                        {pending && (
+                          <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
+                            <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
+                            <button style={{ ...actionBtn, width: '100%', height: 32 }} disabled={actioning === item.message_id} onClick={() => openResolveModal(item)}>Resolve</button>
+                            <button style={{ ...actionBtn, width: '100%', height: 32, background: 'var(--qa-gray-700)', color: '#fff', border: 'none' }} disabled={actioning === item.message_id} onClick={() => openForwardModal(item)}>
+                              {actioning === item.message_id ? '…' : 'Forward to QA'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ margin: '16px 20px', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden', background: 'var(--qa-card)' }}>
                       <EmailSplit
                         conversation={<>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -445,55 +477,6 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                              Dispute raised by {item.agent_name || 'agent'}
-                            </div>
-
-                            {item.challenged_params && item.challenged_params.length > 0 && (
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
-                                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--qa-text-3)' }}>
-                                  Challenged:
-                                </span>
-                                {item.challenged_params.map(cp => {
-                                  const def = DEFAULT_EMAIL_PARAMETERS.find(d => d.key === cp.param);
-                                  return (
-                                    <span key={cp.param} title={cp.note} style={{
-                                      fontSize: 11, fontWeight: 600, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border)',
-                                      borderRadius: 4, padding: '2px 8px', color: 'var(--qa-text)',
-                                    }}>
-                                      {def?.name || cp.param}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                            )}
-
-                            <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '12px 16px', fontSize: 13, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                              {item.dispute_notes || '—'}
-                            </div>
-                          </div>
-
-                          {/* Dispute Thread */}
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                              Dispute Discussion Thread
-                            </div>
-                            <DisputeThread
-                              flagId={item.flag_id || item.message_id}
-                              agentNote={item.dispute_notes}
-                              agentName={item.agent_name}
-                              raisedByRole="agent"
-                              raisedByName={item.agent_name}
-                              reviewedBy={item.reviewed_by}
-                              qaName={(item as any).qa_name || item.reviewed_by}
-                              reviewerRole={item.dispute_status === 'TL_Resolved' ? 'tl' : 'quality'}
-                              flaggedAt={item.sent_at}
-                              reviewedAt={item.reviewed_at}
-                              compact
-                            />
-                          </div>
-
-                          <div>
-                            <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
                               Agent Outbound Response
                             </div>
                             <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, padding: '12px 16px', maxHeight: 420, overflowY: 'auto' }}>
@@ -503,6 +486,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                         </div>
                         </>}
                       />
+                      </div>
                     </td>
                   </tr>
                 )}
