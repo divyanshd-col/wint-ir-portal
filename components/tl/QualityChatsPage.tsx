@@ -446,6 +446,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const [pageSizeDrop, setPageSizeDrop] = useState(false);
 
   // Filters
+  const [chatSearch, setChatSearch] = useState('');
   const [agentFilter,   setAgentFilter]   = useState('');
   const [outcomeFilter, setOutcomeFilter] = useState('');
   const [fromFilter,    setFromFilter]    = useState('');
@@ -476,6 +477,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   const agents = Array.from(new Set(disputes.map(d => d.agentName).filter(Boolean))).sort();
 
   const filteredDisputes = disputes.filter(d => {
+    if (chatSearch.trim() && !String(d.chatId).includes(chatSearch.trim())) return false;
     if (agentFilter && d.agentName !== agentFilter) return false;
     if (outcomeFilter && getDisputeOutcomeKey(d) !== outcomeFilter) return false;
     if (fromFilter) {
@@ -566,6 +568,13 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
 
     {/* Header / Filter & Rows per page bar */}
     <div className="qfilters">
+      <input
+        type="text"
+        value={chatSearch}
+        onChange={e => { setChatSearch(e.target.value); setPage(1); }}
+        placeholder="Search by Chat ID…"
+        style={{ ...inputStyle, width: 170 }}
+      />
       {agents.length > 0 && (
         <UISelect value={agentFilter} onChange={e => { setAgentFilter(e.target.value); setPage(1); }} style={{ ...inputStyle, paddingRight: 4 }}>
           <option value="">All Agents</option>
@@ -592,8 +601,9 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
       </UISelect>
 
       <DateRangeChip from={fromFilter} to={toFilter} onChange={(f, t) => { setFromFilter(f); setToFilter(t); setPage(1); }} />
-      <button type="button" className="qf-chip" disabled={!(agentFilter || outcomeFilter || fromFilter || toFilter)}
+      <button type="button" className="qf-chip" disabled={!(chatSearch || agentFilter || outcomeFilter || fromFilter || toFilter)}
           onClick={() => {
+            setChatSearch('');
             setAgentFilter('');
             setOutcomeFilter('');
             setFromFilter('');
