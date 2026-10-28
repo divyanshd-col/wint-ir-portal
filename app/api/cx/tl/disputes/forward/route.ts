@@ -39,8 +39,10 @@ export async function POST(req: NextRequest) {
     const defined = await getDefinedDispositions();
     const conv = await getConversation(String(flag.chatId));
     const current = String((conv?.tags as any)?.disposition ?? '').trim();
-    if (!current || !defined.includes(current)) {
+    // No topic list loaded (config unavailable): do not block the forward, a missing list must not make every chat unforwardable.
+    if (defined.length > 0 && (!current || !defined.includes(current))) {
       if (!disposition || !defined.includes(disposition)) {
+        log.info('cx/tl/disputes/forward', 'topic_required', { flagId, chatId: flag.chatId, current, definedCount: defined.length });
         return NextResponse.json({ error: 'topic_required', definedDispositions: defined }, { status: 422 });
       }
       await updateConversationTags(String(flag.chatId), { disposition, sub_disposition: String((conv?.tags as any)?.sub_disposition ?? '') });

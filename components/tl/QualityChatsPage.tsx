@@ -489,7 +489,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
     return true;
   });
 
-  const colCount = 9;
+  const colCount = 10;
   const totalPages = Math.max(1, Math.ceil(filteredDisputes.length / limit));
   const pagedDisputes = filteredDisputes.slice((page - 1) * limit, page * limit);
 
@@ -553,7 +553,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
   }
 
   const [sort, toggleSort] = useSort();
-  const sorted1 = sortRows(pagedDisputes, sort, { agent: d => d.agentName, by: d => d.raisedByName, iqs: d => d.iqsScore, call: d => d.callIqsScore, csat: d => d.csatScore, raised: d => d.raisedAt });
+  const sorted1 = sortRows(pagedDisputes, sort, { agent: d => d.agentName, disp: d => d.disposition, by: d => d.raisedByName, iqs: d => d.iqsScore, call: d => d.callIqsScore, csat: d => d.csatScore, raised: d => d.raisedAt });
 
   return (
     <>
@@ -656,12 +656,13 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
 
     <table style={{ width: '100%', minWidth: 1080, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
       <colgroup>
-        {(status === 'pending' ? [9, 12, 10, 8, 6, 10, 9, 12, 24] : [11, 14, 13, 10, 8, 13, 11, 14, 6]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
+        {(status === 'pending' ? [8, 10, 16, 9, 7, 6, 8, 8, 10, 18] : [9, 12, 14, 10, 8, 7, 10, 9, 14, 7]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
       </colgroup>
       <thead>
         <tr>
           <th style={th}>Chat ID</th>
           <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+          <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
           <SortTh k="by" sort={sort} onSort={toggleSort} style={th}>Raised By</SortTh>
           <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS (Agent)</SortTh>
           <SortTh k="call" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Call IQS</SortTh>
@@ -700,6 +701,16 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
               >
                 <td style={tdMono}><ChatIdCell chatId={d.chatId} /></td>
                 <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.agentName}</td>
+                <td style={{ ...td, overflow: 'visible' }} onClick={e => e.stopPropagation()}>
+                  {status === 'pending' && definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) ? (
+                    <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
+                      <option value="">{d.disposition ? `${d.disposition} (not assigned), choose` : 'Choose disposition'}</option>
+                      {definedTopics.map(t => <option key={t} value={t}>{t}</option>)}
+                    </UISelect>
+                  ) : (
+                    <span style={{ fontSize: 13, color: d.disposition ? 'var(--qa-text)' : 'var(--qa-text-3)' }}>{d.disposition || '-'}</span>
+                  )}
+                </td>
                 <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   <span style={{
                     display: 'inline-block', fontSize: 10, fontWeight: 600,
@@ -772,12 +783,6 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         >
                           Resolve
                         </button>
-                        {definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && (
-                          <UISelect aria-label="Topic" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ minWidth: 150 }}>
-                            <option value="">{d.disposition ? `Topic: ${d.disposition}` : 'Choose topic'}</option>
-                            {definedTopics.map(t => <option key={t} value={t}>{t}</option>)}
-                          </UISelect>
-                        )}
                         <button
                           onClick={() => forwardToQA(d.flagId, topicPick[d.flagId])}
                           disabled={actioning === d.flagId || (definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && !topicPick[d.flagId])}
