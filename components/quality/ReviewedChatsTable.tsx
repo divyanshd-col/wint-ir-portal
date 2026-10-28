@@ -285,12 +285,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                     <td style={tdNum}>
                       {chat.botIqsScore !== null ? (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-                          background: chat.botIqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                          color:      chat.botIqsScore < 60 ? '#b91c1c' : '#713f12',
-                        }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                           {chat.botIqsScore}
                         </span>
                       ) : (
@@ -299,12 +294,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                     </td>
                     <td style={tdNum}>
                       {chat.iqsScore !== null ? (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 36, height: 24, borderRadius: 6, fontSize: 12, fontFamily: 'ui-monospace, monospace',
-                          background: chat.iqsScore < 60 ? '#fee2e2' : '#fef9c3',
-                          color:      chat.iqsScore < 60 ? '#b91c1c' : '#713f12',
-                        }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                           {chat.iqsScore}
                         </span>
                       ) : (
@@ -329,13 +319,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                       {chat.csatScore == null ? (
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                       ) : (
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          minWidth: 30, height: 22, borderRadius: 6, fontSize: 12, fontWeight: 600,
-                          fontFamily: 'ui-monospace, monospace',
-                          background: chat.csatScore === 1 ? '#fee2e2' : chat.csatScore === 3 ? '#fef9c3' : '#dcfce7',
-                          color:      chat.csatScore === 1 ? '#b91c1c' : chat.csatScore === 3 ? '#713f12' : '#15803d',
-                        }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                           {chat.csatScore === 1 ? 'Bad' : chat.csatScore === 3 ? 'Neutral' : 'Good'}
                         </span>
                       )}

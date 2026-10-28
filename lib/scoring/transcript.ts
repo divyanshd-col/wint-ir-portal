@@ -99,7 +99,9 @@ export function normalizeRobylonMessages(messages: any[], year?: number): {
       m.sender_type === 'activity' ||
       low.includes('auto-assigned') ||
       low.includes('assigned by') ||
-      low.includes('waiting to assign');
+      low.includes('waiting to assign') ||
+      low.includes('session expired') ||
+      low.includes('whatsapp session expired');
 
     if (isSystemActivity) {
       transcriptForStorage.push({
@@ -154,7 +156,12 @@ export function extractAgentName(messages: any[]): string {
     const sender  = (m.sender || m.role || '').trim();
     if (nonAgents.has(sender.toLowerCase())) continue;
     const content = (m.content || m.text || '').toLowerCase();
-    if (content.includes('auto-assigned') || content.includes('assigned by')) continue;
+    if (
+      content.includes('auto-assigned') ||
+      content.includes('assigned by') ||
+      content.includes('waiting to assign') ||
+      content.includes('session expired')
+    ) continue;
     return sender;
   }
   return '';

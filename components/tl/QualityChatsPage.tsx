@@ -80,67 +80,33 @@ export function DisputeStatusPill({
   const note = (reviewNote || '').toLowerCase();
 
   let label = '';
-  let bg = '#f4f4f5';
-  let color = '#52525b';
-  let border = '#e4e4e7';
 
   if (status === 'pending' || status === 'ir_pending_tl') {
     label = 'Dispute raised by IR';
-    bg = '#fefce8';
-    color = '#854d0e';
-    border = '#fef08a';
   } else if (status === 'tl_forwarded') {
     if (role === 'tl') {
       label = 'Dispute raised by TL';
     } else {
       label = 'Forwarded by TL';
     }
-    bg = '#eff6ff';
-    color = '#1d4ed8';
-    border = '#bfdbfe';
   } else if (status === 'tl_resolved') {
     label = 'Resolved by TL';
-    bg = '#f3f4f6';
-    color = '#374151';
-    border = '#e5e7eb';
   } else if (status === 'reviewed') {
     const hasAnswerChanges = Array.isArray(parameters?.__answerChanges) && parameters.__answerChanges.length > 0;
     const isUpdated = hasAnswerChanges || note.includes('score updated') || note.includes('score changed');
     if (isUpdated) {
       label = 'Updated by QA';
-      bg = '#f0fdf4';
-      color = '#166534';
-      border = '#bbf7d0';
     } else {
       label = 'Resolved by QA';
-      bg = '#faf5ff';
-      color = '#6b21a8';
-      border = '#e9d5ff';
     }
   } else if (status === 'cancelled') {
     label = 'Cancelled';
-    bg = '#fef2f2';
-    color = '#991b1b';
-    border = '#fecaca';
   } else {
     label = status;
   }
 
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        padding: '3px 8px',
-        borderRadius: 4,
-        fontSize: 11,
-        fontWeight: 600,
-        background: bg,
-        color: color,
-        border: `1px solid ${border}`,
-        whiteSpace: 'nowrap',
-      }}
-    >
+    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
       {label}
     </span>
   );
@@ -761,7 +727,17 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                   {d.raisedByName}
                 </td>
                 <td style={tdNum}>
-                  {d.iqsScore != null ? <IQSBadge score={d.iqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                  {d.originalScore != null && d.iqsScore != null && d.originalScore !== d.iqsScore ? (
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ textDecoration: 'line-through', opacity: 0.65 }}><IQSBadge score={d.originalScore} /></span>
+                      <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>→</span>
+                      <IQSBadge score={d.iqsScore} />
+                    </span>
+                  ) : (d.originalScore ?? d.iqsScore) != null ? (
+                    <IQSBadge score={d.originalScore ?? d.iqsScore} />
+                  ) : (
+                    <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
+                  )}
                 </td>
                 <td style={tdNum}>
                   {d.callIqsScore != null ? <IQSBadge score={d.callIqsScore} /> : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}

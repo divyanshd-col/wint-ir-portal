@@ -77,12 +77,13 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
     name: 'Accuracy',
     description: 'Whether everything the agent told the client is correct, compliant and safe, required disclaimers present, client details protected, and any attachment is correct.',
     defaultWeight: 25,
-    allowNA: false,
+    allowNA: true,
     aliases: ['accuracy', 'Accuracy', 'technical_accuracy'],
     scoringGuide: {
       yes: "All applicable checks pass. Information is accurate, right product named, no guarantees/predictions/personal advice, required disclaimer present, only client's own details shared, and any attachment is present, named and correct.",
       half: 'A minor lapse that does not mislead the client or cause harm (wording slip that does not change meaning, footer missing on Tier B reply where safe, attachment mentioned loosely or attached but not mentioned, detail of another account whose origin cannot be shown).',
       no: "Wrong fact, date, amount, step, TAT, offer term or explanation that could mislead; wrong product named; guaranteed return/prediction/advice; another client's details shared; missing required disclaimer on Tier A; core attachment missing/wrong; false statement about thread; essential info (amount, date/time, reference, document/reward) not restated.",
+      na: 'Not applicable to this email context.',
     },
   },
   {
@@ -90,12 +91,13 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
     name: 'Expectation setting',
     description: 'The agent answers the core query completely, states correct process and realistic TAT, provides personalized follow-up, and shares helpful educational points.',
     defaultWeight: 15,
-    allowNA: false,
+    allowNA: true,
     aliases: ['expectation_setting', 'ExpectationSetting', 'expectation'],
     scoringGuide: {
       yes: 'Complete answer, correct process, clear TAT wherever applicable, and personalised follow-up.',
       half: 'Answer is correct, but the process, TAT (where applicable), or follow-up is missing or generic.',
       no: 'Core query unanswered, wrong process, or no expectation set.',
+      na: 'Not applicable to this email context.',
       exception: 'In repayment cases where a specific TAT cannot be defined, do not deduct marks solely for the absence of a specific timeline, provided the agent communicates available information and explains next steps.',
     },
   },
@@ -104,12 +106,13 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
     name: 'Personalisation',
     description: 'Is the email written for this client, not a template? Uses actual situation, references specific details, builds on earlier replies, and avoids asking for info already provided.',
     defaultWeight: 10,
-    allowNA: false,
+    allowNA: true,
     aliases: ['personalisation', 'personalization', 'Personalisation', 'Personalization'],
     scoringGuide: {
       yes: "The email reflects the client's actual case. It references their specific details (bond, amounts, dates, account status), builds on earlier replies, and asks for nothing already shared. On transferred chats, uses what bot already collected.",
       half: 'The email is partly tailored but still has template elements (mentions situation in general terms, leaves out available details, or includes one minor repeated ask for info already given).',
       no: 'The email reads like a template or copy-paste reply; does not reflect client situation; asks for info already given; ignores earlier replies / bot collected information.',
+      na: 'Not applicable to this email context.',
     },
   },
   {
@@ -131,12 +134,13 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
     name: 'Sentences (Simple to understand)',
     description: 'Easy to read, short sentences without unexplained jargon, formatted with emphasis (bold/italics) where needed, error-free, and natural/non-robotic tone.',
     defaultWeight: 10,
-    allowNA: false,
+    allowNA: true,
     aliases: ['sentences_simple_to_understand', 'sentences', 'Sentences', 'readability_and_tone', 'clarity'],
     scoringGuide: {
       yes: 'All four checks pass: simple and clear, well formatted (key details emphasized), error-free, and sounds natural.',
       half: "Understandable, but dense/cluttered/lacks emphasis; or minor errors that don't affect understanding; or partly scripted/stiff; or contains filler/stock phrases in the body.",
       no: 'Confusing, jargon-heavy, hard to read; errors change meaning; whole response sounds robotic or like a copy-pasted template.',
+      na: 'Not applicable to this email context.',
     },
   },
   {
@@ -144,12 +148,13 @@ export const DEFAULT_EMAIL_PARAMETERS: EvaluationParameterConfig[] = [
     name: 'Opening and closing message',
     description: 'Opening and closing messages are natural, personalised, and appropriate to the context of the thread and current stage of resolution.',
     defaultWeight: 5,
-    allowNA: false,
+    allowNA: true,
     aliases: ['opening_and_closing', 'opening_closing_message', 'OpeningClosing', 'greeting_and_closing'],
     scoringGuide: {
       yes: 'The opening and closing are tied to the case, or standard pair on a first educational reply. One stock courtesy line is fine when personal touch is present.',
       half: 'One stock phrase, and the personal touch is missing or very light.',
       no: 'Multiple stock phrases; fully generic pair; repeated sympathy or appreciation line across consecutive emails; or closing that stacks generic lines after action is stated.',
+      na: 'Not applicable to this email context.',
     },
   },
 ];
@@ -281,6 +286,10 @@ export function buildEmailEvaluationPrompt(input: ReplyEvaluationContextInput): 
 
   return `You are an expert Quality Assurance & Compliance Auditor at Wint Wealth, evaluating an outbound email reply sent by an agent to an investor.
 
+CORE TASKS:
+1. Synthesize the customer's core query into a clear, concise 1-2 sentence summary under "core_query". Capture the actual question, issue, or request raised by the customer in plain English. Do NOT simply quote or copy-paste verbatim sentences, salutations, or email client boilerplate (e.g. "Sent from iPhone", forwarded message headers).
+2. Evaluate the outbound agent reply against the 7 parameters below and assign "yes", "half", "no", or "na" with rigorous factual reasoning.
+
 ${mergedNote}
 ${contextBlock}
 
@@ -410,6 +419,7 @@ Mark compliance_passed as false and list specific violation in compliance_issues
 OUTPUT FORMAT:
 Return ONLY a valid JSON object matching this schema (no markdown formatting, no commentary outside the JSON):
 {
+  "core_query": "Investor is requesting account verification OTPs to be sent via email instead of SMS because they are currently traveling in the USA.",
   "quality_score": 88,
   "compliance_passed": true,
   "compliance_issues": [],

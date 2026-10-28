@@ -233,6 +233,14 @@ export async function executeScoring(
     const { extractAgentName } = await import('@/lib/scoring/transcript');
     effectiveAgentName = extractAgentName(transcriptMessages);
   }
+  if (!effectiveAgentName && conv.raw_payload) {
+    const rawName = (
+      (conv.raw_payload as any)?.human_agent_info?.name ||
+      (conv.raw_payload as any)?.data?.human_agent_info?.name ||
+      ''
+    ).trim();
+    if (rawName) effectiveAgentName = rawName;
+  }
   if (!effectiveAgentName && timing.conversationType === 'bot') {
     effectiveAgentName = 'Myra';
   }
@@ -402,7 +410,7 @@ export async function executeScoring(
   }).catch(() => {});
 
   // ── Slack + Sheet alert — deduplicated via KV ─────────────────────────────────────────
-  fireQualityAlert({
+  await fireQualityAlert({
     chatId,
     agentName:           finalAgentName,
     tlName:              resolvedTlName,
@@ -417,11 +425,11 @@ export async function executeScoring(
     complianceFlag:      primaryPass.compliance_flag || !!(primaryPass.breaches && primaryPass.breaches.length > 0),
     conversationType:    timing.conversationType,
     isBot:               timing.conversationType === 'bot',
-  }).catch(() => {});
+  }).catch(err => console.error('[scoring-engine] fireQualityAlert error:', err));
 
   // BOT flag channel alert: only for pure bot chats that were not transferred
   if (botParameters && timing.conversationType === 'bot') {
-    fireBotQualityAlert({
+    await fireBotQualityAlert({
       chatId,
       agentName:           finalAgentName,
       contactPhone,
@@ -433,7 +441,7 @@ export async function executeScoring(
       conversationType:    'bot',
       isTransferred:       false,
       transcript:          transcriptText,
-    }).catch(() => {});
+    }).catch(err => console.error('[scoring-engine] fireBotQualityAlert error:', err));
   }
 
   return { 

@@ -56,7 +56,7 @@ function MonthCalendar({
         const isToday   = sameDay(date, today);
 
         let bg = 'transparent', color = 'var(--qa-text)', borderRadius = 6;
-        if (isStart || isEnd) { bg = 'var(--qa-text)'; color = '#fff'; }
+        if (isStart || isEnd) { bg = 'var(--qa-text)'; color = 'var(--qa-on-text)'; }
         else if (inRange)      { bg = 'var(--qa-fill-light)'; borderRadius = 0; }
 
         return (
@@ -165,7 +165,7 @@ export default function DateRangePicker({ onApply, onCancel }: Props) {
             height: 32, padding: '0 16px', borderRadius: 8, fontFamily: 'inherit', fontSize: 13,
             background: canApply ? 'var(--qa-text)' : 'var(--qa-fill-med)',
             border: canApply ? '1px solid var(--qa-text)' : '1px solid var(--qa-fill-med)',
-            color: canApply ? '#fff' : 'var(--qa-text-3)',
+            color: canApply ? 'var(--qa-on-text)' : 'var(--qa-text-3)',
             cursor: canApply ? 'pointer' : 'not-allowed',
           }}>Apply</button>
         </div>

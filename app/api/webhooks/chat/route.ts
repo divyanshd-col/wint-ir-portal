@@ -19,6 +19,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
+
+export const maxDuration = 300;
 import { readConfig } from '@/lib/config';
 import { callGeminiForCall, getIQSGeminiKeys, fetchAndTranscribeAudio } from '@/lib/gemini';
 import {
@@ -37,7 +39,6 @@ import {
   getConversation,
   isScored,
   getUnlinkedCallsForContact,
-  findClosedConversationForCall,
   linkCallToChat,
   insertCallRecording,
   updateCallRecordingMetrics,
@@ -114,7 +115,25 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   const convEnded   = transcriptObj.conversation_ended || body.data?.closed_at || body.data?.ended_at || body.created_at || new Date().toISOString();
   const chatId      = String(body.chat_id || transcriptObj.chat_id || `wh_${Date.now()}`);
   const year        = convStarted ? new Date(convStarted).getUTCFullYear() : new Date().getUTCFullYear();
-  const agentName   = extractAgentName(rawMessages);
+
+  // Extract agent info from human_agent_info if available (matching voice calls and email pipelines)
+  const webhookAgentName = (
+    body.human_agent_info?.name ||
+    body.data?.human_agent_info?.name ||
+    body.agent_name ||
+    body.data?.agent_name ||
+    ''
+  ).trim();
+  const webhookAgentEmail = (
+    body.human_agent_info?.email ||
+    body.data?.human_agent_info?.email ||
+    body.agent_email ||
+    body.data?.agent_email ||
+    ''
+  ).trim();
+
+  const transcriptAgentName = extractAgentName(rawMessages);
+  const agentName = webhookAgentName || transcriptAgentName;
 
   // Extract mobile/phone number — check all known Robylon field locations
   const mobileNumber: string | undefined =
@@ -155,7 +174,7 @@ async function handleTicketClosed(body: any): Promise<NextResponse> {
   // Upsert contact + agent
   const [contactId, agentId] = await Promise.all([
     upsertContact(mobileNumber),
-    upsertAgent(effectiveWebhookAgent),
+    upsertAgent(effectiveWebhookAgent, webhookAgentEmail || undefined),
   ]);
 
   // Persist conversation to PostgreSQL
@@ -272,6 +291,13 @@ async function handleClassificationUpdated(body: any): Promise<NextResponse> {
 
     if (!agentName && transcriptMessages.length) {
       agentName = extractAgentName(transcriptMessages);
+    }
+    if (!agentName && conv.raw_payload) {
+      agentName = (
+        (conv.raw_payload as any)?.human_agent_info?.name ||
+        (conv.raw_payload as any)?.data?.human_agent_info?.name ||
+        ''
+      ).trim();
     }
 
     const config = await readConfig();
@@ -489,24 +515,9 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
         transcript: segments,
         rawPayload: body,
       });
-      let resolvedChatId: string | null = null;
-      if (contactId) {
-        const conv = await findClosedConversationForCall(contactId, calledAt);
-        if (conv) {
-          resolvedChatId = conv.id;
-          await linkCallToChat(callId, resolvedChatId);
-          console.log(`[webhook] Late-linked call ${callId} → chat ${resolvedChatId}`);
-        }
-      }
+      await updateCallRecordingMetrics({ id: callId, interruptionCount, deadAirCount, status: 'pending_link' });
 
-      await updateCallRecordingMetrics({
-        id: callId,
-        interruptionCount,
-        deadAirCount,
-        status: resolvedChatId ? 'linked' : 'pending_link',
-      });
-
-      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, agent=${agentName || agentEmail || 'none'}, status=${resolvedChatId ? 'linked' : 'pending_link'}`);
+      console.log(`[webhook] CC_VOICE_CALL_COMPLETE transcribed call ${callId} — ${segments.length} segments (${language}), phone=${phone}, agent=${agentName || agentEmail || 'none'}, status=pending_link`);
 
       // ── Step 4: Classify disposition (constrained to official 14-category list) ──
       const callTranscriptText = segmentsToText(segments);
@@ -537,14 +548,7 @@ async function handleCallComplete(body: any): Promise<NextResponse> {
           }
         }
 
-        // ── Step 6: Trigger call evaluation pipeline ─────────────────────────
-        try {
-          const { runCallPipeline } = await import('@/lib/scoring/call-pipeline');
-          await runCallPipeline(callId);
-          console.log(`[webhook] Auto-evaluated call ${callId}`);
-        } catch (pipelineErr: any) {
-          console.error(`[webhook] Call pipeline trigger failed for call ${callId}:`, pipelineErr.message);
-        }
+        // ── Step 6: Chunking removed ─────────────────────────────────────────
       }
     } catch (err: any) {
       console.error(`[webhook] CC_VOICE_CALL_COMPLETE transcription failed for call ${callId}:`, err.message);

@@ -11,6 +11,8 @@ export interface NavItem {
   icon: () => React.ReactElement;
   roles?: string[];
   skill?: string;
+  /** Heading shown above this item (and the items after it) in the admin sidebar. */
+  section?: string;
 }
 
 interface RoleShellProps {
@@ -23,10 +25,6 @@ interface RoleShellProps {
   mainStyle?: React.CSSProperties;
 }
 
-function initials(name: string) {
-  return name.split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase() || '?';
-}
-
 const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
   admin: [
     'quality:analytics:access', 'quality:chat_eval:access', 'quality:call_eval:access',
@@ -35,7 +33,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
     'agent:my_chats:access', 'agent:my_calls:access', 'agent:reports:access',
   ],
   tl: [
-    'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
+    'quality:analytics:access', 'tl:member_analytics:access',
     'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
   ],
   quality: [
@@ -47,7 +45,7 @@ const DEFAULT_ROLE_SKILLS: Record<string, string[]> = {
   ],
 };
 
-export default function RoleShell({ role, name, skills: propSkills, children, navItems, roleLabel, mainStyle }: RoleShellProps) {
+export default function RoleShell({ role, skills: propSkills, children, navItems, roleLabel, mainStyle }: RoleShellProps) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const { data: session } = useSession();
@@ -69,11 +67,11 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
 
   const hasAccess = (item: NavItem) => {
     if (role === 'admin') return true;
+    if (item.roles && !item.roles.includes(role)) {
+      return false;
+    }
     if (item.skill) {
       return effectiveSkills.includes(item.skill);
-    }
-    if (item.roles) {
-      return item.roles.includes(role);
     }
     return true;
   };
@@ -83,31 +81,6 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
 
   return (
     <div className="quality-shell-container">
-      {/* Top Nav */}
-      <header className="quality-shell-header">
-        {/* Wordmark */}
-        <div className="quality-shell-wordmark">
-          Wint Wealth
-        </div>
-
-        {/* Role pill */}
-        <div className="quality-shell-role-container">
-          <span className="quality-shell-role-pill">
-            <span className="quality-shell-role-pill-dot" />
-            {displayRoleLabel}
-          </span>
-        </div>
-
-        {/* User info */}
-        <div className="quality-shell-user">
-          <span className="quality-shell-user-avatar">
-            {initials(name)}
-          </span>
-          <span>{name}</span>
-          <span style={{ color: 'var(--qa-text-3)', fontSize: 10 }}>▾</span>
-        </div>
-      </header>
-
       <div className="quality-shell-body">
         {/* Sidebar */}
         <aside className="quality-shell-sidebar">
@@ -115,20 +88,24 @@ export default function RoleShell({ role, name, skills: propSkills, children, na
             {displayRoleLabel}
           </div>
 
-          {filteredNav.map((item) => {
+          {filteredNav.map((item, i) => {
             const Icon = item.icon;
             const active = pathname === item.href;
+            // Admin sees every role's pages, so group them under QA / TL / IR Agent headings.
+            const heading = role === 'admin' && item.section && item.section !== filteredNav[i - 1]?.section ? item.section : null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
-              >
-                <span>
-                  <Icon />
-                </span>
-                {item.label}
-              </Link>
+              <React.Fragment key={`${item.label}:${item.href}`}>
+                {heading && <div className="quality-shell-sidebar-title">{heading}</div>}
+                <Link
+                  href={item.href}
+                  className={`quality-shell-sidebar-link ${active ? 'active' : ''}`}
+                >
+                  <span>
+                    <Icon />
+                  </span>
+                  {item.label}
+                </Link>
+              </React.Fragment>
             );
           })}
         </aside>

@@ -232,6 +232,7 @@ export interface IQSFlag {
   scoreId?: string;
   chatId: string;
   callId?: string;
+  messageId?: string;
   agentName: string;
   agentEmail: string;
   agentNote: string;
@@ -261,6 +262,7 @@ export interface IQSFlag {
   reviewedBy?: string;
   reviewedAt?: string;
   reviewNote?: string;
+  originalScore?: number | null;
 }
 
 export interface IQSFlagComment {
@@ -288,16 +290,18 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
 
     await query(`
       INSERT INTO iqs_flags (
-        id, score_id, chat_id, call_id, agent_name, agent_email, agent_note,
+        id, score_id, chat_id, call_id, message_id, agent_name, agent_email, agent_note,
         challenged_params, flagged_at, updated_at, raised_by_role,
-        param_category, parent_flag_id, status, reviewed_by, reviewed_at, review_note
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        param_category, parent_flag_id, status, reviewed_by, reviewed_at, review_note,
+        original_score
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       ON CONFLICT (id) DO NOTHING
     `, [
       entry.id,
       entry.scoreId || null,
       String(entry.chatId),
       entry.callId || null,
+      entry.messageId || null,
       entry.agentName || '',
       entry.agentEmail || '',
       entry.agentNote || '',
@@ -311,6 +315,7 @@ export async function storeAppendIQSFlag(entry: IQSFlag): Promise<boolean> {
       entry.reviewedBy || null,
       entry.reviewedAt || null,
       entry.reviewNote || null,
+      entry.originalScore != null ? entry.originalScore : null,
     ]);
     return true;
   } catch (err: any) {
@@ -323,11 +328,12 @@ export async function storeGetIQSFlags(): Promise<string[]> {
   try {
     const rows = await query(`
       SELECT
-        id, score_id AS "scoreId", chat_id AS "chatId", call_id AS "callId", agent_name AS "agentName",
+        id, score_id AS "scoreId", chat_id AS "chatId", call_id AS "callId", message_id AS "messageId", agent_name AS "agentName",
         agent_email AS "agentEmail", agent_note AS "agentNote", challenged_params AS "challengedParams",
         flagged_at AS "flaggedAt", updated_at AS "updatedAt", raised_by_role AS "raisedByRole",
         param_category AS "paramCategory", parent_flag_id AS "parentFlagId", status,
-        reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt", review_note AS "reviewNote"
+        reviewed_by AS "reviewedBy", reviewed_at AS "reviewedAt", review_note AS "reviewNote",
+        original_score AS "originalScore"
       FROM iqs_flags
       ORDER BY flagged_at DESC
     `);
@@ -335,6 +341,7 @@ export async function storeGetIQSFlags(): Promise<string[]> {
     return rows.map(row => {
       const entry = {
         ...row,
+        originalScore: row.originalScore != null ? parseFloat(row.originalScore) : null,
         flaggedAt: row.flaggedAt ? new Date(row.flaggedAt).toISOString() : '',
         updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : undefined,
         reviewedAt: row.reviewedAt ? new Date(row.reviewedAt).toISOString() : undefined,

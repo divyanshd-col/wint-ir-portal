@@ -699,7 +699,7 @@ export default function AdminDashboard() {
                     onClick={() => setViewTab(t)}
                     className={`px-5 py-3 text-sm font-medium transition ${viewTab === t ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-gray-400 hover:text-gray-600'}`}
                   >
-                    {t === 'tl' ? 'By Team Lead' : 'By QA Reviewer'}
+                    {t === 'tl' ? 'By Team Lead' : 'By QA'}
                   </button>
                 ))}
               </div>

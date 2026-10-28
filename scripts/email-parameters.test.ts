@@ -41,6 +41,7 @@ const expectedKeys = [
 expectedKeys.forEach(k => {
   const found = DEFAULT_EMAIL_PARAMETERS.find(p => p.key === k);
   assert(!!found, `Parameter '${k}' must exist in DEFAULT_EMAIL_PARAMETERS`);
+  assert(found?.allowNA === true, `Parameter '${k}' must have allowNA=true for alignment`);
 });
 
 // 2. Normalization verification

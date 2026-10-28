@@ -38,14 +38,14 @@ export default async function TokenUsagePage({
   if (currentView === 'overview') {
     return (
       <div className="relative">
-        <div className="absolute top-4 right-52 z-20 flex bg-gray-100 p-1 rounded-xl border border-gray-200 text-xs font-semibold">
+        <div className="absolute top-4 right-52 z-20 flex bg-[var(--tb-capsule)] p-1 rounded-full text-xs font-semibold">
           <Link
             href="/tokens?view=bifurcation"
-            className="px-3 py-1.5 rounded-lg text-gray-500 hover:text-gray-900 transition"
+            className="px-3 py-1.5 rounded-full text-gray-500 hover:text-gray-900 transition"
           >
             Job Bifurcation
           </Link>
-          <span className="px-3 py-1.5 rounded-lg bg-white text-gray-900 shadow-xs font-bold">
+          <span className="px-3 py-1.5 rounded-full bg-[var(--tb-pill)] text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.12)] font-bold">
             Overview
           </span>
         </div>
@@ -71,13 +71,13 @@ export default async function TokenUsagePage({
         <div className="bg-white border-b border-gray-200 px-8 py-3 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">View:</span>
-            <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200 text-xs font-semibold">
-              <span className="px-3 py-1 rounded-lg bg-white text-gray-900 shadow-xs font-bold">
+            <div className="flex bg-[var(--tb-capsule)] p-1 rounded-full text-xs font-semibold">
+              <span className="px-3 py-1 rounded-full bg-[var(--tb-pill)] text-gray-900 shadow-[0_1px_3px_rgba(0,0,0,0.12)] font-bold">
                 Job Bifurcation (New)
               </span>
               <Link
                 href="/tokens?view=overview"
-                className="px-3 py-1 rounded-lg text-gray-500 hover:text-gray-900 transition"
+                className="px-3 py-1 rounded-full text-gray-500 hover:text-gray-900 transition"
               >
                 Overview Metrics
               </Link>

@@ -1,14 +1,28 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
+import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from './PeriodFilter';
 import DateRangePicker from './DateRangePicker';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import ParamScoreRow from '@/components/quality/ParamScoreRow';
+import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
+import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
 import {
   DEFAULT_EMAIL_PARAMETERS,
   ParameterScoreValue,
   calculateEmailIQS,
   normalizeParamScoreValue,
 } from '@/lib/email/context-builder';
-import EmailMessageView, { CustomerSummaryBlock, EmailHistoryPanel } from './EmailContentRenderer';
+import EmailMessageView, {
+  CustomerSummaryBlock,
+  CustomerCoreQueryCard,
+  CustomerEmailThreadCard,
+  EmailHistoryPanel,
+  InternalNotesBlock,
+  type InternalNote,
+} from './EmailContentRenderer';
+import { DisputeThread } from '@/components/quality/DisputeThread';
 
 type Tab = 'pending' | 'reviewed' | 'disputes' | 'unscored';
 
@@ -17,6 +31,7 @@ interface EvaluationItem {
   ticket_id: string;
   message_id: string;
   chat_id?: string;
+  intent_l1?: string | null;
   customer_email?: string;
   agent_id?: string;
   agent_name?: string;
@@ -34,12 +49,16 @@ interface EvaluationItem {
   parameter_scores?: Record<string, string | number>;
   qa_override_score?: number;
   qa_notes?: string;
-  dispute_status?: 'None' | 'Raised' | 'Under_Review' | 'Resolved' | 'Rejected';
+  dispute_status?: 'None' | 'Raised' | 'Under_Review' | 'TL_Resolved' | 'Resolved' | 'Rejected';
   dispute_notes?: string;
+  flag_id?: string;
+  challenged_params?: { param: string; note?: string }[];
   evaluated_at?: string;
   subject_line?: string;
   thread_summary?: any;
   effective_score?: number;
+  qa_name?: string;
+  internal_notes?: InternalNote[];
 }
 
 // ─── Design Tokens & Styles (Consistent with ChatEvalTable / EvalPanel) ───────
@@ -109,8 +128,10 @@ const chipActive: React.CSSProperties = {
   borderColor: 'var(--qa-gray-700)',
 };
 
+
 // ─── SVG Score Ring (identical to EvalPanel) ──────────────────────────────────
-function ScoreRing({ score }: { score: number | null }) {
+function ScoreRing({ score: rawScore }: { score: number | null }) {
+  const score = rawScore == null ? null : Math.round(Number(rawScore));
   if (score == null) {
     return (
       <svg width="60" height="60" viewBox="0 0 64 64" style={{ flexShrink: 0 }}>
@@ -143,28 +164,12 @@ function ScoreRing({ score }: { score: number | null }) {
 }
 
 // ─── Score Badge (consistent with ChatEvalTable) ──────────────────────────────
-function QualityScoreBadge({ score, isOverridden }: { score: number | null; isOverridden?: boolean }) {
+function QualityScoreBadge({ score }: { score: number | null }) {
   if (score == null) return <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>;
-  const bg = score >= 85 ? '#dcfce7' : score >= 70 ? '#fef9c3' : '#fee2e2';
-  const color = score >= 85 ? '#15803d' : score >= 70 ? '#854d0e' : '#b91c1c';
   return (
-    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-        minWidth: 36, height: 24, borderRadius: 6, fontSize: 12,
-        fontFamily: MONO, fontWeight: 600, background: bg, color,
-      }}>
-        {score}
-      </span>
-      {isOverridden && (
-        <span style={{
-          fontSize: 10, padding: '1px 4px', borderRadius: 4, fontWeight: 700,
-          background: '#f4f4f5', color: '#52525b', border: '1px solid #e4e4e7',
-        }}>
-          QA
-        </span>
-      )}
-    </div>
+    <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+      {Math.round(Number(score))}
+    </span>
   );
 }
 
@@ -180,13 +185,51 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
   );
 }
 
+const KNOWN_QA_MAP: Record<string, string> = {
+  'yashvi@wintwealth.com': 'Yashvi Chajjer',
+  'dipti@wintwealth.com': 'Dipti',
+  'nandani.s@wintwealth.com': 'Nandani',
+  'isna.rizvi@wintwealth.com': 'Isna',
+  'qa reviewer': 'Yashvi Chajjer',
+  'qa': 'Yashvi Chajjer',
+};
+
+function formatReviewerName(raw?: string | null): string {
+  if (!raw) return '—';
+  const clean = raw.trim();
+  const lower = clean.toLowerCase();
+  if (KNOWN_QA_MAP[lower]) return KNOWN_QA_MAP[lower];
+  if (lower.includes('@')) {
+    const local = clean.split('@')[0];
+    return local.split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  }
+  return clean;
+}
+
+// Columns per tab, ordered like the chat tables (ID, Date & Time, Agent, ..., Action).
+type Col = 'ticket' | 'dateTime' | 'agent' | 'intent' | 'iqs' | 'csat' | 'dispute' | 'reviewedBy' | 'reviewedAt' | 'action';
+const TAB_COLS: Record<Tab, Col[]> = {
+  pending: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'action'],
+  reviewed: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'reviewedBy', 'reviewedAt', 'action'],
+  disputes: ['ticket', 'dateTime', 'agent', 'intent', 'iqs', 'csat', 'dispute', 'action'],
+  unscored: ['ticket', 'dateTime', 'agent', 'intent', 'action'],
+};
+const COL_LABEL: Record<Col, string> = { ticket: 'Ticket ID', dateTime: 'Date & Time', agent: 'Agent', intent: 'Intent', iqs: 'IQS', csat: 'CSAT', dispute: 'Dispute', reviewedBy: 'Reviewed By', reviewedAt: 'Reviewed At', action: 'Action' };
+const COL_WIDTH: Partial<Record<Col, number>> = { ticket: 130, dateTime: 135, agent: 160, iqs: 90, csat: 80, dispute: 120, reviewedBy: 160, reviewedAt: 130, action: 90 };
+const RIGHT: Col[] = ['iqs', 'action'];
+type SortCol = 'ticket' | 'dateTime' | 'agent' | 'iqs';
+
 export default function EmailEvaluationPage() {
+  const { data: session } = useSession();
+  const isAdmin = (session?.user as any)?.role === 'admin' || Boolean((session?.user as any)?.isAdmin);
   const [tab, setTab] = useState<Tab>('pending');
   const [items, setItems] = useState<EvaluationItem[]>([]);
   const [summary, setSummary] = useState<{
     pendingReviewCount?: number;
+    totalPendingReviewCount?: number;
     reviewedCount?: number;
     activeDisputesCount?: number;
+    qaDisputesCount?: number;
     unscoredCount?: number;
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -196,6 +239,8 @@ export default function EmailEvaluationPage() {
   // Filters
   const [search, setSearch] = useState('');
   const [agentFilter, setAgentFilter] = useState('');
+  const [dispositionFilter, setDispositionFilter] = useState('');
+  const [availableDispositions, setAvailableDispositions] = useState<string[]>([]);
   const [availableAgents, setAvailableAgents] = useState<string[]>([
     'Aman Sharma',
     'Apoorv',
@@ -204,19 +249,18 @@ export default function EmailEvaluationPage() {
     'Priya Singh',
     'Vedant G',
   ]);
-  const [complianceFailedOnly, setComplianceFailedOnly] = useState(false);
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [period, setPeriod] = useState<PeriodState>(DEFAULT_PERIOD);
+  const [showFilterBarPicker, setShowFilterBarPicker] = useState(false);
+  const [sort, setSort] = useState<{ col: SortCol; dir: 'asc' | 'desc' } | null>(null);
 
   // QA action state
   const [overrideScores, setOverrideScores] = useState<Record<string, number>>({});
   const [overrideParams, setOverrideParams] = useState<Record<string, Record<string, ParameterScoreValue>>>({});
+  const [overrideReasoning, setOverrideReasoning] = useState<Record<string, Record<string, string>>>({});
+  const [overrideComplianceIssues, setOverrideComplianceIssues] = useState<Record<string, string[]>>({});
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const [submittingAction, setSubmittingAction] = useState(false);
-  const [evaluatingSingle, setEvaluatingSingle] = useState<string | null>(null);
-  const [triggeringBatch, setTriggeringBatch] = useState(false);
 
   const normalizeToggleValue = (val: any): ParameterScoreValue => {
     return normalizeParamScoreValue(val);
@@ -247,6 +291,59 @@ export default function EmailEvaluationPage() {
     return initial;
   };
 
+  const getReasoningForItem = (item: EvaluationItem): Record<string, string> => {
+    if (overrideReasoning[item.message_id]) {
+      return overrideReasoning[item.message_id];
+    }
+    const current = (item.parameter_scores as any) || {};
+    const existingReasoning = (current.__reasoning && typeof current.__reasoning === 'object') ? current.__reasoning : {};
+    const initial: Record<string, string> = { ...existingReasoning };
+    DEFAULT_EMAIL_PARAMETERS.forEach(def => {
+      if (!initial[def.key] && def.aliases) {
+        for (const alias of def.aliases) {
+          if (existingReasoning[alias]) {
+            initial[def.key] = existingReasoning[alias];
+            break;
+          }
+        }
+      }
+      if (initial[def.key] === undefined) {
+        initial[def.key] = '';
+      }
+    });
+    return initial;
+  };
+
+  const handleReasoningChange = (messageId: string, paramKey: string, text: string) => {
+    const item = items.find(i => i.message_id === messageId);
+    const existing = overrideReasoning[messageId] || (item ? getReasoningForItem(item) : {});
+    setOverrideReasoning(prev => ({
+      ...prev,
+      [messageId]: {
+        ...existing,
+        [paramKey]: text,
+      },
+    }));
+  };
+
+  const getComplianceIssuesForItem = (item: EvaluationItem): string[] => {
+    if (overrideComplianceIssues[item.message_id] !== undefined) {
+      return overrideComplianceIssues[item.message_id];
+    }
+    return item.compliance_issues || [];
+  };
+
+  const handleComplianceIssueChange = (messageId: string, index: number, text: string) => {
+    const item = items.find(i => i.message_id === messageId);
+    const existing = overrideComplianceIssues[messageId] || (item ? getComplianceIssuesForItem(item) : []);
+    const updated = [...existing];
+    updated[index] = text;
+    setOverrideComplianceIssues(prev => ({
+      ...prev,
+      [messageId]: updated,
+    }));
+  };
+
   const handleParamChange = (messageId: string, paramKey: string, val: ParameterScoreValue) => {
     const item = items.find(i => i.message_id === messageId);
     const existing = overrideParams[messageId] || (item ? getParamsForItem(item) : {});
@@ -272,8 +369,12 @@ export default function EmailEvaluationPage() {
       const params = new URLSearchParams();
       if (search) params.set('search', search);
       if (agentFilter) params.set('agentName', agentFilter);
-      if (complianceFailedOnly) params.set('complianceFailed', 'true');
+      if (dispositionFilter) params.set('disposition', dispositionFilter);
+      const { from, to } = periodBounds(period.period, period.customFrom, period.customTo);
+      if (from) params.set('from', from);
+      if (to) params.set('to', to);
       params.set('tab', tab);
+      params.set('limit', '500');
 
       const res = await fetch(`/api/email-evaluations?${params.toString()}`);
       const data = await res.json();
@@ -285,23 +386,17 @@ export default function EmailEvaluationPage() {
           const names = data.agentBreakdown.map((a: any) => a.agent_name).filter(Boolean);
           setAvailableAgents(prev => Array.from(new Set([...prev, ...names])).sort());
         }
-        let rows: EvaluationItem[] = data.items || [];
-        if (customFrom && customTo) {
-          const from = new Date(customFrom + 'T00:00:00Z').getTime();
-          const to = new Date(customTo + 'T23:59:59Z').getTime();
-          rows = rows.filter(r => {
-            const t = new Date(r.sent_at).getTime();
-            return t >= from && t <= to;
-          });
+        if (data.assignedDispositions && Array.isArray(data.assignedDispositions)) {
+          setAvailableDispositions(data.assignedDispositions);
         }
-        setItems(rows);
+        setItems(data.items || []);
       }
     } catch (err) {
       console.error('[email-eval] Failed to load data:', err);
     } finally {
       setLoading(false);
     }
-  }, [tab, search, agentFilter, complianceFailedOnly, customFrom, customTo]);
+  }, [tab, search, agentFilter, dispositionFilter, period]);
 
   useEffect(() => {
     fetchData();
@@ -309,12 +404,21 @@ export default function EmailEvaluationPage() {
 
   // Tab switch handler
   const handleTabChange = (nextTab: Tab) => {
+    if (nextTab === 'unscored' && !isAdmin) return;
     setTab(nextTab);
     setExpandedId(null);
   };
 
+  useEffect(() => {
+    if (!isAdmin && tab === 'unscored') {
+      setTab('pending');
+    }
+  }, [isAdmin, tab]);
+
   const handleSubmitReview = async (item: EvaluationItem) => {
     const currentParams = getParamsForItem(item);
+    const currentReasoning = getReasoningForItem(item);
+    const currentComplianceIssues = getComplianceIssuesForItem(item);
     const scoreVal = overrideScores[item.message_id] !== undefined
       ? Number(overrideScores[item.message_id])
       : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
@@ -330,12 +434,24 @@ export default function EmailEvaluationPage() {
           messageId: item.message_id,
           score: Number(scoreVal),
           qaNotes: notes,
-          parameterScores: currentParams,
+          parameterScores: {
+            ...currentParams,
+            ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
+          },
+          complianceIssues: currentComplianceIssues,
+          compliancePassed: currentComplianceIssues.length === 0,
         }),
       });
       const data = await res.json();
       if (data.ok) {
-        setSuccessMessage(`Evaluation score for Ticket #${item.ticket_id.slice(0, 8)} submitted and moved to Reviewed!`);
+        const isFromDisputeSection = tab === 'disputes' || Boolean(data.wasDispute) || item.dispute_status === 'Under_Review';
+        setSuccessMessage(
+          isFromDisputeSection
+            ? `Dispute for Ticket #${item.ticket_id.slice(0, 8)} reviewed and moved to Reviewed!`
+            : tab === 'reviewed'
+              ? `Review for Ticket #${item.ticket_id.slice(0, 8)} updated successfully!`
+              : `Evaluation score for Ticket #${item.ticket_id.slice(0, 8)} submitted and moved to Reviewed!`
+        );
         setTimeout(() => setSuccessMessage(null), 4000);
         setOverrideScores(prev => {
           const next = { ...prev };
@@ -347,13 +463,27 @@ export default function EmailEvaluationPage() {
           delete next[item.message_id];
           return next;
         });
+        setOverrideReasoning(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideComplianceIssues(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
         setReviewNotes(prev => {
           const next = { ...prev };
           delete next[item.message_id];
           return next;
         });
         setExpandedId(null);
-        fetchData();
+        if (isFromDisputeSection && tab !== 'reviewed') {
+          setTab('reviewed');
+        } else {
+          fetchData();
+        }
       }
     } catch (err) {
       console.error(err);
@@ -362,53 +492,15 @@ export default function EmailEvaluationPage() {
     }
   };
 
-  const handleEvaluateSingle = async (messageId: string) => {
-    setEvaluatingSingle(messageId);
-    try {
-      const res = await fetch('/api/email-evaluations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'evaluate_single', messageId }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setSuccessMessage(`Email evaluated! Now available in Pending Review.`);
-        setTimeout(() => setSuccessMessage(null), 4000);
-        fetchData();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setEvaluatingSingle(null);
-    }
-  };
-
-  const handleTriggerBatch = async () => {
-    setTriggeringBatch(true);
-    try {
-      const res = await fetch('/api/email-evaluations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'trigger_batch' }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setSuccessMessage(`Gemini batch evaluation job triggered!`);
-        setTimeout(() => setSuccessMessage(null), 4000);
-        fetchData();
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setTriggeringBatch(false);
-    }
-  };
-
   const handleResolveDispute = async (item: EvaluationItem, decision: 'Resolved' | 'Rejected') => {
     const currentParams = getParamsForItem(item);
+    const currentReasoning = getReasoningForItem(item);
     const scoreVal = overrideScores[item.message_id] !== undefined
       ? Number(overrideScores[item.message_id])
       : (item.effective_score ?? item.quality_score ?? calculateIQS(currentParams));
+    const qaNoteVal = reviewNotes[item.message_id] !== undefined
+      ? reviewNotes[item.message_id]
+      : (item.qa_notes || `Dispute marked as ${decision}`);
 
     setSubmittingAction(true);
     try {
@@ -419,12 +511,42 @@ export default function EmailEvaluationPage() {
           action: 'resolve_dispute',
           messageId: item.message_id,
           decision,
-          notes: item.qa_notes || `Dispute marked as ${decision}`,
-          newScore: scoreVal ? Number(scoreVal) : undefined,
+          notes: qaNoteVal,
+          newScore: decision === 'Resolved' ? (scoreVal ? Number(scoreVal) : undefined) : undefined,
+          parameterScores: decision === 'Resolved' ? {
+            ...currentParams,
+            ...(Object.keys(currentReasoning).length > 0 ? { __reasoning: currentReasoning } : {}),
+          } : undefined,
+          complianceIssues: decision === 'Resolved' ? getComplianceIssuesForItem(item) : undefined,
         }),
       });
       const data = await res.json();
       if (data.ok) {
+        setOverrideScores(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideParams(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideReasoning(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setOverrideComplianceIssues(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
+        setReviewNotes(prev => {
+          const next = { ...prev };
+          delete next[item.message_id];
+          return next;
+        });
         fetchData();
       }
     } catch (err) {
@@ -451,25 +573,36 @@ export default function EmailEvaluationPage() {
     transition: 'background 0.15s, color 0.15s',
   });
 
-  const hasFilters = Boolean(search || agentFilter || complianceFailedOnly || customFrom);
+  const hasFilters = Boolean(search || agentFilter || dispositionFilter || period.period !== 'all');
+  const cols = TAB_COLS[tab];
+  const iqsOf = (i: EvaluationItem) => Number(i.effective_score ?? i.quality_score ?? -1);
+  const sortedItems = !sort ? items : [...items].sort((a, b) => {
+    const cmp = sort.col === 'iqs' ? iqsOf(a) - iqsOf(b)
+      : sort.col === 'agent' ? (a.agent_name ?? '').localeCompare(b.agent_name ?? '')
+      : sort.col === 'dateTime' ? (new Date(a.sent_at || 0).getTime() - new Date(b.sent_at || 0).getTime())
+      : String(a.chat_id ?? a.ticket_id).localeCompare(String(b.chat_id ?? b.ticket_id), undefined, { numeric: true });
+    return sort.dir === 'asc' ? cmp : -cmp;
+  });
+
+  const paging = usePaging(sortedItems, `${tab}|${search}|${agentFilter}|${dispositionFilter}|${period.period}|${period.customFrom}|${period.customTo}|${sort?.col}|${sort?.dir}`);
 
   const agentOptions = Array.from(new Set([
     ...availableAgents,
     ...items.map(i => i.agent_name).filter(Boolean),
   ])).sort();
 
+  const dispositionOptions = Array.from(new Set([
+    ...availableDispositions,
+    ...items.map(i => i.intent_l1).filter((d): d is string => Boolean(d)),
+  ])).sort();
+
   return (
-    <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 8px 40px' }}>
+    <div>
       {/* ── Page Header ── */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-        <div>
-          <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
-            Email Quality Evaluation
-          </h1>
-          <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0' }}>
-            Quality assurance evaluations with IQS parameter grading, overrides, and dispute arbitration
-          </p>
-        </div>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>
+          Email Evaluation
+        </h1>
       </div>
 
       {/* ── Success Toast Banner ── */}
@@ -499,224 +632,261 @@ export default function EmailEvaluationPage() {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 16,
+        marginBottom: 20,
         flexWrap: 'wrap',
-        gap: 12,
+        gap: 16,
       }}>
         <div style={{
           display: 'flex', gap: 4,
           background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
           borderRadius: 10, padding: 4, width: 'fit-content',
         }}>
-          <button style={tabStyle(tab === 'pending')} onClick={() => handleTabChange('pending')}>
+          <button
+            style={tabStyle(tab === 'pending')}
+            onClick={() => handleTabChange('pending')}
+            title={summary?.totalPendingReviewCount ? `Total pending emails: ${summary.totalPendingReviewCount}` : undefined}
+          >
             Pending Review
-            <CountBadge count={summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0)} active={tab === 'pending'} />
+            <CountBadge
+              count={
+                period.period === 'all'
+                  ? (summary?.totalPendingReviewCount ?? summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0))
+                  : (summary?.pendingReviewCount ?? (tab === 'pending' ? items.length : 0))
+              }
+              active={tab === 'pending'}
+            />
+          </button>
+          <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
+            Disputes
+            <CountBadge count={summary?.qaDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
           </button>
           <button style={tabStyle(tab === 'reviewed')} onClick={() => handleTabChange('reviewed')}>
             Reviewed Emails
             <CountBadge count={summary?.reviewedCount ?? (tab === 'reviewed' ? items.length : 0)} active={tab === 'reviewed'} />
           </button>
-          <button style={tabStyle(tab === 'disputes')} onClick={() => handleTabChange('disputes')}>
-            Disputes
-            <CountBadge count={summary?.activeDisputesCount ?? (tab === 'disputes' ? items.length : 0)} active={tab === 'disputes'} />
-          </button>
-          <button style={tabStyle(tab === 'unscored')} onClick={() => handleTabChange('unscored')}>
-            Awaiting AI
-            <CountBadge count={summary?.unscoredCount ?? (tab === 'unscored' ? items.length : 0)} active={tab === 'unscored'} />
-          </button>
-        </div>
-
-        {tab === 'unscored' && (
-          <button
-            onClick={handleTriggerBatch}
-            disabled={triggeringBatch}
-            style={{
-              height: 36,
-              padding: '0 16px',
-              borderRadius: 8,
-              border: 'none',
-              background: 'var(--accent, #16a34a)',
-              color: '#fff',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: triggeringBatch ? 'not-allowed' : 'pointer',
-              opacity: triggeringBatch ? 0.7 : 1,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            {triggeringBatch ? 'Submitting Batch…' : 'Run Gemini Batch Evaluation'}
-          </button>
-        )}
-      </div>
-
-      {/* ── Filter Toolbar (Matching ChatEvalTable) ── */}
-      <div style={{
-        background: 'var(--qa-card)',
-        border: '1px solid var(--qa-border)',
-        borderRadius: 8,
-        padding: '10px 14px',
-        marginBottom: 16,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        flexWrap: 'wrap',
-      }}>
-        {/* Search Input */}
-        <div style={{ position: 'relative', width: 220 }}>
-          <input
-            type="text"
-            placeholder="Search Ticket, Query…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            style={{
-              width: '100%',
-              height: 32,
-              padding: '0 10px 0 30px',
-              border: '1px solid var(--qa-border)',
-              borderRadius: 8,
-              background: 'var(--qa-fill-light)',
-              color: 'var(--qa-text)',
-              fontSize: 13,
-              fontFamily: 'inherit',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-          <svg
-            width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-            style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--qa-text-3)' }}
-          >
-            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </div>
-
-        {/* Agent Filter Dropdown */}
-        <select
-          value={agentFilter}
-          onChange={(e) => setAgentFilter(e.target.value)}
-          style={{
-            height: 32,
-            padding: '0 10px',
-            border: '1px solid var(--qa-border)',
-            borderRadius: 8,
-            background: 'var(--qa-card)',
-            color: agentFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
-            fontSize: 13,
-            fontFamily: 'inherit',
-            outline: 'none',
-            cursor: 'pointer',
-          }}
-        >
-          <option value="">All Agents</option>
-          {agentOptions.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-
-        {/* Compliance Failures Chip */}
-        <button
-          onClick={() => setComplianceFailedOnly(!complianceFailedOnly)}
-          style={complianceFailedOnly ? chipActive : chip}
-        >
-          Compliance Failures
-        </button>
-
-        {/* Date Range Picker */}
-        <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
-          <button
-            style={customFrom ? chipActive : chip}
-            onClick={() => setShowDatePicker(v => !v)}
-          >
-            {customFrom && customTo
-              ? `${new Date(customFrom).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – ${new Date(customTo).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
-              : 'Date range'}
-            <span style={{ fontSize: 9, marginLeft: 2 }}>▾</span>
-          </button>
-          {showDatePicker && (
-            <DateRangePicker
-              onApply={(from, to) => { setCustomFrom(from); setCustomTo(to); setShowDatePicker(false); }}
-              onCancel={() => setShowDatePicker(false)}
-            />
+          {isAdmin && (
+            <button style={tabStyle(tab === 'unscored')} onClick={() => handleTabChange('unscored')}>
+              Unscored Emails
+              <CountBadge count={summary?.unscoredCount ?? (tab === 'unscored' ? items.length : 0)} active={tab === 'unscored'} />
+            </button>
           )}
         </div>
 
-        {/* Reset Filters */}
-        <button
-          disabled={!hasFilters}
-          onClick={() => { setSearch(''); setAgentFilter(''); setComplianceFailedOnly(false); setCustomFrom(''); setCustomTo(''); }}
-          style={{
-            ...chip,
-            color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
-            opacity: hasFilters ? 1 : 0.5,
-            cursor: hasFilters ? 'pointer' : 'not-allowed',
-          }}
-        >
-          Reset Filters
-        </button>
-
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 13, color: 'var(--qa-text-3)' }}>
-          {loading ? 'Loading…' : `${items.length} replies`}
-        </span>
+        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
-      {/* ── Table Container ── */}
+      {/* ── One card: filter bar + table + pager (as in the chat tables) ── */}
       <div style={{
         background: 'var(--qa-card)',
         border: '1px solid var(--qa-border)',
         borderRadius: 8,
         overflow: 'hidden',
       }}>
+        <div style={{
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--qa-border)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'wrap',
+        }}>
+          {/* Search Input */}
+          <div style={{ position: 'relative', width: 220 }}>
+            <input
+              type="text"
+              placeholder="Search Ticket, Query, Email…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{
+                width: '100%',
+                height: 32,
+                padding: '0 10px 0 30px',
+                border: '1px solid var(--qa-border)',
+                borderRadius: 8,
+                background: 'var(--qa-fill-light)',
+                color: 'var(--qa-text)',
+                fontSize: 13,
+                fontFamily: 'inherit',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+            <svg
+              width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--qa-text-3)' }}
+            >
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </div>
+
+          {/* Agent Filter Dropdown */}
+          <select
+            value={agentFilter}
+            onChange={(e) => setAgentFilter(e.target.value)}
+            style={{
+              height: 32,
+              padding: '0 10px',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              background: 'var(--qa-card)',
+              color: agentFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
+              fontSize: 13,
+              fontFamily: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="">All Agents</option>
+            {agentOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+
+          {/* Disposition Filter Dropdown */}
+          <select
+            value={dispositionFilter}
+            onChange={(e) => setDispositionFilter(e.target.value)}
+            style={{
+              height: 32,
+              padding: '0 10px',
+              border: '1px solid var(--qa-border)',
+              borderRadius: 8,
+              background: 'var(--qa-card)',
+              color: dispositionFilter ? 'var(--qa-text)' : 'var(--qa-text-2)',
+              fontSize: 13,
+              fontFamily: 'inherit',
+              outline: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <option value="">{isAdmin ? 'All Dispositions' : 'All My Dispositions'}</option>
+            {dispositionOptions.map((disp) => (
+              <option key={disp} value={disp}>
+                {disp}
+              </option>
+            ))}
+          </select>
+
+          {/* Date Range Filter Chip */}
+          <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+            <button
+              style={period.period !== 'all' ? chipActive : chip}
+              onClick={() => setShowFilterBarPicker((v) => !v)}
+              title={
+                period.period === 'custom' && period.customFrom && period.customTo
+                  ? `${period.customFrom} to ${period.customTo}`
+                  : period.period === '7'
+                  ? 'Last 7 days'
+                  : period.period === '30'
+                  ? 'Last 30 days'
+                  : 'Filter by date range'
+              }
+            >
+              <svg
+                width="13"
+                height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ opacity: 0.8 }}
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              {period.period === 'custom' && period.customFrom && period.customTo
+                ? `${period.customFrom} – ${period.customTo}`
+                : period.period === '7'
+                ? 'Last 7 days'
+                : period.period === '30'
+                ? 'Last 30 days'
+                : 'Date range'}
+              <span style={{ fontSize: 9, opacity: 0.7 }}>▾</span>
+            </button>
+            {showFilterBarPicker && (
+              <DateRangePicker
+                onApply={(from, to) => {
+                  setPeriod({ period: 'custom', customFrom: from, customTo: to });
+                  setShowFilterBarPicker(false);
+                }}
+                onCancel={() => setShowFilterBarPicker(false)}
+              />
+            )}
+          </div>
+
+          {/* Reset Filters */}
+          <button
+            disabled={!hasFilters}
+            onClick={() => {
+              setSearch('');
+              setAgentFilter('');
+              setDispositionFilter('');
+              setPeriod({ period: 'all' });
+            }}
+            style={{
+              ...chip,
+              color: hasFilters ? 'var(--qa-text)' : 'var(--qa-text-3)',
+              opacity: hasFilters ? 1 : 0.5,
+              cursor: hasFilters ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Reset Filters
+          </button>
+
+          <div style={{ flex: 1 }} />
+          <ShowingCount shown={paging.pageItems.length} total={paging.total} loading={loading} pageSize={paging.pageSize} onPageSize={paging.setPageSize} />
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 140 }} />
-              <col style={{ width: 160 }} />
-              <col style={{ width: 130 }} />
-              <col />
-              <col style={{ width: 100 }} />
-              <col style={{ width: 120 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 90 }} />
+              {cols.map(c => <col key={c} style={COL_WIDTH[c] ? { width: COL_WIDTH[c] } : undefined} />)}
             </colgroup>
             <thead>
               <tr>
-                <th style={th}>Sent At</th>
-                <th style={th}>Agent</th>
-                <th style={th}>Ticket ID</th>
-                <th style={th}>Subject</th>
-                <th style={{ ...th, textAlign: 'right' }}>IQS</th>
-                <th style={th}>Compliance</th>
-                <th style={th}>Status</th>
-                <th style={{ ...th, textAlign: 'right' }}>Action</th>
+                {cols.map(c => {
+                  const sortable = c === 'ticket' || c === 'agent' || c === 'iqs' || c === 'dateTime';
+                  return (
+                    <th key={c} style={{ ...th, textAlign: RIGHT.includes(c) ? 'right' : 'left' }}>
+                      {sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => setSort(prev => prev?.col === c ? { col: c as SortCol, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col: c as SortCol, dir: 'desc' })}
+                          style={{ all: 'inherit', cursor: 'pointer', padding: 0, height: 'auto', background: 'none', border: 'none', display: 'inline-flex', gap: 4 }}
+                        >
+                          {COL_LABEL[c]} <span style={{ opacity: sort?.col === c ? 1 : 0.3 }}>{sort?.col === c ? (sort.dir === 'asc' ? '↑' : '↓') : '↕'}</span>
+                        </button>
+                      ) : COL_LABEL[c]}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {cols.map((c, j) => (
                       <td key={j} style={td}>
                         <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: '60%' }} />
                       </td>
                     ))}
                   </tr>
                 ))
-              ) : items.length === 0 ? (
+              ) : paging.pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
+                  <td colSpan={cols.length} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '48px 16px' }}>
                     No email reply evaluations found matching filters
                   </td>
                 </tr>
               ) : (
-                items.map(item => {
+                paging.pageItems.map(item => {
                   const isExpanded = expandedId === item.message_id;
                   const itemParams = getParamsForItem(item);
                   const isSessionOverridden = overrideScores[item.message_id] !== undefined;
@@ -724,6 +894,77 @@ export default function EmailEvaluationPage() {
                     ? Number(overrideScores[item.message_id])
                     : (item.effective_score ?? item.quality_score ?? calculateIQS(itemParams));
                   const hasOverride = item.qa_override_score !== null && item.qa_override_score !== undefined;
+                  const cell: Record<Col, React.ReactNode> = {
+                    ticket: (
+                      <td style={tdMono}>
+                        <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
+                        {item.customer_email && (
+                          <div
+                            title={`User Email: ${item.customer_email}`}
+                            style={{
+                              fontSize: 11,
+                              color: 'var(--qa-text-3)',
+                              fontFamily: SANS,
+                              marginTop: 3,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: 150,
+                            }}
+                          >
+                            {item.customer_email}
+                          </div>
+                        )}
+                      </td>
+                    ),
+                    dateTime: (() => {
+                      const dt = formatEmailDateTime(item.sent_at);
+                      return (
+                        <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
+                          {dt.time && (
+                            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
+                              {dt.time}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })(),
+                    agent: (
+                      <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {item.agent_name || 'Unassigned'}
+                      </td>
+                    ),
+                    intent: (
+                      <td style={{ ...td, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{intentLabel(item.intent_l1)}</td>
+                    ),
+                    iqs: (
+                      <td style={tdNum}>
+                        {item.evaluation_status === 'Completed'
+                          ? <QualityScoreBadge score={currentIQS} />
+                          : <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>}
+                      </td>
+                    ),
+                    csat: <td style={{ ...td, color: 'var(--qa-text-3)' }}>—</td>,
+                    dispute: (
+                      <td style={{ ...td, fontSize: 13 }}>{disputeLabel(item.dispute_status, item.qa_name || item.reviewed_by)}</td>
+                    ),
+                    reviewedBy: (
+                      <td style={{ ...td, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatReviewerName(item.reviewed_by)}</td>
+                    ),
+                    reviewedAt: (
+                      <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>
+                        {item.reviewed_at ? new Date(item.reviewed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                      </td>
+                    ),
+                    action: (
+                      <td style={{ ...td, textAlign: 'right' }}>
+                        <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
+                          {isExpanded ? 'Hide ▲' : 'Review ▼'}
+                        </span>
+                      </td>
+                    ),
+                  };
 
                   return (
                     <React.Fragment key={item.message_id}>
@@ -737,227 +978,22 @@ export default function EmailEvaluationPage() {
                         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                       >
-                        <td style={tdMono}>
-                          {new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{' '}
-                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>
-                            {new Date(item.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </td>
-                        <td style={{ ...td, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.agent_name || 'Unassigned'}
-                        </td>
-                        <td style={tdMono}>
-                          {item.ticket_id.slice(0, 8)}…
-                        </td>
-                        <td style={{ ...td, color: 'var(--qa-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {item.subject_line || 'Email Support'}
-                        </td>
-                        <td style={tdNum}>
-                          <QualityScoreBadge score={currentIQS} isOverridden={hasOverride || isSessionOverridden} />
-                        </td>
-                        <td style={td}>
-                          {item.compliance_passed === false ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              fontSize: 12, fontWeight: 600, color: '#b91c1c',
-                            }}>
-                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#dc2626' }} />
-                              Failed
-                            </span>
-                          ) : item.compliance_passed === true ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center', gap: 4,
-                              fontSize: 12, fontWeight: 500, color: 'var(--accent)',
-                            }}>
-                              <span style={{ fontSize: 10 }}>✓</span> Compliant
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
-                          )}
-                        </td>
-                        <td style={td}>
-                          {item.review_status === 'reviewed' ? (
-                            <div>
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center',
-                                fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                                background: '#dcfce7', color: '#15803d',
-                              }}>
-                                Reviewed
-                              </span>
-                              {item.reviewed_by && (
-                                <div style={{ fontSize: 10, color: 'var(--qa-text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  by {item.reviewed_by.split('@')[0]}
-                                </div>
-                              )}
-                            </div>
-                          ) : item.evaluation_status === 'Completed' ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                              background: '#fef3c7', color: '#b45309',
-                            }}>
-                              Pending Review
-                            </span>
-                          ) : item.evaluation_status === 'In_Batch' ? (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                              background: '#e0f2fe', color: '#0369a1',
-                            }}>
-                              In Batch
-                            </span>
-                          ) : (
-                            <span style={{
-                              display: 'inline-flex', alignItems: 'center',
-                              fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10,
-                              background: '#f4f4f5', color: '#71717a',
-                            }}>
-                              Awaiting AI
-                            </span>
-                          )}
-                        </td>
-                        <td style={{ ...td, textAlign: 'right' }}>
-                          {tab === 'unscored' && item.evaluation_status === 'Pending' ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEvaluateSingle(item.message_id);
-                              }}
-                              disabled={evaluatingSingle === item.message_id}
-                              style={{
-                                height: 26,
-                                padding: '0 8px',
-                                borderRadius: 6,
-                                border: '1px solid var(--qa-border)',
-                                background: 'var(--qa-card)',
-                                color: 'var(--qa-text)',
-                                fontSize: 11,
-                                fontWeight: 600,
-                                cursor: evaluatingSingle === item.message_id ? 'not-allowed' : 'pointer',
-                              }}
-                            >
-                              {evaluatingSingle === item.message_id ? 'Evaluating…' : '⚡ Eval'}
-                            </button>
-                          ) : (
-                            <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--qa-text-2)' }}>
-                              {isExpanded ? 'Hide ▲' : 'Review ▼'}
-                            </span>
-                          )}
-                        </td>
+                        {cols.map(c => <React.Fragment key={c}>{cell[c]}</React.Fragment>)}
                       </tr>
 
                       {/* ── Expanded Inline Review Drawer (Matching EvalPanel Structure) ── */}
                       {isExpanded && (
                         <tr>
-                          <td colSpan={8} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={cols.length} style={{ padding: 0, borderBottom: '1px solid var(--qa-border)' }}>
                             <div style={{
                               background: 'var(--qa-gray-50)',
                               borderTop: '1px solid var(--qa-border-sub)',
                               padding: '24px 28px',
                               display: 'grid',
-                              gridTemplateColumns: '1.2fr 1fr',
+                              gridTemplateColumns: '1fr 1.2fr',
                               gap: 28,
                             }}>
-                              {/* Left Pane: Customer Query Context & Agent Outbound Reply */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
-                                      Customer Context &amp; Query Summary
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
-                                      style={{
-                                        height: 26,
-                                        padding: '0 10px',
-                                        borderRadius: 6,
-                                        fontSize: 11,
-                                        fontWeight: 600,
-                                        cursor: 'pointer',
-                                        border: '1px solid var(--qa-border)',
-                                        background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                        color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: 5,
-                                        transition: 'all 0.15s',
-                                      }}
-                                    >
-                                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <circle cx="12" cy="12" r="10" />
-                                        <polyline points="12 6 12 12 16 14" />
-                                      </svg>
-                                      {historyOpen[item.message_id] ? 'Hide History' : 'History'}
-                                    </button>
-                                  </div>
-
-                                  {/* History Panel */}
-                                  {historyOpen[item.message_id] && (
-                                    <EmailHistoryPanel
-                                      customerEmail={item.customer_email}
-                                      chatId={item.chat_id}
-                                      ticketId={item.ticket_id}
-                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
-                                    />
-                                  )}
-
-                                  {/* Customer Context / Query: ONLY SUMMARY */}
-                                  <div style={{
-                                    background: 'var(--qa-card)',
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    padding: '14px 16px',
-                                  }}>
-                                    <CustomerSummaryBlock
-                                      threadSummary={item.thread_summary}
-                                      customerMessage={item.customer_message}
-                                      subjectLine={item.subject_line}
-                                    />
-                                  </div>
-                                </div>
-
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
-                                    Agent Outbound Reply ({item.agent_name || 'Agent'})
-                                  </div>
-                                  <div style={{
-                                    background: 'var(--qa-card)',
-                                    border: '1px solid var(--qa-border)',
-                                    borderRadius: 8,
-                                    padding: '14px 16px',
-                                    fontSize: 13,
-                                    lineHeight: '1.6',
-                                    color: 'var(--qa-text)',
-                                    maxHeight: 260,
-                                    overflowY: 'auto',
-                                  }}>
-                                    <EmailMessageView
-                                      content={item.agent_reply_text}
-                                      fallback="No message content available."
-                                    />
-                                  </div>
-                                </div>
-
-                                {item.dispute_status && item.dispute_status !== 'None' && (
-                                  <div style={{
-                                    background: '#faf5ff',
-                                    border: '1px solid #e9d5ff',
-                                    borderRadius: 8,
-                                    padding: '12px 14px',
-                                  }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#6b21a8' }}>
-                                      Dispute Raised by Agent ({item.dispute_status})
-                                    </div>
-                                    <div style={{ fontSize: 13, color: '#3b0764', marginTop: 4 }}>
-                                      {item.dispute_notes}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Right Pane: AI Score Ring, Parameters, Compliance & QA Override Form */}
+                              {/* Left Pane: AI Score Ring, Parameters, Compliance & QA Override Form (evaluation on the left, as in chats) */}
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
                                 {/* Top Ring & Score Summary Card */}
                                 <div style={{
@@ -977,15 +1013,15 @@ export default function EmailEvaluationPage() {
                                         IQS
                                       </div>
                                       <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--qa-text)', marginTop: 2 }}>
-                                        {currentIQS != null ? `${currentIQS}%` : 'Pending'}
+                                        {currentIQS != null ? `${Math.round(Number(currentIQS))}%` : 'Pending'}
                                       </div>
                                       {isSessionOverridden && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          Adjusted from {item.quality_score}%
+                                          Adjusted from {Math.round(Number(item.quality_score))}%
                                         </div>
-                                      ) : hasOverride && item.quality_score != null ? (
+                                      ) : tab !== 'disputes' && hasOverride && item.quality_score != null ? (
                                         <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600 }}>
-                                          QA Override from {item.quality_score}%
+                                          QA Override from {Math.round(Number(item.quality_score))}%
                                         </div>
                                       ) : null}
                                     </div>
@@ -997,11 +1033,11 @@ export default function EmailEvaluationPage() {
                                     </div>
                                     <div style={{ marginTop: 4 }}>
                                       {item.compliance_passed === false ? (
-                                        <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: '#fee2e2', color: '#b91c1c' }}>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                                           Non-Compliant
                                         </span>
                                       ) : item.compliance_passed === true ? (
-                                        <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 8px', borderRadius: 4, background: '#dcfce7', color: '#15803d' }}>
+                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                                           Compliant
                                         </span>
                                       ) : (
@@ -1011,24 +1047,49 @@ export default function EmailEvaluationPage() {
                                   </div>
                                 </div>
 
-                                {/* Compliance Issues Banner */}
-                                {item.compliance_issues && item.compliance_issues.length > 0 && (
-                                  <div style={{
-                                    background: '#fff1f2',
-                                    border: '1px solid #fecdd3',
-                                    borderRadius: 8,
-                                    padding: '10px 14px',
-                                  }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: '#9f1239', textTransform: 'uppercase' }}>
-                                      Compliance Breaches
+                                {/* Compliance Issues Banner with editable reasons */}
+                                {(() => {
+                                  const issues = getComplianceIssuesForItem(item);
+                                  if (!issues || issues.length === 0) return null;
+                                  return (
+                                    <div style={{
+                                      background: '#fff1f2',
+                                      border: '1px solid #fecdd3',
+                                      borderRadius: 8,
+                                      padding: '10px 14px',
+                                      marginBottom: 12,
+                                    }}>
+                                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9f1239', textTransform: 'uppercase', marginBottom: 6 }}>
+                                        Compliance Breaches — Reason for Breach:
+                                      </div>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        {issues.map((iss, idx) => (
+                                          <textarea
+                                            key={idx}
+                                            value={iss}
+                                            onChange={e => handleComplianceIssueChange(item.message_id, idx, e.target.value)}
+                                            placeholder="Specify reason / citation for this compliance breach…"
+                                            rows={2}
+                                            style={{
+                                              width: '100%',
+                                              boxSizing: 'border-box',
+                                              resize: 'vertical',
+                                              border: '1px solid #fca5a5',
+                                              borderRadius: 6,
+                                              padding: '6px 8px',
+                                              fontSize: 12.5,
+                                              color: '#881337',
+                                              lineHeight: 1.45,
+                                              fontFamily: 'inherit',
+                                              background: '#fff',
+                                              outline: 'none',
+                                            }}
+                                          />
+                                        ))}
+                                      </div>
                                     </div>
-                                    <ul style={{ margin: '4px 0 0 16px', padding: 0, fontSize: 12, color: '#881337' }}>
-                                      {item.compliance_issues.map((iss, idx) => (
-                                        <li key={idx}>{iss}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
+                                  );
+                                })()}
 
                                 {/* Parameter Scores (Matching EvalPanel in Chats) */}
                                 <div>
@@ -1046,109 +1107,25 @@ export default function EmailEvaluationPage() {
                                   }}>
                                     {DEFAULT_EMAIL_PARAMETERS.map((def, idx) => {
                                       const currentParams = getParamsForItem(item);
-                                      const val = currentParams[def.key] ?? 'yes';
-                                      const reason = (item.parameter_scores as any)?.__reasoning?.[def.key];
+                                      const currentReasoning = getReasoningForItem(item);
+                                      const isDisputed = tab === 'disputes' && (item.challenged_params?.some(cp => cp.param === def.key) ?? false);
                                       return (
-                                        <div
+                                        <ParamScoreRow
                                           key={def.key}
-                                          style={{
-                                            padding: '12px 16px',
-                                            borderBottom: idx < DEFAULT_EMAIL_PARAMETERS.length - 1 ? '1px solid var(--qa-border-sub)' : 'none',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 12,
-                                          }}
-                                        >
-                                          <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>
-                                              {def.name}
-                                            </div>
-                                            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', lineHeight: 1.3, marginTop: 2 }}>
-                                              {def.description}
-                                            </div>
-                                            {reason && (
-                                              <div style={{ fontSize: 11, color: '#4b5563', fontStyle: 'italic', marginTop: 4, lineHeight: 1.3 }}>
-                                                💡 {reason}
-                                              </div>
-                                            )}
-                                          </div>
-
-                                          {/* Yes / Half / No / NA buttons */}
-                                          <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                                            {(
-                                              def.allowNA
-                                                ? [
-                                                    { val: 'yes', label: 'Yes' },
-                                                    { val: 'half', label: 'Half' },
-                                                    { val: 'no', label: 'No' },
-                                                    { val: 'na', label: 'NA' },
-                                                  ]
-                                                : [
-                                                    { val: 'yes', label: 'Yes' },
-                                                    { val: 'half', label: 'Half' },
-                                                    { val: 'no', label: 'No' },
-                                                  ]
-                                            ).map(({ val: optVal, label }) => {
-                                              const isSel = val === optVal || (optVal === 'half' && val === 'partial');
-                                              return (
-                                                <button
-                                                  key={optVal}
-                                                  type="button"
-                                                  onClick={() => handleParamChange(item.message_id, def.key, optVal as ParameterScoreValue)}
-                                                  style={{
-                                                    height: 28,
-                                                    padding: '0 10px',
-                                                    borderRadius: 8,
-                                                    border: '1px solid var(--qa-border)',
-                                                    background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                                                    color: isSel ? '#ffffff' : 'var(--qa-text-2)',
-                                                    fontSize: 12,
-                                                    fontFamily: 'inherit',
-                                                    fontWeight: isSel ? 600 : 400,
-                                                    cursor: 'pointer',
-                                                    transition: 'background 0.12s, color 0.12s, border-color 0.12s',
-                                                  }}
-                                                >
-                                                  {label}
-                                                </button>
-                                              );
-                                            })}
-                                          </div>
-
-                                          <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, flexShrink: 0, minWidth: 32, textAlign: 'right' }}>
-                                            {def.defaultWeight}%
-                                          </span>
-                                        </div>
+                                          name={def.name}
+                                          description={def.description}
+                                          value={currentParams[def.key] ?? 'yes'}
+                                          allowNA={def.allowNA}
+                                          weight={def.defaultWeight}
+                                          disputed={isDisputed}
+                                          reason={currentReasoning[def.key] ?? ''}
+                                          onChange={(v) => handleParamChange(item.message_id, def.key, v as ParameterScoreValue)}
+                                          onReasonChange={(r) => handleReasoningChange(item.message_id, def.key, r)}
+                                          last={idx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                        />
                                       );
                                     })}
                                   </div>
-                                </div>
-
-                                {/* QA Feedback & Notes (Editable) */}
-                                <div>
-                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
-                                    {item.review_status === 'reviewed' ? 'QA Review Notes & Feedback' : 'QA Notes & Feedback (Editable)'}
-                                  </div>
-                                  <textarea
-                                    value={reviewNotes[item.message_id] !== undefined ? reviewNotes[item.message_id] : (item.qa_notes || '')}
-                                    onChange={e => setReviewNotes(prev => ({ ...prev, [item.message_id]: e.target.value }))}
-                                    placeholder="Add QA feedback, observations, or rationale for score adjustments..."
-                                    rows={3}
-                                    style={{
-                                      width: '100%',
-                                      boxSizing: 'border-box',
-                                      padding: '10px 12px',
-                                      borderRadius: 8,
-                                      border: '1px solid var(--qa-border)',
-                                      background: 'var(--qa-card)',
-                                      color: 'var(--qa-text)',
-                                      fontSize: 12,
-                                      lineHeight: 1.5,
-                                      fontFamily: 'inherit',
-                                      resize: 'vertical',
-                                      outline: 'none',
-                                    }}
-                                  />
                                 </div>
 
                                 {/* Action Bar: Submit Review / Update */}
@@ -1159,33 +1136,9 @@ export default function EmailEvaluationPage() {
                                   paddingTop: 6,
                                 }}>
                                   <div>
-                                    {item.dispute_status === 'Raised' && (
-                                      <div style={{ display: 'flex', gap: 6 }}>
-                                        <button
-                                          onClick={() => handleResolveDispute(item, 'Resolved')}
-                                          disabled={submittingAction}
-                                          style={{
-                                            height: 32, padding: '0 12px', border: 'none', borderRadius: 6,
-                                            background: 'var(--accent)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                                          }}
-                                        >
-                                          Accept Dispute
-                                        </button>
-                                        <button
-                                          onClick={() => handleResolveDispute(item, 'Rejected')}
-                                          disabled={submittingAction}
-                                          style={{
-                                            height: 32, padding: '0 12px', border: 'none', borderRadius: 6,
-                                            background: '#dc2626', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                                          }}
-                                        >
-                                          Reject Dispute
-                                        </button>
-                                      </div>
-                                    )}
                                     {item.review_status === 'reviewed' && item.reviewed_by && (
                                       <div style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>
-                                        Reviewed by <strong>{item.reviewed_by}</strong> {item.reviewed_at ? `on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}
+                                        Reviewed by <strong>{formatReviewerName(item.reviewed_by)}</strong> {item.reviewed_at ? `on ${new Date(item.reviewed_at).toLocaleDateString('en-GB')}` : ''}
                                       </div>
                                     )}
                                   </div>
@@ -1242,6 +1195,141 @@ export default function EmailEvaluationPage() {
                                   </div>
                                 </div>
                               </div>
+
+                              {/* Right Pane: Customer Query Context & Agent Outbound Reply (conversation on the right, as in chats) */}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                                {/* 1. Customer Core Query (Separate, prominent, well-spaced) */}
+                                <CustomerCoreQueryCard
+                                  threadSummary={item.thread_summary}
+                                  customerMessage={item.customer_message}
+                                  subjectLine={item.subject_line}
+                                  customerEmail={item.customer_email}
+                                  parameterScores={item.parameter_scores}
+                                />
+
+                                {/* 2. Customer Inbound Email Thread (Separated with clean controls & History) */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)' }}>
+                                      Customer Inbound Email Thread
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                      {item.customer_email && (
+                                        <span
+                                          style={{
+                                            fontSize: 11,
+                                            color: '#1d4ed8',
+                                            background: '#eff6ff',
+                                            border: '1px solid #bfdbfe',
+                                            padding: '1px 7px',
+                                            borderRadius: 4,
+                                            fontWeight: 500,
+                                            fontFamily: MONO,
+                                          }}
+                                          title={`User Email: ${item.customer_email}`}
+                                        >
+                                          {item.customer_email}
+                                        </span>
+                                      )}
+                                      {item.ticket_id && (
+                                        <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: 'var(--font-mono, monospace)' }}>
+                                          Ticket #{item.ticket_id}
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: !prev[item.message_id] }))}
+                                        style={{
+                                          height: 26,
+                                          padding: '0 10px',
+                                          borderRadius: 6,
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          cursor: 'pointer',
+                                          border: '1px solid var(--qa-border)',
+                                          background: historyOpen[item.message_id] ? 'var(--qa-gray-700)' : 'var(--qa-card)',
+                                          color: historyOpen[item.message_id] ? '#fff' : 'var(--qa-text-2)',
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 5,
+                                          transition: 'all 0.15s',
+                                        }}
+                                      >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <polyline points="12 6 12 12 16 14" />
+                                        </svg>
+                                        {historyOpen[item.message_id] ? 'Hide History' : 'History'}
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* History Panel */}
+                                  {historyOpen[item.message_id] && (
+                                    <EmailHistoryPanel
+                                      customerEmail={item.customer_email}
+                                      chatId={item.chat_id}
+                                      ticketId={item.ticket_id}
+                                      currentMessageId={item.message_id}
+                                      onClose={() => setHistoryOpen(prev => ({ ...prev, [item.message_id]: false }))}
+                                    />
+                                  )}
+
+                                  <CustomerEmailThreadCard
+                                    customerMessage={item.customer_message}
+                                    subjectLine={item.subject_line}
+                                    customerEmail={item.customer_email}
+                                  />
+                                </div>
+
+                                {/* Internal Working Notes (highlighted amber, matching chat style) */}
+                                {item.internal_notes && item.internal_notes.length > 0 && (
+                                  <InternalNotesBlock notes={item.internal_notes} />
+                                )}
+
+                                <div>
+                                  <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                                    Agent Outbound Reply ({item.agent_name || 'Agent'})
+                                  </div>
+                                  <div style={{
+                                    background: 'var(--qa-card)',
+                                    border: '1px solid var(--qa-border)',
+                                    borderRadius: 8,
+                                    padding: '14px 16px',
+                                    fontSize: 13,
+                                    lineHeight: '1.6',
+                                    color: 'var(--qa-text)',
+                                    maxHeight: 420,
+                                    overflowY: 'auto',
+                                  }}>
+                                    <EmailMessageView
+                                      content={item.agent_reply_text}
+                                      fallback="No message content available."
+                                    />
+                                  </div>
+                                </div>
+
+                                {tab === 'disputes' && item.dispute_status && item.dispute_status !== 'None' && (
+                                  <div>
+                                    <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 8 }}>
+                                      Dispute Discussion Thread
+                                    </div>
+                                    <DisputeThread
+                                      flagId={item.flag_id || item.message_id}
+                                      agentNote={item.dispute_notes}
+                                      agentName={item.agent_name}
+                                      raisedByRole="agent"
+                                      raisedByName={item.agent_name}
+                                      reviewedBy={item.reviewed_by}
+                                      qaName={item.qa_name || item.reviewed_by}
+                                      reviewerRole="quality"
+                                      flaggedAt={item.sent_at}
+                                      reviewedAt={item.reviewed_at}
+                                      compact
+                                    />
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1253,6 +1341,7 @@ export default function EmailEvaluationPage() {
             </tbody>
           </table>
         </div>
+        <Pager page={paging.page} pages={paging.pages} onPage={paging.setPage} />
       </div>
     </div>
   );

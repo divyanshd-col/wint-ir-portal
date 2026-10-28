@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 
 export interface AnalyticsNavData {
   sessions: { id: string; title: string }[];
@@ -52,10 +52,10 @@ function AnalyticsNav({ sessions, activeId, onSelect, onNew, onClose, streaming 
   return (
     <div>
       <div
-        className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors relative ${
+        className={`w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] text-sm font-medium transition-colors relative ${
           onAnalytics
-            ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full'
-            : 'text-gray-400 hover:text-white hover:bg-white/5'
+            ? 'bg-[var(--sb-active-bg)] text-[var(--sb-active-text)] shadow-[var(--sb-active-shadow)]'
+            : 'text-[var(--sb-text-muted)] hover:text-[var(--sb-active-text)] hover:bg-[var(--sb-hover)]'
         }`}
       >
         <Link href="/analytics" className="flex items-center gap-3 flex-1 min-w-0">
@@ -67,7 +67,7 @@ function AnalyticsNav({ sessions, activeId, onSelect, onNew, onClose, streaming 
           onClick={() => setExpanded(e => !e)}
           aria-label={expanded ? 'Collapse Analytics' : 'Expand Analytics'}
           aria-expanded={expanded}
-          className="p-1 -mr-1 rounded text-gray-500 hover:text-white transition-colors"
+          className="p-1 -mr-1 rounded text-[var(--sb-text-muted)] hover:text-[var(--sb-active-text)] transition-colors"
         >
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"
             className={`transition-transform ${expanded ? 'rotate-180' : ''}`}>
@@ -82,7 +82,7 @@ function AnalyticsNav({ sessions, activeId, onSelect, onNew, onClose, streaming 
             type="button"
             onClick={onNew}
             disabled={streaming}
-            className="flex items-center gap-2 pl-4 pr-3 min-h-[34px] rounded-lg text-[13px] font-medium text-[#2d9e4f] hover:bg-[#2d9e4f]/10 disabled:opacity-40 transition-colors text-left"
+            className="flex items-center gap-2 pl-4 pr-3 min-h-[34px] rounded-lg text-[13px] font-medium text-[var(--accent-active)] hover:bg-[var(--accent-weak)] disabled:opacity-40 transition-colors text-left"
           >
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">
               <path d="M8 3v10M3 8h10" strokeLinecap="round" />
@@ -95,7 +95,7 @@ function AnalyticsNav({ sessions, activeId, onSelect, onNew, onClose, streaming 
               <div
                 key={s.id}
                 className={`group flex items-center gap-1 pl-4 pr-2 min-h-[34px] rounded-lg text-[13px] transition-colors ${
-                  active ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
+                  active ? 'bg-[var(--sb-active-bg)] text-[var(--sb-active-text)]' : 'text-[var(--sb-text-muted)] hover:text-[var(--sb-active-text)] hover:bg-[var(--sb-hover)]'
                 }`}
               >
                 <button
@@ -113,7 +113,7 @@ function AnalyticsNav({ sessions, activeId, onSelect, onNew, onClose, streaming 
                     onClick={() => onClose(s.id)}
                     disabled={streaming}
                     aria-label="Close chat"
-                    className="shrink-0 text-gray-500 opacity-0 group-hover:opacity-100 hover:text-white transition-opacity text-[15px] leading-none px-1 disabled:opacity-0"
+                    className="shrink-0 text-[var(--sb-text-muted)] opacity-0 group-hover:opacity-100 hover:text-[var(--sb-active-text)] transition-opacity text-[15px] leading-none px-1 disabled:opacity-0"
                   >
                     ×
                   </button>
@@ -141,10 +141,10 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`w-full flex items-center gap-3 px-3 min-h-[44px] rounded-lg text-sm font-medium transition-colors relative ${
+      className={`w-full flex items-center gap-3 px-3 min-h-[40px] rounded-[10px] text-sm font-medium transition-colors relative ${
         active
-          ? 'bg-white/10 text-white before:absolute before:left-0 before:top-2 before:bottom-2 before:w-0.5 before:bg-[#2d9e4f] before:rounded-full'
-          : 'text-gray-400 hover:text-white hover:bg-white/5'
+          ? 'bg-[var(--sb-active-bg)] text-[var(--sb-active-text)] shadow-[var(--sb-active-shadow)]'
+          : 'text-[var(--sb-text-muted)] hover:text-[var(--sb-active-text)] hover:bg-[var(--sb-hover)]'
       }`}
     >
       {icon}
@@ -153,7 +153,7 @@ function NavLink({
   );
 }
 
-export default function PageNav({ username, role, isAdmin, skills: propSkills, flags, analytics }: PageNavProps) {
+export default function PageNav({ role, isAdmin, skills: propSkills, flags, analytics }: PageNavProps) {
   const { data: session } = useSession();
   const sessionSkills = (session?.user as any)?.skills as string[] | undefined;
   const userRole = role || (session?.user as any)?.role || (isAdmin ? 'admin' : 'agent');
@@ -164,56 +164,29 @@ export default function PageNav({ username, role, isAdmin, skills: propSkills, f
     : (DEFAULT_ROLE_SKILLS[userRole] || []);
 
   const checkSkill = (req: string) => isAdmin || userRole === 'admin' || effectiveSkills.includes(req);
+  const pathname = usePathname();
 
   const canSeeAnalytics    = checkSkill('analytics:access');
-  const canSeeQuality      = checkSkill('quality:analytics:access');
   const canSeeCx           = checkSkill('cx_dashboard:access');
   const canSeeCallAnalysis = checkSkill('call_analysis:access');
-  const canSeeTokens       = checkSkill('tokens:view:access');
-  const canSeeSettings     = checkSkill('settings:manage:access');
+
+  const showCx = !!flags?.cxDashboard && canSeeCx;
+  const showCall = !!flags?.callAnalysis && canSeeCallAnalysis;
+
+  // A sidebar that only repeats the tab it sits under (Analytics alone) is just noise: show it once there is somewhere else to go.
+  const destinations = (canSeeAnalytics ? 1 : 0) + (showCx ? 1 : 0) + (showCall ? 1 : 0);
+  if (pathname === '/tokens' || pathname.startsWith('/tokens/')) return null; // Token Usage belongs to Settings, not to this sidebar
+  if (!analytics && destinations <= 1) return null;
 
   return (
-    <aside className="w-64 bg-[#1a1a1a] flex-col shrink-0 hidden lg:flex h-screen sticky top-0">
-      {/* Logo */}
-      <div className="px-5 py-4 border-b border-white/10">
-        <Link href="/chat">
-          <div className="bg-white rounded-lg px-2.5 py-1.5 inline-block">
-            <img src="/wint-logo.png" alt="Wint Wealth" width={68} height={22} className="object-contain block" />
-          </div>
-        </Link>
-        <p className="text-gray-500 text-xs mt-2">
-          IR Portal{role ? ` · ${role.charAt(0).toUpperCase() + role.slice(1)}` : ''}
-        </p>
-      </div>
-
-      {/* Nav */}
-      <nav className="px-4 py-4 flex-1 overflow-y-auto space-y-1">
-        <NavLink
-          href="/chat"
-          label="Chat"
-          icon={
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M2 13.5L14 8 2 2.5v4l8.5 1.5L2 9.5v4z" />
-            </svg>
-          }
-        />
+    <aside className="w-56 bg-[var(--sb-bg)] border-r border-[var(--sb-border)] flex-col shrink-0 hidden lg:flex h-screen sticky top-0">
+      <nav className="px-3 py-3 flex-1 overflow-y-auto space-y-1">
         {canSeeAnalytics && (
           analytics
             ? <AnalyticsNav {...analytics} />
             : <NavLink href="/analytics" label="Analytics" icon={AnalyticsIcon} />
         )}
-        {canSeeQuality && (
-          <NavLink
-            href="/quality"
-            label="Quality Tool"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M8 1l1.8 3.6L14 5.6l-3 2.9.7 4.1L8 10.5l-3.7 2.1.7-4.1-3-2.9 4.2-.4z" />
-              </svg>
-            }
-          />
-        )}
-        {flags?.cxDashboard && canSeeCx && (
+        {showCx && (
           <NavLink
             href="/cx"
             label="CX Dashboard"
@@ -226,7 +199,7 @@ export default function PageNav({ username, role, isAdmin, skills: propSkills, f
             }
           />
         )}
-        {flags?.callAnalysis && canSeeCallAnalysis && (
+        {showCall && (
           <NavLink
             href="/call-analysis"
             label="Call Analysis"
@@ -237,56 +210,7 @@ export default function PageNav({ username, role, isAdmin, skills: propSkills, f
             }
           />
         )}
-        {canSeeTokens && (
-          <NavLink
-            href="/tokens"
-            label="Token Usage"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="3" y="3" width="10" height="10" rx="2" />
-                <path d="M6 1v2M10 1v2M6 13v2M10 13v2M1 6h2M1 10h2M13 6h2M13 10h2" strokeLinecap="round" />
-                <circle cx="8" cy="8" r="1.5" />
-              </svg>
-            }
-          />
-        )}
-        {canSeeSettings && (
-          <NavLink
-            href="/settings"
-            label="Settings"
-            icon={
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <circle cx="8" cy="8" r="2.5" />
-                <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
-              </svg>
-            }
-          />
-        )}
       </nav>
-
-      {/* Footer */}
-      <div className="px-4 py-4 border-t border-white/10">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 bg-[#2d9e4f] rounded-full flex items-center justify-center text-white text-sm font-bold uppercase shrink-0">
-              {username?.[0] || 'U'}
-            </div>
-            <div className="min-w-0">
-              <span className="text-gray-300 text-sm truncate max-w-[100px] block">{username.split('@')[0]}</span>
-              {role && <span className="text-gray-500 text-xs capitalize">{role}</span>}
-            </div>
-          </div>
-          <button
-            onClick={() => signOut({ callbackUrl: '/login' })}
-            className="text-gray-500 hover:text-white transition-colors text-xs shrink-0"
-            title="Sign out"
-          >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M10 8H2M6 5l-3 3 3 3M7 2h5a1 1 0 011 1v10a1 1 0 01-1 1H7" />
-            </svg>
-          </button>
-        </div>
-      </div>
     </aside>
   );
 }

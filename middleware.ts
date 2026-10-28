@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { isHttpsRequest } from '@/lib/auth-cookie';
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -18,7 +19,25 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  // Support both secure (__Secure-next-auth.session-token) and non-secure (next-auth.session-token)
+  // cookie names regardless of whether NEXTAUTH_URL has https or localhost http.
+  let token = null;
+  const hasSecure = req.cookies.has('__Secure-next-auth.session-token');
+  const hasPlain = req.cookies.has('next-auth.session-token');
+
+  if (hasSecure) {
+    token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: true });
+  }
+  if (!token && hasPlain) {
+    token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: false });
+  }
+  if (!token && !hasSecure && !hasPlain) {
+    const isHttps = isHttpsRequest(req.headers.get('x-forwarded-proto'), req.nextUrl.protocol);
+    token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: isHttps });
+    if (!token) {
+      token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET, secureCookie: !isHttps });
+    }
+  }
   if (!token) {
     return NextResponse.redirect(new URL('/login', req.url));
   }
@@ -34,7 +53,7 @@ export async function middleware(req: NextRequest) {
     ],
     tl: [
       'chat:access', 'analytics:access', 'call_analysis:access', 'cx_dashboard:access',
-      'quality:analytics:access', 'tl:team_analytics:access', 'tl:member_analytics:access',
+      'quality:analytics:access', 'tl:member_analytics:access',
       'tl:quality_chats:access', 'tl:quality_calls:access', 'tl:reports:access',
     ],
     quality: [
@@ -89,7 +108,7 @@ export async function middleware(req: NextRequest) {
     }
   }
   if (pathname.startsWith('/quality/call-evaluation')) {
-    if (!checkSkill(['quality:call_eval:access', 'tl:quality_calls:access'])) {
+    if (!checkSkill('quality:call_eval:access')) {
       return NextResponse.redirect(new URL('/quality', req.url));
     }
   }
@@ -116,6 +135,16 @@ export async function middleware(req: NextRequest) {
   // Settings
   if (pathname.startsWith('/settings')) {
     if (!checkSkill('settings:manage:access')) {
+      return NextResponse.redirect(new URL('/', req.url));
+    }
+  }
+
+  // Team Analytics (restricted to admin)
+  if (pathname === '/tl' || pathname === '/tl/') {
+    if (!isAdmin) {
+      if (checkSkill('tl:member_analytics:access') || checkSkill('agent:my_analytics:access')) {
+        return NextResponse.redirect(new URL('/tl/member-analytics', req.url));
+      }
       return NextResponse.redirect(new URL('/', req.url));
     }
   }
