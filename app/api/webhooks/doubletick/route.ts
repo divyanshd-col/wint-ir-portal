@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { saveRobylonWebhookPayload } from '@/lib/robylon/db';
+import { ingestDoubleTickPayload } from '@/lib/pcg/doubletick';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,8 +8,9 @@ export const dynamic = 'force-dynamic';
  * DoubleTick Webhook / Ingestion Route
  * POST /api/webhooks/doubletick
  *
- * Dumps incoming DoubleTick chat JSON payloads directly into `robylon_webhook_payloads`
- * with channel='doubletick' and source='doubletick'.
+ * 1. Dumps incoming DoubleTick chat JSON payloads directly into `robylon_webhook_payloads`
+ *    with channel='doubletick' and source='doubletick'.
+ * 2. Parses and threads messages into `pcg_conversations` in real-time.
  *
  * Auth Verification:
  *  - Checks Authorization: Bearer <DOUBLETICK_WEBHOOK_SECRET>
@@ -65,26 +67,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Payload must be a JSON object or array' }, { status: 400 });
   }
 
-  // Safely extract Chat ID from either array or object payload
+  // Safely extract Chat ID and Event ID from either array or object payload
   let chatId: string | null = null;
   let eventId: string | null = null;
 
-  if (Array.isArray(body)) {
-    if (body.length === 0) {
-      return NextResponse.json({ error: 'Empty JSON array payload' }, { status: 400 });
-    }
-    const firstItem = body[0] || {};
-    chatId = firstItem['Chat ID'] || firstItem['chatId'] || firstItem['chat_id'] || null;
-    eventId = firstItem['Message ID'] || firstItem['messageId'] || firstItem['message_id'] || null;
-  } else {
-    chatId = body['Chat ID'] || body['chatId'] || body['chat_id'] || null;
-    eventId = body['Message ID'] || body['messageId'] || body['message_id'] || null;
-  }
+  const target = Array.isArray(body) ? (body[0] || {}) : body;
+  chatId = target['Chat ID'] || target['chatId'] || target['chat_id'] || target.dtCustomerId || target.customerId || target.to || target.from || null;
+  eventId = target['Message ID'] || target['messageId'] || target['message_id'] || target.dtMessageId || target.id || null;
 
   const safeChatId = chatId ? String(chatId).trim() : null;
   const safeEventId = eventId ? String(eventId).trim() : null;
   const headers = sanitizeHeaders(req);
 
+  // 1. Instantly store raw payload into robylon_webhook_payloads (data safety)
   try {
     await saveRobylonWebhookPayload({
       source: 'doubletick',
@@ -94,18 +89,26 @@ export async function POST(req: NextRequest) {
       payload: body,
       headers: headers,
     });
-
-    return NextResponse.json({
-      success: true,
-      message: 'DoubleTick payload ingested successfully',
-      channel: 'doubletick',
-      chatId: safeChatId,
-      recordCount: Array.isArray(body) ? body.length : 1,
-      receivedAt: new Date().toISOString(),
-    }, { status: 200 });
-
   } catch (err: any) {
-    console.error('[doubletick-webhook] Failed to save payload:', err?.message || err);
-    return NextResponse.json({ error: 'Failed to ingest payload' }, { status: 500 });
+    console.warn('[doubletick-webhook] Warning saving raw payload:', err?.message || err);
   }
+
+  // 2. Parse & Thread messages into `pcg_conversations` table
+  let ingestedCount = 0;
+  try {
+    const res = await ingestDoubleTickPayload(body);
+    ingestedCount = res?.ingestedCount || 0;
+  } catch (err: any) {
+    console.error('[doubletick-webhook] Failed to ingest into pcg_conversations:', err?.message || err);
+  }
+
+  return NextResponse.json({
+    success: true,
+    message: 'DoubleTick payload ingested successfully',
+    channel: 'doubletick',
+    chatId: safeChatId,
+    recordCount: Array.isArray(body) ? body.length : 1,
+    conversationsIngested: ingestedCount,
+    receivedAt: new Date().toISOString(),
+  }, { status: 200 });
 }
