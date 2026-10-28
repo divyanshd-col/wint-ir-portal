@@ -780,6 +780,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                         raisedByRole={d.raisedByRole || (d.raisedBy === 'TL' ? 'tl' : 'agent')}
                         raisedByName={d.raisedByName || d.agentName}
                         reviewedBy={(d as any).reviewedBy}
+                        flush
                         reviewerRole={d.status === 'tl_resolved' ? 'tl' : ((d as any).reviewedByRole || 'quality')}
                         flaggedAt={(d as any).flaggedAt || d.raisedAt}
                         reviewedAt={(d as any).reviewedAt}
@@ -787,7 +788,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                       />
                         </div>
                         {status === 'pending' && (
-                          <div style={{ width: 220, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: 16, background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 12 }}>
+                          <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 14px', background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 1px 3px rgba(0,0,0,0.04)', boxSizing: 'border-box' }}>
                             <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text)', marginBottom: 4 }}>Action</div>
                             {definedTopics.length > 0 && !d.callId && !definedTopics.includes((d.disposition || '').trim()) && (
                               <UISelect aria-label="Disposition" value={topicPick[d.flagId] ?? ''} onChange={e => setTopicPick(p => ({ ...p, [d.flagId]: e.target.value }))} style={{ width: '100%' }}>
@@ -845,6 +846,7 @@ function DisputesSection({ status, onTotalChange }: { status: 'pending' | 'resol
                     onDone={() => setExpandedId(null)}
                     onClose={() => setExpandedId(null)}
                     colSpan={colCount}
+                    inset
                     conversationType={d.conversationType}
                   />
                 </>
