@@ -38,6 +38,7 @@ export interface TLDisputeRow {
   gates?:           any;
   conversationType?: 'bot' | 'agent' | 'hybrid';
   mobileNumber?:    string | null;
+  originalScore?:   number | null;
 }
 
 export const GET = withLogging(ROUTE, async (req: NextRequest) => {
@@ -265,6 +266,7 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
       parameters:       params,
       gates:            callDb?.gates ?? null,
       conversationType: (db?.conversation_type ?? null) as any,
+      originalScore:    flag.originalScore != null ? parseFloat(flag.originalScore as any) : null,
     });
   }
 
@@ -283,5 +285,9 @@ export const GET = withLogging(ROUTE, async (req: NextRequest) => {
     durationMs: Date.now() - t0,
   });
 
-  return NextResponse.json({ disputes: finalDisputes });
+  return NextResponse.json({ disputes: finalDisputes }, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
+  });
 });

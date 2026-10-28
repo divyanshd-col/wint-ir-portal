@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const { session, response } = await requireRole(['admin', 'quality', 'tl', 'agent']);
   if (response) return response;
 
-  const { scoreId, chatId, callId, agentNote, challengedParams, raisedByRole } = await req.json();
+  const { scoreId, chatId, callId, agentNote, challengedParams, raisedByRole, originalScore: bodyOriginalScore } = await req.json();
   const effectiveChatId = chatId || callId;
   if (!effectiveChatId) return NextResponse.json({ error: 'chatId or callId required' }, { status: 400 });
 
@@ -40,6 +40,34 @@ export async function POST(req: NextRequest) {
   const isTL = role === 'tl' || raisedByRole === 'tl';
   const effectiveRaisedByRole = isTL ? 'tl' : 'ir';
   const initialStatus = isTL ? 'tl_forwarded' : 'pending';
+
+  // Snapshot the original score being disputed
+  let originalScore: number | null = typeof bodyOriginalScore === 'number' ? bodyOriginalScore : null;
+  if (originalScore === null) {
+    try {
+      const { query } = await import('@/lib/cx/db');
+      if (callId) {
+        const cRows = await query<{ iqs_percent: string }>(
+          `SELECT iqs_percent FROM call_evaluations WHERE call_id = $1 LIMIT 1`,
+          [callId]
+        );
+        if (cRows[0]?.iqs_percent != null) originalScore = parseFloat(cRows[0].iqs_percent);
+      } else if (effectiveChatId) {
+        const sRows = await query<{ iqs_score: string; parameters: any }>(
+          `SELECT iqs_score, parameters FROM iqs_scores WHERE chat_id = $1 LIMIT 1`,
+          [effectiveChatId]
+        );
+        if (sRows[0]) {
+          const rawParams = typeof sRows[0].parameters === 'string' ? JSON.parse(sRows[0].parameters) : sRows[0].parameters;
+          if (rawParams?.__scores?.agent_iqs != null) {
+            originalScore = parseFloat(rawParams.__scores.agent_iqs);
+          } else if (sRows[0].iqs_score != null) {
+            originalScore = parseFloat(sRows[0].iqs_score);
+          }
+        }
+      }
+    } catch {}
+  }
 
   // If raised by TL on behalf of an agent, look up the actual agent from the conversation/call
   let targetAgentName = submitterName;
@@ -71,6 +99,7 @@ export async function POST(req: NextRequest) {
     agentName: targetAgentName, agentEmail: email,
     agentNote: agentNote || '', challengedParams: params, flaggedAt: now,
     raisedByRole: effectiveRaisedByRole, paramCategory: 'qa', status: initialStatus,
+    originalScore,
   };
   const saved = await storeAppendIQSFlag(flag);
   if (!saved) {

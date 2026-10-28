@@ -144,6 +144,7 @@ interface DisputeRow {
   reviewedAt: string;
   parameters: Record<string, any> | null;
   flaggedAt: string;
+  originalScore?: number | null;
 }
 
 interface Props {
@@ -329,6 +330,25 @@ export default function MyQualityChatsPage({ agentName }: Props) {
     fetchEvaluatedChats();
     fetchDisputes();
   }, [activeTab]);
+
+  // Auto-refresh when tab regains focus or every 45s so IRs see QA updates without manual reload
+  useEffect(() => {
+    const handleFocus = () => {
+      fetchEvaluatedChats();
+      fetchDisputes();
+    };
+    window.addEventListener('focus', handleFocus);
+    const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchEvaluatedChats();
+        fetchDisputes();
+      }
+    }, 45000);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [fetchEvaluatedChats, fetchDisputes]);
 
   const cancelDispute = async (flagId: string) => {
     setCancellingId(flagId);
@@ -760,6 +780,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           challengedParams={reviewedFlag?.challengedParams || pendingFlag?.challengedParams || []}
                           agentNote={reviewedFlag?.agentNote || pendingFlag?.agentNote}
                           flagId={pendingFlag?.flagId || reviewedFlag?.flagId}
+                          originalScore={pendingFlag?.originalScore ?? reviewedFlag?.originalScore}
                           colSpan={8}
                           onClose={() => setExpandedEvalId(null)}
                           onDisputeRaised={() => {
@@ -999,7 +1020,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           {agentName}
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
-                          <IQSBadge score={row.iqsScore} />
+                          <IQSBadge score={row.originalScore ?? row.iqsScore} />
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={row.callIqsScore ?? null} />
@@ -1128,6 +1149,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             flaggedAt={row.flaggedAt}
                             flagId={row.flagId}
                             flagStatus={row.status}
+                            originalScore={row.originalScore}
                             colSpan={8}
                             onClose={() => setExpandedDisputeId(null)}
                           />
@@ -1371,7 +1393,17 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                           {agentName}
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
-                          <IQSBadge score={row.iqsScore} />
+                          {row.originalScore != null && row.iqsScore != null && row.originalScore !== row.iqsScore ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                              <span style={{ textDecoration: 'line-through', opacity: 0.65 }}>
+                                <IQSBadge score={row.originalScore} />
+                              </span>
+                              <span style={{ fontSize: 11, color: 'var(--qa-text-3)' }}>→</span>
+                              <IQSBadge score={row.iqsScore} />
+                            </div>
+                          ) : (
+                            <IQSBadge score={row.iqsScore} />
+                          )}
                         </td>
                         <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={row.callIqsScore ?? null} />
@@ -1482,6 +1514,7 @@ export default function MyQualityChatsPage({ agentName }: Props) {
                             reviewedAt={row.reviewedAt}
                             flagId={row.flagId}
                             flagStatus={row.status}
+                            originalScore={row.originalScore}
                             colSpan={9}
                             onClose={() => setExpandedDisputeId(null)}
                           />

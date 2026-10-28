@@ -344,9 +344,17 @@ export default function DisputesTable({ leadingFilter, onCountChange, agentFilte
                   <td style={{ ...td, color: 'var(--qa-text-2)' }}>{d.disposition || '—'}</td>
                   <td style={{ ...td, fontWeight: 500 }}>{d.agentName}</td>
                   <td style={tdNum}>
-                    {(d.callIqsScore ?? d.iqsScore) != null ? (
+                    {(d.originalScore ?? (d.callIqsScore ?? d.iqsScore)) != null ? (
                       <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                        {d.callIqsScore ?? d.iqsScore}
+                        {d.originalScore != null && (d.callIqsScore ?? d.iqsScore) != null && d.originalScore !== (d.callIqsScore ?? d.iqsScore) ? (
+                          <span title={`Disputed score: ${d.originalScore}, Revised: ${d.callIqsScore ?? d.iqsScore}`}>
+                            <span style={{ opacity: 0.6, textDecoration: 'line-through' }}>{d.originalScore}</span>
+                            <span style={{ margin: '0 4px', color: 'var(--qa-text-3)', fontWeight: 400 }}>→</span>
+                            <span style={{ color: '#166534' }}>{d.callIqsScore ?? d.iqsScore}</span>
+                          </span>
+                        ) : (
+                          d.originalScore ?? (d.callIqsScore ?? d.iqsScore)
+                        )}
                       </span>
                     ) : (
                       <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>

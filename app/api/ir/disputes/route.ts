@@ -147,11 +147,16 @@ export async function GET(req: NextRequest) {
       gates: cRow?.gates ?? null,
       mobileNumber: (isCall ? cRow?.mobile_number : row?.mobile_number) || null,
       flaggedAt: f.flaggedAt,
+      originalScore: f.originalScore != null ? parseFloat(f.originalScore as any) : null,
     };
   });
 
   // Sort newest first
   enriched.sort((a, b) => new Date(b.flaggedAt).getTime() - new Date(a.flaggedAt).getTime());
 
-  return NextResponse.json({ disputes: enriched });
+  return NextResponse.json({ disputes: enriched }, {
+    headers: {
+      'Cache-Control': 'no-store, no-cache, must-revalidate',
+    },
+  });
 }

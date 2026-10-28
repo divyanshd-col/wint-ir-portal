@@ -44,6 +44,7 @@ interface IRScorePanelProps {
   colSpan: number;
   flagId?: string;
   flagStatus?: string;
+  originalScore?: number | null;
   onClose: () => void;
   onDisputeRaised?: () => void;
 }
@@ -100,7 +101,7 @@ function ScoreRing({ score }: { score: number | null }) {
 export default function IRScorePanel({
   chatId, agentName, iqsScore, botIqsScore, closedAt, parameters, mode,
   challengedParams = [], agentNote, reviewNote, reviewedBy, flaggedAt, reviewedAt, colSpan, flagId,
-  onClose, onDisputeRaised, flagStatus,
+  originalScore, onClose, onDisputeRaised, flagStatus,
 }: IRScorePanelProps) {
   const [activeTab, setActiveTab] = useState<'agent' | 'bot'>('agent');
   const isV4 = isV4Evaluation(parameters);
@@ -183,7 +184,13 @@ export default function IRScorePanel({
       const res = await fetch('/api/quality/flag', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId, challengedParams: challenged, agentNote: sharedNote.trim(), raisedByRole: 'ir' }),
+        body: JSON.stringify({
+          chatId,
+          challengedParams: challenged,
+          agentNote: sharedNote.trim(),
+          raisedByRole: 'ir',
+          originalScore: displayedScore,
+        }),
       });
       if (!res.ok) throw new Error('Failed to submit dispute');
       setDisputeDone(true);
@@ -510,6 +517,11 @@ export default function IRScorePanel({
               }}>
                 <div style={{ fontWeight: 600, marginBottom: reviewNote ? 4 : 0 }}>
                   QA Review: {reviewedOutcome}{reviewedBy ? ` by ${reviewedBy}` : ''}{reviewedAt ? ` · ${new Date(reviewedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}` : ''}
+                  {originalScore != null && displayedScore != null && originalScore !== displayedScore && (
+                    <span style={{ marginLeft: 8, fontWeight: 500, color: 'var(--qa-text-2, #6B6B6B)' }}>
+                      (Score revised: <span style={{ textDecoration: 'line-through' }}>{originalScore}</span> → <strong style={{ color: '#166534' }}>{displayedScore}</strong>)
+                    </span>
+                  )}
                 </div>
                 {reviewNote && <div style={{ color: isRejected ? '#7f1d1d' : '#14532d', lineHeight: 1.4 }}>{reviewNote}</div>}
               </div>

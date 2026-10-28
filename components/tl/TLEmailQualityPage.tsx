@@ -7,7 +7,7 @@ import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import ScoreRing from '@/components/quality/ScoreRing';
 import ParamScoreRow from '@/components/quality/ParamScoreRow';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
-import { periodBounds, intentLabel, disputeLabel } from '@/lib/email/ui';
+import { periodBounds, intentLabel, disputeLabel, formatEmailDateTime } from '@/lib/email/ui';
 import { DEFAULT_EMAIL_PARAMETERS } from '@/lib/email/context-builder';
 import EmailMessageView, {
   CustomerSummaryBlock,
@@ -183,9 +183,9 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
     (!agentFilter || r.agent_name === agentFilter) &&
     (!outcomeFilter || r.dispute_status === outcomeFilter));
   const [sort, toggleSort] = useSort();
-  const sortedSrc = sortRows(shown, sort, { agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
+  const sortedSrc = sortRows(shown, sort, { date: r => r.sent_at, agent: r => r.agent_name, iqs: r => r.effective_score ?? r.quality_score });
   const paging = usePaging(sortedSrc, `${queue}|${agentFilter}|${outcomeFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
-  const colCount = 7;
+  const colCount = 8;
   const field: React.CSSProperties = { height: 32, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12 };
 
   return (
@@ -312,6 +312,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
       <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
         <colgroup>
           <col style={{ width: 130 }} />
+          <col style={{ width: 135 }} />
           <col />
           <col style={{ width: 90 }} />
           <col style={{ width: 80 }} />
@@ -322,6 +323,7 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
         <thead>
           <tr>
             <th style={th}>Ticket ID</th>
+            <SortTh k="date" sort={sort} onSort={toggleSort} style={th}>Date & Time</SortTh>
             <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
             <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
             <th style={th}>CSAT</th>
@@ -349,6 +351,19 @@ function EmailDisputesSection({ queue, period, onPeriod, onChanged }: { queue: '
                   <td style={tdMono}>
                     <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 8)}…`} />
                   </td>
+                  {(() => {
+                    const dt = formatEmailDateTime(item.sent_at);
+                    return (
+                      <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                        <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
+                        {dt.time && (
+                          <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
+                            {dt.time}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })()}
                   <td style={{ ...td, fontWeight: 500 }}>{item.agent_name || 'Unassigned'}</td>
                   <td style={{ ...tdNum, color: 'var(--qa-text)', fontWeight: 600 }}>
                     {score != null ? Math.round(Number(score)) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
@@ -553,7 +568,7 @@ export default function TLEmailQualityPage() {
     : 0;
 
   const [sortR, toggleSortR] = useSort();
-  const sortedReplies = sortRows(replies, sortR, { agent: r => r.agent_name, intent: r => r.intent_l1, iqs: r => r.effective_score ?? r.quality_score });
+  const sortedReplies = sortRows(replies, sortR, { date: r => r.sent_at, agent: r => r.agent_name, intent: r => r.intent_l1, iqs: r => r.effective_score ?? r.quality_score });
   const paging = usePaging(sortedReplies, `${selectedAgent}|${period.period}|${period.customFrom}|${period.customTo}`);
 
   return (
@@ -782,9 +797,10 @@ export default function TLEmailQualityPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: '14%' }} />
-              <col style={{ width: '18%' }} />
-              <col style={{ width: '25.4%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '16%' }} />
+              <col style={{ width: '16.4%' }} />
               <col style={{ width: '14.2%' }} />
               <col style={{ width: '14.2%' }} />
               <col style={{ width: '14.2%' }} />
@@ -792,6 +808,7 @@ export default function TLEmailQualityPage() {
             <thead>
               <tr>
                 <th style={th}>Ticket ID</th>
+                <SortTh k="date" sort={sortR} onSort={toggleSortR} style={th}>Date & Time</SortTh>
                 <SortTh k="agent" sort={sortR} onSort={toggleSortR} style={th}>Agent</SortTh>
                 <SortTh k="intent" sort={sortR} onSort={toggleSortR} style={th}>Intent</SortTh>
                 <SortTh k="iqs" sort={sortR} onSort={toggleSortR} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
@@ -802,13 +819,13 @@ export default function TLEmailQualityPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     Loading team email replies…
                   </td>
                 </tr>
               ) : paging.pageItems.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
+                  <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
                     No replies matching selected filters
                   </td>
                 </tr>
@@ -830,6 +847,19 @@ export default function TLEmailQualityPage() {
                         <td style={tdMono}>
                           <TicketLinkButton id={reply.chat_id ?? reply.ticket_id} label={reply.chat_id ?? `${reply.ticket_id.slice(0, 8)}…`} />
                         </td>
+                        {(() => {
+                          const dt = formatEmailDateTime(reply.sent_at);
+                          return (
+                            <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
+                              {dt.time && (
+                                <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
+                                  {dt.time}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })()}
                         <td style={{ ...td, fontWeight: 500 }}>
                           {reply.agent_name || 'Unassigned'}
                         </td>
@@ -849,7 +879,7 @@ export default function TLEmailQualityPage() {
 
                       {isExpanded && (
                         <tr className="eval-panel-row">
-                          <td colSpan={6} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
+                          <td colSpan={7} className="eval-panel-cell" style={{ padding: 0, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)' }}>
                             <EmailSplit
                               conversation={<>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
