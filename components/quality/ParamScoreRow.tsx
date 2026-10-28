@@ -1,4 +1,5 @@
 import { paramChoice, paramLabel, type ParamChoice } from '@/lib/email/ui';
+import AutoTextarea from './AutoTextarea';
 
 const OPTIONS: { val: ParamChoice; label: string }[] = [
   { val: 'yes', label: 'Yes' },
@@ -106,7 +107,7 @@ export default function ParamScoreRow({
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-3)', marginBottom: 4 }}>
               Reasoning:
             </div>
-            <textarea
+            <AutoTextarea
               value={reason || ''}
               onChange={e => onReasonChange?.(e.target.value)}
               placeholder="Reasoning for this parameter score…"

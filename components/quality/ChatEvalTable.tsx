@@ -6,8 +6,11 @@ import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import EvalPanel from './EvalPanel';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { csatLabel } from './csat';
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   dispositions:   string[];
   onCountChange?: (count: number) => void;
   agentFilter?:   'bot_only' | 'all' | 'human_only' | 'has_calls';
@@ -55,10 +58,10 @@ function buildSubMap(chats: ChatToReviewRow[]): Record<string, string[]> {
   return m;
 }
 
-type SortCol = 'chatId' | 'agentName' | 'iqsScore' | 'botIqsScore';
+type SortCol = 'agentName' | 'iqsScore' | 'botIqsScore' | 'callTx' | 'status';
 type SortDir = 'asc' | 'desc';
 
-export default function ChatEvalTable({ dispositions, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId, onChatNotFound }: Props) {
+export default function ChatEvalTable({ leadingFilter, dispositions, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId, onChatNotFound }: Props) {
   // ── Sort state ────────────────────────────────────────────────────────────
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('desc');
@@ -181,22 +184,27 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
   const sortedChats = [...chats].sort((a, b) => {
     if (!sortCol) return 0;
     let cmp = 0;
-    if (sortCol === 'chatId')    cmp = a.chatId.localeCompare(b.chatId);
     if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
     if (sortCol === 'iqsScore')  cmp = (a.iqsScore ?? 0) - (b.iqsScore ?? 0);
     if (sortCol === 'botIqsScore')  cmp = (a.botIqsScore ?? 0) - (b.botIqsScore ?? 0);
+    if (sortCol === 'callTx')    cmp = String(a.callTranscriptStatus ?? '').localeCompare(String(b.callTranscriptStatus ?? ''));
+    if (sortCol === 'status')    cmp = String(a.status ?? '').localeCompare(String(b.status ?? ''));
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
+  // Every row is Pending in the common case, so the Status column only appears when a re-opened chat is listed.
+  const showStatus = sortedChats.some(c => c.status === 'reopened');
+  const cols = showStatus ? 7 : 6;
+
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-    fontWeight: 500, textAlign: 'left', padding: '0 12px', whiteSpace: 'nowrap',
+    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--faint)',
+    fontWeight: 600, textAlign: 'left', padding: '0 12px', whiteSpace: 'nowrap',
   };
   const thBtn: React.CSSProperties = {
     background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em',
-    color: 'var(--qa-text-2)', fontWeight: 500, fontFamily: 'inherit',
+    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em',
+    color: 'var(--faint)', fontWeight: 600, fontFamily: 'inherit',
     display: 'inline-flex', alignItems: 'center', gap: 4,
   };
   const td: React.CSSProperties = {
@@ -232,10 +240,11 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
 
       {/* Filter bar — overflow: visible so dropdowns are not clipped */}
       <div style={{
-        minHeight: 56, background: 'var(--qa-card)', borderBottom: '1px solid var(--qa-border)',
+        minHeight: 56, background: 'var(--sunk)', borderBottom: '1px solid var(--qa-border)',
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 16px',
         borderRadius: '8px 8px 0 0',
       }}>
+        {leadingFilter}
 
         {/* Search by Chat ID */}
         <input
@@ -363,18 +372,18 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
         {/* CSAT filter */}
         <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
           <button style={csatFilter.length ? chipActive : chip} onClick={() => setOpenDrop(openDrop === 'csat' ? null : 'csat')}>
-            {csatFilter.length ? `CSAT: ${csatFilter.join(', ')}` : 'CSAT'} <span style={{ fontSize: 9 }}>▾</span>
+            {csatFilter.length ? `CSAT: ${csatFilter.map(v => csatLabel(v)).join(', ')}` : 'CSAT'} <span style={{ fontSize: 9 }}>▾</span>
           </button>
           {openDrop === 'csat' && (
             <div style={dropdown} onClick={e => e.stopPropagation()}>
-              {[1, 3, 5].map(v => {
+              {[5, 3, 1].map(v => {
                 const checked = csatFilter.includes(v);
                 return (
                   <div key={v} style={dropItem} onClick={() => {
                     setCsatFilter(prev => checked ? prev.filter(x => x !== v) : [...prev, v]);
                   }}>
                     <span style={{ fontSize: 10 }}>{checked ? '☑' : '☐'}</span>
-                    {v === 1 ? '1 — Negative' : v === 3 ? '3 — Neutral' : '5 — Positive'}
+                    {csatLabel(v)}
                   </div>
                 );
               })}
@@ -477,41 +486,38 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
       </div>
 
       {/* Table */}
-      <div style={{ overflowX: 'auto', borderRadius: '0 0 8px 8px', overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+      <div style={{ overflowX: 'auto', borderRadius: '0 0 8px 8px' }}>
+        <table style={{ width: '100%', minWidth: 640, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <colgroup>
-            <col style={{ width: 110 }} />
-            <col />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 140 }} />
-            <col style={{ width: 95 }} />
-            <col style={{ width: 90 }} />
+            {/* left of the split (as in the panel's transcript): ID + agent; right (scoring): scores + action */}
+            <col style={{ width: '16%' }} />
+            <col style={{ width: '41.4%' }} />
+            <col style={{ width: showStatus ? '10%' : '12%' }} />
+            <col style={{ width: showStatus ? '8%' : '10%' }} />
+            <col style={{ width: showStatus ? '9%' : '12.6%' }} />
+            {showStatus && <col style={{ width: '8%' }} />}
+            <col style={{ width: showStatus ? '7.6%' : '8%' }} />
           </colgroup>
           <thead>
             <tr>
-              <th style={th}>
-                <button style={thBtn} onClick={() => toggleSort('chatId')}>
-                  Chat ID <SortIcon col="chatId" />
-                </button>
-              </th>
+              <th style={th}>Chat ID</th>
               <th style={th}>
                 <button style={thBtn} onClick={() => toggleSort('agentName')}>
                   Agent <SortIcon col="agentName" />
                 </button>
               </th>
               <th style={{ ...th, textAlign: 'right' }}>
-                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('botIqsScore')}>
-                  <SortIcon col="botIqsScore" /> IQS (Bot)
+                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('iqsScore')}>
+                  <SortIcon col="iqsScore" /> Agent IQS
                 </button>
               </th>
               <th style={{ ...th, textAlign: 'right' }}>
-                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('iqsScore')}>
-                  <SortIcon col="iqsScore" /> IQS (Agent)
+                <button style={{ ...thBtn, justifyContent: 'flex-end', width: '100%' }} onClick={() => toggleSort('botIqsScore')}>
+                  <SortIcon col="botIqsScore" /> Bot IQS
                 </button>
               </th>
-              <th style={th}>Call Transcript</th>
-              <th style={th}>Status</th>
+              <th style={th}><button style={thBtn} onClick={() => toggleSort('callTx')}>Call Transcript <SortIcon col="callTx" /></button></th>
+              {showStatus && <th style={th}><button style={thBtn} onClick={() => toggleSort('status')}>Status <SortIcon col="status" /></button></th>}
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
@@ -519,7 +525,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i}>
-                  {Array.from({ length: 7 }).map((_, j) => (
+                  {Array.from({ length: cols }).map((_, j) => (
                     <td key={j} style={td}>
                       <div style={{ height: 12, background: 'var(--qa-fill-light)', borderRadius: 4, width: j === 0 ? '50%' : '70%' }} />
                     </td>
@@ -528,7 +534,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
               ))
             ) : sortedChats.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
+                <td colSpan={cols} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: '40px 16px' }}>
                   No chats pending review
                 </td>
               </tr>
@@ -537,23 +543,13 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                 <React.Fragment key={chat.chatId}>
                   <tr
                     onClick={() => toggleExpand(chat.chatId)}
-                    style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
+                    style={{ background: expandedId === chat.chatId ? 'var(--accent-weak)' : undefined, cursor: 'pointer' }}
                     onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                     onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                   >
-                    <td style={tdMono}>
+                    <td style={{ ...tdMono, boxShadow: expandedId === chat.chatId ? 'inset 3px 0 0 var(--accent)' : undefined }}>
                       {/^\d+$/.test(chat.chatId.trim()) ? (
-                        <a
-                          href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={e => e.stopPropagation()}
-                          style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}
-                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                        >
-                          {chat.chatId}
-                        </a>
+                        <TicketLinkButton id={chat.chatId} label={chat.chatId} />
                       ) : (
                         chat.chatId
                       )}
@@ -562,21 +558,21 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                       {chat.agentName}
                     </td>
                     <td style={tdNum}>
-                      {chat.botIqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                          {chat.botIqsScore}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
-                      )}
-                    </td>
-                    <td style={tdNum}>
                       {chat.iqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
                           {chat.iqsScore}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 12, fontWeight: 500 }}>NIL</span>
+                      )}
+                    </td>
+                    <td style={tdNum}>
+                      {chat.botIqsScore !== null ? (
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 400, color: 'var(--faint)' }}>
+                          {chat.botIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>—</span>
                       )}
                     </td>
                     <td style={td}>
@@ -593,17 +589,19 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 12 }}>No Call</span>
                       )}
                     </td>
+                    {showStatus && (
                     <td style={td}>
-                      {chat.status === 'reopened' ? (
-                        <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
-                          Reopened
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
-                          Pending
-                        </span>
-                      )}
-                    </td>
+                        {chat.status === 'reopened' ? (
+                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
+                            Reopened
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--qa-text-2)' }}>
+                            Pending
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td style={tdAct}>
                       <button
                         onClick={e => { e.stopPropagation(); toggleExpand(chat.chatId); }}
@@ -638,7 +636,7 @@ export default function ChatEvalTable({ dispositions, onCountChange, agentFilter
                         mode="submit"
                         onDone={() => removeChat(chat.chatId)}
                         onClose={() => setExpandedId(null)}
-                        colSpan={7}
+                        colSpan={cols}
                         conversationType={chat.conversationType}
                       />
                     </ErrorBoundary>

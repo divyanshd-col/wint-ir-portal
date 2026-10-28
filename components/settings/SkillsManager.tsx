@@ -238,14 +238,14 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
             placeholder="Search skills by name, ID, or description…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
           />
         </div>
 
         <select
           value={selectedCategory}
           onChange={e => setSelectedCategory(e.target.value)}
-          className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30"
+          className="border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30"
         >
           <option value="all">All Categories ({skills.length})</option>
           {categories.map(c => (
@@ -272,7 +272,7 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
                   onClick={() => setSelectedPersonaId(p.id)}
                   className={`p-4 rounded-2xl border text-left transition-all ${
                     isSelected
-                      ? 'bg-emerald-50/50 border-[#2d9e4f] shadow-sm'
+                      ? 'bg-emerald-50/50 border-[#1f7a4d] shadow-sm'
                       : 'bg-white border-gray-100 hover:border-gray-200'
                   }`}
                 >
@@ -280,7 +280,7 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
                     <span className="font-semibold text-sm text-gray-900">{p.name}</span>
                     <span
                       className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                        isSelected ? 'bg-[#2d9e4f] text-white' : 'bg-gray-100 text-gray-600'
+                        isSelected ? 'bg-[#1f7a4d] text-white' : 'bg-gray-100 text-gray-600'
                       }`}
                     >
                       {skillCount} / {skills.length}
@@ -336,7 +336,7 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
                             {/* ON/OFF Toggle Switch */}
                             <div className="shrink-0 flex items-center gap-3">
                               <span className={`text-xs font-semibold uppercase tracking-wider ${
-                                isEnabled ? 'text-[#2d9e4f]' : 'text-gray-400'
+                                isEnabled ? 'text-[#1f7a4d]' : 'text-gray-400'
                               }`}>
                                 {isEnabled ? 'Enabled' : 'Disabled'}
                               </span>
@@ -347,8 +347,8 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
                                 aria-checked={isEnabled}
                                 disabled={isToggling}
                                 onClick={() => toggleSkill(activePersona.id, s.id, isEnabled)}
-                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 disabled:opacity-50 ${
-                                  isEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'
+                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 disabled:opacity-50 ${
+                                  isEnabled ? 'bg-[#1f7a4d]' : 'bg-gray-200'
                                 }`}
                               >
                                 <span
@@ -433,8 +433,8 @@ export default function SkillsManager({ showToast }: SkillsManagerProps) {
                             disabled={isToggling}
                             onClick={() => toggleSkill(p.id, s.id, isEnabled)}
                             title={`${isEnabled ? 'Disable' : 'Enable'} ${s.name} for ${p.name}`}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 disabled:opacity-40 ${
-                              isEnabled ? 'bg-[#2d9e4f]' : 'bg-gray-200'
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 disabled:opacity-40 ${
+                              isEnabled ? 'bg-[#1f7a4d]' : 'bg-gray-200'
                             }`}
                           >
                             <span

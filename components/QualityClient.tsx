@@ -399,7 +399,7 @@ function DateRangePicker({ from, to, onChange, onClose }: {
         </button>
       </div>
       <p className="text-[10px] text-gray-400 text-center mb-1.5">
-        {step === 'from' ? 'Click start date' : `From ${pendingFrom} — click end`}
+        {step === 'from' ? 'Click start date' : `From ${pendingFrom}, click end`}
       </p>
       <div className="grid grid-cols-7 mb-0.5">
         {DAY_NAMES.map(d => <div key={d} className="text-center text-[9px] text-gray-400 py-0.5">{d}</div>)}
@@ -794,7 +794,7 @@ function AgentCard({
             <div className="flex items-center gap-2 flex-wrap">
               <p className="font-bold text-gray-900 text-sm truncate">{stat.agent}</p>
               {isAtRisk && (
-                <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full shrink-0">⚠ At Risk</span>
+                <span className="text-[10px] font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full shrink-0">At Risk</span>
               )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">{stat.chats} chats · range {stat.minIqs}–{stat.maxIqs}%</p>
@@ -1214,7 +1214,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
           {hasPrevChatRef && (
             <div className="flex items-start gap-2 bg-amber-50 border-b border-amber-200 px-4 py-2.5">
               <svg className="shrink-0 mt-0.5 text-amber-500" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 7.5a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/></svg>
-              <p className="text-xs text-amber-800 flex-1"><span className="font-semibold">Previous conversation referenced</span> — this transcript refers to a prior chat. Scores may not reflect the full context. Review carefully and override if needed.</p>
+              <p className="text-xs text-amber-800 flex-1"><span className="font-semibold">Previous conversation referenced</span>. This transcript refers to a prior chat. Scores may not reflect the full context. Review carefully and override if needed.</p>
             </div>
           )}
           <div className="flex divide-x divide-gray-100" style={{ maxHeight: 560, minHeight: 220 }}>
@@ -1490,7 +1490,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-[160px]">
           <h2 className="text-sm font-bold text-gray-900">Chats Pending Review</h2>
-          <p className="text-xs text-gray-400 mt-0.5">IQS &lt; 80% or needs bot review — scoped to your agents</p>
+          <p className="text-xs text-gray-400 mt-0.5">IQS &lt; 80% or needs bot review</p>
         </div>
         {/* All / Needs Review / Challenged filter */}
         <div className="flex items-center bg-gray-100 rounded-xl p-1 gap-0.5">
@@ -1608,7 +1608,7 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
           {/* Row 4: Disposition + Sub-Disposition */}
           {assignedDispositions && (
             <p className="text-[11px] text-emerald-700 font-medium">
-              Default view: {assignedDispositions.join(', ')} — select a different disposition below to override
+              Default view: {assignedDispositions.join(', ')}. Select a different disposition below to override
             </p>
           )}
           <div className="flex flex-wrap items-end gap-4">
@@ -1654,7 +1654,6 @@ function PendingChatsTab({ userRole, userEmail, initialSection }: { userRole?: s
       {/* Items */}
       {displayItems.length === 0 ? (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-14 text-center">
-          <p className="text-2xl mb-2">{section === 'pending' ? '✓' : '📋'}</p>
           <p className="text-sm font-semibold text-gray-700">{section === 'pending' ? 'All caught up' : 'No reviewed chats yet'}</p>
           <p className="text-xs text-gray-400 mt-1">{section === 'pending' ? 'No chats pending review for your agents.' : 'Mark some chats as reviewed to see them here.'}</p>
         </div>
@@ -1701,7 +1700,7 @@ function fmtDurQ(secs: number | null | undefined): string {
 }
 
 function iqsColorQ(iqs: number | null) {
-  if (iqs === null) return { text: '#6b7280', bg: '#f3f4f6' };
+  if (iqs === null) return { text: 'var(--qa-text-2)', bg: 'var(--qa-fill-light)' };
   if (iqs >= 90) return { text: '#15803d', bg: '#dcfce7' };
   if (iqs >= 80) return { text: '#92400e', bg: '#fef3c7' };
   if (iqs >= 70) return { text: '#c2410c', bg: '#ffedd5' };
@@ -1917,9 +1916,9 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
             <div className="flex items-center gap-3 mt-1 text-xs text-gray-500 flex-wrap">
               <span>{item.date}</span>
               {item.calledAt && <span>{new Date(item.calledAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>}
-              <span>⏱ {fmtDurQ(item.durationSeconds)}</span>
-              {item.interruptionCount > 0 && <span className="text-orange-500">⚡ {item.interruptionCount} interruptions</span>}
-              {item.deadAirCount > 0 && <span className="text-slate-400">🔇 {item.deadAirCount} dead air</span>}
+              <span>{fmtDurQ(item.durationSeconds)}</span>
+              {item.interruptionCount > 0 && <span className="text-orange-500">{item.interruptionCount} interruptions</span>}
+              {item.deadAirCount > 0 && <span className="text-slate-400">{item.deadAirCount} dead air</span>}
             </div>
             {item.failedParams.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-2">
@@ -1980,7 +1979,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
                       onClick={() => openCallOverride(item, activeScores, activeReasoning)}
                       className="text-xs px-3 py-1 rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 font-semibold transition-colors"
                     >
-                      ✏️ Override
+                      Override
                     </button>
                   )}
                   <button
@@ -1988,7 +1987,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
                     disabled={callScoreLoading[item.callId]}
                     className="text-xs px-3 py-1 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 disabled:opacity-50 font-semibold transition-colors"
                   >
-                    {callScoreLoading[item.callId] ? '⏳ Scoring…' : '⚡ Score This Call'}
+                    {callScoreLoading[item.callId] ? 'Scoring…' : 'Score This Call'}
                   </button>
                 </div>
               </div>
@@ -2109,7 +2108,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
               </div>
               {!callOverrideItem.chatId && (
                 <p className="text-xs text-amber-600 bg-amber-50 rounded-xl px-3 py-2">
-                  ⚠️ This call has no linked chat — override cannot be saved until the call is linked to a chat.
+                  This call has no linked chat. Override cannot be saved until the call is linked to a chat.
                 </p>
               )}
               <div className="flex gap-3 pt-1">
@@ -2152,7 +2151,7 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
         {/* QA disposition scope label */}
         {assignedCallDispositions.length > 0 && (
           <p className="text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">
-            Default scope: {assignedCallDispositions.join(', ')} — select a different filter to override
+            Default scope: {assignedCallDispositions.join(', ')}. Select a different filter to override
           </p>
         )}
 
@@ -2232,7 +2231,6 @@ function CallQueueTab({ userRole, userEmail }: { userRole?: string; userEmail?: 
       <div className="flex-1 overflow-y-auto px-6 pb-6 space-y-3">
         {displayItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-2xl mb-2">{section === 'pending' ? '✓' : '📋'}</p>
             <p className="text-sm font-semibold text-gray-700">
               {section === 'pending' ? 'All caught up' : 'No reviewed calls yet'}
             </p>
@@ -2787,7 +2785,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const chatId = row.chatId || `row_${i + 1}`;
-      setProgressLabel(`${i + 1} / ${rows.length} — ${row.agent || chatId}`);
+      setProgressLabel(`${i + 1} / ${rows.length} · ${row.agent || chatId}`);
       setProgress(Math.round(((i + 1) / rows.length) * 100));
       if (!row.transcript.trim() || row.transcript === 'nan') {
         errors.push({ row: i + 1, chatId, error: 'Empty transcript' }); continue;
@@ -2807,7 +2805,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
       setBatchResults([...results]);
     }
     setBatchErrors(errors);
-    setProgressLabel(`Done — ${results.length} scored${errors.length ? `, ${errors.length} failed` : ''}`);
+    setProgressLabel(`Done · ${results.length} scored${errors.length ? `, ${errors.length} failed` : ''}`);
     setScoring(false);
     setLogsLoaded(false);
   };
@@ -2908,7 +2906,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
 
   // ── Render ───────────────────────────────────────────────────────────────────
   return (
-    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: '#f5f3ee' }}>
+    <div className="h-screen flex font-sans antialiased overflow-hidden" style={{ background: 'var(--page-bg)' }}>
       {detailEntry && (
         <ScoreDetail
           entry={detailEntry}
@@ -3139,9 +3137,9 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {tab === 'reports' && 'Download filtered data as CSV'}
               {tab === 'pending' && `${challengeCount} pending review`}
               {tab === 'calls' && 'Scored IR call recordings'}
-              {tab === 'call-queue' && 'Calls pending QA review — scoped to your agents'}
+              {tab === 'call-queue' && 'Calls pending QA review'}
               {tab === 'call-test' && 'Link a call to a chat and run the full scoring pipeline'}
-              {tab === 'unified' && 'Score chat + call together — transcribe, retrieve KB, and evaluate both in one run'}
+              {tab === 'unified' && 'Score chat + call together. Transcribe, retrieve KB, and evaluate both in one run'}
             </p>
           </div>
 
@@ -3518,7 +3516,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                     <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
                       <div>
                         <p className="text-sm font-bold text-gray-900">Parameter Pass Rate by Week</p>
-                        <p className="text-xs text-gray-500 mt-0.5">% of chats passing each parameter per week · click a row to filter Score Log</p>
+                        <p className="text-xs text-gray-500 mt-0.5">% of chats passing each parameter per week</p>
                       </div>
                       {weeklyParamData.length > 5 && (
                         <button onClick={() => setShowAllWeeks(v => !v)} className="text-xs text-emerald-600 font-semibold hover:underline shrink-0">
@@ -3719,7 +3717,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                         onClick={() => setShowColPicker(v => !v)}
                         className="text-xs px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg hover:border-gray-400 transition font-medium"
                       >
-                        Columns ⚙
+                        Columns 
                       </button>
                       {showColPicker && (
                         <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 shadow-lg rounded-xl z-10 p-3 min-w-[160px]">
@@ -3967,7 +3965,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h2 className="text-sm font-bold text-gray-900">Metadata file <span className="text-gray-400 font-normal">(optional)</span></h2>
-                      <p className="text-xs text-gray-400 mt-1">Excel/CSV with <strong className="text-gray-600">chat_id, agent_name, tags, csat</strong> — matched by chat_id to enrich scores</p>
+                      <p className="text-xs text-gray-400 mt-1">Excel/CSV with <strong className="text-gray-600">chat_id, agent_name, tags, csat</strong>. Matched by chat_id to enrich scores</p>
                     </div>
                     <input ref={metaFileRef} type="file" accept=".csv,.xlsx,.xls,.ods" className="hidden" onChange={handleMetaFile} />
                     <button onClick={() => metaFileRef.current?.click()}
@@ -4108,7 +4106,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                   </div>
                   <div className="grid grid-cols-4 gap-3">
                     {[
-                      { label: 'Scored', value: batchResults.length, color: '#111827' },
+                      { label: 'Scored', value: batchResults.length, color: 'var(--qa-text)' },
                       { label: 'Avg IQS', value: `${avgIqs}%`, color: iqsTheme(avgIqs).text },
                       { label: 'Below 70%', value: batchResults.filter(e => e.iqs < 70).length, color: '#dc2626' },
                       { label: '≥ 90%', value: batchResults.filter(e => e.iqs >= 90).length, color: '#15803d' },
@@ -4137,7 +4135,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
                               <td className="py-2.5 px-2"><ChatLink chatId={e.chatId} className="text-xs" /></td>
                               <td className="py-2.5 px-2"><IQSPill iqs={e.iqs} /></td>
                               <td className="py-2.5 px-2 text-gray-500">
-                                {e.csat === '5' ? '👍' : e.csat === '3' ? '😐' : e.csat === '1' ? '👎' : '—'}
+                                {e.csat === '5' ? 'Good' : e.csat === '3' ? 'Neutral' : e.csat === '1' ? 'Bad' : '—'}
                               </td>
                               <td className="py-2.5 px-2">
                                 {fails.length > 0 ? <span className="text-red-500 font-semibold">{fails.length} ✗</span> : <span className="text-emerald-600">✓ Clean</span>}
@@ -4288,7 +4286,7 @@ export default function QualityClient({ userRole, userEmail, selfAgentName: self
               {/* Download buttons */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <p className="text-sm font-bold text-gray-900 mb-1">Download</p>
-                <p className="text-xs text-gray-500 mb-5">Exports all chats matching the filters above — no pagination limit.</p>
+                <p className="text-xs text-gray-500 mb-5">Exports all chats matching the filters above. No pagination limit.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <button
                     onClick={() => downloadReport()}

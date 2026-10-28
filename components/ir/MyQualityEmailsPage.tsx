@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
-import PeriodFilter, { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { DEFAULT_PERIOD, type PeriodState } from '@/components/quality/PeriodFilter';
+import { PeriodRangeChip } from '@/components/quality/FilterControls';
 import TicketLinkButton from '@/components/quality/TicketLinkButton';
 import { usePaging, ShowingCount, Pager } from '@/components/quality/TablePaging';
 import ScoreRing from '@/components/quality/ScoreRing';
@@ -18,6 +19,9 @@ import EmailMessageView, {
   type InternalNote,
 } from '@/components/quality/EmailContentRenderer';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import { rowClick } from '@/components/quality/rowClick';
+import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 interface EvaluationItem {
   id: number;
@@ -64,12 +68,12 @@ const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Aria
 
 const TH_BASE: CSSProperties = {
   height: 40,
-  background: 'var(--qa-gray-50, #FAFAFB)',
-  borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+  background: 'var(--qa-gray-50, var(--qa-gray-50))',
+  borderBottom: '1px solid var(--qa-border, var(--qa-border))',
   fontSize: 12,
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
   fontWeight: 500,
   padding: '0 16px',
   textAlign: 'left',
@@ -79,7 +83,7 @@ const TH_BASE: CSSProperties = {
 const TD_BASE: CSSProperties = {
   height: 52,
   padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+  borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
   fontSize: 14,
   color: 'var(--qa-text, #111111)',
   verticalAlign: 'middle',
@@ -89,7 +93,7 @@ const TD_MONO: CSSProperties = {
   ...TD_BASE,
   fontFamily: MONO,
   fontSize: 13,
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
 };
 
 const TD_NUM: CSSProperties = {
@@ -102,7 +106,7 @@ const TD_NUM: CSSProperties = {
 // ─── Badges (Exact match with MyQualityChatsPage) ─────────────────────────────
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13, fontWeight: 500 }}>NIL</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13, fontWeight: 500 }}>NIL</span>;
   return <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111111)' }}>{Math.round(Number(score))}</span>;
 }
 
@@ -115,8 +119,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
         borderRadius: 10,
         fontWeight: 600,
         lineHeight: '18px',
-        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, #F4F4F5)',
-        color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+        background: active ? 'var(--ink)' : 'var(--qa-fill-light)',
+        color: active ? 'var(--ink-fg)' : 'var(--qa-text-2, var(--qa-text-2))',
       }}
     >
       {count}
@@ -306,7 +310,9 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
     });
   }, [activeTab, evaluatedItems, disputesRaisedItems, reviewedDisputesItems, search, complianceFilter]);
 
-  const paging = usePaging(currentTabItems, `${activeTab}|${search}|${complianceFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
+  const [sort, toggleSort] = useSort();
+  const sortedItems = sortRows(currentTabItems, sort, { date: r => r.sent_at, agent: r => r.agent_name, intent: r => r.intent_l1, iqs: r => r.effective_score ?? r.quality_score });
+  const paging = usePaging(sortedItems, `${activeTab}|${search}|${complianceFilter}|${period.period}|${period.customFrom}|${period.customTo}`);
   const hasFilters = Boolean(search || complianceFilter);
   const clearFilters = () => {
     setSearch('');
@@ -314,26 +320,18 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   };
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    height: 36,
-    padding: '0 16px',
-    border: 'none',
-    borderRadius: 8,
-    background: active ? 'var(--qa-gray-700, #111111)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
-    fontFamily: SANS,
-    fontSize: 13,
-    fontWeight: active ? 600 : 400,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
-    transition: 'background 0.15s, color 0.15s',
+    height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+    background: 'transparent',
+    color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+    borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+    fontFamily: SANS, fontSize: 13, fontWeight: active ? 600 : 500,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
   const chipInputStyle: CSSProperties = {
     height: 32,
     padding: '0 10px',
-    border: '1px solid var(--qa-border, #E4E4E7)',
+    border: '1px solid var(--qa-border, var(--qa-border))',
     borderRadius: 8,
     fontSize: 13,
     fontFamily: SANS,
@@ -343,15 +341,12 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
   };
 
   return (
-    <div style={{ padding: 24, background: '#F7F7F8', minHeight: '100%', fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
+    <div style={{ fontFamily: SANS, WebkitFontSmoothing: 'antialiased' }}>
       {/* ── Page Header ── */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, margin: 0, color: 'var(--qa-text, #111111)' }}>
           My Quality Emails
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: '4px 0 0' }}>
-          View evaluated email replies, track parameter grading, and raise or monitor disputes for {agentName}.
-        </p>
       </div>
 
       {/* ── Tabs & Interaction Bar (Exact match with MyQualityChatsPage) ── */}
@@ -370,11 +365,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           style={{
             display: 'flex',
             gap: 4,
-            background: 'var(--qa-card, #FFFFFF)',
-            border: '1px solid var(--qa-border, #E4E4E7)',
-            borderRadius: 10,
-            padding: 4,
-            width: 'fit-content',
+            borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
           }}
         >
           <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
@@ -391,7 +382,6 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           </button>
         </div>
 
-        <PeriodFilter value={period} onChange={setPeriod} />
       </div>
 
       {/* ── KPI Cards (Evaluated tab, between the tabs and the table) ── */}
@@ -400,18 +390,18 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           <div
             style={{
               background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, #E4E4E7)',
+              border: '1px solid var(--qa-border, var(--qa-border))',
               borderRadius: 8,
               padding: 20,
             }}
           >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)', fontWeight: 500 }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
               My Quality Average
             </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#111111', marginTop: 6, fontFamily: MONO }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
               {summary.avgScore ? `${summary.avgScore}%` : 'N/A'}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, #6B6B6B)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
               Target: 85%+
             </div>
           </div>
@@ -419,18 +409,18 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           <div
             style={{
               background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, #E4E4E7)',
+              border: '1px solid var(--qa-border, var(--qa-border))',
               borderRadius: 8,
               padding: 20,
             }}
           >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)', fontWeight: 500 }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
               Evaluated Replies
             </div>
-            <div style={{ fontSize: 26, fontWeight: 700, color: '#111111', marginTop: 6, fontFamily: MONO }}>
+            <div style={{ fontSize: 26, fontWeight: 700, color: 'var(--qa-text)', marginTop: 6, fontFamily: MONO }}>
               {summary.completedCount}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, #6B6B6B)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
               Batch processed
             </div>
           </div>
@@ -438,12 +428,12 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           <div
             style={{
               background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, #E4E4E7)',
+              border: '1px solid var(--qa-border, var(--qa-border))',
               borderRadius: 8,
               padding: 20,
             }}
           >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)', fontWeight: 500 }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
               Compliance Rate
             </div>
             <div style={{ fontSize: 26, fontWeight: 700, color: '#166534', marginTop: 6, fontFamily: MONO }}>
@@ -451,7 +441,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                 ? `${Math.round(((summary.completedCount - summary.complianceBreachCount) / summary.completedCount) * 100)}%`
                 : '100%'}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, #6B6B6B)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
               Zero regulatory breaches
             </div>
           </div>
@@ -459,18 +449,18 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
           <div
             style={{
               background: 'var(--qa-card, #FFFFFF)',
-              border: '1px solid var(--qa-border, #E4E4E7)',
+              border: '1px solid var(--qa-border, var(--qa-border))',
               borderRadius: 8,
               padding: 20,
             }}
           >
-            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, #71717A)', fontWeight: 500 }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3, var(--qa-text-2))', fontWeight: 500 }}>
               Active Disputes
             </div>
             <div style={{ fontSize: 26, fontWeight: 700, color: '#6b21a8', marginTop: 6, fontFamily: MONO }}>
               {summary.activeDisputesCount}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--qa-text-2, #6B6B6B)', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--qa-text-2, var(--qa-text-2))', marginTop: 4 }}>
               Awaiting QA arbitration
             </div>
           </div>
@@ -482,27 +472,15 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
       <div
         style={{
           background: 'var(--qa-card, #FFFFFF)',
-          border: '1px solid var(--qa-border, #E4E4E7)',
+          border: '1px solid var(--qa-border, var(--qa-border))',
           borderRadius: 8,
           overflow: 'hidden',
         }}
       >
         {/* Single-line Filter Bar */}
-        <div
-          style={{
-            minHeight: 52,
-            background: '#FFFFFF',
-            borderBottom: '1px solid var(--qa-border, #E4E4E7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            padding: '10px 16px',
-            overflowX: 'auto',
-          }}
-        >
+        <div className="qfilters">
           {/* Filter Inputs Group */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'contents' }}>
             {/* Search */}
             <input
               type="text"
@@ -513,7 +491,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             />
 
             {/* Compliance Filter */}
-            <select
+            <UISelect
               value={complianceFilter}
               onChange={(e) => setComplianceFilter(e.target.value as any)}
               style={chipInputStyle}
@@ -521,26 +499,15 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
               <option value="">All Compliance</option>
               <option value="compliant">Compliant</option>
               <option value="breach">Non-Compliant</option>
-            </select>
+            </UISelect>
 
-            {hasFilters && (
-              <button
-                onClick={clearFilters}
-                style={{
-                  height: 28,
-                  padding: '0 10px',
-                  borderRadius: 6,
-                  border: '1px solid #E4E4E7',
-                  background: '#FFFFFF',
-                  color: '#6B6B6B',
-                  fontSize: 12,
-                  fontFamily: SANS,
-                  cursor: 'pointer',
-                }}
+            <PeriodRangeChip value={period} onChange={setPeriod} />
+
+            <button type="button" className="qf-chip" disabled={!(hasFilters || period.period !== 'all')}
+                onClick={() => { clearFilters(); setPeriod(DEFAULT_PERIOD); }}
               >
-                Clear
-              </button>
-            )}
+              Reset Filters
+            </button>
           </div>
 
           {/* Records Counter */}
@@ -553,22 +520,15 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <colgroup>
-              <col style={{ width: 130 }} />
-              <col style={{ width: 135 }} />
-              <col style={{ width: 160 }} />
-              <col />
-              <col style={{ width: 95 }} />
-              <col style={{ width: 80 }} />
-              {activeTab !== 'evaluated' && <col style={{ width: 150 }} />}
-              <col style={{ width: 90 }} />
+              {(activeTab === 'evaluated' ? [12, 13, 16, 16.4, 14.2, 14.2, 14.2] : [11, 12, 15, 19.4, 10, 10, 12, 10.6]).map((w, i) => <col key={i} style={{ width: `${w}%` }} />)}
             </colgroup>
             <thead>
               <tr>
                 <th style={TH_BASE}>Ticket ID</th>
-                <th style={TH_BASE}>Date & Time</th>
-                <th style={TH_BASE}>Agent</th>
-                <th style={TH_BASE}>Intent</th>
-                <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS</th>
+                <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date & Time</SortTh>
+                <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent</SortTh>
+                <SortTh k="intent" sort={sort} onSort={toggleSort} style={TH_BASE}>Intent</SortTh>
+                <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS</SortTh>
                 <th style={TH_BASE}>CSAT</th>
                 {activeTab !== 'evaluated' && <th style={TH_BASE}>{activeTab === 'reviewed' ? 'Outcome' : 'Dispute'}</th>}
                 <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
@@ -577,13 +537,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     Loading email quality evaluations…
                   </td>
                 </tr>
               ) : currentTabItems.length === 0 ? (
                 <tr>
-                  <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ textAlign: 'center', color: '#A1A1AA', fontSize: 13, padding: '36px 0' }}>
+                  <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ textAlign: 'center', color: 'var(--qa-text-3)', fontSize: 13, padding: '36px 0' }}>
                     No evaluations found in this view.
                   </td>
                 </tr>
@@ -598,59 +558,42 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
 
                   return (
                     <Fragment key={item.message_id}>
-                      <tr
+                      <tr data-row-click onClick={rowClick(() => { setExpandedId(isOpen ? null : item.message_id); setDisputeSuccessMsg(null); })}
                         style={{
-                          background: isOpen ? '#FAFAFB' : '#FFFFFF',
+                          background: isOpen ? 'var(--accent-weak)' : '#FFFFFF',
                           transition: 'background 0.1s',
                         }}
                       >
-                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_MONO, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <TicketLinkButton id={item.chat_id ?? item.ticket_id} label={item.chat_id ?? `${item.ticket_id.slice(0, 12)}…`} />
-                          {item.customer_email && (
-                            <div
-                              title={`User Email: ${item.customer_email}`}
-                              style={{
-                                fontSize: 11,
-                                color: 'var(--qa-text-3, #71717A)',
-                                fontFamily: SANS,
-                                marginTop: 3,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                maxWidth: 160,
-                              }}
-                            >
-                              {item.customer_email}
-                            </div>
-                          )}
                         </td>
                         {(() => {
                           const dt = formatEmailDateTime(item.sent_at);
                           return (
-                            <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', whiteSpace: 'nowrap' }}>
-                              <div style={{ fontSize: 13, color: 'var(--qa-text, #111111)' }}>{dt.date}</div>
+                            <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', whiteSpace: 'nowrap' }}>
+                              <div style={{ fontSize: 13, color: 'var(--qa-text)' }}>{dt.date}</div>
                               {dt.time && (
-                                <div style={{ fontSize: 11, color: 'var(--qa-text-3, #71717A)', marginTop: 2, fontFamily: MONO }}>
+                                <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2, fontFamily: MONO }}>
                                   {dt.time}
                                 </div>
                               )}
                             </td>
                           );
                         })()}
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || agentName}</td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.agent_name || agentName}</td>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           <span style={{ color: 'var(--qa-text, #111111)' }}>{intentLabel(item.intent_l1)}</span>
                         </td>
-                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid #F0F0F2' }}>
+                        <td style={{ ...TD_NUM, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)' }}>
                           <IQSBadge score={score} />
                         </td>
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', color: 'var(--qa-text-3, #A1A1AA)' }}>—</td>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</td>
                         {activeTab !== 'evaluated' && (
-                          <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', fontSize: 13 }}>
-                            {isDisputed ? disputeLabel(item.dispute_status) : <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}
+                          <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', fontSize: 13 }}>
+                            {isDisputed ? disputeLabel(item.dispute_status) : <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}
                           </td>
                         )}
-                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid #F0F0F2', textAlign: 'right' }}>
+                        <td style={{ ...TD_BASE, borderBottom: isLast ? 'none' : '1px solid var(--qa-border-sub)', textAlign: 'right' }}>
                           <button
                             onClick={() => {
                               setExpandedId(isOpen ? null : item.message_id);
@@ -660,7 +603,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                               background: 'none',
                               border: 0,
                               fontSize: 13,
-                              color: '#111111',
+                              color: 'var(--qa-text)',
                               fontWeight: 500,
                               cursor: 'pointer',
                               display: 'inline-flex',
@@ -672,7 +615,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                             {isOpen ? 'Close' : 'View'}
                             <span
                               style={{
-                                color: '#6B6B6B',
+                                color: 'var(--qa-text-2)',
                                 fontSize: 11,
                                 transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                                 transition: 'transform 0.15s',
@@ -686,138 +629,31 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
 
                       {/* ── Expanded Detail Drawer (Exact match with IRScorePanel) ── */}
                       {isOpen && (
-                        <tr style={{ background: '#FAFAFB' }}>
+                        <tr style={{ background: 'var(--qa-gray-50)' }}>
                           <td colSpan={activeTab === 'evaluated' ? 7 : 8} style={{ padding: '0 16px 16px' }}>
                             <div
                               style={{
                                 display: 'flex',
-                                border: '1px solid #E4E4E7',
+                                border: '1px solid var(--qa-border)',
                                 borderRadius: 8,
                                 background: '#FFFFFF',
                                 overflow: 'hidden',
                                 minHeight: 460,
                               }}
                             >
-                              {/* ── Left Pane: Score Ring, Parameters, & QA Notes ── */}
-                              <div
-                                style={{
-                                  width: 480,
-                                  minWidth: 400,
-                                  flexShrink: 0,
-                                  borderRight: '1px solid #E4E4E7',
-                                  display: 'flex',
-                                  flexDirection: 'column',
-                                }}
-                              >
-                                {/* Header */}
-                                <div style={{ padding: 16, borderBottom: '1px solid #E4E4E7', flexShrink: 0 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                                    <ScoreRing score={score} />
-                                    <div>
-                                      <div style={{ fontSize: 14, fontWeight: 600, color: '#111111' }}>
-                                        {item.agent_name || agentName}
-                                      </div>
-                                      <div style={{ fontSize: 12, color: '#A1A1AA', marginTop: 4 }}>
-                                        <span style={{ fontFamily: MONO }}>{item.ticket_id}</span>
-                                        {' · '}
-                                        {new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
-                                      </div>
-                                      {isOverridden && (
-                                        <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600, marginTop: 4 }}>
-                                          Adjusted from {Math.round(Number(item.quality_score))}%
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-
-                                {/* Section Header */}
-                                <div
-                                  style={{
-                                    padding: '10px 16px',
-                                    borderBottom: '1px solid #E4E4E7',
-                                    background: '#FAFAFB',
-                                    fontSize: 12,
-                                    fontWeight: 600,
-                                    textTransform: 'uppercase',
-                                    letterSpacing: '0.08em',
-                                    color: 'var(--qa-text-2, #6B6B6B)',
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                  }}
-                                >
-                                  <span>Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})</span>
-                                  <span style={{ fontSize: 11, fontWeight: 400, color: '#A1A1AA' }}>IQS Breakdown</span>
-                                </div>
-
-                                {/* Parameters List */}
-                                <div style={{ flex: 1, overflowY: 'auto' }}>
-                                  {DEFAULT_EMAIL_PARAMETERS.map((def, pIdx) => {
-                                    const val = [def.key, ...(def.aliases ?? [])].map(k => item.parameter_scores?.[k]).find(v => v !== undefined);
-                                    const isChallenged = item.challenged_params?.some(cp => cp.param === def.key);
-                                    const isPicked = disputingId === item.message_id && selectedParams.has(def.key);
-
-                                    return (
-                                      <div
-                                        key={def.key}
-                                        onClick={disputingId === item.message_id ? () => toggleParamPick(def.key) : undefined}
-                                        style={{
-                                          cursor: disputingId === item.message_id ? 'pointer' : 'default',
-                                          background: isPicked ? 'var(--qa-fill-light, #FAFAFB)' : 'transparent',
-                                          boxShadow: isPicked ? 'inset 3px 0 0 var(--qa-gray-700, #111111)' : 'none',
-                                          transition: 'background 0.1s',
-                                        }}
-                                      >
-                                        <div style={{ display: 'flex', alignItems: 'center', padding: '6px 16px 0', gap: 6 }}>
-                                          {disputingId === item.message_id && (
-                                            <input
-                                              type="checkbox"
-                                              checked={isPicked}
-                                              onChange={() => toggleParamPick(def.key)}
-                                              onClick={e => e.stopPropagation()}
-                                              style={{ cursor: 'pointer', width: 15, height: 15, accentColor: '#111111' }}
-                                            />
-                                          )}
-                                          {isChallenged && (
-                                            <span style={{
-                                              height: 18, padding: '0 7px', borderRadius: 999,
-                                              background: 'var(--qa-gray-700, #2D2D31)', color: '#fff',
-                                              fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
-                                              display: 'inline-flex', alignItems: 'center',
-                                            }}>
-                                              Disputed
-                                            </span>
-                                          )}
-                                        </div>
-                                        <ParamScoreRow
-                                          name={def.name}
-                                          description={def.description}
-                                          value={val}
-                                          allowNA={def.allowNA}
-                                          weight={def.defaultWeight}
-                                          reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
-                                          last={pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1}
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-
                               {/* ── Right Pane: Customer Email, Agent Reply & Dispute Box ── */}
                               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                 {/* Header */}
                                 <div
                                   style={{
                                     padding: '12px 16px',
-                                    borderBottom: '1px solid #E4E4E7',
-                                    background: '#FAFAFB',
+                                    borderBottom: '1px solid var(--qa-border)',
+                                    background: 'var(--qa-gray-50)',
                                     fontSize: 12,
                                     fontWeight: 600,
                                     textTransform: 'uppercase',
                                     letterSpacing: '0.08em',
-                                    color: 'var(--qa-text-2, #6B6B6B)',
+                                    color: 'var(--qa-text-2, var(--qa-text-2))',
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'space-between',
@@ -827,8 +663,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                 >
                                   <span>Email Conversation Details</span>
                                   {item.customer_email && (
-                                    <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', color: 'var(--qa-text-2, #6B6B6B)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                      <span style={{ color: 'var(--qa-text-3, #71717A)' }}>User:</span>
+                                    <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'none', letterSpacing: 'normal', color: 'var(--qa-text-2, var(--qa-text-2))', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                      <span style={{ color: 'var(--qa-text-3, var(--qa-text-2))' }}>User:</span>
                                       <strong style={{ color: 'var(--qa-text, #111111)', fontFamily: MONO }}>{item.customer_email}</strong>
                                     </span>
                                   )}
@@ -871,7 +707,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 14 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A' }}>
+                                        <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)' }}>
                                           Customer Inbound Email Thread
                                         </div>
                                         {item.customer_email && (
@@ -902,9 +738,9 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                           fontSize: 11,
                                           fontWeight: 600,
                                           cursor: 'pointer',
-                                          border: '1px solid #E4E4E7',
+                                          border: '1px solid var(--qa-border)',
                                           background: historyOpen ? '#2D2D31' : '#FFFFFF',
-                                          color: historyOpen ? '#FFFFFF' : '#71717A',
+                                          color: historyOpen ? '#FFFFFF' : 'var(--qa-text-2)',
                                           display: 'inline-flex',
                                           alignItems: 'center',
                                           gap: 4,
@@ -944,13 +780,13 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
 
                                   {/* Agent Reply */}
                                   <div>
-                                      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#71717A', marginBottom: 6 }}>
+                                      <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)', marginBottom: 6 }}>
                                         My Outbound Reply
                                       </div>
                                       <div
                                         style={{
                                           background: '#FFFFFF',
-                                          border: '1px solid #E4E4E7',
+                                          border: '1px solid var(--qa-border)',
                                           borderRadius: 8,
                                           padding: '14px 16px',
                                           maxHeight: 420,
@@ -970,7 +806,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                   <div
                                     style={{
                                       padding: '14px 16px',
-                                      borderTop: '1px solid #E4E4E7',
+                                      borderTop: '1px solid var(--qa-border)',
                                       background: '#FFFFFF',
                                       flexShrink: 0,
                                       maxHeight: isDisputed ? 360 : undefined,
@@ -1045,7 +881,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                                   padding: '3px 8px',
                                                   borderRadius: 4,
                                                   background: '#FFFFFF',
-                                                  border: '1px solid #E4E4E7',
+                                                  border: '1px solid var(--qa-border)',
                                                   color: '#b91c1c',
                                                   cursor: 'pointer',
                                                 }}
@@ -1057,7 +893,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
 
                                           {item.challenged_params && item.challenged_params.length > 0 && (
                                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0 6px' }}>
-                                              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: '#71717A' }}>
+                                              <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--qa-text-2)' }}>
                                                 Challenged:
                                               </span>
                                               {item.challenged_params.map(cp => {
@@ -1069,7 +905,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                                     style={{
                                                       fontSize: 11, fontWeight: 600,
                                                       background: '#FFFFFF',
-                                                      border: '1px solid #E4E4E7',
+                                                      border: '1px solid var(--qa-border)',
                                                       borderRadius: 4,
                                                       padding: '2px 8px',
                                                       color: '#3F3F46',
@@ -1104,19 +940,19 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                   ) : disputingId === item.message_id ? (
                                     <div>
                                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                                           Dispute this Score
                                         </div>
                                         <button
                                           type="button"
                                           onClick={cancelDisputeComposition}
-                                          style={{ fontSize: 12, color: '#6B6B6B', background: 'none', border: 'none', cursor: 'pointer' }}
+                                          style={{ fontSize: 12, color: 'var(--qa-text-2)', background: 'none', border: 'none', cursor: 'pointer' }}
                                         >
                                           Cancel
                                         </button>
                                       </div>
 
-                                      <div style={{ fontSize: 12, color: '#71717A', marginBottom: 8 }}>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 8 }}>
                                         Select the parameter(s) you wish to challenge:
                                       </div>
 
@@ -1132,8 +968,8 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                                 gap: 8,
                                                 padding: '6px 10px',
                                                 borderRadius: 6,
-                                                border: `1px solid ${isSelected ? '#111111' : '#E4E4E7'}`,
-                                                background: isSelected ? '#FAFAFB' : '#FFFFFF',
+                                                border: `1px solid ${isSelected ? '#111111' : 'var(--qa-border)'}`,
+                                                background: isSelected ? 'var(--qa-gray-50)' : '#FFFFFF',
                                                 cursor: 'pointer',
                                                 fontSize: 12,
                                                 fontWeight: 500,
@@ -1151,7 +987,7 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                         })}
                                       </div>
 
-                                      <div style={{ fontSize: 12, color: '#71717A', marginBottom: 4 }}>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-2)', marginBottom: 4 }}>
                                         Reason for dispute (required):
                                       </div>
                                       <textarea
@@ -1162,10 +998,10 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                         style={{
                                           width: '100%',
                                           padding: '8px 12px',
-                                          border: '1px solid #E4E4E7',
+                                          border: '1px solid var(--qa-border)',
                                           borderRadius: 6,
                                           background: '#FFFFFF',
-                                          color: '#111111',
+                                          color: 'var(--qa-text)',
                                           fontSize: 12,
                                           fontFamily: SANS,
                                           outline: 'none',
@@ -1182,9 +1018,9 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                             height: 32,
                                             padding: '0 14px',
                                             borderRadius: 6,
-                                            border: '1px solid #E4E4E7',
+                                            border: '1px solid var(--qa-border)',
                                             background: '#FFFFFF',
-                                            color: '#111111',
+                                            color: 'var(--qa-text)',
                                             fontSize: 12,
                                             fontWeight: 500,
                                             cursor: 'pointer',
@@ -1217,10 +1053,10 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                   ) : (
                                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                                       <div>
-                                        <div style={{ fontSize: 13, fontWeight: 600, color: '#111111' }}>
+                                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
                                           Dispute this Score
                                         </div>
-                                        <div style={{ fontSize: 12, color: '#71717A' }}>
+                                        <div style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
                                           Challenge specific parameter grades and submit to Team Lead for review.
                                         </div>
                                       </div>
@@ -1230,10 +1066,10 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                         style={{
                                           height: 34,
                                           padding: '0 16px',
-                                          border: '1px solid #E4E4E7',
+                                          border: '1px solid var(--qa-border)',
                                           borderRadius: 6,
                                           background: '#FFFFFF',
-                                          color: '#111111',
+                                          color: 'var(--qa-text)',
                                           fontSize: 12,
                                           fontWeight: 600,
                                           cursor: 'pointer',
@@ -1247,6 +1083,113 @@ export default function MyQualityEmailsPage({ agentName }: { agentName: string }
                                 </div>
                               )}
                               </div>
+                              {/* ── Left Pane: Score Ring, Parameters, & QA Notes ── */}
+                              <div
+                                style={{
+                                  width: '42.6%',
+                                  minWidth: 360,
+                                  flexShrink: 0,
+                                  borderLeft: '1px solid var(--qa-border)',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                }}
+                              >
+                                {/* Header */}
+                                <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                                    <ScoreRing score={score} />
+                                    <div>
+                                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--qa-text)' }}>
+                                        {item.agent_name || agentName}
+                                      </div>
+                                      <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4 }}>
+                                        <span style={{ fontFamily: MONO }}>{item.ticket_id}</span>
+                                        {' · '}
+                                        {new Date(item.sent_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                      </div>
+                                      {isOverridden && (
+                                        <div style={{ fontSize: 11, color: '#6b21a8', fontWeight: 600, marginTop: 4 }}>
+                                          Adjusted from {Math.round(Number(item.quality_score))}%
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Section Header */}
+                                <div
+                                  style={{
+                                    padding: '10px 16px',
+                                    borderBottom: '1px solid var(--qa-border)',
+                                    background: 'var(--qa-gray-50)',
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.08em',
+                                    color: 'var(--qa-text-2, var(--qa-text-2))',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                  }}
+                                >
+                                  <span>Parameter Scores ({DEFAULT_EMAIL_PARAMETERS.length})</span>
+                                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--qa-text-3)' }}>IQS Breakdown</span>
+                                </div>
+
+                                {/* Parameters List */}
+                                <div style={{ flex: 1, overflowY: 'auto' }}>
+                                  {DEFAULT_EMAIL_PARAMETERS.map((def, pIdx) => {
+                                    const val = [def.key, ...(def.aliases ?? [])].map(k => item.parameter_scores?.[k]).find(v => v !== undefined);
+                                    const isChallenged = item.challenged_params?.some(cp => cp.param === def.key);
+                                    const isPicked = disputingId === item.message_id && selectedParams.has(def.key);
+
+                                    return (
+                                      <div
+                                        key={def.key}
+                                        onClick={disputingId === item.message_id ? () => toggleParamPick(def.key) : undefined}
+                                        style={{
+                                          cursor: disputingId === item.message_id ? 'pointer' : 'default',
+                                          background: isPicked ? 'var(--qa-fill-light, var(--qa-gray-50))' : 'transparent',
+                                          boxShadow: isPicked ? 'inset 3px 0 0 var(--qa-gray-700, #111111)' : 'none',
+                                          transition: 'background 0.1s',
+                                        }}
+                                      >
+                                        <div style={{ display: 'flex', alignItems: 'center', padding: '6px 16px 0', gap: 6 }}>
+                                          {disputingId === item.message_id && (
+                                            <input
+                                              type="checkbox"
+                                              checked={isPicked}
+                                              onChange={() => toggleParamPick(def.key)}
+                                              onClick={e => e.stopPropagation()}
+                                              style={{ cursor: 'pointer', width: 15, height: 15, accentColor: '#111111' }}
+                                            />
+                                          )}
+                                          {isChallenged && (
+                                            <span style={{
+                                              height: 18, padding: '0 7px', borderRadius: 999,
+                                              background: 'var(--qa-gray-700, #2D2D31)', color: '#fff',
+                                              fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em',
+                                              display: 'inline-flex', alignItems: 'center',
+                                            }}>
+                                              Disputed
+                                            </span>
+                                          )}
+                                        </div>
+                                        <ParamScoreRow
+                                          name={def.name}
+                                          description={def.description}
+                                          value={val}
+                                          allowNA={def.allowNA}
+                                          weight={def.defaultWeight}
+                                          reason={(item.parameter_scores as any)?.__reasoning?.[def.key]}
+                                          last={pIdx === DEFAULT_EMAIL_PARAMETERS.length - 1}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
                             </div>
                           </td>
                         </tr>

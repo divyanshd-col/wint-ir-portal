@@ -15,7 +15,7 @@
 .topbar-tab:hover { color: var(--color-text-primary); }
 .topbar-tab.active { background: var(--tb-pill); color: var(--color-text-primary); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.12); }
 .topbar-tab.active:focus-visible { outline: none; }
-.topbar-tab:focus-visible, .topbar-icon-btn:focus-visible, .topbar-account-btn:focus-visible, .topbar-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.topbar-tab:focus-visible, .topbar-icon-btn:focus-visible, .topbar-account-btn:focus-visible, .topbar-menu-item:focus-visible { outline: 2px solid var(--marker); outline-offset: 2px; }
 
 .topbar-right { justify-self: end; display: flex; align-items: center; gap: 6px; }
 .topbar-icon-btn { width: 34px; height: 34px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; border: 0; background: transparent; color: var(--color-text-secondary); cursor: pointer; }
@@ -38,6 +38,6 @@
   .topbar-tab { padding: 6px 12px; }
 }
 
-/* One warm page ground for light mode: pages used #f5f3ee, #f5f5f0, #f7f8f7, #f7f8fa and #F7F7F8 side by side.
+/* One muted page ground for light mode: pages used #f5f3ee, #f5f5f0, #f7f8f7, #f7f8fa and #F7F7F8 side by side.
    Dark mode overrides these classes again in dark-theme.css (higher specificity), so this only affects light. */
 .bg-\[\#f5f3ee\], .bg-\[\#f5f5f0\], .bg-\[\#f7f8f7\], .bg-\[\#f7f8fa\], .bg-\[\#F7F7F8\] { background-color: var(--page-bg); }

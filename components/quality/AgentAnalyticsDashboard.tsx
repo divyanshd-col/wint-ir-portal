@@ -355,7 +355,7 @@ export default function AgentAnalyticsDashboard({}: Props) {
                   <div style={S({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 })}>
                     <h2 style={S({ fontSize: 18, fontWeight: 600, margin: 0 })}>Performance by Category</h2>
                     <span style={S({ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' })}>
-                      {periodLabel} · click a row to expand subcategories
+                      {periodLabel}
                     </span>
                   </div>
 
@@ -429,7 +429,6 @@ export default function AgentAnalyticsDashboard({}: Props) {
                 <section style={S({ marginBottom: 32 })}>
                   <div style={S({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 })}>
                     <h2 style={S({ fontSize: 18, fontWeight: 600, margin: 0 })}>Week-on-Week Performance</h2>
-                    <span style={S({ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' })}>Trailing 5 weeks</span>
                   </div>
 
                   <div style={S({ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflow: 'hidden' })}>
@@ -620,18 +619,11 @@ export default function AgentAnalyticsDashboard({}: Props) {
                               );
                             })}
                           </div>
-                          <p style={S({ marginTop: 16, fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' })}>
-                            Generated from your evaluated {aiChannel} · {periodLabel}
-                          </p>
                         </div>
                       );
                     })()}
                   </div>
                 </section>
-
-                <p style={S({ margin: '0 0 16px', fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' })}>
-                  Scores &amp; volumes reflect evaluated conversations · {periodLabel}
-                </p>
               </>
             )}
           </>

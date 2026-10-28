@@ -6,8 +6,13 @@ import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import type { DisputeRow } from '@/app/api/cx/qa/disputes/route';
 import { getDisputeClassification } from '@/lib/quality';
 import { DisputeThread } from './DisputeThread';
+import { rowClick } from './rowClick';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { CsatPill } from './csat';
+import { useSort, sortRows, SortTh } from './sort';
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   onCountChange?: (count: number) => void;
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
@@ -32,7 +37,7 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function DisputesTable({ onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', type = 'all', initialMobile }: Props) {
+export default function DisputesTable({ leadingFilter, onCountChange, agentFilter = 'human_only', hasCallsFilter = 'all', type = 'all', initialMobile }: Props) {
   const [disputes,    setDisputes]    = useState<DisputeRow[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [expandedId,  setExpandedId]  = useState<string | null>(null);
@@ -123,6 +128,9 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
   const totalPages = Math.max(1, Math.ceil(visibleDisputes.length / pageSize));
   const pagedDisputes = visibleDisputes.slice((page - 1) * pageSize, page * pageSize);
 
+  const [sort, toggleSort] = useSort();
+  const sortedRows = sortRows(pagedDisputes, sort, { mobile: d => d.mobileNumber, date: d => d.closedAt, disp: d => d.disposition, agent: d => d.agentName, iqs: d => d.iqsScore, csat: d => d.csatScore });
+
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
     fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
@@ -152,7 +160,8 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8, overflowX: 'auto', maxWidth: '100%' }}>
 
       {/* Filter bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderBottom: '1px solid var(--qa-border)', flexWrap: 'wrap', background: 'var(--sunk)' }}>
+        {leadingFilter}
         <input
           placeholder={isCallsOnly ? "Search by Call ID…" : "Search by ID…"}
           value={chatIdSearch}
@@ -275,12 +284,12 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
         <thead>
           <tr>
             <th style={th}>{isCallsOnly ? 'Call ID' : 'Chat ID'}</th>
-            <th style={th}>Mobile</th>
-            <th style={th}>Date & Time</th>
-            <th style={th}>Disposition</th>
-            <th style={th}>Agent</th>
-            <th style={{ ...th, textAlign: 'right' }}>IQS Score</th>
-            <th style={th}>CSAT</th>
+            <SortTh k="mobile" sort={sort} onSort={toggleSort} style={th}>Mobile</SortTh>
+            <SortTh k="date" sort={sort} onSort={toggleSort} style={th}>Date & Time</SortTh>
+            <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
+            <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+            <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS Score</SortTh>
+            <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
             <th style={{ ...th, textAlign: 'right' }}>Action</th>
           </tr>
         </thead>
@@ -302,7 +311,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
             </td>
           </tr>
         ) : (
-          pagedDisputes.map(d => {
+          sortedRows.map(d => {
             const isCallDispute = isCallsOnly || (!isChatsOnly && Boolean(
               d.callId ||
               d.challengedParams?.some(p => /^P\d+/i.test(p.param.replace(/^(call|agent|bot):/, '')))
@@ -312,36 +321,16 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
 
             return (
               <React.Fragment key={d.flagId}>
-                <tr
-                  style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined }}
+                <tr data-row-click onClick={rowClick(() => toggleExpand(rowKey))}
+                  style={{ background: isExpanded ? 'var(--accent-weak)' : undefined }}
                   onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                   onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
                 >
                   <td style={tdMono}>
                     {d.chatId && /^\d+$/.test(String(d.chatId).trim()) ? (
-                      <a
-                        href={`https://app.robylon.ai/unified-inbox/share/${String(d.chatId).trim()}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                      >
-                        {rowKey}
-                      </a>
+                      <TicketLinkButton id={String(d.chatId).trim()} label={rowKey} />
                     ) : /^\d+$/.test(String(rowKey).trim()) ? (
-                      <a
-                        href={`https://app.robylon.ai/unified-inbox/share/${String(rowKey).trim()}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                        onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                        onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                      >
-                        {rowKey}
-                      </a>
+                      <TicketLinkButton id={String(rowKey).trim()} label={rowKey} />
                     ) : (
                       rowKey
                     )}
@@ -372,13 +361,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                     )}
                   </td>
                   <td style={td}>
-                    {d.csatScore == null ? (
-                      <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-                    ) : (
-                      <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--qa-text)' }}>
-                        {d.csatScore === 1 ? 'Bad' : d.csatScore === 3 ? 'Neutral' : 'Good'}
-                      </span>
-                    )}
+                    <CsatPill value={d.csatScore} />
                   </td>
                   <td style={{ ...tdAct, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, border: 'none', height: 52 }}>
                     <button
@@ -392,7 +375,7 @@ export default function DisputesTable({ onCountChange, agentFilter = 'human_only
                         display: 'inline-flex', alignItems: 'center', gap: 4,
                       }}
                     >
-                      💬 Comment
+                      Comment
                     </button>
                     <button
                       onClick={() => toggleExpand(rowKey)}

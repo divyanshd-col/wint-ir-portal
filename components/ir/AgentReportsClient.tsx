@@ -597,7 +597,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 </div>
               ) : (
                 <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-gray-500 font-medium">
-                  🎉 Fantastic week! No low-scoring chat themes were identified. Keep up the excellent work!
+                  Fantastic week! No low-scoring chat themes were identified. Keep up the excellent work!
                 </div>
               )}
             </div>
@@ -612,7 +612,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                   </h2>
                 </div>
                 <div className="bg-amber-50/90 border border-amber-300 text-amber-900 p-4 sm:p-5 rounded-2xl text-sm sm:text-base font-medium leading-relaxed shadow-sm flex items-start gap-3.5">
-                  <span className="text-xl sm:text-2xl flex-shrink-0 mt-0.5" role="img" aria-label="warning">⚠️</span>
+                  
                   <div>
                     <strong className="font-bold text-amber-950">Note on compliance flags: </strong>
                     <span>These are flagged by the AI classifier for a human to review, not proven violations. The classifier over-fires on ordinary file sharing and Slack URLs.</span>
@@ -630,7 +630,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                                 Chat #{breach.chatId}
                               </a>
                               <button onClick={() => handleCopy(breach.chatId)} className="text-gray-400 hover:text-indigo-600">
-                                {copiedId === breach.chatId ? '✓' : '📋'}
+                                {copiedId === breach.chatId ? 'Copied' : 'Copy'}
                               </button>
                             </span>
                             <span className="bg-red-50 text-red-700 text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded border border-red-100">
@@ -692,7 +692,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                                 #{ev.chatId}
                               </a>
                               <button onClick={() => handleCopy(ev.chatId)} className="text-gray-400 hover:text-indigo-600">
-                                {copiedId === ev.chatId ? '✓' : '📋'}
+                                {copiedId === ev.chatId ? 'Copied' : 'Copy'}
                               </button>
                             </div>
                           </td>
@@ -784,7 +784,7 @@ export default function AgentReportsClient({ agentName, role = 'agent' }: Props)
                 className="w-4 h-4 rounded text-amber-600 border-gray-300 focus:ring-amber-500"
               />
               <label htmlFor="highlight-check" className="text-xs font-bold text-amber-800 cursor-pointer select-none">
-                💡 Highlight / Flag this for 1-on-1 discussion
+                Highlight / Flag this for 1-on-1 discussion
               </label>
             </div>
 

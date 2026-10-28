@@ -242,6 +242,47 @@ export async function GET(req: NextRequest) {
       : tlAgentNames[0];
   }
 
+  // ── E-mail stats for the member + CX-wide averages (all active agents, same period) ──────
+  // Each query is independent and failure-tolerant: a problem here must not blank the chat/call cards.
+  const BOTS = `('Robylon', 'Robylon AI', 'Robylon Automation')`;
+  const safe = <T,>(p: Promise<T>) => p.catch(() => null as T | null);
+  const extraP = Promise.all([
+    safe(query<{ iqs: number|null; volume: number }>(`
+      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score))::numeric,1)::float AS iqs, COUNT(*)::int AS volume
+      FROM email_reply_evaluations e
+      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
+        AND LOWER(TRIM(e.agent_name)) = LOWER(TRIM($3))
+    `, [dateFrom, dateTo, agentName])),
+    safe(query<{ csat_pct: number|null; iqs: number|null; volume: number; agents: number }>(`
+      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
+             ROUND(AVG(s.iqs_score)::numeric,1)::float AS iqs,
+             COUNT(c.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
+      FROM conversations c
+      JOIN agents a ON a.id = c.agent_id
+      LEFT JOIN iqs_scores s ON s.chat_id = c.id
+      WHERE c.closed_at::date >= $1 AND c.closed_at::date <= $2 AND a.name NOT IN ${BOTS}
+    `, [dateFrom, dateTo])),
+    safe(query<{ csat_pct: number|null; iqs: number|null; volume: number; agents: number }>(`
+      SELECT ROUND(COUNT(CASE WHEN c.csat_label='good' THEN 1 END)::numeric
+                   / NULLIF(COUNT(CASE WHEN c.csat_label IS NOT NULL THEN 1 END),0)*100,1)::float AS csat_pct,
+             ROUND(AVG(COALESCE(ce.iqs_percent, s.call_iqs_score))::numeric,1)::float AS iqs,
+             COUNT(cr.id)::int AS volume, COUNT(DISTINCT a.id)::int AS agents
+      FROM call_recordings cr
+      LEFT JOIN call_evaluations ce ON ce.call_id = cr.id
+      LEFT JOIN conversations c ON c.id = cr.chat_id
+      LEFT JOIN iqs_scores s ON s.chat_id = cr.chat_id
+      JOIN agents a ON a.id = COALESCE(ce.agent_id, cr.agent_id, c.agent_id)
+      WHERE cr.called_at::date >= $1 AND cr.called_at::date <= $2 AND a.name NOT IN ${BOTS}
+    `, [dateFrom, dateTo])),
+    safe(query<{ iqs: number|null; volume: number; agents: number }>(`
+      SELECT ROUND(AVG(COALESCE(e.qa_override_score, e.quality_score))::numeric,1)::float AS iqs,
+             COUNT(*)::int AS volume, COUNT(DISTINCT LOWER(TRIM(e.agent_name)))::int AS agents
+      FROM email_reply_evaluations e
+      WHERE e.evaluation_status = 'Completed' AND e.sent_at::date >= $1 AND e.sent_at::date <= $2
+    `, [dateFrom, dateTo])),
+  ]);
+
   // ── Run chats + calls queries in parallel ─────────────────────────────────────
   const [chatsRes, callsRes] = await Promise.all([
     Promise.all([
@@ -400,6 +441,7 @@ export async function GET(req: NextRequest) {
     ]),
   ]);
 
+  const [emailStatRows, cxChatRows, cxCallRows, cxEmailRows] = await extraP;
   const [chatStatRows, chatParents, chatSubs, chatWow, chatWowParams, chatPeriodParams] = chatsRes;
   const [callStatRows, callParents, callSubs, callWow, callWowParams] = callsRes;
 
@@ -457,7 +499,15 @@ export async function GET(req: NextRequest) {
         categories,
         wow:        buildWow(callWow as any[], callWowParams as any[], wowWeeks, false),
       },
-      emails: null,
+      emails: emailStatRows
+        ? { stats: { csat_pct: null, iqs: emailStatRows[0]?.iqs ?? null, volume: emailStatRows[0]?.volume ?? 0 }, categories: [], wow: [] }
+        : null,
+    },
+    // Team-wide benchmark for the same period: pooled CSAT / IQS and average volume per agent.
+    cxAverage: {
+      chats:  cxChatRows?.[0]  ? { csat_pct: cxChatRows[0].csat_pct,  iqs: cxChatRows[0].iqs,  volume: cxChatRows[0].agents  ? Math.round(cxChatRows[0].volume  / cxChatRows[0].agents)  : null } : null,
+      calls:  cxCallRows?.[0]  ? { csat_pct: cxCallRows[0].csat_pct,  iqs: cxCallRows[0].iqs,  volume: cxCallRows[0].agents  ? Math.round(cxCallRows[0].volume  / cxCallRows[0].agents)  : null } : null,
+      emails: cxEmailRows?.[0] ? { csat_pct: null,                    iqs: cxEmailRows[0].iqs, volume: cxEmailRows[0].agents ? Math.round(cxEmailRows[0].volume / cxEmailRows[0].agents) : null } : null,
     },
   });
 }

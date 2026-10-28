@@ -6,8 +6,14 @@ import {
   V3_PARAM_ORDER, V3_PARAM_NAMES, V3_WEIGHTS, isV4Evaluation, getDisputeClassification, formatParamLabel,
 } from '@/lib/quality';
 import { CallTranscriptCard } from '@/components/CallTranscriptCard';
+import { maskText, renderMasked } from './mask';
+import { isActivityEvent } from './transcript-events';
 import { PASCAL_TO_DB, resolveParamCell } from '@/lib/param-keys';
 import { DisputeThread } from '@/components/quality/DisputeThread';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { renderWithAttachments } from './attachments';
+import { CsatPill } from './csat';
+import AutoTextarea from './AutoTextarea';
 
 // ── Key maps ──────────────────────────────────────────────────────────────────
 
@@ -114,6 +120,11 @@ interface HistoryEntry {
 }
 
 function renderContentWithLinks(text: string, isOutgoing?: boolean) {
+  if (!text) return '';
+  return renderWithAttachments(text, part => linkifyText(part, isOutgoing));
+}
+
+function linkifyText(text: string, isOutgoing?: boolean) {
   if (!text) return '';
   const urlRegex = /(https?:\/\/[^\s\]\)\>]+)/gi;
   const parts = text.split(urlRegex);
@@ -365,7 +376,7 @@ function extractGateReasoning(item: any): string {
         const turnStr = ev.turn !== undefined && ev.turn !== null ? `Turn ${ev.turn}: ` : '';
         const quoteStr = ev.quote ? `"${ev.quote}"` : '';
         const whyStr = ev.why || ev.note || '';
-        if (quoteStr && whyStr) return `${turnStr}${quoteStr} — Note: ${whyStr}`;
+        if (quoteStr && whyStr) return `${turnStr}${quoteStr} · Note: ${whyStr}`;
         if (quoteStr) return `${turnStr}${quoteStr}`;
         if (whyStr) return `${turnStr}Note: ${whyStr}`;
         return typeof ev === 'object' ? JSON.stringify(ev) : String(ev);
@@ -440,7 +451,7 @@ function findChatBreachesForGate(params: any, gateKey: string): string {
     }
     const q = b.quote ? `"${b.quote}"` : '';
     const n = b.note || b.why || b.reason || '';
-    if (q && n) return `${q} — Note: ${n}`;
+    if (q && n) return `${q} · Note: ${n}`;
     return q || (n ? `Note: ${n}` : JSON.stringify(b));
   }).filter(Boolean).join('\n');
 }
@@ -503,6 +514,10 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
     const hasFail = Object.values(gateState).some(g => g.status === 'fail');
     return hasFail ? 'FAIL' : 'PASS';
   }, [gateState]);
+  // Any breach turns the gates card and footer red; while evaluating, the displayed Agent IQS drops to 0 (stored IQS is unchanged).
+  const gateFail = overallGateResult === 'FAIL';
+  const zeroed = gateFail && activeTab === 'agent' && !isReadOnly;
+  const shownIqs = zeroed ? 0 : liveIqs;
 
   const handleGateStatusChange = (gateKey: string, status: 'pass' | 'fail' | 'not_applicable') => {
     setGateState(prev => ({
@@ -756,465 +771,26 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
     background: 'var(--qa-gray-50)',
   };
   const panelWrap: React.CSSProperties = {
-    display: 'flex', height: 520, width: '100%', maxWidth: '100%',
+    width: '100%', maxWidth: '100%',
     border: '1px solid var(--qa-border)', borderRadius: 8,
-    background: 'var(--qa-card)', overflow: 'hidden',
+    background: 'var(--qa-card)',
     margin: '16px auto', boxSizing: 'border-box',
-  };
-  const leftPanel: React.CSSProperties = {
-    width: 440, minWidth: 320, maxWidth: '48%', flexShrink: 1,
-    borderRight: '1px solid var(--qa-border)',
-    display: 'flex', flexDirection: 'column', overflow: 'hidden',
-  };
-  const rightPanel: React.CSSProperties = {
-    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column',
-    overflow: 'hidden',
   };
 
   return (
     <tr className="eval-panel-row">
-      <td colSpan={colSpan} style={{ ...td, maxWidth: 0, overflow: 'hidden' }}>
-        <div style={panelWrap}>
+      <td colSpan={colSpan} className="eval-panel-cell" style={{ ...td, maxWidth: 0, overflow: 'hidden' }}>
+        <div className="eval-wrap" style={panelWrap}>
 
-          {/* ── LEFT ── */}
-          <div style={leftPanel}>
-            {/* Head */}
-            <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <ScoreRing score={liveIqs} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    {agentName}
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
-                    <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{chatId}</span>
-                    <span>·</span>
-                    <span>{fmtDate(closedAt)}</span>
-                    <span>·</span>
-                    <span>{disposition}</span>
-                    {mobileNumber && (
-                      <>
-                        <span>·</span>
-                        <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{mobileNumber}</span>
-                      </>
-                    )}
-                    {dispute && (
-                      <>
-                        <span>·</span>
-                        <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
-                          Disputed by {dispute.raisedBy} ({dispute.raisedByName})
-                        </span>
-                        <span style={{
-                          fontSize: 10, fontWeight: 700,
-                          background: disputeTarget.badgeBg, color: disputeTarget.badgeText,
-                          border: `1px solid ${disputeTarget.badgeBorder}`,
-                          borderRadius: 4, padding: '1px 6px', marginLeft: 4,
-                          display: 'inline-block', verticalAlign: 'middle',
-                        }}>
-                          {disputeTarget.label}
-                        </span>
-                      </>
-                    )}
-                    {mode === 'view' && reviewedBy && (
-                      <>
-                        <span>·</span>
-                        <span>Reviewed by <strong style={{ color: 'var(--qa-text)' }}>{reviewedBy}</strong></span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-            </div>
-
-
-
-            {/* Param list */}
-            {showTabs ? (
-              <div style={{ display: 'flex', padding: '16px 16px 0', borderBottom: '1px solid var(--qa-border)', gap: 16 }}>
-                <button
-                  onClick={() => setActiveTab('agent')}
-                  style={{
-                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
-                    color: activeTab === 'agent' ? 'var(--qa-text)' : 'var(--qa-text-3)',
-                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-                    borderBottom: activeTab === 'agent' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    background: 'none', cursor: 'pointer'
-                  }}
-                >
-                  Agent Parameters
-                </button>
-                <button
-                  onClick={() => setActiveTab('bot')}
-                  style={{
-                    fontSize: 12, fontWeight: 600, paddingBottom: 8,
-                    color: activeTab === 'bot' ? 'var(--qa-text)' : 'var(--qa-text-3)',
-                    borderTop: 'none', borderLeft: 'none', borderRight: 'none',
-                    borderBottom: activeTab === 'bot' ? '2px solid var(--qa-primary)' : '2px solid transparent',
-                    background: 'none', cursor: 'pointer'
-                  }}
-                >
-                  Bot Parameters
-                </button>
-              </div>
-            ) : (
-              <div style={{
-                fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
-                color: 'var(--qa-text-3)', padding: '16px 16px 4px',
-              }}>
-                Parameter Scores
-              </div>
-            )}
-            <div style={{ flex: 1, overflowY: 'auto' }}>
-              {/* Compliance Gates — scrolls away with the params to free space for them */}
-              <div style={{
-                margin: '12px 16px',
-                background: overallGateResult === 'FAIL' ? '#fff5f5' : '#f8fafc',
-                border: `1.5px solid ${overallGateResult === 'FAIL' ? '#f87171' : 'var(--qa-border)'}`,
-                borderRadius: 10,
-                padding: '14px 16px',
-                boxShadow: overallGateResult === 'FAIL' ? '0 2px 8px rgba(239, 68, 68, 0.08)' : '0 1px 3px rgba(0, 0, 0, 0.02)',
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--qa-text)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      Compliance Gates:
-                    </span>
-                    <span style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      letterSpacing: '0.04em',
-                      color: overallGateResult === 'FAIL' ? '#b91c1c' : '#15803d',
-                      background: overallGateResult === 'FAIL' ? '#fee2e2' : '#dcfce7',
-                      border: `1px solid ${overallGateResult === 'FAIL' ? '#fca5a5' : '#86efac'}`,
-                      padding: '3px 10px',
-                      borderRadius: 6,
-                    }}>{overallGateResult}</span>
-                  </div>
-                  {!isReadOnly && (
-                    <span style={{ fontSize: 11.5, color: overallGateResult === 'FAIL' ? '#b91c1c' : 'var(--qa-text-3)', fontWeight: 500 }}>
-                      Fail on any gate flags interaction
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {COMPLIANCE_GATES_LIST.map(g => {
-                    const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
-                    const scoreBadgeVal = gItem.status === 'pass' ? 'Yes' : gItem.status === 'fail' ? 'No' : 'NA';
-                    const showMistakeBox = gItem.status === 'fail' || Boolean(gItem.reasoning);
-
-                    return (
-                      <div key={g.key} style={{
-                        padding: '10px 12px',
-                        background: gItem.status === 'fail' ? '#fff1f2' : '#fff',
-                        border: `1.5px solid ${gItem.status === 'fail' ? '#fca5a5' : 'var(--qa-border-sub, #f1f5f9)'}`,
-                        borderRadius: 8,
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: showMistakeBox ? 6 : 0,
-                          gap: 12,
-                        }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: gItem.status === 'fail' ? '#991b1b' : 'var(--qa-text)', lineHeight: 1.4 }}>
-                            {g.shortLabel}: <span style={{ fontWeight: 400, color: 'var(--qa-text-2)' }}>{g.label.split('(')[1]?.replace(')', '') || g.label}</span>
-                          </span>
-                          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                            {([
-                              { label: 'Yes', val: 'pass' as const },
-                              { label: 'No', val: 'fail' as const },
-                              { label: 'NA', val: 'not_applicable' as const },
-                            ]).map(opt => {
-                              const isSel = gItem.status === opt.val;
-                              const bg = isSel
-                                ? opt.val === 'pass'
-                                  ? '#15803d'
-                                  : opt.val === 'fail'
-                                  ? '#b91c1c'
-                                  : 'var(--qa-gray-700, #334155)'
-                                : 'var(--qa-card, #fff)';
-                              const borderColor = isSel
-                                ? opt.val === 'pass'
-                                  ? '#15803d'
-                                  : opt.val === 'fail'
-                                  ? '#b91c1c'
-                                  : 'var(--qa-gray-700, #334155)'
-                                : 'var(--qa-border, #e2e8f0)';
-                              const color = isSel ? '#fff' : 'var(--qa-text-2, #64748b)';
-
-                              return (
-                                <button
-                                  key={opt.val}
-                                  onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
-                                  disabled={isReadOnly}
-                                  style={{
-                                    height: 28,
-                                    padding: '0 12px',
-                                    borderRadius: 6,
-                                    fontSize: 12,
-                                    fontWeight: isSel ? 700 : 500,
-                                    border: `1px solid ${borderColor}`,
-                                    background: bg,
-                                    color: color,
-                                    cursor: isReadOnly ? 'default' : 'pointer',
-                                    fontFamily: 'inherit',
-                                    transition: 'all 0.15s ease'
-                                  }}
-                                >
-                                  {opt.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Reason for compliance gate (shown only in case of breach) */}
-                        {gItem.status === 'fail' && (
-                          isReadOnly ? (
-                            gItem.reasoning ? (
-                              <div style={{
-                                marginTop: 8,
-                                padding: '8px 10px',
-                                background: '#fee2e2',
-                                borderLeft: '3px solid #ef4444',
-                                borderRadius: 6,
-                                fontSize: 12.5,
-                                color: '#991b1b',
-                                lineHeight: 1.5,
-                                whiteSpace: 'pre-wrap'
-                              }}>
-                                <span style={{ fontWeight: 700 }}>Reason: </span>{gItem.reasoning}
-                              </div>
-                            ) : null
-                          ) : (
-                            <div style={{ marginTop: 8 }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                                Reason for Breach:
-                              </div>
-                              <textarea
-                                value={gItem.reasoning}
-                                onChange={e => handleGateReasoningChange(g.key, e.target.value)}
-                                placeholder="Specify reason / citation for this compliance breach…"
-                                rows={2}
-                                style={{
-                                  width: '100%',
-                                  boxSizing: 'border-box',
-                                  resize: 'vertical',
-                                  border: '1px solid #fca5a5',
-                                  borderRadius: 6,
-                                  padding: '6px 8px',
-                                  fontSize: 12.5,
-                                  color: '#991b1b',
-                                  background: '#fff1f2',
-                                  lineHeight: 1.5
-                                }}
-                              />
-                            </div>
-                          )
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              {activeParamOrder.map(pascal => {
-                const st       = currentParamState[pascal];
-                const pickKey  = `${activeTab}:${pascal}`;
-                const disputed = (dispute?.challengedParams ?? []).find(c =>
-                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal) || c.param.toLowerCase() === pickKey.toLowerCase()
-                );
-                const paramReadOnly = isReadOnly;
-                return (
-                  <div key={pascal} style={{
-                    padding: '14px 16px',
-                    borderBottom: '1px solid var(--qa-border-sub)',
-                    ...(disputed ? {
-                      background: 'var(--qa-gray-50)',
-                      boxShadow: 'inset 3px 0 0 var(--qa-gray-700)',
-                    } : {}),
-                  }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {disputing && (
-                        <input
-                          type="checkbox"
-                          checked={disputePicks.has(pascal)}
-                          onChange={() => toggleDisputePick(pascal)}
-                          style={{ cursor: 'pointer', width: 15, height: 15, accentColor: 'var(--qa-gray-700)' }}
-                        />
-                      )}
-                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
-                        {activeParamNames[pascal]}
-                        {disputed && (
-                          <span style={{
-                            marginLeft: 8, height: 18, padding: '0 7px', borderRadius: 999,
-                            background: 'var(--qa-gray-700)', color: '#fff',
-                            fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                            letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
-                            verticalAlign: 'middle',
-                          }}>
-                            {dispute?.raisedBy} disputes
-                          </span>
-                        )}
-                      </span>
-                      {/* Yes / Half / No / NA buttons */}
-                      <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
-                        {([1.0, 0.5, 0.0, null] as const).map((val, i) => {
-                          const label = val === 1.0 ? 'Yes' : val === 0.5 ? 'Half' : val === 0.0 ? 'No' : 'NA';
-                          const isSel = st.score === val;
-                          return (
-                            <button key={i} onClick={() => !paramReadOnly && setScore(pascal, val)} style={{
-                              height: 28, padding: '0 9px', borderRadius: 8,
-                              border: '1px solid var(--qa-border)',
-                              background: isSel ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                              color: isSel ? '#fff' : 'var(--qa-text-2)',
-                              fontSize: 12, fontFamily: 'inherit',
-                              cursor: paramReadOnly ? 'default' : 'pointer',
-                              opacity: paramReadOnly && !isSel ? 0.4 : 1,
-                            }}>
-                              {label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                      <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontFamily: 'ui-monospace, monospace', flexShrink: 0 }}>
-                        {pctLabel(pascal)}
-                      </span>
-                    </div>
-
-                    {/* Reasoning */}
-                    {(st.reasoning || !paramReadOnly) && (
-                      <textarea
-                        value={st.reasoning}
-                        onChange={e => !paramReadOnly && setReasoning(pascal, e.target.value)}
-                        readOnly={paramReadOnly}
-                        placeholder={paramReadOnly ? '' : 'Add reasoning…'}
-                        rows={st.reasoning ? undefined : 1}
-                        style={{
-                          marginTop: 8, width: '100%', resize: paramReadOnly ? 'none' : 'vertical',
-                          border: '1px solid transparent', borderRadius: 6,
-                          padding: '6px 8px', fontSize: 12, color: 'var(--qa-text-2)',
-                          lineHeight: 1.5, fontFamily: 'inherit',
-                          background: 'transparent', outline: 'none',
-                          transition: 'background 0.12s, border-color 0.12s',
-                          cursor: paramReadOnly ? 'default' : 'text',
-                        }}
-                        onFocus={e => {
-                          if (!paramReadOnly) {
-                            e.target.style.background = 'var(--qa-card)';
-                            e.target.style.borderColor = 'var(--qa-text)';
-                          }
-                        }}
-                        onBlur={e => {
-                          e.target.style.background = 'transparent';
-                          e.target.style.borderColor = 'transparent';
-                        }}
-                      />
-                    )}
-
-                    {/* Dispute claim */}
-                    {disputed && (
-                      <div style={{
-                        marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)',
-                        background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
-                        borderRadius: 6, padding: '8px 10px', lineHeight: 1.5,
-                      }}>
-                        <div style={{
-                          height: 18, padding: '0 7px', borderRadius: 999,
-                          background: 'var(--qa-gray-700)', color: '#fff',
-                          fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
-                          letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
-                          marginBottom: 4,
-                        }}>
-                          {dispute?.raisedBy} note
-                        </div>
-                        <div>{disputed.note}</div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Dispute composer for TL */}
-            {disputing && (
-              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)', flexShrink: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
-                  Reason for Dispute (QA Review)
-                </div>
-                <textarea
-                  value={disputeReason}
-                  onChange={e => setDisputeReason(e.target.value)}
-                  placeholder="Explain why you disagree with the score on selected parameters…"
-                  rows={3}
-                  style={{
-                    width: '100%', resize: 'vertical',
-                    border: '1px solid var(--qa-border)', borderRadius: 6,
-                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
-                    lineHeight: 1.5, fontFamily: 'inherit',
-                    background: 'var(--qa-card)', outline: 'none',
-                  }}
-                />
-                {disputeError && (
-                  <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 6 }}>{disputeError}</div>
-                )}
-                <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginRight: 'auto' }}>
-                    {disputePicks.size} parameter{disputePicks.size === 1 ? '' : 's'} selected
-                  </span>
-                  <button
-                    onClick={() => { setDisputing(false); setDisputePicks(new Set()); setDisputeReason(''); setDisputeError(''); }}
-                    style={{
-                      height: 30, padding: '0 12px', borderRadius: 6, border: '1px solid var(--qa-border)',
-                      background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, cursor: 'pointer',
-                    }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={submitTLDispute}
-                    disabled={disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting}
-                    style={{
-                      height: 30, padding: '0 14px', borderRadius: 6, border: 'none',
-                      background: 'var(--qa-gray-700)', color: '#fff', fontSize: 12, fontWeight: 500,
-                      cursor: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 'not-allowed' : 'pointer',
-                      opacity: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 0.6 : 1,
-                    }}
-                  >
-                    {disputeSubmitting ? 'Sending to QA…' : 'Submit Dispute to QA'}
-                  </button>
-                </div>
-              </div>
-            )}
-
-
-            {isReadOnly && reviewNote && (
-              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
-                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 4 }}>
-                  Review Note
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>{reviewNote}</div>
-              </div>
-            )}
-
-            {/* Footer */}
-            {submitErr && (
-              <div style={{ margin: '0 16px', padding: '8px 12px', background: 'var(--qa-fill-light)', border: '1px solid var(--qa-border)', borderRadius: 6, fontSize: 12, color: 'var(--qa-text)' }}>
-                {submitErr}
-              </div>
-            )}
-          </div>
-
-          {/* ── RIGHT ── */}
-          <div style={rightPanel}>
+          {/* ── TRANSCRIPT ── */}
+          <div className="eval-pane">
             {/* Right header */}
             <div style={{
               padding: '0 12px', borderBottom: '1px solid var(--qa-border)',
               display: 'flex', alignItems: 'center', gap: 6, height: 52, flexShrink: 0,
               minWidth: 0, overflow: 'hidden',
             }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--qa-text)', marginRight: 4, flexShrink: 0 }}>Transcript</span>
               {/* History toggle */}
               <button
                 onClick={() => {
@@ -1225,8 +801,8 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                 title="Previous conversations"
                 style={{
                   height: 28, padding: '0 10px', border: '1px solid var(--qa-border)', borderRadius: 8,
-                  background: historyOpen ? 'var(--qa-gray-700)' : 'var(--qa-card)',
-                  color: historyOpen ? '#fff' : 'var(--qa-text-2)',
+                  background: historyOpen ? 'var(--ink)' : 'var(--qa-card)',
+                  color: historyOpen ? 'var(--ink-fg)' : 'var(--qa-text-2)',
                   cursor: 'pointer', fontSize: 12, fontFamily: 'inherit',
                   display: 'inline-flex', alignItems: 'center', gap: 5,
                 }}
@@ -1257,7 +833,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                   <>
                     <span style={{
                       height: 18, padding: '0 7px', borderRadius: 999, flexShrink: 0,
-                      background: 'var(--qa-gray-700)', color: '#fff',
+                      background: 'var(--ink)', color: 'var(--ink-fg)',
                       fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
                       letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
                     }}>
@@ -1297,67 +873,6 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                   </button>
                 ) : null
               )}
-              {/* Mark for KB change checkbox + comment field (only visible to admins and QA) */}
-              {canMarkKb && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <label style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500,
-                    color: needsKbUpdate ? '#92400e' : 'var(--qa-text-2)', cursor: 'pointer',
-                    background: needsKbUpdate ? '#fef3c7' : 'var(--qa-card)',
-                    border: needsKbUpdate ? '1px solid #f59e0b' : '1px solid var(--qa-border)',
-                    padding: '4px 10px', borderRadius: 8, transition: 'all 0.15s ease',
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={needsKbUpdate}
-                      onChange={e => setNeedsKbUpdate(e.target.checked)}
-                      style={{ cursor: 'pointer', accentColor: '#d97706' }}
-                    />
-                    Mark for KB change
-                  </label>
-                  {needsKbUpdate && (
-                    <input
-                      type="text"
-                      placeholder="Comment on KB update needed..."
-                      value={kbComment}
-                      onChange={e => setKbComment(e.target.value)}
-                      style={{
-                        height: 32, padding: '0 10px', borderRadius: 8,
-                        fontSize: 12, border: '1px solid #f59e0b',
-                        background: '#fffbe6', color: '#78350f',
-                        fontFamily: 'inherit', outline: 'none', width: 230,
-                      }}
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Primary action (submit/resolve/override modes) */}
-              {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (
-                <button
-                  onClick={submit}
-                  disabled={submitting}
-                  style={{
-                    height: 36, padding: '0 16px', borderRadius: 8,
-                    fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                    cursor: submitting ? 'not-allowed' : 'pointer',
-                    display: 'inline-flex', alignItems: 'center',
-                    border: '1px solid var(--qa-gray-700)',
-                    background: submitting ? 'var(--qa-fill-med)' : 'var(--qa-gray-700)',
-                    color: '#fff',
-                    opacity: submitting ? 0.7 : 1,
-                  }}
-                >
-                  {submitting ? 'Saving…' : primaryLabel}
-                </button>
-              )}
-              {/* Close */}
-              <button onClick={onClose} style={{
-                width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
-                background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 16, lineHeight: 1,
-              }}>×</button>
             </div>
 
             {/* History panel */}
@@ -1382,16 +897,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                           <td style={{ padding: '6px 12px', color: 'var(--qa-text-2)', whiteSpace: 'nowrap' }}>{h.date}</td>
                           <td style={{ padding: '6px 12px', fontFamily: 'ui-monospace, monospace' }}>
                             {h.chatId && /^\d+$/.test(h.chatId.trim()) ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${h.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{ color: 'var(--qa-text-2)', textDecoration: 'none' }}
-                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                              >
-                                {h.chatId}
-                              </a>
+                              <TicketLinkButton id={h.chatId} label={h.chatId} />
                             ) : (
                               h.chatId
                             )}
@@ -1410,16 +916,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                             ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
                           </td>
                           <td style={{ padding: '6px 12px' }}>
-                            {h.csat ? (
-                              <span style={{
-                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                minWidth: 36, height: 18, borderRadius: 4, fontSize: 11, fontWeight: 600,
-                                background: 'var(--qa-fill-light)', color: 'var(--qa-text-2)',
-                                border: '1px solid var(--qa-border)',
-                              }}>
-                                {h.csat === '1' ? 'Bad' : h.csat === '3' ? 'Neutral' : 'Good'}
-                              </span>
-                            ) : <span style={{ color: 'var(--qa-text-3)' }}>—</span>}
+                            <CsatPill value={h.csat} />
                           </td>
                         </tr>
                       ))}
@@ -1430,7 +927,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
             )}
 
             {/* Transcript */}
-            <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
+            <div className="eval-scroll-t" style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '16px 14px', display: 'flex', flexDirection: 'column', gap: 0, minWidth: 0 }}>
               {txLoading ? (
                 <div style={{ color: 'var(--qa-text-3)', fontSize: 13, textAlign: 'center', marginTop: 40 }}>
                   Loading transcript…
@@ -1483,14 +980,14 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                     }
 
                     const msg = item.data;
-                    const type = senderType(msg.sender_type ?? msg.sender);
+                    const type = isActivityEvent(msg.sender_type ?? msg.sender, msg.content) ? 'system' : senderType(msg.sender_type ?? msg.sender);
                     
                     // Determine gap based on previous item
                     let gap = 16;
                     if (idx > 0) {
                       const prevItem = items[idx - 1];
                       if (prevItem.type === 'message') {
-                        const prevType = senderType(prevItem.data.sender_type ?? prevItem.data.sender);
+                        const prevType = isActivityEvent(prevItem.data.sender_type ?? prevItem.data.sender, prevItem.data.content) ? 'system' : senderType(prevItem.data.sender_type ?? prevItem.data.sender);
                         gap = prevType === type ? 8 : 16;
                       }
                     }
@@ -1515,33 +1012,16 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                     }
 
                     if (type === 'internal_note') {
-                      const noteTime = msg.timestamp
-                        ? '  •  ' + formatTranscriptDate(msg.timestamp)
-                        : '';
+                      const noteTime = msg.timestamp ? ' · ' + formatTranscriptDate(msg.timestamp) : '';
+                      const noteText = String(msg.content ?? '');
                       return (
-                        <div key={idx} style={{
-                          marginTop: gap + 'px',
-                          display: 'flex',
-                          justifyContent: 'flex-end',
-                          width: '100%',
-                          alignSelf: 'flex-end',
-                        }}>
-                          <div style={{
-                            background: '#fffbeb', border: '1px dashed #f59e0b',
-                            borderRadius: 8, fontSize: 12,
-                            color: '#78350f', padding: '10px 14px', display: 'inline-block',
-                            maxWidth: '76%', lineHeight: 1.5,
-                            wordBreak: 'break-word', overflowWrap: 'anywhere',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                          }}>
-                            <div style={{ fontWeight: 600, fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#b45309', marginBottom: 4 }}>
-                              Internal Note (Robylon AI){noteTime}
-                            </div>
-                            <div style={{ fontStyle: 'italic' }}>
-                              {msg.content}
-                            </div>
-                          </div>
-                        </div>
+                        <details key={idx} className="eval-note">
+                          <summary>
+                            <span style={{ flexShrink: 0 }}>Robylon AI note{noteTime}</span>
+                            <span className="preview">{maskText(noteText)}</span>
+                          </summary>
+                          <pre>{renderMasked(noteText)}</pre>
+                        </details>
                       );
                     }
 
@@ -1562,7 +1042,7 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                         <div style={{
                           padding: '10px 14px', borderRadius: 8, fontSize: 13, lineHeight: 1.5,
                           wordBreak: 'break-word', overflowWrap: 'anywhere',
-                          ...(type === 'agent' ? { background: 'var(--qa-gray-700)', color: '#fff' }
+                          ...(type === 'agent' ? { background: 'var(--ink)', color: 'var(--ink-fg)' }
                             : type === 'bot'   ? { background: 'var(--qa-gray-100)', color: 'var(--qa-text)' }
                             : { background: 'var(--qa-card)', border: '1px solid var(--qa-border)', color: 'var(--qa-text)' }),
                         }}>
@@ -1572,6 +1052,346 @@ function resolveGateData(rawGates: any, gateKey: string, altKey?: string, params
                     );
                   });
                 })()
+              )}
+            </div>
+          </div>
+
+          {/* ── SCORING ── */}
+          <div className="eval-pane">
+            {/* Head */}
+            <div style={{ padding: 16, borderBottom: '1px solid var(--qa-border)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <ScoreRing score={shownIqs} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    {agentName}
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--qa-text-3)', marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '0 8px' }}>
+                    <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{chatId}</span>
+                    <span>·</span>
+                    <span>{fmtDate(closedAt)}</span>
+                    <span>·</span>
+                    <span>{disposition}</span>
+                    {mobileNumber && (
+                      <>
+                        <span>·</span>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', color: 'var(--qa-text-2)' }}>{mobileNumber}</span>
+                      </>
+                    )}
+                    {dispute && (
+                      <>
+                        <span>·</span>
+                        <span style={{ fontWeight: 500, color: 'var(--qa-text)' }}>
+                          Disputed by {dispute.raisedBy} ({dispute.raisedByName})
+                        </span>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700,
+                          background: disputeTarget.badgeBg, color: disputeTarget.badgeText,
+                          border: `1px solid ${disputeTarget.badgeBorder}`,
+                          borderRadius: 4, padding: '1px 6px', marginLeft: 4,
+                          display: 'inline-block', verticalAlign: 'middle',
+                        }}>
+                          {disputeTarget.label}
+                        </span>
+                      </>
+                    )}
+                    {mode === 'view' && reviewedBy && (
+                      <>
+                        <span>·</span>
+                        <span>Reviewed by <strong style={{ color: 'var(--qa-text)' }}>{reviewedBy}</strong></span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button" onClick={onClose} aria-label="Close evaluation" title="Close"
+                  style={{
+                    marginLeft: 'auto', alignSelf: 'flex-start', flexShrink: 0,
+                    width: 28, height: 28, border: '1px solid var(--qa-border)', borderRadius: 8,
+                    background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                </button>
+              </div>
+
+            </div>
+
+
+
+            {/* Param list */}
+            {showTabs ? (
+              <div role="tablist" style={{ display: 'flex', gap: 4, padding: '8px 16px 0', borderBottom: '1px solid var(--qa-border)' }}>
+                <button type="button" role="tab" aria-selected={activeTab === 'agent'} className="eval-rtab" onClick={() => setActiveTab('agent')}>
+                  Agent Parameters
+                </button>
+                <button type="button" role="tab" aria-selected={activeTab === 'bot'} className="eval-rtab" onClick={() => setActiveTab('bot')}>
+                  Bot Parameters
+                </button>
+              </div>
+            ) : (
+              <div style={{
+                fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em',
+                color: 'var(--qa-text-3)', padding: '16px 16px 4px',
+              }}>
+                Parameter Scores
+              </div>
+            )}
+            <div className="eval-scroll-r" style={{ flex: 1, overflowY: 'auto' }}>
+              {/* Compliance Gates — scrolls away with the params to free space for them */}
+              <div className={`eval-gates${gateFail ? ' failed' : ''}`}>
+                <div className="eval-ghead">
+                  <span className="eval-gtitle">Compliance Gates</span>
+                  <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
+                </div>
+                {COMPLIANCE_GATES_LIST.map(g => {
+                  const gItem = gateState[g.key] || { status: 'pass', reasoning: '' };
+                  return (
+                    <div key={g.key} className="eval-gate">
+                      <div style={{ minWidth: 0 }}>
+                        <b>{g.shortLabel}</b>
+                        <small>{g.label.split('(')[1]?.replace(')', '') || g.label}</small>
+                      </div>
+                      <div className="eval-seg gate" role="group" aria-label={`${g.shortLabel} result`}>
+                        {([
+                          { label: 'Pass', val: 'pass' as const },
+                          { label: 'Breach', val: 'fail' as const },
+                          { label: 'NA', val: 'not_applicable' as const },
+                        ]).map(opt => (
+                          <button
+                            key={opt.val} type="button" data-v={opt.val}
+                            aria-pressed={gItem.status === opt.val}
+                            disabled={isReadOnly}
+                            onClick={() => !isReadOnly && handleGateStatusChange(g.key, opt.val)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Reason for compliance gate (shown only in case of breach) */}
+                      {gItem.status === 'fail' && (
+                        isReadOnly ? (
+                          gItem.reasoning ? (
+                            <div className="eval-gate-extra eval-reason">
+                              <strong>Reason: </strong>{gItem.reasoning}
+                            </div>
+                          ) : null
+                        ) : (
+                          <div className="eval-gate-extra">
+                            <div className="eval-reason-label">Reason for Breach:</div>
+                            <AutoTextarea
+                              className="eval-reason-input"
+                              value={gItem.reasoning}
+                              onChange={e => handleGateReasoningChange(g.key, e.target.value)}
+                              placeholder="Specify reason / citation for this compliance breach…"
+                              rows={2}
+                            />
+                          </div>
+                        )
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {activeParamOrder.map(pascal => {
+                const st       = currentParamState[pascal];
+                const pickKey  = `${activeTab}:${pascal}`;
+                const disputed = (dispute?.challengedParams ?? []).find(c =>
+                  c.param === pickKey || (activeTab === 'agent' && c.param === pascal) || c.param.toLowerCase() === pickKey.toLowerCase()
+                );
+                const paramReadOnly = isReadOnly;
+                return (
+                  <div key={pascal} style={{
+                    padding: '14px 16px',
+                    borderBottom: '1px solid var(--qa-border-sub)',
+                    ...(disputed ? {
+                      background: 'var(--qa-gray-50)',
+                      boxShadow: 'inset 3px 0 0 var(--qa-gray-700)',
+                    } : {}),
+                  }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 12px' }}>
+                      {disputing && (
+                        <input
+                          type="checkbox"
+                          checked={disputePicks.has(pascal)}
+                          onChange={() => toggleDisputePick(pascal)}
+                          style={{ cursor: 'pointer', width: 15, height: 15, accentColor: 'var(--qa-gray-700)' }}
+                        />
+                      )}
+                      <span style={{ fontSize: 13, fontWeight: 500, flex: 1, minWidth: 0 }}>
+                        {activeParamNames[pascal]}<span className="eval-weight">{pctLabel(pascal)}</span>
+                        {disputed && (
+                          <span style={{
+                            marginLeft: 8, height: 18, padding: '0 7px', borderRadius: 999,
+                            background: 'var(--ink)', color: 'var(--ink-fg)',
+                            fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+                            letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
+                            verticalAlign: 'middle',
+                          }}>
+                            {dispute?.raisedBy} disputes
+                          </span>
+                        )}
+                      </span>
+                      {/* Yes / Half / No / NA */}
+                      <div className="eval-seg" role="group" aria-label={`${activeParamNames[pascal]} score`}>
+                        {([1.0, 0.5, 0.0, null] as const).map((val, i) => {
+                          const label = val === 1.0 ? 'Yes' : val === 0.5 ? 'Half' : val === 0.0 ? 'No' : 'NA';
+                          return (
+                            <button key={i} type="button" aria-pressed={st.score === val} disabled={paramReadOnly} onClick={() => !paramReadOnly && setScore(pascal, val)}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Reasoning */}
+                    {(st.reasoning || !paramReadOnly) && (
+                      <AutoTextarea
+                        value={st.reasoning}
+                        onChange={e => !paramReadOnly && setReasoning(pascal, e.target.value)}
+                        readOnly={paramReadOnly}
+                        placeholder={paramReadOnly ? '' : 'Add reasoning…'}
+                        rows={st.reasoning ? undefined : 1}
+                        style={{
+                          marginTop: 8, width: '100%', resize: paramReadOnly ? 'none' : 'vertical',
+                          border: '1px solid transparent', borderRadius: 6,
+                          padding: '6px 8px', fontSize: 12, color: 'var(--qa-text-2)',
+                          lineHeight: 1.5, fontFamily: 'inherit',
+                          background: 'transparent', outline: 'none',
+                          transition: 'background 0.12s, border-color 0.12s',
+                          cursor: paramReadOnly ? 'default' : 'text',
+                        }}
+                        onFocus={e => {
+                          if (!paramReadOnly) {
+                            e.target.style.background = 'var(--qa-card)';
+                            e.target.style.borderColor = 'var(--qa-text)';
+                          }
+                        }}
+                        onBlur={e => {
+                          e.target.style.background = 'transparent';
+                          e.target.style.borderColor = 'transparent';
+                        }}
+                      />
+                    )}
+
+                    {/* Dispute claim */}
+                    {disputed && (
+                      <div style={{
+                        marginTop: 8, fontSize: 12, color: 'var(--qa-text-2)',
+                        background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
+                        borderRadius: 6, padding: '8px 10px', lineHeight: 1.5,
+                      }}>
+                        <div style={{
+                          height: 18, padding: '0 7px', borderRadius: 999,
+                          background: 'var(--ink)', color: 'var(--ink-fg)',
+                          fontSize: 10, fontWeight: 600, textTransform: 'uppercase',
+                          letterSpacing: '0.04em', display: 'inline-flex', alignItems: 'center',
+                          marginBottom: 4,
+                        }}>
+                          {dispute?.raisedBy} note
+                        </div>
+                        <div>{disputed.note}</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Dispute composer for TL */}
+            {disputing && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border)', background: 'var(--qa-gray-50)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 6 }}>
+                  Reason for Dispute (QA Review)
+                </div>
+                <AutoTextarea
+                  value={disputeReason}
+                  onChange={e => setDisputeReason(e.target.value)}
+                  placeholder="Explain why you disagree with the score on selected parameters…"
+                  rows={3}
+                  style={{
+                    width: '100%', resize: 'vertical',
+                    border: '1px solid var(--qa-border)', borderRadius: 6,
+                    padding: '6px 8px', fontSize: 12, color: 'var(--qa-text)',
+                    lineHeight: 1.5, fontFamily: 'inherit',
+                    background: 'var(--qa-card)', outline: 'none',
+                  }}
+                />
+                {disputeError && (
+                  <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 6 }}>{disputeError}</div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: 'var(--qa-text-3)', marginRight: 'auto' }}>
+                    {disputePicks.size} parameter{disputePicks.size === 1 ? '' : 's'} selected
+                  </span>
+                  <button
+                    onClick={() => { setDisputing(false); setDisputePicks(new Set()); setDisputeReason(''); setDisputeError(''); }}
+                    style={{
+                      height: 30, padding: '0 12px', borderRadius: 6, border: '1px solid var(--qa-border)',
+                      background: 'var(--qa-card)', color: 'var(--qa-text)', fontSize: 12, cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitTLDispute}
+                    disabled={disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting}
+                    style={{
+                      height: 30, padding: '0 14px', borderRadius: 6, border: 'none',
+                      background: 'var(--ink)', color: 'var(--ink-fg)', fontSize: 12, fontWeight: 500,
+                      cursor: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 'not-allowed' : 'pointer',
+                      opacity: disputePicks.size === 0 || !disputeReason.trim() || disputeSubmitting ? 0.6 : 1,
+                    }}
+                  >
+                    {disputeSubmitting ? 'Sending to QA…' : 'Submit Dispute to QA'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+
+            {isReadOnly && reviewNote && (
+              <div style={{ padding: '12px 16px', borderTop: '1px solid var(--qa-border-sub)', flexShrink: 0 }}>
+                <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-3)', marginBottom: 4 }}>
+                  Review Note
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--qa-text-2)', lineHeight: 1.5 }}>{reviewNote}</div>
+              </div>
+            )}
+
+            {/* Sticky commit footer: score, gate status, optional KB flag, submit. Turns red on any gate breach. */}
+            <div className={`eval-foot${gateFail ? ' failed' : ''}`}>
+              {submitErr && <div className="eval-foot-err" role="alert">{submitErr}</div>}
+              <div className="eval-status">
+                <div className="eval-big">
+                  <span style={{ fontFamily: 'ui-monospace, monospace' }}>{activeTab === 'bot' ? 'Bot' : 'Agent'} IQS {shownIqs ?? '—'}</span>
+                  <span className={`eval-chip ${gateFail ? 'fail' : 'pass'}`}>{gateFail ? 'GATE BREACHED' : 'GATES PASS'}</span>
+                </div>
+                <div className="eval-small">
+                  {zeroed ? `Computed ${liveIqs ?? '—'} · scored 0 on gate breach` : gateFail ? 'One or more gates breached' : isReadOnly ? 'Saved evaluation' : 'Check the score before you submit'}
+                </div>
+              </div>
+              {canMarkKb && (
+                <>
+                  <label className="eval-kb">
+                    <input type="checkbox" checked={needsKbUpdate} onChange={e => setNeedsKbUpdate(e.target.checked)} />
+                    Mark for KB change
+                  </label>
+                  {needsKbUpdate && (
+                    <input
+                      type="text" className="eval-kb-comment" placeholder="Comment on KB update needed..."
+                      value={kbComment} onChange={e => setKbComment(e.target.value)}
+                    />
+                  )}
+                </>
+              )}
+              {(mode === 'submit' || mode === 'resolve' || isModified || needsKbUpdate !== initialNeedsKbUpdate) && (
+                <button type="button" className={`eval-submit${gateFail ? ' danger' : ''}`} onClick={submit} disabled={submitting}>
+                  {submitting ? 'Saving…' : gateFail && mode === 'submit' ? 'Submit as failed' : primaryLabel}
+                </button>
               )}
             </div>
           </div>

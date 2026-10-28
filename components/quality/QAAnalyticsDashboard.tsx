@@ -177,7 +177,7 @@ export default function QAAnalyticsDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, margin: 0, color: 'var(--qa-text)' }}>By Disposition</h2>
           <span style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic' }}>
-            {periodLabel} · click a row to expand sub-dispositions
+            {periodLabel}
           </span>
         </div>
 
@@ -204,10 +204,6 @@ export default function QAAnalyticsDashboard() {
       <section style={{ marginBottom: 32 }}>
         <WoWTrendChart dispositions={allDispositions} />
       </section>
-
-      <p style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic', marginTop: 0 }}>
-        Data from live DB · disposition-scoped to your assignments
-      </p>
     </div>
   );
 }

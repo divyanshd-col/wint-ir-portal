@@ -3,8 +3,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import CallEvalPanel from './CallEvalPanel';
 import DateRangePicker from './DateRangePicker';
 import type { CallToReviewRow } from '@/app/api/cx/qa/calls-to-review/route';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { useSort, sortRows, SortTh } from './sort';
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   dispositions:   string[];
   onCountChange?: (count: number) => void;
   agentFilter?:   'all' | 'human_only';
@@ -76,45 +79,17 @@ const CallEvalRow = React.memo(function CallEvalRow({
     <React.Fragment>
       <tr
         onClick={() => onToggleExpand(call.callId)}
-        style={{ background: isExpanded ? 'var(--qa-gray-50)' : undefined, cursor: 'pointer' }}
+        style={{ background: isExpanded ? 'var(--accent-weak)' : undefined, cursor: 'pointer' }}
         onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
         onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = ''; }}
       >
-        <td style={tdMono}>
-          <div>{call.callId}</div>
-          {call.calledAt && (
-            <div style={{ fontSize: 11, color: 'var(--qa-text-3)', marginTop: 2 }}>
-              {new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' })}
-            </div>
-          )}
-        </td>
+        <td style={tdMono}>{call.callId}</td>
         <td style={{ ...td, fontWeight: 500 }}>{call.agentName}</td>
         <td style={tdMono}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3)' }}>—</span>}</td>
         <td style={td}>{call.disposition}</td>
         <td style={td} onClick={e => e.stopPropagation()}>
           {call.chatId ? (
-            <a
-              href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '2px 8px',
-                fontSize: 12,
-                fontWeight: 500,
-                borderRadius: 6,
-                border: '1px solid var(--qa-border)',
-                background: 'var(--qa-card)',
-                color: '#2563eb',
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-              }}
-              title={`Open chat ${call.chatId} in Robylon`}
-            >
-              Show chat ↗
-            </a>
+            <TicketLinkButton id={call.chatId} />
           ) : (
             <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
           )}
@@ -173,7 +148,7 @@ const CallEvalRow = React.memo(function CallEvalRow({
 
 type SortCol = 'callId' | 'agentName' | 'iqsScore';
 
-export default function CallEvalTable({ dispositions, onCountChange, agentFilter = 'all', initialCallId, initialMobile, onCallNotFound }: Props) {
+export default function CallEvalTable({ leadingFilter, dispositions, onCountChange, agentFilter = 'all', initialCallId, initialMobile, onCallNotFound }: Props) {
   const [sortCol, setSortCol] = useState<SortCol | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
@@ -261,14 +236,8 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
     setExpandedId(null);
   }, []);
 
-  const sortedCalls = [...calls].sort((a, b) => {
-    if (!sortCol) return 0;
-    let cmp = 0;
-    if (sortCol === 'callId') cmp = a.callId.localeCompare(b.callId);
-    if (sortCol === 'agentName') cmp = a.agentName.localeCompare(b.agentName);
-    if (sortCol === 'iqsScore') cmp = (a.iqsScore ?? 0) - (b.iqsScore ?? 0);
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
+  const [sort, toggleSort] = useSort();
+  const sortedCalls = sortRows(calls, sort, { agent: c => c.agentName, mobile: c => c.mobileNumber, disp: c => c.disposition, iqs: c => c.iqsScore, status: c => c.status });
 
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
@@ -293,10 +262,11 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
     <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
       {/* Filter bar */}
       <div style={{
-        minHeight: 56, background: 'var(--qa-card)', borderBottom: '1px solid var(--qa-border)',
+        minHeight: 56, background: 'var(--sunk)', borderBottom: '1px solid var(--qa-border)',
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 16px',
         borderRadius: '8px 8px 0 0',
       }}>
+        {leadingFilter}
         <input
           placeholder="Search by Call ID…"
           value={callIdSearch}
@@ -383,7 +353,7 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
 
         <button style={chip} onClick={() => {
           setCallIdSearch(''); setMobileSearch(''); setDebouncedMobile(''); setDispFilter([]); setIqsMin(''); setIqsMax(''); setStatusFilter(''); setCustomFrom(''); setCustomTo('');
-        }}>Reset</button>
+        }}>Reset Filters</button>
 
         <div style={{ flex: 1 }} />
 
@@ -428,16 +398,26 @@ export default function CallEvalTable({ dispositions, onCountChange, agentFilter
       </div>
 
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+          <colgroup>
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '15.4%' }} />
+              <col style={{ width: '14%' }} />
+              <col style={{ width: '8%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '10.6%' }} />
+            </colgroup>
           <thead>
             <tr>
               <th style={th}>Call ID</th>
-              <th style={th}>Agent</th>
-              <th style={th}>Mobile</th>
-              <th style={th}>Disposition</th>
+              <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+              <SortTh k="mobile" sort={sort} onSort={toggleSort} style={th}>Mobile</SortTh>
+              <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
               <th style={th}>Linked Chat</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS</th>
-              <th style={th}>Status</th>
+              <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>IQS</SortTh>
+              <SortTh k="status" sort={sort} onSort={toggleSort} style={th}>Status</SortTh>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>

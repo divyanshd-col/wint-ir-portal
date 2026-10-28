@@ -6,57 +6,81 @@
   color-scheme: light;
 
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #1b201b;
 
   /* ── Brand accent (Wint green) — governed, single source ───────────── */
-  --accent:         #2d9e4f;
-  --accent-hover:   #25883f;
-  --accent-active:  #1f7436;
-  --accent-weak:    #eaf6ee;  /* tinted surface for accent backgrounds */
+  --accent:         #1f7a4d;
+  --accent-hover:   #1a6a42;
+  --accent-active:  #155a38;
+  --accent-weak:    #e3f1e8;  /* tinted surface for accent backgrounds */
   --accent-on:      #ffffff;  /* text/icon on top of --accent */
 
   /* ── QA Analytics design tokens (wireframe) ─────────────────────────── */
-  --qa-bg:           #F5F3EE;  /* the app-wide warm page ground (see topbar.css) */
+  --qa-bg:           #F5F6F4;  /* the app-wide muted gray-green page ground (see topbar.css) */
   --qa-card:         #FFFFFF;
-  --qa-border:       #E4E4E7;
-  --qa-border-sub:   #F0F0F2;
-  --qa-fill-light:   #F4F4F5;
-  --qa-fill-med:     #E4E4E7;
-  --qa-text:         #111111;
-  --qa-text-2:       #6B6B6B;
-  --qa-text-3:       #A1A1AA;
-  --qa-text-4:       #C7C7CC;
-  --qa-gray-700:     #2D2D31;
-  --qa-gray-50:      #FAFAFB;
-  --qa-gray-100:     #F4F4F5;
+  --qa-border:       #DDE1DB;
+  --qa-border-sub:   #E8EBE6;
+  --qa-fill-light:   #EEF0EC;
+  --qa-fill-med:     #DDE1DB;
+  --qa-text:         #1B201B;
+  --qa-text-2:       #4F584F;
+  --qa-text-3:       #667066;
+  --qa-text-4:       #B3BAB2;
+  --qa-gray-700:     #2C332C;
+  --qa-gray-50:      #F7F8F6;
+  --qa-gray-100:     #EEF0EC;
   --qa-on-text:      #FFFFFF;  /* text on a filled --qa-text surface (active pills, primary buttons) */
 
   /* ── Design system tokens ─────────────────────────────────────────── */
   --color-background-primary:   #ffffff;
-  --color-background-secondary: #fafafa;  /* zinc-50 (was slate #f8fafc) */
-  --color-background-tertiary:  #f4f4f5;  /* zinc-100 (was slate #f1f5f9) */
-  --color-background-danger:    #fee2e2;
+  --color-background-secondary: #f7f8f6;
+  --color-background-tertiary:  #eef0ec;
+  --color-background-danger:    #fbe7e5;
   --color-background-warning:   #fef3c7;
-  --color-background-success:   #dcfce7;
+  --color-background-success:   #e3f1e8;
   --color-background-info:      #dbeafe;
 
-  --color-text-primary:   #18181b;  /* zinc-900 (was gray #111827) */
-  --color-text-secondary: #71717a;  /* zinc-500 (was gray #6b7280) */
-  --color-text-tertiary:  #a1a1aa;  /* zinc-400 (was gray #9ca3af) */
-  --color-text-danger:    #b91c1c;
+  --color-text-primary:   #1b201b;
+  --color-text-secondary: #4f584f;
+  --color-text-tertiary:  #667066;
+  --color-text-danger:    #c0352b;
   --color-text-warning:   #b45309;
-  --color-text-success:   #15803d;
+  --color-text-success:   #1f7a4d;
   --color-text-info:      #1d4ed8;
 
-  --color-border-tertiary:  #e4e4e7;  /* zinc-200 (was gray #e5e7eb) */
-  --color-border-secondary: #d4d4d8;  /* zinc-300 (was gray #d1d5db) */
-  --color-border-danger:    #ef4444;
+  --color-border-tertiary:  #dde1db;
+  --color-border-secondary: #c4cac1;
+  --color-border-danger:    #c0352b;
   --color-border-warning:   #f59e0b;
-  --color-border-success:   #22c55e;
+  --color-border-success:   #1f7a4d;
   --color-border-info:      #3b82f6;
+
+  /* ── Semantic status + emphasis tokens (Chat Evaluation reference) ───
+     green = pass, red = breach/failure, blue = change markers + focus outlines only. */
+  --pass:        #1f7a4d;
+  --pass-soft:   #e3f1e8;
+  --fail:        #c0352b;
+  --fail-soft:   #fbe7e5;
+  --marker:      #3b5bdb;  /* focus ring + change markers only */
+  --marker-fg:   #ffffff;
+  --ink:         #1b201b;  /* primary action surface (Submit) */
+  --ink-fg:      #ffffff;
+  --sunk:        #eef0ec;  /* recessed surface: filter bars, notes */
+  --line:        #dde1db;
+  --line-strong: #c4cac1;
+  --faint:       #667066;  /* low-priority text: table heads, metadata (AA on white; reference #8a938a is 3.2:1) */
 
   --border-radius-md: 8px;
   --border-radius-lg: 12px;
+}
+
+/* Tailwind gray-400 text is 2.5:1 on white; send it through the AA "faint" tier. Dark mode has its own, more specific rules. */
+.text-gray-400, .text-slate-400, .text-zinc-400 { color: var(--qa-text-3); }
+
+/* Focus outlines are the one place blue appears in chrome (reference: blue = focus + change markers only). */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--marker);
+  outline-offset: 2px;
 }
 
 body {
@@ -207,7 +231,41 @@ body {
   flex: 1;
   padding: 32px 48px;
   min-width: 0;
-  max-width: 1400px;
+  max-width: none; /* use the whole screen, especially with the sidebar collapsed */
+}
+
+/* The label keeps the link's own colour; only the icon span is tinted. */
+.quality-shell-sidebar-link .quality-shell-sidebar-label,
+.quality-shell-sidebar-link.active .quality-shell-sidebar-label { color: inherit; display: inline; }
+
+/* Sidebar: pinned under the top bar (it does not scroll with the page), scrolls on its own if the nav is long, and collapses to
+   icons on request (the choice is remembered; first visit starts collapsed on screens <= 1100px). Labels stay in the DOM for
+   assistive tech and as tooltips. */
+.quality-shell-sidebar { position: sticky; top: var(--topbar-h, 0px); align-self: flex-start; height: calc(100vh - var(--topbar-h, 0px)); overflow-x: hidden; overflow-y: auto; transition: width .16s ease; }
+.quality-shell-sidebar-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px 2px 16px; min-height: 36px; }
+.quality-shell-sidebar-head .quality-shell-sidebar-title { padding: 0; }
+.quality-shell-sidebar-toggle { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: var(--qa-text-3); cursor: pointer; }
+.quality-shell-sidebar-toggle:hover { background: var(--sb-hover); color: var(--qa-text); }
+.quality-shell-sidebar-toggle svg { transition: transform .16s ease; }
+.quality-shell-sidebar.collapsed { width: 64px; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-head { justify-content: center; padding: 6px 0 2px; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-head .quality-shell-sidebar-title { display: none; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-toggle svg { transform: rotate(180deg); }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-title { height: 1px; margin: 12px 16px; padding: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-link { justify-content: center; margin: 0 10px 2px; padding: 0; }
+.quality-shell-sidebar.collapsed .quality-shell-sidebar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 1100px) {
+  .quality-shell-main { padding: 24px; }
+}
+/* Below 560px the rail becomes a scrolling icon strip above the content, so every page stays reachable. */
+@media (max-width: 560px) {
+  .quality-shell-body { flex-direction: column; }
+  .quality-shell-sidebar, .quality-shell-sidebar.collapsed { position: static; width: 100%; height: auto; min-height: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; overflow-y: hidden; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--sb-border); }
+  .quality-shell-sidebar-head { display: none; }
+  .quality-shell-sidebar-title, .quality-shell-sidebar.collapsed .quality-shell-sidebar-title { width: 1px; height: 20px; margin: 0 6px; padding: 0; flex-shrink: 0; background: var(--sb-border); font-size: 0; overflow: hidden; }
+  .quality-shell-sidebar-link, .quality-shell-sidebar.collapsed .quality-shell-sidebar-link { width: 44px; height: 44px; margin: 0; padding: 0; justify-content: center; flex-shrink: 0; }
+  .quality-shell-sidebar-label, .quality-shell-sidebar.collapsed .quality-shell-sidebar-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .quality-shell-main { padding: 16px; }
 }
 
 /* Email bodies in the quality review panels: tight like chat transcripts, no dangling space after the last paragraph. */
@@ -230,3 +288,149 @@ body {
   color: #92400e;
 }
 
+
+/* ── Evaluation panel (Chat Evaluation reference) ─────────────────────────────
+   Transcript left (wider, full height), scoring right. Both stack below 980px; gate rows go single-column below 560px.
+   Green = pass, red = breach, blue only for focus. Colours come from the shared tokens, so both themes follow. */
+.eval-wrap { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); height: clamp(560px, calc(100vh - 140px), 1000px); overflow: hidden; }
+.eval-pane { min-width: 0; display: flex; flex-direction: column; overflow: hidden; container-type: inline-size; }
+.eval-pane + .eval-pane { border-left: 1px solid var(--line); }
+
+.eval-chip { font-size: 11px; font-weight: 700; letter-spacing: .08em; border-radius: 6px; padding: 3px 8px; white-space: nowrap; }
+.eval-chip.pass { background: var(--pass-soft); color: var(--pass); }
+.eval-chip.fail { background: var(--fail); color: var(--qa-card); }
+
+.eval-gates { margin: 12px 16px; border: 2px solid var(--line-strong); border-radius: 10px; padding: 14px; background: var(--qa-card); }
+.eval-gates.failed { border-color: var(--fail); background: var(--fail-soft); }
+.eval-ghead { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.eval-gtitle { font-size: 13px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--qa-text); white-space: nowrap; }
+.eval-gate { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.eval-gate b { display: block; font-size: 13.5px; color: var(--qa-text); }
+.eval-gate small { color: var(--qa-text-2); font-size: 12.5px; }
+.eval-gate-extra { grid-column: 1 / -1; }
+.eval-reason-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--fail); margin-bottom: 4px; }
+.eval-reason { padding: 8px 10px; border-left: 3px solid var(--fail); border-radius: 6px; background: var(--qa-card); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; color: var(--qa-text); }
+.eval-reason-input { width: 100%; box-sizing: border-box; resize: vertical; border: 1px solid var(--fail); border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 12.5px; line-height: 1.5; background: var(--qa-card); color: var(--qa-text); }
+
+.eval-seg { display: inline-flex; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; background: var(--qa-card); }
+.eval-seg button { border: 0; border-left: 1px solid var(--line); background: none; padding: 6px 11px; font: inherit; font-size: 12.5px; font-weight: 500; color: var(--qa-text-2); cursor: pointer; }
+.eval-seg button:first-child { border-left: 0; }
+.eval-seg button:disabled { cursor: default; }
+.eval-seg button:disabled:not([aria-pressed="true"]) { opacity: .45; }
+.eval-seg button[aria-pressed="true"] { background: var(--ink); color: var(--ink-fg); }
+.eval-seg.gate button[data-v="pass"][aria-pressed="true"] { background: var(--pass); color: var(--qa-card); }
+.eval-seg.gate button[data-v="fail"][aria-pressed="true"] { background: var(--fail); color: var(--qa-card); }
+.eval-weight { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--faint); }
+
+.eval-rtab { border: 0; background: none; padding: 8px 10px; border-bottom: 2px solid transparent; font: inherit; font-size: 13px; font-weight: 500; color: var(--qa-text-2); cursor: pointer; }
+.eval-rtab[aria-selected="true"] { color: var(--qa-text); border-bottom-color: var(--qa-text); font-weight: 600; }
+
+/* Sticky commit footer: score, gate status, optional KB flag, submit. Red on any breach. */
+.eval-foot { position: sticky; bottom: 0; z-index: 2; flex-shrink: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--qa-card); }
+.eval-foot.failed { border-top-color: var(--fail); background: var(--fail-soft); }
+.eval-foot-err { flex-basis: 100%; padding: 8px 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--sunk); font-size: 12px; color: var(--qa-text); }
+.eval-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; margin-right: auto; }
+.eval-big { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; color: var(--qa-text); }
+.eval-small { font-size: 12px; color: var(--qa-text-2); }
+.eval-kb { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--qa-text-2); cursor: pointer; }
+.eval-kb input { accent-color: var(--accent); }
+.eval-kb-comment { height: 32px; width: 220px; max-width: 100%; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; font: inherit; font-size: 12px; background: var(--qa-card); color: var(--qa-text); }
+.eval-submit { height: 36px; padding: 0 16px; border: 1px solid var(--ink); border-radius: 8px; background: var(--ink); color: var(--ink-fg); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.eval-submit.danger { background: var(--fail); border-color: var(--fail); color: var(--qa-card); }
+.eval-submit:disabled { opacity: .6; cursor: not-allowed; }
+/* Narrow scoring pane: status + submit share row 1, the KB flag takes its own row. Wide pane: everything on one row. */
+.eval-foot .eval-kb { order: 3; flex-basis: 100%; }
+.eval-foot .eval-kb-comment { order: 4; flex-basis: 100%; }
+@container (min-width: 560px) {
+  .eval-foot .eval-kb, .eval-foot .eval-kb-comment { order: 0; flex-basis: auto; }
+}
+
+/* Internal notes: collapsed, neutral, secrets masked */
+.eval-note { align-self: stretch; margin-top: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--sunk); font-size: 12.5px; color: var(--qa-text-2); }
+.eval-note summary { display: flex; align-items: center; gap: 10px; padding: 7px 12px; list-style: none; cursor: pointer; }
+.eval-note summary::-webkit-details-marker { display: none; }
+.eval-note summary::before { content: ""; flex-shrink: 0; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform .15s; }
+.eval-note[open] summary::before { transform: rotate(45deg); }
+.eval-note .preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--faint); }
+.eval-note pre { margin: 0; padding: 4px 12px 10px 28px; font-family: ui-monospace, monospace; font-size: 11.5px; white-space: pre-wrap; word-break: break-all; color: var(--qa-text); }
+.eval-mask { padding: 0 4px; border-radius: 3px; background: var(--line); color: var(--qa-text-2); }
+
+@media (max-width: 980px) {
+  .eval-panel-cell { overflow: visible !important; }
+  .eval-wrap { grid-template-columns: minmax(0, 1fr); height: auto; overflow: visible; }
+  .eval-pane { overflow: visible; }
+  .eval-pane + .eval-pane { border-left: 0; border-top: 1px solid var(--line); }
+  .eval-scroll-t { max-height: 440px; }
+  .eval-scroll-r { overflow: visible !important; }
+}
+@media (max-width: 560px) {
+  .eval-gate { grid-template-columns: minmax(0, 1fr); }
+  .eval-foot { padding: 10px 12px; }
+  .eval-kb-comment { width: 100%; }
+}
+
+/* Queue rows that open an inline panel on click (see components/quality/rowClick.ts). */
+tr[data-row-click] { cursor: pointer; }
+
+/* ── Queue filter bars ───────────────────────────────────────────────────────
+   One look for every queue's filter bar (Chat Evaluation is the reference): recessed --sunk surface, 32px / 8px-radius
+   controls, one font size. Applied to older pages whose controls carry inline styles, hence !important on the shared
+   metrics. Use .qf-chip for buttons that should look like the chips. */
+.qfilters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 16px; min-height: 56px; background: var(--sunk); border-bottom: 1px solid var(--qa-border); }
+.qfilters.standalone { margin-bottom: 16px; border: 1px solid var(--qa-border); border-radius: 8px; }
+.qfilters input:not([type="checkbox"]):not([type="radio"]),
+.qfilters select,
+.qfilters .qf-chip { height: 32px !important; box-sizing: border-box; padding: 0 10px !important; border: 1px solid var(--qa-border) !important; border-radius: 8px !important; background: var(--qa-card); color: var(--qa-text); font-family: inherit; font-size: 13px !important; line-height: 1; }
+.qfilters select { padding-right: 24px !important; }
+.qfilters input::placeholder { color: var(--qa-text-3); }
+.qfilters .qf-chip { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+.qfilters .qf-chip.on { background: var(--ink); color: var(--ink-fg); border-color: var(--ink) !important; }
+.qfilters .qf-chip:disabled { opacity: .5; cursor: not-allowed; color: var(--qa-text-3); }
+.qfilters .qf-label { font-size: 12px; color: var(--qa-text-3); }
+.qfilters .qf-group { display: inline-flex; align-items: center; gap: 8px; }
+.qfilters select { max-width: 220px; }
+.quality-shell-sidebar-link { white-space: nowrap; }
+
+/* Chat / ticket ID link chip: identical in every queue and panel. */
+.id-link { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--qa-border); border-radius: 6px; background: var(--qa-card); color: var(--qa-text); font-family: ui-monospace, monospace; font-size: 12px; line-height: 18px; text-decoration: none; white-space: nowrap; }
+.id-link:hover { background: var(--qa-fill-light); }
+.id-link span { color: var(--qa-text-3); font-family: inherit; }
+
+/* Selected (expanded) queue row: accent tint plus an inset marker on the first cell, as in Chat Evaluation. */
+tr[style*="--accent-weak"] > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+
+/* Attachments in chat transcripts and e-mail bodies: a clickable chip, readable on light and ink bubbles alike. */
+.attachment-chip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin: 2px 0; padding: 4px 10px; border: 1px solid var(--qa-border); border-radius: 8px; background: var(--qa-card); color: var(--qa-text) !important; font-size: 12.5px; font-weight: 500; line-height: 18px; text-decoration: none !important; vertical-align: middle; }
+.attachment-chip:hover { background: var(--qa-fill-light); }
+.attachment-chip .attachment-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-chip .attachment-arrow { color: var(--qa-text-3); flex-shrink: 0; }
+
+/* CSAT pills: sans, sentence case, semantic colour (green = Good, red = Bad). */
+.csat-pill { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; border-radius: 999px; border: 1px solid transparent; font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.csat-pill.good { background: var(--pass-soft); color: var(--pass); }
+.csat-pill.bad { background: var(--fail-soft); color: var(--fail); }
+.csat-pill.mid { background: var(--sunk); color: var(--qa-text-2); border-color: var(--qa-border); }
+
+/* UISelect: themed replacement for native <select> (see components/quality/UISelect.tsx). */
+.ui-select-btn { width: 100%; height: 32px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; border: 1px solid var(--qa-border); border-radius: 8px; background: var(--qa-card); color: var(--qa-text); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.ui-select-btn:hover { background: var(--qa-fill-light); }
+.ui-select-btn.on { background: var(--ink); color: var(--ink-fg); border-color: var(--ink); }
+.ui-select-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ui-select-btn svg { flex-shrink: 0; opacity: .7; }
+.ui-select-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ui-select-menu { z-index: 200; max-height: 280px; overflow-y: auto; padding: 6px 0; border: 1px solid var(--qa-border); border-radius: 8px; background: var(--qa-card); box-shadow: 0 8px 24px rgba(0,0,0,.14); }
+.ui-select-item { display: flex; align-items: center; gap: 8px; padding: 8px 14px 8px 10px; font-size: 13px; color: var(--qa-text); cursor: pointer; white-space: nowrap; }
+.ui-select-item.hi { background: var(--qa-fill-light); }
+.ui-select-item[aria-selected="true"] { font-weight: 600; }
+.ui-select-item.off { opacity: .45; cursor: not-allowed; }
+.ui-select-check { width: 12px; font-size: 11px; text-align: center; color: var(--accent); }
+/* A filter bar that opens a card sits flush with the card's rounded top. */
+.qfilters:first-child { border-radius: 7px 7px 0 0; }
+
+/* Quoted reply history in e-mail bodies: collapsed behind a pill, like the CRM. */
+.email-quote-toggle { display: inline-flex; align-items: center; justify-content: center; height: 16px; margin-top: 8px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--sunk); color: var(--qa-text-2); font-size: 11px; line-height: 1; letter-spacing: .12em; cursor: pointer; }
+.email-quote-toggle:hover { background: var(--qa-fill-light); }
+.email-quoted { margin-top: 8px; padding: 6px 12px; border-left: 2px solid var(--line-strong); color: var(--qa-text-2); font-size: 12.5px; white-space: pre-wrap; }
+
+/* Sidebar tooltip: shown immediately (native title tooltips wait about a second). */
+.sb-tip { position: fixed; z-index: 300; transform: translateY(-50%); padding: 6px 10px; border-radius: 8px; background: var(--ink); color: var(--ink-fg); font-size: 12.5px; font-weight: 500; white-space: nowrap; pointer-events: none; box-shadow: 0 4px 14px rgba(0,0,0,.18); }

@@ -63,7 +63,7 @@ export default function CorrectionPanel({
           <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#16a34a" strokeWidth="2">
             <path d="M3 8l4 4 6-6"/>
           </svg>
-          <span className="text-[13px] text-green-800 font-[500]">Correction submitted — an admin will review it.</span>
+          <span className="text-[13px] text-green-800 font-[500]">Correction submitted. An admin will review it.</span>
         </div>
         <button onClick={onClose} className="text-[12px] text-green-600 hover:text-green-800 transition-colors">Dismiss</button>
       </div>
