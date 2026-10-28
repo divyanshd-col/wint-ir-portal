@@ -18,7 +18,7 @@ export function hasNavSkill(role: string | undefined, skills: string[] | undefin
 
 const TABS: (NavTab & { skill: string })[] = [
   { key: 'chat',      label: 'Chat',      href: '/chat',      skill: 'chat:access' },
-  { key: 'analytics', label: 'Analytics', href: '/analytics', skill: 'analytics:access' },
+  { key: 'analytics', label: 'MCP', href: '/analytics', skill: 'analytics:access' },
   { key: 'quality',   label: 'Quality',   href: '/quality',   skill: 'quality:analytics:access' },
   { key: 'settings',  label: 'Settings',  href: '/settings',  skill: 'settings:manage:access' },
 ];
