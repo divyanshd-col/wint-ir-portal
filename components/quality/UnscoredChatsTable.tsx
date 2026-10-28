@@ -21,6 +21,7 @@ interface UnscoredChatRow {
 }
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   onCountChange?: (count: number) => void;
 }
@@ -30,7 +31,7 @@ function fmtDate(iso: string | null) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange }: Props) {
+export default function UnscoredChatsTable({ leadingFilter, agentFilter = 'all', onCountChange }: Props) {
   const [chats, setChats] = useState<UnscoredChatRow[]>([]);
   const [total, setTotal] = useState(0);
   const [unscoredCount, setUnscoredCount] = useState(0);
@@ -153,6 +154,7 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
       }}>
         {/* Filters */}
         <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          {leadingFilter}
           <input
             type="text"
             placeholder="Search Chat ID..."
@@ -207,7 +209,7 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}
           >
-            {scoringBatch ? 'Running Batch...' : '⚡ Score Pending Batch'}
+            {scoringBatch ? 'Running Batch...' : 'Score Pending Batch'}
           </button>
 
           {/* Rows per page selector */}
@@ -280,7 +282,7 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
             ) : chats.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ ...td, textAlign: 'center', color: 'var(--qa-text-3)', padding: 32 }}>
-                  🎉 No unscored conversations found matching filters.
+                  No unscored conversations found matching filters.
                 </td>
               </tr>
             ) : (
@@ -290,7 +292,7 @@ export default function UnscoredChatsTable({ agentFilter = 'all', onCountChange 
                   <React.Fragment key={chat.id}>
                     <tr
                       style={{
-                        background: isExpanded ? 'var(--qa-gray-50)' : undefined,
+                        background: isExpanded ? 'var(--accent-weak)' : undefined,
                         cursor: 'pointer',
                       }}
                       onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}

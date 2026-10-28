@@ -155,7 +155,7 @@ export default function QADashboard() {
       <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
         <div className="px-4 py-3 border-b border-stone-100">
           <h2 className="text-sm font-semibold text-stone-700">IQS Parameter Failure Rates</h2>
-          <p className="text-xs text-stone-400 mt-0.5">Sorted by highest failure rate — identify coaching priorities</p>
+          <p className="text-xs text-stone-400 mt-0.5">Sorted by highest failure rate. Identify coaching priorities</p>
         </div>
         <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
           {loading ? (
@@ -241,7 +241,7 @@ export default function QADashboard() {
         <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-stone-100">
             <h2 className="text-sm font-semibold text-stone-700">Conversations Needing Attention</h2>
-            <p className="text-xs text-stone-400 mt-0.5">Low IQS (&lt;60) or bad CSAT — up to 20 most recent</p>
+            <p className="text-xs text-stone-400 mt-0.5">Low IQS (&lt;60) or bad CSAT. Up to 20 most recent</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

@@ -184,7 +184,7 @@ export default function AgentDashboard() {
               {top3.top3.map(entry => (
                 <div key={entry.rank} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/5">
                   <span className="text-stone-400 text-sm font-medium">
-                    {entry.rank === 1 ? '🥇' : entry.rank === 2 ? '🥈' : '🥉'} #{entry.rank}
+                    #{entry.rank}
                   </span>
                   <span className="text-white text-sm tabular-nums font-semibold">
                     {entry.composite_score.toFixed(2)}
@@ -197,7 +197,7 @@ export default function AgentDashboard() {
                   <div className="flex items-center justify-between">
                     <span className="text-stone-400 text-sm">Your rank</span>
                     <span className="text-white text-sm font-semibold tabular-nums">
-                      #{top3.my_rank} — {top3.my_composite_score?.toFixed(2) ?? '—'}
+                      #{top3.my_rank} · {top3.my_composite_score?.toFixed(2) ?? '—'}
                     </span>
                   </div>
                 ) : (

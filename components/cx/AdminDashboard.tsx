@@ -322,7 +322,6 @@ function KpiCard({ label, value, sub, onClick, active }: {
       <p className="text-[11px] text-gray-500 uppercase tracking-wider font-semibold mb-1">{label}</p>
       <p className="text-2xl font-bold text-gray-900 tabular-nums">{value}</p>
       {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
-      {onClick && <p className="text-[10px] text-gray-200 mt-1.5">Click to expand</p>}
     </div>
   );
 }
@@ -703,7 +702,6 @@ export default function AdminDashboard() {
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-400 px-4">Click a row to expand agents · click an agent to inspect</p>
             </div>
 
             <div className="overflow-x-auto">

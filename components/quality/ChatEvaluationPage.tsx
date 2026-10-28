@@ -1,4 +1,5 @@
 'use client';
+import AgentFilterSelect from './AgentFilterSelect';
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -46,10 +47,11 @@ export default function ChatEvaluationPage({ role }: Props) {
   }, []);
 
   const tabStyle = (active: boolean): React.CSSProperties => ({
-    height: 36, padding: '0 16px', border: 'none', borderRadius: 8,
-    background: active ? 'var(--qa-gray-700)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2)',
-    fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 500 : 400,
+    height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+    background: 'transparent',
+    color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+    borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+    fontFamily: 'inherit', fontSize: 13, fontWeight: active ? 600 : 500,
     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
@@ -57,8 +59,8 @@ export default function ChatEvaluationPage({ role }: Props) {
     return (
       <span style={{
         fontSize: 11, padding: '1px 6px', borderRadius: 10, fontWeight: 600, lineHeight: '18px',
-        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100)',
-        color: active ? '#fff' : 'var(--qa-text-2)',
+        background: active ? 'var(--ink)' : 'var(--qa-fill-light)',
+        color: active ? 'var(--ink-fg)' : 'var(--qa-text-2)',
       }}>
         {count}
       </span>
@@ -85,8 +87,7 @@ export default function ChatEvaluationPage({ role }: Props) {
       }}>
         <div style={{
           display: 'flex', gap: 4,
-          background: 'var(--qa-card)', border: '1px solid var(--qa-border)',
-          borderRadius: 10, padding: 4, width: 'fit-content',
+          borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto',
         }}>
           <button style={tabStyle(tab === 'pending')} onClick={() => setTab('pending')}>
             Pending Review
@@ -104,37 +105,6 @@ export default function ChatEvaluationPage({ role }: Props) {
             </button>
           )}
         </div>
-
-        {/* Agent / Interaction Filter Dropdown */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          <select
-            value={agentFilter}
-            onChange={e => setAgentFilter(e.target.value as any)}
-            style={{
-              height: 36,
-              padding: '0 28px 0 12px',
-              border: '1px solid var(--qa-border)',
-              borderRadius: 8,
-              background: 'var(--qa-card)',
-              color: 'var(--qa-text)',
-              fontSize: 13,
-              fontFamily: 'inherit',
-              outline: 'none',
-              cursor: 'pointer',
-              appearance: 'none',
-              backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23a1a1aa\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Cpolyline points=\'6 9 12 15 18 9\'/%3E%3C/svg%3E")',
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 10px center',
-              backgroundSize: '12px',
-              fontWeight: 500,
-            }}
-          >
-            <option value="all" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>All</option>
-            <option value="human_only" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>Human Only</option>
-            <option value="bot_only" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>Bot Only</option>
-            <option value="has_calls" style={{ background: 'var(--qa-card)', color: 'var(--qa-text)' }}>Has Calls</option>
-          </select>
-        </div>
       </div>
 
       {/* Tab content */}
@@ -143,6 +113,7 @@ export default function ChatEvaluationPage({ role }: Props) {
           dispositions={loadingDisp ? [] : dispositions}
           onCountChange={setPendingCount}
           agentFilter={agentFilter}
+          leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }, { value: 'bot_only', label: 'Bot Only' }, { value: 'has_calls', label: 'Has Calls' }]} />}
           initialChatId={targetChatId}
           onChatNotFound={() => setTab('reviewed')}
         />
@@ -153,6 +124,7 @@ export default function ChatEvaluationPage({ role }: Props) {
           type="chats"
           onCountChange={setDisputeCount}
           agentFilter={agentFilter}
+          leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }, { value: 'bot_only', label: 'Bot Only' }, { value: 'has_calls', label: 'Has Calls' }]} />}
         />
       </div>
 
@@ -160,6 +132,7 @@ export default function ChatEvaluationPage({ role }: Props) {
         <ReviewedChatsTable
           dispositions={loadingDisp ? [] : dispositions}
           agentFilter={agentFilter}
+          leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }, { value: 'bot_only', label: 'Bot Only' }, { value: 'has_calls', label: 'Has Calls' }]} />}
           initialChatId={targetChatId}
         />
       </div>
@@ -168,14 +141,11 @@ export default function ChatEvaluationPage({ role }: Props) {
         <div style={{ display: tab === 'unscored' ? 'block' : 'none' }}>
           <UnscoredChatsTable
             agentFilter={agentFilter}
+            leadingFilter={<AgentFilterSelect value={agentFilter} onChange={v => setAgentFilter(v as typeof agentFilter)} options={[{ value: 'all', label: 'All' }, { value: 'human_only', label: 'Human Only' }, { value: 'bot_only', label: 'Bot Only' }, { value: 'has_calls', label: 'Has Calls' }]} />}
             onCountChange={setUnscoredCount}
           />
         </div>
       )}
-
-      <p style={{ fontSize: 11, color: 'var(--qa-text-3)', fontStyle: 'italic', marginTop: 16 }}>
-        Data from live DB · scoped to your assigned dispositions
-      </p>
     </div>
   );
 }

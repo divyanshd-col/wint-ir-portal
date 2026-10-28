@@ -196,7 +196,7 @@ export default function TokensClient() {
     const fraction = spendVal / totalModelSpend;
     const startAngle = cumulativeAngle;
     cumulativeAngle += fraction * 360;
-    const color = MODEL_COLORS[m.model_name] || '#6B7280';
+    const color = MODEL_COLORS[m.model_name] || 'var(--qa-text-2)';
     return {
       model_name: m.model_name,
       label: formatModelLabel(m.model_name),
@@ -281,23 +281,23 @@ export default function TokensClient() {
   const currentLogs = recentLogsList.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--qa-bg, #F9FAFB)', color: 'var(--qa-text, #111827)', padding: '24px 32px' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--qa-bg, var(--qa-gray-50))', color: 'var(--qa-text, var(--qa-text))', padding: '24px 32px' }}>
       
       {/* ── Top Navigation & Header ────────────────────────────────────────────── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
             <h1 style={{ fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: '-0.02em' }}>Token Usage & Cost Intelligence</h1>
-            <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>
+            <span style={{ background: 'var(--pass-soft)', color: 'var(--pass)', fontSize: 12, fontWeight: 600, padding: '2px 8px', borderRadius: 12 }}>
               Real Data Tracking
             </span>
             {lastRefreshed && (
-              <span style={{ fontSize: 11, color: '#6B7280', background: '#F3F4F6', padding: '2px 8px', borderRadius: 10 }}>
+              <span style={{ fontSize: 11, color: 'var(--qa-text-2)', background: 'var(--qa-fill-light)', padding: '2px 8px', borderRadius: 10 }}>
                 Refreshed at {lastRefreshed}
               </span>
             )}
           </div>
-          <p style={{ margin: 0, fontSize: 14, color: 'var(--qa-text-2, #6B7280)' }}>
+          <p style={{ margin: 0, fontSize: 14, color: 'var(--qa-text-2, var(--qa-text-2))' }}>
             Monitor LLM token consumption, compare model spend, and audit job-level execution traffic across Chats, Calls, and Reports.
           </p>
         </div>
@@ -312,10 +312,10 @@ export default function TokensClient() {
             style={{
               padding: '8px 12px',
               borderRadius: 8,
-              border: '1px solid var(--qa-border, #E5E7EB)',
-              background: '#FFFFFF',
+              border: '1px solid var(--qa-border, var(--qa-border))',
+              background: 'var(--qa-card)',
               fontSize: 13,
-              color: '#374151',
+              color: 'var(--qa-gray-700)',
               cursor: 'pointer',
             }}
           >
@@ -332,10 +332,10 @@ export default function TokensClient() {
             style={{
               padding: '8px 12px',
               borderRadius: 8,
-              border: '1px solid var(--qa-border, #E5E7EB)',
-              background: '#FFFFFF',
+              border: '1px solid var(--qa-border, var(--qa-border))',
+              background: 'var(--qa-card)',
               fontSize: 13,
-              color: '#374151',
+              color: 'var(--qa-gray-700)',
               cursor: 'pointer',
             }}
           >
@@ -347,7 +347,7 @@ export default function TokensClient() {
           </select>
 
           {/* Time Segment Selector */}
-          <div style={{ background: '#E5E7EB', padding: 3, borderRadius: 8, display: 'flex', gap: 2, alignItems: 'center' }}>
+          <div style={{ background: 'var(--qa-border)', padding: 3, borderRadius: 8, display: 'flex', gap: 2, alignItems: 'center' }}>
             {(['24h', '7d', '30d', 'custom'] as Period[]).map((p) => (
               <button
                 key={p}
@@ -359,31 +359,31 @@ export default function TokensClient() {
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: 'pointer',
-                  background: period === p ? '#111827' : 'transparent',
-                  color: period === p ? '#FFFFFF' : '#4B5563',
+                  background: period === p ? 'var(--qa-text)' : 'transparent',
+                  color: period === p ? '#FFFFFF' : 'var(--qa-text-2)',
                   transition: 'all 0.15s ease',
                 }}
               >
-                {p === '24h' ? '24 Hours' : p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : '📅 Custom Range'}
+                {p === '24h' ? '24 Hours' : p === '7d' ? '7 Days' : p === '30d' ? '30 Days' : 'Custom Range'}
               </button>
             ))}
           </div>
 
           {/* Custom Date Range Calendar Inputs */}
           {period === 'custom' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#FFFFFF', padding: '4px 8px', borderRadius: 8, border: '1px solid #D1D5DB' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--qa-card)', padding: '4px 8px', borderRadius: 8, border: '1px solid var(--line-strong)' }}>
               <input
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 12, color: '#374151' }}
+                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--qa-border)', fontSize: 12, color: 'var(--qa-gray-700)' }}
               />
-              <span style={{ fontSize: 12, color: '#6B7280', fontWeight: 500 }}>to</span>
+              <span style={{ fontSize: 12, color: 'var(--qa-text-2)', fontWeight: 500 }}>to</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 12, color: '#374151' }}
+                style={{ padding: '4px 6px', borderRadius: 6, border: '1px solid var(--qa-border)', fontSize: 12, color: 'var(--qa-gray-700)' }}
               />
             </div>
           )}
@@ -400,14 +400,14 @@ export default function TokensClient() {
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: 8,
-              border: '1px solid var(--qa-border, #E5E7EB)',
-              background: '#FFFFFF',
+              border: '1px solid var(--qa-border, var(--qa-border))',
+              background: 'var(--qa-card)',
               cursor: loading ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.6 : 1,
             }}
           >
             <span style={{ display: 'inline-block', transform: loading ? 'rotate(360deg)' : 'none', transition: 'transform 0.6s linear' }}>
-              🔄
+              Refresh
             </span>
           </button>
         </div>
@@ -424,14 +424,14 @@ export default function TokensClient() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 24 }}>
         
         {/* Card 1: Model Spend Share (Doughnut Chart in ₹ Spend) */}
-        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border, #E5E7EB)', borderRadius: 12, padding: 20 }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 12, padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Model Spend & Usage Share</h3>
-            <span style={{ fontSize: 11, background: '#EFF6FF', color: '#1D4ED8', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+            <span style={{ fontSize: 11, background: 'var(--qa-fill-light)', color: 'var(--qa-text)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
               Based on Spend (₹)
             </span>
           </div>
-          <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 20px 0' }}>Proportional spend and processing volume by model</p>
+          <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '0 0 20px 0' }}>Proportional spend and processing volume by model</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 220 }}>
             {/* SVG Doughnut Ring */}
@@ -465,7 +465,7 @@ export default function TokensClient() {
             {/* Model Legend with Spend & Tokens */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center' }}>
               {doughnutSlices.map((slice, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: '#374151' }}>
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 500, color: 'var(--qa-gray-700)' }}>
                   <div style={{ width: 12, height: 12, borderRadius: 3, background: slice.color }} />
                   <span>
                     <strong>{slice.label}</strong>: {fmtCurrencyInr(slice.spendVal)} ({Math.round(slice.fraction * 100)}%)
@@ -478,11 +478,11 @@ export default function TokensClient() {
         </div>
 
         {/* Card 2: Consumption by Feature (Vertical Bar Chart) */}
-        <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border, #E5E7EB)', borderRadius: 12, padding: 20 }}>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 12, padding: 20 }}>
           <h3 style={{ fontSize: 16, fontWeight: 600, margin: '0 0 4px 0' }}>
             {isAudioOrSpendView ? 'Spend & Consumption by Feature' : 'Consumption by Feature'}
           </h3>
-          <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 20px 0' }}>
+          <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '0 0 20px 0' }}>
             {isAudioOrSpendView
               ? 'Spend (₹ INR) incurred across Call Diarization & Feature Groups'
               : 'Tokens utilized by Quality Scoring, Chat, Call Analysis, etc.'}
@@ -490,18 +490,18 @@ export default function TokensClient() {
 
           <div style={{ display: 'flex', height: 210, position: 'relative' }}>
             {/* Y-Axis Labels */}
-            <div style={{ width: isAudioOrSpendView ? 75 : 65, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingRight: 8, fontSize: 11, color: '#9CA3AF', fontFamily: MONO, textAlign: 'right' }}>
+            <div style={{ width: isAudioOrSpendView ? 75 : 65, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingRight: 8, fontSize: 11, color: 'var(--qa-text-3)', fontFamily: MONO, textAlign: 'right' }}>
               {yTicksBar.map((val, idx) => (
                 <span key={idx}>{isAudioOrSpendView ? fmtCurrencyInr(val) : fmtMillions(val)}</span>
               ))}
             </div>
 
             {/* Bars & Gridlines Container */}
-            <div style={{ flex: 1, height: 170, borderLeft: '1px solid #E5E7EB', borderBottom: '1px solid #E5E7EB', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', padding: '0 16px' }}>
+            <div style={{ flex: 1, height: 170, borderLeft: '1px solid var(--qa-border)', borderBottom: '1px solid var(--qa-border)', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', padding: '0 16px' }}>
               {/* Gridlines */}
               <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
                 {yTicksBar.map((_, idx) => (
-                  <div key={idx} style={{ width: '100%', height: 1, borderTop: '1px dashed #F3F4F6' }} />
+                  <div key={idx} style={{ width: '100%', height: 1, borderTop: '1px dashed var(--qa-fill-light)' }} />
                 ))}
               </div>
 
@@ -512,7 +512,7 @@ export default function TokensClient() {
                 const label = FEATURE_LABELS[f.feature_group] || f.feature_group;
                 return (
                   <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 65, zIndex: 1, position: 'relative' }}>
-                    <span style={{ fontSize: 9, color: '#059669', fontWeight: 600, marginBottom: 4, fontFamily: MONO }}>
+                    <span style={{ fontSize: 9, color: 'var(--pass)', fontWeight: 600, marginBottom: 4, fontFamily: MONO }}>
                       {isAudioOrSpendView ? fmtCurrencyInr(f.total_spend_inr) : fmtMillions(f.total_tokens)}
                     </span>
                     <div
@@ -525,7 +525,7 @@ export default function TokensClient() {
                       }}
                       title={isAudioOrSpendView ? `${label}: ${fmtCurrencyInr(f.total_spend_inr)} (${f.invocations} invocations)` : `${label}: ${fmtNumber(f.total_tokens)} tokens (${fmtCurrencyInr(f.total_spend_inr)})`}
                     />
-                    <span style={{ fontSize: 10, color: '#4B5563', marginTop: 6, textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 85, transform: 'rotate(-12deg)', transformOrigin: 'top left' }}>
+                    <span style={{ fontSize: 10, color: 'var(--qa-text-2)', marginTop: 6, textAlign: 'center', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden', maxWidth: 85, transform: 'rotate(-12deg)', transformOrigin: 'top left' }}>
                       {label}
                     </span>
                   </div>
@@ -538,17 +538,17 @@ export default function TokensClient() {
       </div>
 
       {/* ── Section 2: Token Consumption Trend (Smooth Curved Area Line Chart) ───── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border, #E5E7EB)', borderRadius: 12, padding: 20, marginBottom: 24 }}>
+      <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 12, padding: 20, marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>
               {isAudioOrSpendView ? 'Spend & Diarization Trend' : 'Token Consumption Trend'}
             </h3>
-            <p style={{ fontSize: 13, color: '#6B7280', margin: '4px 0 0 0' }}>
+            <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0 0' }}>
               {isAudioOrSpendView ? 'Total spend (₹ INR) incurred over time' : 'Total volume of tokens consumed over time'}
             </p>
           </div>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#4B5563', background: '#F3F4F6', padding: '4px 10px', borderRadius: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text-2)', background: 'var(--qa-fill-light)', padding: '4px 10px', borderRadius: 6 }}>
             Timeframe: {period.toUpperCase()}
           </span>
         </div>
@@ -567,8 +567,8 @@ export default function TokensClient() {
               const yPos = paddingY + (idx / 4) * (chartHeight - 2 * paddingY);
               return (
                 <g key={idx}>
-                  <line x1={paddingX} y1={yPos} x2={chartWidth - 20} y2={yPos} stroke="#F3F4F6" strokeDasharray="3 3" />
-                  <text x={paddingX - 10} y={yPos + 4} textAnchor="end" fontSize="10" fill="#9CA3AF" fontFamily={MONO}>
+                  <line x1={paddingX} y1={yPos} x2={chartWidth - 20} y2={yPos} stroke="var(--qa-fill-light)" strokeDasharray="3 3" />
+                  <text x={paddingX - 10} y={yPos + 4} textAnchor="end" fontSize="10" fill="var(--qa-text-3)" fontFamily={MONO}>
                     {isAudioOrSpendView ? fmtCurrencyInr(val) : fmtMillions(val)}
                   </text>
                 </g>
@@ -586,7 +586,7 @@ export default function TokensClient() {
               if (idx % Math.ceil(trendPoints.length / 8) !== 0 && idx !== trendPoints.length - 1) return null;
               const dateStr = pt.bucket ? new Date(pt.bucket).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
               return (
-                <text key={idx} x={pt.x} y={chartHeight - 2} textAnchor="middle" fontSize="10" fill="#9CA3AF">
+                <text key={idx} x={pt.x} y={chartHeight - 2} textAnchor="middle" fontSize="10" fill="var(--qa-text-3)">
                   {dateStr}
                 </text>
               );
@@ -596,13 +596,13 @@ export default function TokensClient() {
       </div>
 
       {/* ── Section 3: Granular 18-Job Spend & Token Bifurcation Table ──────────── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border, #E5E7EB)', borderRadius: 12, padding: 20, marginBottom: 24 }}>
+      <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 12, padding: 20, marginBottom: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Granular Spend Bifurcation by AI Job</h3>
-            <p style={{ fontSize: 13, color: '#6B7280', margin: '4px 0 0 0' }}>Detailed breakdown of token consumption and cost across all 18 AI execution points</p>
+            <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0 0' }}>Detailed breakdown of token consumption and cost across all 18 AI execution points</p>
           </div>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#4B5563', background: '#F3F4F6', padding: '4px 10px', borderRadius: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--qa-text-2)', background: 'var(--qa-fill-light)', padding: '4px 10px', borderRadius: 6 }}>
             Showing {data?.jobBifurcation?.length || 0} AI jobs
           </span>
         </div>
@@ -610,7 +610,7 @@ export default function TokensClient() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', textTransform: 'uppercase', fontSize: 11, color: '#6B7280', letterSpacing: '0.05em' }}>
+              <tr style={{ background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', textTransform: 'uppercase', fontSize: 11, color: 'var(--qa-text-2)', letterSpacing: '0.05em' }}>
                 <th style={{ padding: '10px 12px', textAlign: 'left' }}>Job Name</th>
                 <th style={{ padding: '10px 12px', textAlign: 'left' }}>Feature Group</th>
                 <th style={{ padding: '10px 12px', textAlign: 'left' }}>Model</th>
@@ -623,20 +623,20 @@ export default function TokensClient() {
             </thead>
             <tbody>
               {data?.jobBifurcation?.map((j, idx) => (
-                <tr key={idx} style={{ borderBottom: '1px solid #F3F4F6' }}>
+                <tr key={idx} style={{ borderBottom: '1px solid var(--qa-fill-light)' }}>
                   <td style={{ padding: '12px' }}>
-                    <div style={{ fontWeight: 600, color: '#111827' }}>{j.label}</div>
+                    <div style={{ fontWeight: 600, color: 'var(--qa-text)' }}>{j.label}</div>
                   </td>
                   <td style={{ padding: '12px' }}>
                     <span style={{
                       padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                      background: j.feature_group === 'Chats' ? '#EFF6FF' : j.feature_group === 'Calls' ? '#ECFDF5' : j.feature_group === 'Analytics' ? '#FFFBEB' : '#F5F3FF',
-                      color: j.feature_group === 'Chats' ? '#1D4ED8' : j.feature_group === 'Calls' ? '#047857' : j.feature_group === 'Analytics' ? '#B45309' : '#6D28D9'
+                      background: j.feature_group === 'Chats' ? 'var(--qa-fill-light)' : j.feature_group === 'Calls' ? 'var(--pass-soft)' : j.feature_group === 'Analytics' ? 'var(--sunk)' : 'var(--sunk)',
+                      color: j.feature_group === 'Chats' ? 'var(--qa-text)' : j.feature_group === 'Calls' ? 'var(--pass)' : j.feature_group === 'Analytics' ? 'var(--qa-text-2)' : 'var(--qa-text-2)'
                     }}>
                       {j.feature_group}
                     </span>
                   </td>
-                  <td style={{ padding: '12px', fontFamily: MONO, fontSize: 12, color: '#374151' }}>{j.model_name}</td>
+                  <td style={{ padding: '12px', fontFamily: MONO, fontSize: 12, color: 'var(--qa-gray-700)' }}>{j.model_name}</td>
                   <td style={{ padding: '12px', textAlign: 'right', fontWeight: 600 }}>{fmtNumber(j.invocations)}</td>
                   <td style={{ padding: '12px', textAlign: 'right', fontFamily: MONO }}>
                     {j.model_name.includes('pyannote') ? '—' : fmtNumber(j.input_tokens)}
@@ -647,7 +647,7 @@ export default function TokensClient() {
                   <td style={{ padding: '12px', textAlign: 'right', fontFamily: MONO, fontWeight: 600 }}>
                     {j.model_name.includes('pyannote') ? '—' : fmtNumber(j.total_tokens)}
                   </td>
-                  <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>{fmtCurrencyInr(j.total_spend_inr)}</td>
+                  <td style={{ padding: '12px', textAlign: 'right', fontWeight: 700, color: 'var(--pass)' }}>{fmtCurrencyInr(j.total_spend_inr)}</td>
                 </tr>
               ))}
             </tbody>
@@ -656,13 +656,13 @@ export default function TokensClient() {
       </div>
 
       {/* ── Section 4: Paginated Recent AI Requests Stream ──────────────────────── */}
-      <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border, #E5E7EB)', borderRadius: 12, padding: 20 }}>
+      <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 12, padding: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <div>
             <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0 }}>Recent AI Invocations Stream</h3>
-            <p style={{ fontSize: 13, color: '#6B7280', margin: '4px 0 0 0' }}>Audit log of recent AI model requests across all portal endpoints</p>
+            <p style={{ fontSize: 13, color: 'var(--qa-text-2)', margin: '4px 0 0 0' }}>Audit log of recent AI model requests across all portal endpoints</p>
           </div>
-          <span style={{ fontSize: 12, color: '#6B7280' }}>
+          <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
             Showing {Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, totalLogsCount)} – {Math.min(currentPage * ITEMS_PER_PAGE, totalLogsCount)} of {totalLogsCount} invocations
           </span>
         </div>
@@ -670,7 +670,7 @@ export default function TokensClient() {
         <div style={{ overflowX: 'auto', marginBottom: 16 }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', textTransform: 'uppercase', fontSize: 10, color: '#6B7280', letterSpacing: '0.05em' }}>
+              <tr style={{ background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)', textTransform: 'uppercase', fontSize: 10, color: 'var(--qa-text-2)', letterSpacing: '0.05em' }}>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Time</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Job Name</th>
                 <th style={{ padding: '10px', textAlign: 'left' }}>Model</th>
@@ -682,18 +682,18 @@ export default function TokensClient() {
             </thead>
             <tbody>
               {currentLogs.map((log) => (
-                <tr key={log.id} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                  <td style={{ padding: '10px', color: '#6B7280', fontFamily: MONO }}>{new Date(log.created_at).toLocaleTimeString()}</td>
-                  <td style={{ padding: '10px', fontWeight: 600, color: '#111827' }}>{formatJobLabel(log.job_type)}</td>
-                  <td style={{ padding: '10px', color: '#374151', fontFamily: MONO }}>{log.model_name}</td>
-                  <td style={{ padding: '10px', color: '#6B7280', fontFamily: MONO }}>{log.entity_id || '—'}</td>
+                <tr key={log.id} style={{ borderBottom: '1px solid var(--qa-fill-light)' }}>
+                  <td style={{ padding: '10px', color: 'var(--qa-text-2)', fontFamily: MONO }}>{new Date(log.created_at).toLocaleTimeString()}</td>
+                  <td style={{ padding: '10px', fontWeight: 600, color: 'var(--qa-text)' }}>{formatJobLabel(log.job_type)}</td>
+                  <td style={{ padding: '10px', color: 'var(--qa-gray-700)', fontFamily: MONO }}>{log.model_name}</td>
+                  <td style={{ padding: '10px', color: 'var(--qa-text-2)', fontFamily: MONO }}>{log.entity_id || '—'}</td>
                   <td style={{ padding: '10px', textAlign: 'right', fontFamily: MONO }}>
                     {log.model_name.includes('pyannote') ? '—' : fmtNumber(log.total_tokens)}
                   </td>
-                  <td style={{ padding: '10px', textAlign: 'right', fontFamily: MONO, color: '#6B7280' }}>
+                  <td style={{ padding: '10px', textAlign: 'right', fontFamily: MONO, color: 'var(--qa-text-2)' }}>
                     {log.latency_ms ? `${(log.latency_ms / 1000).toFixed(1)}s` : '—'}
                   </td>
-                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: '#059669' }}>{fmtCurrencyInr(log.estimated_cost_inr)}</td>
+                  <td style={{ padding: '10px', textAlign: 'right', fontWeight: 600, color: 'var(--pass)' }}>{fmtCurrencyInr(log.estimated_cost_inr)}</td>
                 </tr>
               ))}
             </tbody>
@@ -701,16 +701,16 @@ export default function TokensClient() {
         </div>
 
         {/* Pagination Controls */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid #F3F4F6' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 12, borderTop: '1px solid var(--qa-fill-light)' }}>
           <button
             onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             disabled={currentPage === 1}
             style={{
               padding: '6px 14px',
               borderRadius: 6,
-              border: '1px solid #D1D5DB',
-              background: currentPage === 1 ? '#F3F4F6' : '#FFFFFF',
-              color: currentPage === 1 ? '#9CA3AF' : '#374151',
+              border: '1px solid var(--line-strong)',
+              background: currentPage === 1 ? 'var(--qa-fill-light)' : '#FFFFFF',
+              color: currentPage === 1 ? 'var(--qa-text-3)' : 'var(--qa-gray-700)',
               fontSize: 12,
               fontWeight: 600,
               cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
@@ -729,9 +729,9 @@ export default function TokensClient() {
                   width: 28,
                   height: 28,
                   borderRadius: 6,
-                  border: p === currentPage ? 'none' : '1px solid #E5E7EB',
-                  background: p === currentPage ? '#111827' : '#FFFFFF',
-                  color: p === currentPage ? '#FFFFFF' : '#4B5563',
+                  border: p === currentPage ? 'none' : '1px solid var(--qa-border)',
+                  background: p === currentPage ? 'var(--qa-text)' : '#FFFFFF',
+                  color: p === currentPage ? '#FFFFFF' : 'var(--qa-text-2)',
                   fontSize: 12,
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -748,9 +748,9 @@ export default function TokensClient() {
             style={{
               padding: '6px 14px',
               borderRadius: 6,
-              border: '1px solid #D1D5DB',
-              background: currentPage === totalPages ? '#F3F4F6' : '#FFFFFF',
-              color: currentPage === totalPages ? '#9CA3AF' : '#374151',
+              border: '1px solid var(--line-strong)',
+              background: currentPage === totalPages ? 'var(--qa-fill-light)' : '#FFFFFF',
+              color: currentPage === totalPages ? 'var(--qa-text-3)' : 'var(--qa-gray-700)',
               fontSize: 12,
               fontWeight: 600,
               cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
@@ -767,15 +767,15 @@ export default function TokensClient() {
 
 function SummaryCard({ title, main, sub, badge }: { title: string; main: string; sub: string; badge?: string }) {
   return (
-    <div style={{ background: '#FFFFFF', border: '1px solid var(--qa-border, #E5E7EB)', borderRadius: 12, padding: '16px 20px', position: 'relative' }}>
+    <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border, var(--qa-border))', borderRadius: 12, padding: '16px 20px', position: 'relative' }}>
       {badge && (
-        <span style={{ position: 'absolute', top: 16, right: 16, background: '#EFF6FF', color: '#1D4ED8', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>
+        <span style={{ position: 'absolute', top: 16, right: 16, background: 'var(--qa-fill-light)', color: 'var(--qa-text)', fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>
           {badge}
         </span>
       )}
-      <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', letterSpacing: '0.05em', marginBottom: 8 }}>{title}</div>
-      <div style={{ fontSize: 24, fontWeight: 700, color: '#111827', letterSpacing: '-0.02em', marginBottom: 4 }}>{main}</div>
-      <div style={{ fontSize: 12, color: '#6B7280' }}>{sub}</div>
+      <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--qa-text-2)', letterSpacing: '0.05em', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--qa-text)', letterSpacing: '-0.02em', marginBottom: 4 }}>{main}</div>
+      <div style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>{sub}</div>
     </div>
   );
 }

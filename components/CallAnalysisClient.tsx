@@ -55,8 +55,8 @@ export default function CallAnalysisClient({ username, role, isAdmin, flags }: P
   const phaseLabel: Record<Phase, string> = {
     idle:       '',
     uploading:  'Uploading audio…',
-    pass1:      'Pass 1 — Extracting structure…',
-    pass2:      'Pass 2 — Transcribing & analysing…',
+    pass1:      'Pass 1 · Extracting structure…',
+    pass2:      'Pass 2 · Transcribing & analysing…',
     done:       'Analysis complete',
     error:      'Analysis failed',
   };
@@ -93,7 +93,7 @@ export default function CallAnalysisClient({ username, role, isAdmin, flags }: P
         throw new Error(error ?? 'Could not get upload URL');
       }
       const { uploadUrl, mimeType, pyannoteUploadUrl, pyannoteUri } = await initRes.json();
-      addLog(`Upload URL obtained — uploading ${(file.size / 1024 / 1024).toFixed(1)} MB directly to Gemini…`);
+      addLog(`Upload URL obtained. Uploading ${(file.size / 1024 / 1024).toFixed(1)} MB directly to Gemini…`);
 
       // ── Step 2: Browser uploads file bytes directly (no Vercel limit) ──
       const uploadStart = Date.now();
@@ -142,7 +142,7 @@ export default function CallAnalysisClient({ username, role, isAdmin, flags }: P
       const [uploadData] = await Promise.all(uploads);
       const fileUri = uploadData?.file?.uri;
       if (!fileUri) throw new Error(`No file URI in Gemini response: ${JSON.stringify(uploadData).slice(0, 200)}`);
-      addLog(`Upload complete in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s — starting analysis…`);
+      addLog(`Upload complete in ${((Date.now() - uploadStart) / 1000).toFixed(1)}s. Starting analysis…`);
 
       // ── Step 3: Run two-pass analysis (SSE stream) ────────────────────────
       const runRes = await fetch('/api/call-analysis/run', {
@@ -221,7 +221,7 @@ export default function CallAnalysisClient({ username, role, isAdmin, flags }: P
         {/* Header */}
         <div className="bg-white border-b border-gray-100 px-6 py-4 shrink-0">
           <h1 className="text-base font-semibold text-gray-900">Call Quality Analyser</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Two-pass Gemini analysis — structure extraction then transcription &amp; tone</p>
+          <p className="text-xs text-gray-400 mt-0.5">Two-pass Gemini analysis. Structure extraction then transcription &amp; tone</p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
@@ -265,7 +265,7 @@ export default function CallAnalysisClient({ username, role, isAdmin, flags }: P
               {/* Pass indicators */}
               <div className="flex gap-3 mb-4">
                 {(['uploading', 'pass1', 'pass2'] as Phase[]).map((p, i) => {
-                  const labels = ['Upload', 'Pass 1 — Structure', 'Pass 2 — Analysis'];
+                  const labels = ['Upload', 'Pass 1 · Structure', 'Pass 2 · Analysis'];
                   const isDone = (phase === 'done') || (p === 'uploading' && ['pass1','pass2','done'].includes(phase)) || (p === 'pass1' && ['pass2','done'].includes(phase));
                   const isActive = phase === p;
                   return (
@@ -324,7 +324,7 @@ export default function CallAnalysisClient({ username, role, isAdmin, flags }: P
                       <p className="text-xs text-gray-500">
                         <span className="font-medium text-gray-700">Speaker {execSpeaker}</span> identified as IR Executive
                         {result.speaker_identification_signal
-                          ? <> — "<span className="italic">{result.speaker_identification_signal}</span>"</>
+                          ? <> · "<span className="italic">{result.speaker_identification_signal}</span>"</>
                           : ' (inferred from call behaviour)'}
                       </p>
                     </div>

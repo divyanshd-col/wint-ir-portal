@@ -31,7 +31,7 @@ interface Props {
   flags?: { callAnalysis?: boolean; cxDashboard?: boolean };
 }
 
-const COLORS = ['#2d9e4f', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#10b981', '#6366f1'];
+const COLORS = ['#1f7a4d', '#3b82f6', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4', '#10b981', '#6366f1'];
 
 export default function TokenUsageClient({ username, role, isAdmin, flags }: Props) {
   const [timeframe, setTimeframe] = useState<'24h' | '7d' | '30d' | 'all'>('30d');
@@ -110,7 +110,7 @@ export default function TokenUsageClient({ username, role, isAdmin, flags }: Pro
             <select
               value={modelFilter}
               onChange={(e) => setModelFilter(e.target.value)}
-              className="bg-gray-100 hover:bg-gray-200/70 border border-gray-200 text-xs font-semibold rounded-xl px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#2d9e4f]/30 transition"
+              className="bg-gray-100 hover:bg-gray-200/70 border border-gray-200 text-xs font-semibold rounded-xl px-3 py-2 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#1f7a4d]/30 transition"
             >
               <option value="all">All Models</option>
               {data?.byModel.map((m) => (
@@ -181,7 +181,7 @@ export default function TokenUsageClient({ username, role, isAdmin, flags }: Pro
           {data?.summary && data.summary.topModel && data.summary.totalTokens > 0 && (
             <div className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-200/80 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
               <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-[#2d9e4f] flex items-center justify-center text-white shrink-0 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-[#1f7a4d] flex items-center justify-center text-white shrink-0 shadow-sm">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
                   </svg>
@@ -352,7 +352,7 @@ export default function TokenUsageClient({ username, role, isAdmin, flags }: Pro
                           <div className="flex items-center gap-2">
                             <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                               <div
-                                className="bg-[#2d9e4f] h-full rounded-full transition-all"
+                                className="bg-[#1f7a4d] h-full rounded-full transition-all"
                                 style={{ width: `${Math.min(100, m.sharePercent)}%` }}
                               />
                             </div>
@@ -442,13 +442,13 @@ export default function TokenUsageClient({ username, role, isAdmin, flags }: Pro
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={featureBarData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#6b7280' }} interval={0} angle={-15} textAnchor="end" />
-                      <YAxis tickFormatter={(v) => formatTokenCount(v)} tick={{ fontSize: 11, fill: '#6b7280' }} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'var(--qa-text-2)' }} interval={0} angle={-15} textAnchor="end" />
+                      <YAxis tickFormatter={(v) => formatTokenCount(v)} tick={{ fontSize: 11, fill: 'var(--qa-text-2)' }} />
                       <Tooltip
                         formatter={(val: any) => [formatTokenCount(Number(val)) + ' tokens', 'Total Tokens']}
-                        labelStyle={{ color: '#111827', fontWeight: 600 }}
+                        labelStyle={{ color: 'var(--qa-text)', fontWeight: 600 }}
                       />
-                      <Bar dataKey="tokens" fill="#2d9e4f" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="tokens" fill="var(--accent)" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 )}
@@ -478,24 +478,24 @@ export default function TokenUsageClient({ username, role, isAdmin, flags }: Pro
                   <AreaChart data={data.timeSeries} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
                       <linearGradient id="tokenGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#2d9e4f" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#2d9e4f" stopOpacity={0} />
+                        <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="var(--accent)" stopOpacity={0} />
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#6b7280' }} />
-                    <YAxis tickFormatter={(v) => formatTokenCount(v)} tick={{ fontSize: 11, fill: '#6b7280' }} />
+                    <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'var(--qa-text-2)' }} />
+                    <YAxis tickFormatter={(v) => formatTokenCount(v)} tick={{ fontSize: 11, fill: 'var(--qa-text-2)' }} />
                     <Tooltip
                       formatter={(val: any, name: any) => [
                         name === 'totalTokens' ? formatTokenCount(Number(val)) + ' tokens' : val,
                         'Total Tokens',
                       ]}
-                      labelStyle={{ color: '#111827', fontWeight: 600 }}
+                      labelStyle={{ color: 'var(--qa-text)', fontWeight: 600 }}
                     />
                     <Area
                       type="monotone"
                       dataKey="totalTokens"
-                      stroke="#2d9e4f"
+                      stroke="var(--accent)"
                       strokeWidth={2}
                       fillOpacity={1}
                       fill="url(#tokenGradient)"

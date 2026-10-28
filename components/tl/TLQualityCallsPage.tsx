@@ -6,18 +6,22 @@ import CallEvalPanel from '../quality/CallEvalPanel';
 import { DisputeThread } from '../quality/DisputeThread';
 import type { TLDisputeRow } from '@/app/api/cx/tl/disputes/route';
 import { DisputeStatusPill, getDisputeOutcomeKey } from './QualityChatsPage';
+import { DateRangeChip } from '@/components/quality/FilterControls';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import UISelect from '@/components/quality/UISelect';
+import { useSort, sortRows, SortTh } from '@/components/quality/sort';
 
 const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 const SANS = '-apple-system, BlinkMacSystemFont, "Inter", "Helvetica Neue", Arial, sans-serif';
 
 const TH_BASE: CSSProperties = {
   height: 40,
-  background: 'var(--qa-gray-50, #FAFAFB)',
-  borderBottom: '1px solid var(--qa-border, #E4E4E7)',
+  background: 'var(--qa-gray-50, var(--qa-gray-50))',
+  borderBottom: '1px solid var(--qa-border, var(--qa-border))',
   fontSize: 12,
   textTransform: 'uppercase',
   letterSpacing: '0.08em',
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
   fontWeight: 500,
   padding: '0 16px',
   textAlign: 'left',
@@ -27,7 +31,7 @@ const TH_BASE: CSSProperties = {
 const TD_BASE: CSSProperties = {
   height: 52,
   padding: '0 16px',
-  borderBottom: '1px solid var(--qa-border-sub, #F0F0F2)',
+  borderBottom: '1px solid var(--qa-border-sub, var(--qa-border-sub))',
   fontSize: 14,
   color: 'var(--qa-text, #111111)',
   verticalAlign: 'middle',
@@ -37,7 +41,7 @@ const TD_MONO: CSSProperties = {
   ...TD_BASE,
   fontFamily: MONO,
   fontSize: 13,
-  color: 'var(--qa-text-2, #6B6B6B)',
+  color: 'var(--qa-text-2, var(--qa-text-2))',
 };
 
 const TD_NUM: CSSProperties = {
@@ -48,7 +52,7 @@ const TD_NUM: CSSProperties = {
 };
 
 function IQSBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>;
+  if (score == null) return <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>;
   return <span style={{ fontFamily: MONO, fontSize: 13, fontWeight: 600, color: 'var(--qa-text, #111111)' }}>{score}</span>;
 }
 
@@ -61,8 +65,8 @@ function CountBadge({ count, active }: { count: number; active: boolean }) {
         borderRadius: 10,
         fontWeight: 600,
         lineHeight: '18px',
-        background: active ? 'rgba(255,255,255,0.2)' : 'var(--qa-gray-100, #F4F4F5)',
-        color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
+        background: active ? 'var(--ink)' : 'var(--qa-fill-light)',
+        color: active ? 'var(--ink-fg)' : 'var(--qa-text-2, var(--qa-text-2))',
       }}
     >
       {count}
@@ -315,24 +319,18 @@ export default function TLQualityCallsPage() {
   const totalEvaluatedPages = Math.max(1, Math.ceil(totalEntries / limit));
 
   const tabStyle = (active: boolean): CSSProperties => ({
-    height: 36,
-    padding: '0 16px',
-    border: 'none',
-    borderRadius: 8,
-    background: active ? 'var(--qa-gray-700, #27272A)' : 'transparent',
-    color: active ? '#fff' : 'var(--qa-text-2, #6B6B6B)',
-    fontSize: 13,
-    fontWeight: active ? 500 : 400,
-    cursor: 'pointer',
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 6,
+    height: 40, padding: '0 14px', border: 'none', borderRadius: 0, marginBottom: -1,
+    background: 'transparent',
+    color: active ? 'var(--qa-text)' : 'var(--qa-text-2)',
+    borderBottom: `2px solid ${active ? 'var(--qa-text)' : 'transparent'}`, whiteSpace: 'nowrap', flexShrink: 0,
+    fontSize: 13, fontWeight: active ? 600 : 500,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6,
   });
 
   const chipInputStyle: CSSProperties = {
     height: 32,
     padding: '0 10px',
-    border: '1px solid var(--qa-border, #E4E4E7)',
+    border: '1px solid var(--qa-border, var(--qa-border))',
     borderRadius: 8,
     fontSize: 13,
     fontFamily: SANS,
@@ -341,16 +339,18 @@ export default function TLQualityCallsPage() {
     outline: 'none',
   };
 
+  const [sort, toggleSort] = useSort();
+  const sorted1 = sortRows(entries, sort, { agent: c => c.agentName, mobile: c => c.mobileNumber, date: c => c.calledAt ?? c.date, disp: c => c.disposition, iqs: c => c.iqs });
+  const sorted2 = sortRows(pagedPending, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, by: d => d.raisedByName, iqs: d => d.callIqsScore, disp: d => d.disposition, status: d => d.status });
+  const sorted3 = sortRows(pagedReviewed, sort, { agent: d => d.agentName, mobile: d => d.mobileNumber, by: d => d.raisedByName, iqs: d => d.callIqsScore, status: d => d.status, raised: d => d.raisedAt });
+
   return (
-    <div style={{ padding: 24, maxWidth: 1400, margin: '0 auto', fontFamily: SANS }}>
+    <div style={{ fontFamily: SANS }}>
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 600, color: 'var(--qa-text, #111111)', margin: '0 0 6px 0' }}>
-          Team Lead — Quality Calls
+          Quality Calls
         </h1>
-        <p style={{ fontSize: 13, color: 'var(--qa-text-2, #6B6B6B)', margin: 0 }}>
-          View team members' call evaluations, manage raised call disputes, post thread comments, resolve disputes, or forward to QA.
-        </p>
       </div>
 
       {actionError && (
@@ -360,7 +360,7 @@ export default function TLQualityCallsPage() {
       )}
 
       {/* Tabs Bar */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 20, background: 'var(--qa-card, #FFFFFF)', border: '1px solid var(--qa-border, #E4E4E7)', padding: 4, borderRadius: 10, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, borderBottom: '1px solid var(--qa-border)', flex: 1, minWidth: 0, overflowX: 'auto', }}>
         <button style={tabStyle(activeTab === 'evaluated')} onClick={() => setActiveTab('evaluated')}>
           Evaluated Calls
           <CountBadge count={totalEntries} active={activeTab === 'evaluated'} />
@@ -377,10 +377,10 @@ export default function TLQualityCallsPage() {
 
       {/* ── TAB 1: EVALUATED CALLS ────────────────────────────────────────────── */}
       {activeTab === 'evaluated' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-            <select
+          <div className="qfilters">
+            <UISelect
               value={agentFilter}
               onChange={e => { setAgentFilter(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, minWidth: 160 }}
@@ -389,40 +389,29 @@ export default function TLQualityCallsPage() {
               {agentsList.map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
-            </select>
+            </UISelect>
 
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={e => { setDateFrom(e.target.value); setPage(0); }}
-              style={chipInputStyle}
-              title="From Date"
-            />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={e => { setDateTo(e.target.value); setPage(0); }}
-              style={chipInputStyle}
-              title="To Date"
-            />
 
-            <input
+            <span className="qf-group">
+<span className="qf-label">IQS</span>
+<input
               type="number"
-              placeholder="Min IQS"
+              placeholder="min"
               value={iqsMin}
               onChange={e => { setIqsMin(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, width: 80 }}
             />
-            <input
+<input
               type="number"
-              placeholder="Max IQS"
+              placeholder="max"
               value={iqsMax}
               onChange={e => { setIqsMax(e.target.value); setPage(0); }}
               style={{ ...chipInputStyle, width: 80 }}
             />
+</span>
 
-            {(agentFilter || dateFrom || dateTo || iqsMin || iqsMax) && (
-              <button
+            <DateRangeChip from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); setPage(0); }} />
+            <button type="button" className="qf-chip" disabled={!(agentFilter || dateFrom || dateTo || iqsMin || iqsMax)}
                 onClick={() => {
                   setAgentFilter('');
                   setDateFrom('');
@@ -431,11 +420,9 @@ export default function TLQualityCallsPage() {
                   setIqsMax('');
                   setPage(0);
                 }}
-                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
               >
-                Clear Filters
-              </button>
-            )}
+              Reset Filters
+            </button>
 
             {/* Rows per page */}
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -445,9 +432,9 @@ export default function TLQualityCallsPage() {
               <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab1' ? null : 'tab1')}
-                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                  title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {limit} / page ▾
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
                 {openPageDrop === 'tab1' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -455,7 +442,7 @@ export default function TLQualityCallsPage() {
                       <div
                         key={n}
                         onClick={() => { setLimit(n); setPage(0); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: limit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: limit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -467,17 +454,27 @@ export default function TLQualityCallsPage() {
           </div>
 
           {/* Table */}
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse', textAlign: 'left', tableLayout: 'fixed' }}>
+              <colgroup>
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '13%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12.4%' }} />
+              <col style={{ width: '10%' }} />
+              <col style={{ width: '18%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '12.6%' }} />
+            </colgroup>
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Agent Name</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Date / Time</th>
-                  <th style={TH_BASE}>Disposition</th>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="date" sort={sort} onSort={toggleSort} style={TH_BASE}>Date / Time</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</th>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>IQS Score</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
@@ -495,51 +492,30 @@ export default function TLQualityCallsPage() {
                     </td>
                   </tr>
                 ) : (
-                  entries.map(call => {
+                  sorted1.map(call => {
                     const isExpanded = expandedCallId === call.callId;
                     return (
                       <Fragment key={call.callId}>
                         <tr
                           onClick={() => setExpandedCallId(isExpanded ? null : call.callId)}
                           style={{
-                            background: isExpanded ? 'var(--qa-gray-50, #FAFAFB)' : undefined,
+                            background: isExpanded ? 'var(--accent-weak)' : undefined,
                             cursor: 'pointer',
                             transition: 'background 0.15s ease',
                           }}
                         >
                           <td style={TD_MONO}>{call.callId}</td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{call.agentName}</td>
-                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{call.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>
                             {call.calledAt ? new Date(call.calledAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : call.date}
                           </td>
                           <td style={TD_BASE}>{call.disposition || '—'}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {call.chatId ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${call.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  padding: '3px 8px',
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
-                                  background: '#fff',
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={`Open chat ${call.chatId} in Robylon`}
-                              >
-                                Show chat ↗
-                              </a>
+                              <TicketLinkButton id={call.chatId} />
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_NUM}>
@@ -553,7 +529,7 @@ export default function TLQualityCallsPage() {
                               }}
                               style={{
                                 background: 'none', border: 0, padding: 0,
-                                fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer',
+                                fontSize: 13, fontWeight: 500, color: 'var(--qa-text)', cursor: 'pointer', whiteSpace: 'nowrap',
                               }}
                             >
                               {isExpanded ? 'Hide' : 'View Details'}
@@ -615,10 +591,10 @@ export default function TLQualityCallsPage() {
 
       {/* ── TAB 2: DISPUTES RAISED (PENDING TL ACTION) ───────────────────────── */}
       {activeTab === 'disputes' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-            <select
+          <div className="qfilters">
+            <UISelect
               value={pendingAgentFilter}
               onChange={e => { setPendingAgentFilter(e.target.value); setPendingPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -627,9 +603,9 @@ export default function TLQualityCallsPage() {
               {Array.from(new Set(pendingDisputes.map(d => d.agentName).filter(Boolean))).sort().map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
-            </select>
+            </UISelect>
 
-            <select
+            <UISelect
               value={pendingOutcomeFilter}
               onChange={e => { setPendingOutcomeFilter(e.target.value); setPendingPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -637,25 +613,11 @@ export default function TLQualityCallsPage() {
               <option value="">All Statuses</option>
               <option value="raised_ir">Dispute raised by IR</option>
               <option value="raised_tl">Dispute raised by TL</option>
-            </select>
+            </UISelect>
 
-            <input
-              type="date"
-              value={pendingFromFilter}
-              onChange={e => { setPendingFromFilter(e.target.value); setPendingPage(1); }}
-              style={chipInputStyle}
-              title="From Date"
-            />
-            <input
-              type="date"
-              value={pendingToFilter}
-              onChange={e => { setPendingToFilter(e.target.value); setPendingPage(1); }}
-              style={chipInputStyle}
-              title="To Date"
-            />
 
-            {(pendingAgentFilter || pendingOutcomeFilter || pendingFromFilter || pendingToFilter) && (
-              <button
+            <DateRangeChip from={pendingFromFilter} to={pendingToFilter} onChange={(f, t) => { setPendingFromFilter(f); setPendingToFilter(t); }} />
+            <button type="button" className="qf-chip" disabled={!(pendingAgentFilter || pendingOutcomeFilter || pendingFromFilter || pendingToFilter)}
                 onClick={() => {
                   setPendingAgentFilter('');
                   setPendingOutcomeFilter('');
@@ -663,11 +625,9 @@ export default function TLQualityCallsPage() {
                   setPendingToFilter('');
                   setPendingPage(1);
                 }}
-                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
               >
-                Clear Filters
-              </button>
-            )}
+              Reset Filters
+            </button>
 
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
@@ -676,9 +636,9 @@ export default function TLQualityCallsPage() {
               <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab2' ? null : 'tab2')}
-                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                  title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {pendingLimit} / page ▾
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
                 {openPageDrop === 'tab2' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -686,7 +646,7 @@ export default function TLQualityCallsPage() {
                       <div
                         key={n}
                         onClick={() => { setPendingLimit(n); setPendingPage(1); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: pendingLimit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: pendingLimit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -697,18 +657,18 @@ export default function TLQualityCallsPage() {
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Agent Name</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Raised By</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
-                  <th style={TH_BASE}>Disposition</th>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="by" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised By</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
+                  <SortTh k="disp" sort={sort} onSort={toggleSort} style={TH_BASE}>Disposition</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={TH_BASE}>Status</th>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
                   <th style={{ ...TH_BASE, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
@@ -726,7 +686,7 @@ export default function TLQualityCallsPage() {
                     </td>
                   </tr>
                 ) : (
-                  pagedPending.map(dispute => {
+                  sorted2.map(dispute => {
                     const isOpen = expandedDisputeId === dispute.flagId;
                     const callKey = dispute.callId || dispute.chatId;
 
@@ -734,27 +694,17 @@ export default function TLQualityCallsPage() {
                       <Fragment key={dispute.flagId}>
                         <tr
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
-                          style={{ cursor: 'pointer', background: isOpen ? 'var(--qa-gray-50)' : undefined }}
+                          style={{ cursor: 'pointer', background: isOpen ? 'var(--accent-weak)' : undefined }}
                         >
                           <td style={TD_MONO}>
                             {/^\d+$/.test(String(callKey).trim()) ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text-2, #6B6B6B)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                              >
-                                {callKey}
-                              </a>
+                              <TicketLinkButton id={String(callKey).trim()} label={callKey} />
                             ) : (
                               callKey
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
@@ -762,30 +712,9 @@ export default function TLQualityCallsPage() {
                           <td style={TD_BASE}>{dispute.disposition || '—'}</td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  padding: '3px 8px',
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
-                                  background: '#fff',
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={`Open chat ${dispute.chatId} in Robylon`}
-                              >
-                                Show chat ↗
-                              </a>
+                              <TicketLinkButton id={dispute.chatId} />
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_BASE}>
@@ -887,10 +816,10 @@ export default function TLQualityCallsPage() {
 
       {/* ── TAB 3: REVIEWED DISPUTES ────────────────────────────────────────── */}
       {activeTab === 'reviewed' && (
-        <div>
+        <div style={{ background: 'var(--qa-card)', border: '1px solid var(--qa-border)', borderRadius: 8 }}>
           {/* Filters Bar */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-            <select
+          <div className="qfilters">
+            <UISelect
               value={reviewedAgentFilter}
               onChange={e => { setReviewedAgentFilter(e.target.value); setReviewedPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -899,9 +828,9 @@ export default function TLQualityCallsPage() {
               {Array.from(new Set(reviewedDisputes.map(d => d.agentName).filter(Boolean))).sort().map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
-            </select>
+            </UISelect>
 
-            <select
+            <UISelect
               value={reviewedOutcomeFilter}
               onChange={e => { setReviewedOutcomeFilter(e.target.value); setReviewedPage(1); }}
               style={{ ...chipInputStyle, minWidth: 140 }}
@@ -912,25 +841,11 @@ export default function TLQualityCallsPage() {
               <option value="resolved_tl">Resolved by TL</option>
               <option value="forwarded">Forwarded by TL</option>
               <option value="cancelled">Cancelled</option>
-            </select>
+            </UISelect>
 
-            <input
-              type="date"
-              value={reviewedFromFilter}
-              onChange={e => { setReviewedFromFilter(e.target.value); setReviewedPage(1); }}
-              style={chipInputStyle}
-              title="From Date"
-            />
-            <input
-              type="date"
-              value={reviewedToFilter}
-              onChange={e => { setReviewedToFilter(e.target.value); setReviewedPage(1); }}
-              style={chipInputStyle}
-              title="To Date"
-            />
 
-            {(reviewedAgentFilter || reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter) && (
-              <button
+            <DateRangeChip from={reviewedFromFilter} to={reviewedToFilter} onChange={(f, t) => { setReviewedFromFilter(f); setReviewedToFilter(t); }} />
+            <button type="button" className="qf-chip" disabled={!(reviewedAgentFilter || reviewedOutcomeFilter || reviewedFromFilter || reviewedToFilter)}
                 onClick={() => {
                   setReviewedAgentFilter('');
                   setReviewedOutcomeFilter('');
@@ -938,11 +853,9 @@ export default function TLQualityCallsPage() {
                   setReviewedToFilter('');
                   setReviewedPage(1);
                 }}
-                style={{ height: 32, padding: '0 12px', border: '1px solid var(--qa-border)', borderRadius: 8, background: '#fff', fontSize: 12, cursor: 'pointer' }}
               >
-                Clear Filters
-              </button>
-            )}
+              Reset Filters
+            </button>
 
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--qa-text-2)' }}>
@@ -951,9 +864,9 @@ export default function TLQualityCallsPage() {
               <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
                 <button
                   onClick={() => setOpenPageDrop(openPageDrop === 'tab3' ? null : 'tab3')}
-                  style={{ height: 28, padding: '0 8px', border: '1px solid var(--qa-border)', borderRadius: 6, background: '#fff', fontSize: 12, cursor: 'pointer' }}
+                  title="Rows per page" style={{ width: 32, height: 32, border: '1px solid var(--qa-border)', borderRadius: 8, background: 'var(--qa-card)', color: 'var(--qa-text-2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  {reviewedLimit} / page ▾
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
                 </button>
                 {openPageDrop === 'tab3' && (
                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, zIndex: 50, background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', overflow: 'hidden' }}>
@@ -961,7 +874,7 @@ export default function TLQualityCallsPage() {
                       <div
                         key={n}
                         onClick={() => { setReviewedLimit(n); setReviewedPage(1); setOpenPageDrop(null); }}
-                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: reviewedLimit === n ? '#f4f4f5' : '#fff' }}
+                        style={{ padding: '6px 16px', fontSize: 12, cursor: 'pointer', background: reviewedLimit === n ? 'var(--qa-fill-light)' : '#fff' }}
                       >
                         {n} rows
                       </div>
@@ -972,18 +885,18 @@ export default function TLQualityCallsPage() {
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid var(--qa-border)', borderRadius: 10, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
               <thead>
                 <tr>
                   <th style={TH_BASE}>Call ID</th>
-                  <th style={TH_BASE}>Agent Name</th>
-                  <th style={TH_BASE}>Mobile</th>
-                  <th style={TH_BASE}>Raised By</th>
-                  <th style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</th>
+                  <SortTh k="agent" sort={sort} onSort={toggleSort} style={TH_BASE}>Agent Name</SortTh>
+                  <SortTh k="mobile" sort={sort} onSort={toggleSort} style={TH_BASE}>Mobile</SortTh>
+                  <SortTh k="by" sort={sort} onSort={toggleSort} style={TH_BASE}>Raised By</SortTh>
+                  <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...TH_BASE, textAlign: 'right' }}>Call IQS</SortTh>
                   <th style={TH_BASE}>Linked Chat</th>
-                  <th style={TH_BASE}>Status</th>
-                  <th style={TH_BASE}>Date Raised</th>
+                  <SortTh k="status" sort={sort} onSort={toggleSort} style={TH_BASE}>Status</SortTh>
+                  <SortTh k="raised" sort={sort} onSort={toggleSort} style={TH_BASE}>Date Raised</SortTh>
                 </tr>
               </thead>
               <tbody>
@@ -1000,7 +913,7 @@ export default function TLQualityCallsPage() {
                     </td>
                   </tr>
                 ) : (
-                  pagedReviewed.map(dispute => {
+                  sorted3.map(dispute => {
                     const isOpen = expandedDisputeId === dispute.flagId;
                     const callKey = dispute.callId || dispute.chatId;
 
@@ -1008,57 +921,26 @@ export default function TLQualityCallsPage() {
                       <Fragment key={dispute.flagId}>
                         <tr
                           onClick={() => setExpandedDisputeId(isOpen ? null : dispute.flagId)}
-                          style={{ cursor: 'pointer', background: isOpen ? 'var(--qa-gray-50)' : undefined }}
+                          style={{ cursor: 'pointer', background: isOpen ? 'var(--accent-weak)' : undefined }}
                         >
                           <td style={TD_MONO}>
                             {/^\d+$/.test(String(callKey).trim()) ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${String(callKey).trim()}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={e => e.stopPropagation()}
-                                style={{ color: 'var(--qa-text-2, #6B6B6B)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                                onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                                onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                              >
-                                {callKey}
-                              </a>
+                              <TicketLinkButton id={String(callKey).trim()} label={callKey} />
                             ) : (
                               callKey
                             )}
                           </td>
                           <td style={{ ...TD_BASE, fontWeight: 500 }}>{dispute.agentName}</td>
-                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, #A1A1AA)' }}>—</span>}</td>
+                          <td style={TD_MONO}>{dispute.mobileNumber || <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))' }}>—</span>}</td>
                           <td style={TD_BASE}>{dispute.raisedByName} ({dispute.raisedBy})</td>
                           <td style={TD_NUM}>
                             <IQSBadge score={dispute.callIqsScore ?? dispute.iqsScore} />
                           </td>
                           <td style={TD_BASE} onClick={e => e.stopPropagation()}>
                             {dispute.chatId ? (
-                              <a
-                                href={`https://app.robylon.ai/unified-inbox/share/${dispute.chatId}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: 4,
-                                  padding: '3px 8px',
-                                  fontSize: 12,
-                                  fontWeight: 500,
-                                  borderRadius: 6,
-                                  border: '1px solid var(--qa-border, #E4E4E7)',
-                                  background: '#fff',
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  whiteSpace: 'nowrap',
-                                }}
-                                title={`Open chat ${dispute.chatId} in Robylon`}
-                              >
-                                Show chat ↗
-                              </a>
+                              <TicketLinkButton id={dispute.chatId} />
                             ) : (
-                              <span style={{ color: 'var(--qa-text-3, #A1A1AA)', fontSize: 13 }}>—</span>
+                              <span style={{ color: 'var(--qa-text-3, var(--qa-text-3))', fontSize: 13 }}>—</span>
                             )}
                           </td>
                           <td style={TD_BASE}>

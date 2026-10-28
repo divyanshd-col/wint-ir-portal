@@ -4,8 +4,13 @@ import EvalPanel from './EvalPanel';
 import { ErrorBoundary } from '../../scratch/ErrorBoundary';
 import DateRangePicker from './DateRangePicker';
 import type { ChatToReviewRow } from '@/app/api/cx/qa/chats-to-review/route';
+import { rowClick } from './rowClick';
+import TicketLinkButton from '@/components/quality/TicketLinkButton';
+import { CsatPill } from './csat';
+import { useSort, sortRows, SortTh } from './sort';
 
 interface Props {
+  leadingFilter?: React.ReactNode;
   dispositions: string[];
   agentFilter?: 'bot_only' | 'all' | 'human_only' | 'has_calls';
   hasCallsFilter?: 'all' | 'has_calls' | 'no_calls';
@@ -19,7 +24,7 @@ function fmtDateShort(iso: string) {
   return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 }
 
-export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId }: Props) {
+export default function ReviewedChatsTable({ leadingFilter, agentFilter = 'human_only', hasCallsFilter = 'all', initialChatId }: Props) {
   const [chats,         setChats]         = useState<ChatToReviewRow[]>([]);
   const [total,         setTotal]         = useState(0);
   const [filteredCount, setFilteredCount] = useState(0);
@@ -83,10 +88,13 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
+  const [sort, toggleSort] = useSort();
+  const sortedRows = sortRows(chats, sort, { agent: c => c.agentName, iqs: c => c.iqsScore, bot: c => c.botIqsScore, callTx: c => c.callTranscriptStatus, csat: c => c.csatScore, disp: c => c.disposition, by: c => c.reviewedBy, at: c => c.reviewedAt });
+
   const th: React.CSSProperties = {
     height: 40, background: 'var(--qa-gray-50)', borderBottom: '1px solid var(--qa-border)',
-    fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--qa-text-2)',
-    fontWeight: 500, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
+    fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--faint)',
+    fontWeight: 600, textAlign: 'left', padding: '0 16px', whiteSpace: 'nowrap',
   };
   const td: React.CSSProperties = {
     height: 52, padding: '0 16px', borderBottom: '1px solid var(--qa-border-sub)',
@@ -108,10 +116,11 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
 
       {/* Filter bar */}
       <div style={{
-        minHeight: 56, borderBottom: '1px solid var(--qa-border)',
+        minHeight: 56, background: 'var(--sunk)', borderBottom: '1px solid var(--qa-border)',
         display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8, padding: '8px 16px',
         borderRadius: '8px 8px 0 0',
       }}>
+        {leadingFilter}
         <input
           style={inputStyle}
           placeholder="Search by Chat ID…"
@@ -233,14 +242,14 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
           <thead>
             <tr>
               <th style={th}>Chat ID</th>
-              <th style={th}>Agent</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS (Bot)</th>
-              <th style={{ ...th, textAlign: 'right' }}>IQS (Agent)</th>
-              <th style={th}>Call Transcript</th>
-              <th style={th}>CSAT</th>
-              <th style={th}>Disposition</th>
-              <th style={th}>Reviewed By</th>
-              <th style={th}>Reviewed At</th>
+              <SortTh k="agent" sort={sort} onSort={toggleSort} style={th}>Agent</SortTh>
+              <SortTh k="iqs" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Agent IQS</SortTh>
+              <SortTh k="bot" sort={sort} onSort={toggleSort} style={{ ...th, textAlign: 'right' }}>Bot IQS</SortTh>
+              <SortTh k="callTx" sort={sort} onSort={toggleSort} style={th}>Call Transcript</SortTh>
+              <SortTh k="csat" sort={sort} onSort={toggleSort} style={th}>CSAT</SortTh>
+              <SortTh k="disp" sort={sort} onSort={toggleSort} style={th}>Disposition</SortTh>
+              <SortTh k="by" sort={sort} onSort={toggleSort} style={th}>Reviewed By</SortTh>
+              <SortTh k="at" sort={sort} onSort={toggleSort} style={th}>Reviewed At</SortTh>
               <th style={{ ...th, textAlign: 'right' }}>Action</th>
             </tr>
           </thead>
@@ -262,43 +271,35 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                 </td>
               </tr>
             ) : (
-              chats.map(chat => (
+              sortedRows.map(chat => (
                 <React.Fragment key={chat.chatId}>
-                  <tr
-                    style={{ background: expandedId === chat.chatId ? 'var(--qa-gray-50)' : undefined }}
+                  <tr data-row-click onClick={rowClick(() => setExpandedId(prev => prev === chat.chatId ? null : chat.chatId))}
+                    style={{ background: expandedId === chat.chatId ? 'var(--accent-weak)' : undefined }}
                     onMouseEnter={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = 'var(--qa-fill-light)'; }}
                     onMouseLeave={e => { if (expandedId !== chat.chatId) e.currentTarget.style.background = ''; }}
                   >
                     <td style={tdMono}>
                       {/^\d+$/.test(chat.chatId.trim()) ? (
-                        <a
-                          href={`https://app.robylon.ai/unified-inbox/share/${chat.chatId}`}
-                          target="_blank" rel="noopener noreferrer"
-                          style={{ color: 'var(--qa-text-2)', textDecoration: 'none', fontFamily: 'ui-monospace, monospace', fontSize: 13 }}
-                          onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
-                          onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
-                        >
-                          {chat.chatId}
-                        </a>
+                        <TicketLinkButton id={chat.chatId} label={chat.chatId} />
                       ) : chat.chatId}
                     </td>
                     <td style={{ ...td, fontWeight: 500 }}>{chat.agentName}</td>
                     <td style={tdNum}>
-                      {chat.botIqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                          {chat.botIqsScore}
-                        </span>
-                      ) : (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-                      )}
-                    </td>
-                    <td style={tdNum}>
                       {chat.iqsScore !== null ? (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 14, fontWeight: 700, color: 'var(--qa-text)' }}>
                           {chat.iqsScore}
                         </span>
                       ) : (
                         <span style={{ color: 'var(--qa-text-3)', fontSize: 13, fontWeight: 500 }}>NIL</span>
+                      )}
+                    </td>
+                    <td style={tdNum}>
+                      {chat.botIqsScore !== null ? (
+                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 12, fontWeight: 400, color: 'var(--faint)' }}>
+                          {chat.botIqsScore}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
                       )}
                     </td>
                     <td style={td}>
@@ -316,13 +317,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                       )}
                     </td>
                     <td style={td}>
-                      {chat.csatScore == null ? (
-                        <span style={{ color: 'var(--qa-text-3)', fontSize: 13 }}>—</span>
-                      ) : (
-                        <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 13, fontWeight: 600, color: 'var(--qa-text)' }}>
-                          {chat.csatScore === 1 ? 'Bad' : chat.csatScore === 3 ? 'Neutral' : 'Good'}
-                        </span>
-                      )}
+                      <CsatPill value={chat.csatScore} />
                     </td>
                     <td style={{ ...td, fontSize: 13, color: 'var(--qa-text-2)' }}>
                       {chat.disposition}
@@ -379,7 +374,7 @@ export default function ReviewedChatsTable({ agentFilter = 'human_only', hasCall
                           style={{
                             background: 'none', border: 0, padding: 0,
                             fontFamily: 'inherit', fontSize: 13, fontWeight: 500,
-                            color: reopeningId === chat.chatId ? 'var(--qa-text-3, #a1a1aa)' : 'var(--qa-active-blue, #2563eb)',
+                            color: reopeningId === chat.chatId ? 'var(--qa-text-3, var(--qa-text-3))' : 'var(--qa-active-blue, #2563eb)',
                             cursor: reopeningId === chat.chatId ? 'not-allowed' : 'pointer',
                           }}
                         >
